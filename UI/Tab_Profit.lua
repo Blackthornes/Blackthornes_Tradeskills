@@ -1933,6 +1933,35 @@ local function OrderKey()
         tostring(Method()), state.search or "" }, "|")
 end
 
+--- The empty list's words when some professions have minimums of their
+--- own: the one picked by name, else that some have their own. False
+--- when the profession picked has none, so today's words stay.
+local function ShowProfessionHidden(hidden)
+    local best = hidden[1]
+    local bestText = Util.FormatMoney(best and best.profit or 0, { noColor = true, short = true })
+
+    if state.profession then
+        local profit, margin, profession = ns.Profit:MinimumsFor({ skillLineID = state.profession })
+        if not profession then return false end
+        local name = ns.Auctions and ns.Auctions.ProfessionLabel
+            and ns.Auctions:ProfessionLabel(profession) or profession
+        local floor = Util.FormatMoney(profit or 0, { noColor = true, short = true })
+        widgets.emptyLabel:SetText(#hidden == 1
+            and L.Format("%d craft hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s.",
+                #hidden, name, floor, margin or 0, bestText)
+            or L.Format("%d crafts hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s.",
+                #hidden, name, floor, margin or 0, bestText))
+        return true
+    end
+
+    widgets.emptyLabel:SetText(#hidden == 1
+        and L.Format("%d craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s.",
+            #hidden, bestText)
+        or L.Format("%d crafts hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s.",
+            #hidden, bestText))
+    return true
+end
+
 local function BuildList()
     local key = OrderKey()
     if key ~= state.orderKey then
@@ -2039,6 +2068,11 @@ local function Refresh()
             if state.search ~= "" then
                 widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
                 if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
+            elseif #hidden > 0 and ns.Profit.HasProfessionMinimums
+                and ns.Profit:HasProfessionMinimums()
+                and ShowProfessionHidden(hidden) then
+                -- A profession's own minimums (2026-11-17) name it, or say
+                -- some have their own, since one number would be wrong.
             elseif #hidden > 0 and (minProfit > 0 or minMargin > 0) then
                 local best = hidden[1]
 
