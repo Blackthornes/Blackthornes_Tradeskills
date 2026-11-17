@@ -3551,6 +3551,13 @@ L["Average paid"] = "平均买入价"
 L["(%d in %d buys)"] = "（%d 个，%d 次购买）"
 L["Bought For on Tooltips:"] = "鼠标提示里的买入价："
 L["What you last paid for an item on the auction house. Hold Shift for the average."] = "你上次在拍卖行买这件物品花了多少钱。按住 Shift 查看平均价。"
+-- Used In on tooltips (2026-11-17)
+L["Used in"] = "用于"
+L["and %d more"] = "还有 %d 个"
+L["Your characters don't use it yet."] = "你的角色还没有用到它。"
+L["For example"] = "例如"
+L["Used In Recipes:"] = "用于配方："
+L["Shows which professions use a material and how many of your recipes need it. Hold Shift for the recipe names."] = "显示哪些专业会用到这个材料，以及你有多少配方需要它。按住 Shift 查看配方名称。"
 -- Mute All Sounds (2026-11-12)
 L["Mute All Sounds:"] = "全部静音："
 L["turn every Blackthornes sound off or back on (on/off)"] = "关闭或重新打开所有 Blackthornes 音效（on/off）"

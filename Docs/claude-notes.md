@@ -2837,6 +2837,30 @@ ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
 draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
 seen in game.
 
+## Used in on tooltips
+
+Asked 2026-11-17 (a player's idea; Trent approved the mockup and words). A
+material's tooltip says "Used in" with each profession the account's
+characters know a recipe for, and how many, most first; Shift adds a line per
+profession with up to three recipe names, easiest first, then "and N more".
+When none of them use it: the professions from the full recipe book in grey,
+"Your characters don't use it yet.", and with Shift one "For example" recipe.
+Nothing for an item no recipe uses, or a grey item.
+
+`Logic/UsedIn.lua` keeps two lookups built by `Util.NewWorker`, never on
+hover: the book one from `RecipeBook:GetAll()` and the known one from every
+character's saved recipes, leaving out dropped professions (`Recipes:IsDropped`)
+and a material that is also the recipe's output. The first tooltip starts
+both; until done the line is left out. `UsedIn:Stale()` rebuilds over frames
+and is called by `Recipes:Harvest` when it saves new recipes, by
+`ForgetCharacter`, and when a character's profession lines change. Answers are
+kept per item until a rebuild. Long lists are broken into lines of about
+`UsedIn.WIDTH` letters (`UsedIn.Wrap`), never cut.
+
+Settings: Tooltips page, "Used In Recipes:" Off / Shift / Always
+(`tooltipUsedIn`, on; `tooltipUsedInShift`, off; never rename), in "All
+Lines". Tested in `tools/test_usedin.lua`.
+
 ## Leave Out of Report (2026-11-17)
 
 The owner said build it from a mockup (2026-11-17). On the Sales tab's

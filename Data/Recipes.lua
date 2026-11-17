@@ -532,6 +532,7 @@ function Recipes:ForgetCharacter(characterKey)
     end
 
     ns.Cost:InvalidateIndex()
+    if ns.UsedIn and ns.UsedIn.Stale then pcall(ns.UsedIn.Stale, ns.UsedIn) end
     return true
 end
 
@@ -975,6 +976,8 @@ function Recipes:Harvest()
                 ns.Debug(("saved %d new and %d updated recipe(s)"):format(added, updated))
             end
             if added > 0 and ns.Mail and ns.Mail.ForgetOutputSet then ns.Mail:ForgetOutputSet() end
+            -- The tooltip's "Used in" counts the new recipes (Logic/UsedIn.lua).
+            if added > 0 and ns.UsedIn and ns.UsedIn.Stale then pcall(ns.UsedIn.Stale, ns.UsedIn, true) end
 
             -- A recipe Road to 300 put materials on the list for, now
             -- learned: its crafts go in the queue.
@@ -1163,6 +1166,7 @@ function Recipes:RefreshProfessions()
         end
         record.professionLines = lines
         if changed and ns.Cost and ns.Cost.InvalidateIndex then ns.Cost:InvalidateIndex() end
+        if changed and ns.UsedIn and ns.UsedIn.Stale then pcall(ns.UsedIn.Stale, ns.UsedIn) end
     end
 
     return AnyLearned(record.professions), AnyLearned(fresh)
