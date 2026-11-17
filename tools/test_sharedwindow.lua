@@ -425,6 +425,27 @@ do
     SW.Arrived("auction")
     SW.Open("tradeskills")
     assert(SW.Docked() and frame.point[4] == 900 and frame.point[5] == 650, "next visit, the same spot")
+    -- Mid-drag, nothing puts it back, even when the game's window or the
+    -- bags shift under it (players saw it snap back at the profession
+    -- window, 2026-11-17); the drop is kept as before.
+    frame.scripts.OnDragStart(frame)
+    assert(SW.Dragging(), "a drag is heard")
+    frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 500, 500 }
+    AuctionHouseFrame.right = 850
+    assert(SW.Keep() == false and frame.point[4] == 500, "the watcher leaves it alone while dragged")
+    assert(SW.Dock(true) == false and frame.point[4] == 500, "nothing docks it mid-drag")
+    frame.left, frame.top = 500, 500
+    frame.scripts.OnDragStop(frame)
+    assert(not SW.Dragging(), "the drag ends on the drop")
+    assert(SW.Keep() == false and frame.point[4] == 500, "dropped there, it stays")
+    AuctionHouseFrame.right = 840
+    assert(SW.Keep() and frame.point[4] == 490 and frame.point[5] == 500,
+        "the game's window moved back: the drop's spot from it")
+    -- A drop never heard ends once the mouse button is up.
+    frame.scripts.OnDragStart(frame)
+    _G.IsMouseButtonDown = function() return false end
+    assert(not SW.Dragging(), "button up: the drag is over")
+    _G.IsMouseButtonDown = nil
     local ran = 0
     SW.AddSpotReset("beta", function() ran = ran + 1 end)
     SW.AddSpotReset("alpha", function() error("broken") end)
