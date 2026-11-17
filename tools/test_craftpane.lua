@@ -1120,6 +1120,91 @@ do
   ns.UI, _G.BlackthornesWindow = oldUI, oldHub
 end
 
+do
+  -- Alt-click on a row opens the Keep in Stock box and queues nothing;
+  -- a craft with nothing to hold opens nothing (2026-11-17).
+  local oldAlt, oldBox, oldQueue, oldTip = rawget(_G, "IsAltKeyDown"), ns.StockBox, ns.Queue, rawget(_G, "GameTooltip")
+  local opened, added = {}, 0
+  _G.IsAltKeyDown = function() return true end
+  _G.GameTooltip = { Hide = function() end }
+  ns.StockBox = { Open = function(_, itemID, name) opened[#opened + 1] = { itemID = itemID, name = name } end }
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "LeftButton")
+  check("Alt-click opens the Keep in Stock box", opened[1] and opened[1].itemID, 5001)
+  check("for that craft", opened[1] and opened[1].name, "Runecloth Bag")
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "RightButton")
+  check("Alt-right-click opens it too", #opened, 2)
+  check("Alt-click queues and removes nothing", added, 0)
+  CraftPanel.OnRowClick({ recipeID = 104, name = "Enchant Bracer" }, nil, "LeftButton")
+  check("a craft with nothing to hold opens nothing", #opened, 2)
+  check("and queues nothing", added, 0)
+  _G.IsAltKeyDown, ns.StockBox, ns.Queue, _G.GameTooltip = oldAlt, oldBox, oldQueue, oldTip
+end
+
+do
+  -- A player's report (2026-11-17): folded to its title with nothing
+  -- queued, the pane's strip still sat over other addons' windows. Folded
+  -- and empty, it stays out of sight; the first craft queued brings it back.
+  local S = CraftPanel.StaysHidden
+  check("folded and empty: stays hidden", S(true, 0, false), true)
+  check("folded with a craft queued: shows", S(true, 2, false), false)
+  check("open and empty: shows as always", S(false, 0, false), false)
+  check("asked for by hand: shows", S(true, 0, true), false)
+
+  local saved = { frame = CraftPanel.frame, Place = CraftPanel.Place, Refresh = CraftPanel.Refresh,
+    WatchSheets = CraftPanel.WatchSheets, inOne = CraftPanel.inOne, stripMode = CraftPanel.stripMode,
+    RequestRefresh = CraftPanel.RequestRefresh, RefreshQueued = CraftPanel.RefreshQueued,
+    queuedFrame = CraftPanel.queuedFrame, list = CraftPanel.list }
+  local oldCollapse, oldQueue, oldTabs, oldCrafting, oldTimer, oldMotion =
+    ns.Collapse, ns.Queue, ns.TSTabs, ns.Crafting, _G.C_Timer, ns.Motion
+  local folded, queued = true, 0
+  ns.Collapse = { IsCollapsed = function() return folded end }
+  ns.Queue = { Count = function() return queued end, Find = function() end, GetAll = function() return {} end }
+  ns.TSTabs, ns.Motion, _G.C_Timer = nil, nil, nil
+  ns.Crafting = { isTradeSkillOpen = true }
+  CraftPanel.inOne, CraftPanel.stripMode, CraftPanel.queuedFrame, CraftPanel.list = false, false, nil, nil
+  CraftPanel.Place = function() end
+  CraftPanel.WatchSheets = function() end
+  CraftPanel.Refresh = function() end
+  CraftPanel.RequestRefresh = function() end
+  CraftPanel.RefreshQueued = function() end
+  local pane = { shown = false }
+  function pane:Show() self.shown = true end
+  function pane:Hide() self.shown = false end
+  function pane:IsShown() return self.shown end
+  CraftPanel.frame = pane
+  CraftPanel.shownByHand, CraftPanel.waitingForQueue = false, false
+
+  CraftPanel:Attach(true)
+  check("profession opened, folded, nothing queued: hidden", pane.shown, false)
+
+  queued = 1
+  CraftPanel:OnQueueChanged()
+  check("something queued: the pane comes back", pane.shown, true)
+
+  queued = 0
+  CraftPanel:OnQueueChanged()
+  check("the queue empties while folded: hidden again", pane.shown, false)
+
+  folded = false
+  CraftPanel:Attach(true)
+  check("open (not folded) and empty: shown as always", pane.shown, true)
+
+  folded = true
+  pane.shown = false
+  CraftPanel.shownByHand = true
+  CraftPanel:Attach(true)
+  check("/bts pane shows it anyway", pane.shown, true)
+  CraftPanel:OnQueueChanged()
+  check("and it stays while shown by hand", pane.shown, true)
+
+  ns.Collapse, ns.Queue, ns.TSTabs, ns.Crafting, _G.C_Timer, ns.Motion =
+    oldCollapse, oldQueue, oldTabs, oldCrafting, oldTimer, oldMotion
+  for key, value in pairs(saved) do CraftPanel[key] = value end
+  CraftPanel.shownByHand, CraftPanel.waitingForQueue = nil, nil
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))

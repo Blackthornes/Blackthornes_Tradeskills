@@ -310,6 +310,32 @@ Tabs:SettleDock()
 check("all sent: back to the tab before", Tabs.atDock == nil and UI.activeTab == "queue")
 _G.MailFrame = nil
 
+print("8. Small Craft Queue: ticked")
+-- A player asked (2026-11-17) for only the small craft queue at the
+-- profession window while the one window stays on everywhere else.
+pcall(SW.Close)
+Tabs:SettleDock()
+Tabs:DockClosed("profession")
+settings.craftPaneBeside = true
+_G.ProfessionsFrame = Region()
+_G.ProfessionsFrame.GetRight = function() return 600 end
+_G.ProfessionsFrame.GetTop = function() return 650 end
+hub.place = "profession"
+local intoBefore = craft.into
+local took = Tabs:AtDock("profession")
+check("the one window stays shut", not (hub.frame and hub.frame:IsShown()))
+check("the small pane opens beside the window", took == false and craft.into == intoBefore)
+check("the one window is still on", SW.On())
+pcall(SW.Open, "tradeskills")
+Tabs:AtDock("profession")
+check("opened by hand, the pane moves into it as before", Tabs.atDock == "profession"
+    and craft.into == intoBefore + 1)
+pcall(SW.Close)
+Tabs:SettleDock()
+Tabs:DockClosed("profession")
+settings.craftPaneBeside = nil
+_G.ProfessionsFrame = nil
+
 SW.SetOn(false)
 _G.BlackthornesWindow = nil
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

@@ -485,6 +485,10 @@ local DEFAULTS = {
         -- request, 2026-11-05). Account wide; never rename either.
         openAtAuction = true,
         openAtProfessions = true,
+        -- "Small Craft Queue:" (a player's request, 2026-11-17): ticked, the
+        -- profession window opens the small craft pane beside it, not the
+        -- one window. Off unless ticked. Account wide; never rename it.
+        craftPaneBeside = false,
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
@@ -699,6 +703,12 @@ local DEFAULTS = {
     -- an item's own number and maxPostedPerItem (2026-10-13). Account wide;
     -- never rename it. See Auctions:GetLimit.
     professionStockLimits = {},
+
+    -- [a profession's English name] = { profit = copper, margin = percent }:
+    -- that profession's own Minimum Profit and Minimum Margin, either one
+    -- missing for the usual (2026-11-17). Account wide; never rename it.
+    -- See Profit:MinimumsFor.
+    professionMinimums = {},
 
     -- recipeID -> the craft's name: crafts the player told the Profit tab to
     -- stop recommending. Account wide; the name is kept so Settings can list

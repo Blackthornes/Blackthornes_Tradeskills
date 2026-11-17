@@ -152,6 +152,7 @@ UI\HiddenItemsWindow.lua
 UI\PriceEditor.lua
 UI\ListRulesWindow.lua
 UI\KeepBox.lua
+UI\StockBox.lua
 UI\NeverMakeBox.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
@@ -180,6 +181,7 @@ UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
 UI\YourTimeView.lua
 UI\ShuffleView.lua
+UI\AllRecipesView.lua
 UI\Tab_Profit.lua
 UI\RoadView.lua
 UI\Tab_LevelUp.lua

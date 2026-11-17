@@ -100,6 +100,9 @@ local widgets = {}
 local ShowQueueList, FindQueueList
 local IGNORED_ROW_HEIGHT = 22
 local STOCK_ROW_HEIGHT = 26
+-- Where Minimums by Profession's profit and margin boxes start in a row.
+local MINIMUM_PROFIT_X = 150
+local MINIMUM_MARGIN_X = 290
 -- "Show:" is short, so the box starts early and has room for a list's name.
 local LIST_BOX_X = 60
 
@@ -1056,7 +1059,7 @@ local function Build(outer)
     -- The owner asked (2026-11-16): crafts list at the least that still
     -- makes Minimum Profit when others sell for less (Logic/Profit.lua).
     local minProfitPostRow = CreateRow(pages.pricing, 1, L["Post at Minimum Profit:"],
-        L["When others sell for less, your crafts list at the lowest price that still makes your Minimum Profit."])
+        L["When others sell for less, your crafts list at the lowest price that still makes your Minimum Profit for their profession."])
 
     widgets.postAtMinProfit = Widgets.CreateCheckbox(minProfitPostRow, L["On"], function(checked)
         Config:Set("postAtMinProfit", checked)
@@ -1208,7 +1211,7 @@ local function Build(outer)
     CreateSection(pages.pricing, 2, L["WHAT COUNTS AS PROFIT"])
 
     local profitRow = CreateRow(pages.pricing, 2, L["Minimum Profit:"],
-        L["Crafts that make less than this are hidden on the Profit tab."])
+        L["Crafts that make less than this are hidden on the Profit tab. Set your own for a profession below."])
 
     widgets.minProfit = Widgets.CreateNumberBox(profitRow, {
         width = 70, min = 0, max = 1000000,
@@ -1237,6 +1240,48 @@ local function Build(outer)
     })
     widgets.minMargin:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(marginRow, widgets.minMargin, "%")
+
+    -- Minimums by profession (the owner said build it, 2026-11-17, from a
+    -- mockup): a profit and a margin box per profession, empty for the
+    -- numbers above (Profit:MinimumsFor). Rows made in Refresh, as the
+    -- Keep in Stock by Profession list's are.
+    local minimums = CreateFrame("Frame", nil, pages.pricing.content)
+    minimums:SetSize(COLUMN_WIDTH, 1)
+    Place(pages.pricing, 2, minimums)
+
+    local minimumsLabel = Theme.CreateLabel(minimums, "small", "text")
+    minimumsLabel:SetPoint("TOPLEFT", 0, -4)
+    minimumsLabel:SetWidth(COLUMN_WIDTH)
+    minimumsLabel:SetWordWrap(true)
+    minimumsLabel:SetText(L["Minimums by Profession:"])
+
+    local minimumsHint = Theme.CreateLabel(minimums, "tiny", "muted")
+    minimumsHint:SetPoint("TOPLEFT", minimumsLabel, "BOTTOMLEFT", 0, -4)
+    minimumsHint:SetWidth(COLUMN_WIDTH)
+    minimumsHint:SetWordWrap(true)
+    minimumsHint:SetText(L["Leave a box empty to use Minimum Profit and Minimum Margin above."])
+
+    local minimumsHeads = CreateFrame("Frame", nil, minimums)
+    minimumsHeads:SetSize(COLUMN_WIDTH, 16)
+    minimumsHeads:SetPoint("TOPLEFT", minimumsHint, "BOTTOMLEFT", 0, -6)
+    for _, head in ipairs({
+        { L["PROFESSION"], 8 }, { L["PROFIT"], MINIMUM_PROFIT_X }, { L["MARGIN"], MINIMUM_MARGIN_X },
+    }) do
+        local text = Theme.CreateLabel(minimumsHeads, "tiny", "dim")
+        text:SetPoint("LEFT", head[2], 0)
+        text:SetText(head[1])
+    end
+
+    local minimumsEmpty = Theme.CreateLabel(minimums, "small", "dim")
+    minimumsEmpty:SetPoint("TOPLEFT", minimumsHeads, "BOTTOMLEFT", 0, -4)
+    minimumsEmpty:SetWidth(COLUMN_WIDTH)
+    minimumsEmpty:SetWordWrap(true)
+    minimumsEmpty:SetText(L["None yet. Open a profession window on each character once, and its professions show here."])
+
+    widgets.minimums, widgets.minimumsLabel, widgets.minimumsHint = minimums, minimumsLabel, minimumsHint
+    widgets.minimumsHeads, widgets.minimumsEmpty, widgets.minimumRows = minimumsHeads, minimumsEmpty, {}
+    Searchable(pages.pricing, minimums, L["Minimums by Profession:"] .. " "
+        .. L["minimum profit margin by profession per profession alchemy blacksmithing tailoring leatherworking"])
 
     -- Gold an hour, buy the parts or make them (a Discord player, the
     -- owner said build it 2026-11-12, casting time only). Off unless ticked.
@@ -1748,6 +1793,15 @@ local function Build(outer)
         end
     end, { width = 150, multi = true, placeholder = L["None"] })
     widgets.openByItself:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    -- Only the small craft queue at the profession window, the one window
+    -- staying on everywhere else (a player's request, 2026-11-17).
+    local smallRow = CreateRow(pages.windows, 1, L["Small Craft Queue:"],
+        L["Shows the small craft queue beside your profession window, even when the One Window is on."])
+    widgets.craftPaneBeside = Widgets.CreateCheckbox(smallRow, L["On"], function(checked)
+        Config:Set("craftPaneBeside", checked and true or false)
+    end, false)
+    widgets.craftPaneBeside:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
     local windowPlacesRow = CreateRow(pages.all, 1, L["Window Spots:"],
@@ -2585,6 +2639,177 @@ local function RefreshStockProfessions()
     widgets.queueLists.stock.count, widgets.queueLists.stock.shown = own, #professions
 end
 
+--- The professions the Minimums by Profession list offers: those your
+--- characters craft with, and any already given a number of its own.
+local function MinimumProfessions()
+    local seen, list = {}, {}
+    local function Add(name)
+        if type(name) == "string" and not seen[name] then
+            seen[name] = true
+            list[#list + 1] = name
+        end
+    end
+    if ns.Auctions and ns.Auctions.StockProfessions then
+        for _, name in ipairs(ns.Auctions:StockProfessions()) do Add(name) end
+    end
+    for name in pairs(ns.db and ns.db.professionMinimums or {}) do Add(name) end
+    table.sort(list)
+    return list
+end
+
+--- The row's tooltip: what its numbers hide, in the profession's name.
+local function ShowMinimumTip(row)
+    row.band:SetColorTexture(Theme.Unpack("glassHover"))
+    row.edge:Show()
+    if not (row.profession and GameTooltip) then return end
+    local profit, margin = ns.Profit:MinimumsFor(row.profession)
+    GameTooltip:SetOwner(row, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    GameTooltip:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -2)
+    GameTooltip:SetText(row.label:GetText() or row.profession, Theme.Unpack("accent"))
+    GameTooltip:AddLine(L.Format("%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them.",
+        row.label:GetText() or row.profession,
+        Util.FormatMoney(profit or 0, { noColor = true, short = true }), margin or 0), 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+local function HideMinimumTip(row)
+    row.band:SetColorTexture(Theme.Unpack(row.index % 2 == 1 and "glass" or "glassAlt"))
+    row.edge:Hide()
+    if GameTooltip and GameTooltip:IsOwned(row) then GameTooltip:Hide() end
+end
+
+--- One profession's line on the Pricing page: dark glass by place, its
+--- name, a profit box in silver with what it means in g, s and c, a margin
+--- box, and an x while it has a number of its own.
+local function MinimumRow(index)
+    local row = widgets.minimumRows[index]
+    if row then return row end
+
+    row = CreateFrame("Frame", nil, widgets.minimums)
+    row.index = index
+    row:SetSize(COLUMN_WIDTH, STOCK_ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", widgets.minimumsHeads, "BOTTOMLEFT", 0,
+        -2 - (index - 1) * STOCK_ROW_HEIGHT)
+
+    row.band = row:CreateTexture(nil, "BACKGROUND")
+    row.band:SetAllPoints(row)
+    row.band:SetColorTexture(Theme.Unpack(index % 2 == 1 and "glass" or "glassAlt"))
+
+    row.line = row:CreateTexture(nil, "BORDER")
+    row.line:SetPoint("BOTTOMLEFT", 0, 0)
+    row.line:SetPoint("BOTTOMRIGHT", 0, 0)
+    row.line:SetHeight(1)
+    row.line:SetColorTexture(Theme.Unpack("border"))
+    row.line:SetAlpha(0.6)
+
+    row.edge = row:CreateTexture(nil, "ARTWORK")
+    row.edge:SetPoint("TOPLEFT")
+    row.edge:SetPoint("BOTTOMLEFT")
+    row.edge:SetWidth(2)
+    row.edge:SetColorTexture(Theme.Unpack("accentHi"))
+    row.edge:Hide()
+
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", ShowMinimumTip)
+    row:SetScript("OnLeave", HideMinimumTip)
+
+    row.label = Theme.CreateLabel(row, "small", "text")
+    row.label:SetPoint("LEFT", 8, 0)
+    row.label:SetPoint("RIGHT", row, "LEFT", MINIMUM_PROFIT_X - 6, 0)
+    row.label:SetWordWrap(false)
+
+    -- Typed in silver, as Minimum Profit is.
+    row.profit = Widgets.CreateNumberBox(row, {
+        width = 56, min = 0, max = 1000000, allowEmpty = true,
+        onChange = function(value)
+            if row.profession then
+                ns.Profit:SetProfessionMinimum(row.profession, "profit", value and value * 100)
+            end
+        end,
+    })
+    row.profit:SetPoint("LEFT", row, "LEFT", MINIMUM_PROFIT_X, 0)
+
+    row.preview = Theme.CreateLabel(row, "tiny", "dim")
+    row.preview:SetPoint("LEFT", row.profit, "RIGHT", 6, 0)
+    row.preview:SetPoint("RIGHT", row, "LEFT", MINIMUM_MARGIN_X - 4, 0)
+    row.preview:SetWordWrap(false)
+
+    row.margin = Widgets.CreateNumberBox(row, {
+        width = 40, min = 0, max = 100, allowEmpty = true,
+        onChange = function(value)
+            if row.profession then ns.Profit:SetProfessionMinimum(row.profession, "margin", value) end
+        end,
+    })
+    row.margin:SetPoint("LEFT", row, "LEFT", MINIMUM_MARGIN_X, 0)
+
+    row.percent = Theme.CreateLabel(row, "small", "muted")
+    row.percent:SetPoint("LEFT", row.margin, "RIGHT", 4, 0)
+    row.percent:SetText("%")
+
+    row.clear = Widgets.CreateButton(row, "x", function()
+        if row.profession then ns.Profit:ClearProfessionMinimums(row.profession) end
+    end, { width = 20, height = 20, tooltip = L["Use the usual minimums for this profession again"] })
+    row.clear:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+
+    widgets.minimumRows[index] = row
+    return row
+end
+
+local function RefreshProfessionMinimums()
+    if not widgets.minimums or not (ns.Profit and ns.Profit.GetProfessionMinimums) then return end
+
+    local professions = MinimumProfessions()
+    local usualProfit = ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config:Get("minMarginPercent") or 0
+
+    for index, profession in ipairs(professions) do
+        local row = MinimumRow(index)
+        row.profession = profession
+        row.label:SetText(ns.Auctions and ns.Auctions.ProfessionLabel
+            and ns.Auctions:ProfessionLabel(profession) or profession)
+
+        local profit, margin = ns.Profit:GetProfessionMinimums(profession)
+        row.profit:SetPlaceholder(tostring(math.floor(usualProfit / 100)))
+        row.margin:SetPlaceholder(tostring(usualMargin))
+        if not (row.profit.editBox.HasFocus and row.profit.editBox:HasFocus()) then
+            row.profit:SetValue(profit and profit / 100, true)
+        end
+        if not (row.margin.editBox.HasFocus and row.margin.editBox:HasFocus()) then
+            row.margin:SetValue(margin, true)
+        end
+
+        if profit then
+            row.preview:SetText(Util.FormatMoney(profit, { short = true }))
+        elseif margin == nil then
+            row.preview:SetText(L["usual"])
+        else
+            row.preview:SetText("")
+        end
+        row.clear:SetShown(profit ~= nil or margin ~= nil)
+        row:Show()
+    end
+    for index = #professions + 1, #widgets.minimumRows do
+        widgets.minimumRows[index].profession = nil
+        widgets.minimumRows[index]:Hide()
+    end
+    widgets.minimumsEmpty:SetShown(#professions == 0)
+
+    -- The box grows with its rows, so what sits under it moves down.
+    local function Tall(text, fallback)
+        local height = text.GetStringHeight and text:GetStringHeight()
+        return type(height) == "number" and math.ceil(height) or fallback
+    end
+    local top = 4 + Tall(widgets.minimumsLabel, 14) + 4 + Tall(widgets.minimumsHint, 12) + 6 + 16
+    local body = #professions > 0 and (2 + #professions * STOCK_ROW_HEIGHT)
+        or (4 + Tall(widgets.minimumsEmpty, 14))
+    local height = top + body + 4
+    if widgets.minimums:GetHeight() ~= height then
+        widgets.minimums:SetHeight(height)
+        FitScroll("pricing")
+    end
+end
+
 local function RefreshChangedStock()
     if not widgets.changedHint or not (ns.SellOut and ns.SellOut.Changed) then return end
 
@@ -2606,6 +2831,7 @@ end
 
 local function RefreshIgnored()
     RefreshStockProfessions()
+    RefreshProfessionMinimums()
     RefreshChangedStock()
     RefreshNeverSubCrafts()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
@@ -2840,6 +3066,7 @@ local function Refresh()
         openWithShops = Config:Get("openWithShops") == true,
         openAtProfessions = Config:Get("openAtProfessions") ~= false,
     })
+    widgets.craftPaneBeside:SetChecked(Config:Get("craftPaneBeside") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)

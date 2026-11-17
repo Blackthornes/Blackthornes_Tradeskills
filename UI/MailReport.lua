@@ -448,6 +448,18 @@ function MailReport:Build()
     ribbon:Hide()
     frame.ribbon = ribbon
 
+    -- The plain ribbon for a visit the player left out of the totals: dark
+    -- glass and muted words, no gold, since it holds no record now.
+    local leftOut = CreateFrame("Frame", nil, frame)
+    leftOut:SetHeight(24)
+    Theme.Fill(leftOut, "glass")
+    Theme.Border(leftOut, "border", 0.6)
+    leftOut.text = Theme.CreateLabel(leftOut, "normal", "muted", "CENTER")
+    leftOut.text:SetPoint("LEFT", 8, 0)
+    leftOut.text:SetPoint("RIGHT", -8, 0)
+    leftOut:Hide()
+    frame.leftOutRibbon = leftOut
+
     frame.rows = {}
 
     -- Footer: the day, the week and the best haul, then the buttons.
@@ -459,6 +471,18 @@ function MailReport:Build()
     local done = Widgets.CreateButton(frame, L["Close"], function() frame:Hide() end,
         { width = 110, height = 24, primary = true })
     done:SetPoint("BOTTOMRIGHT", -PAD, 14)
+
+    -- On a left out visit's report only: puts it back in the totals.
+    local countAgain = Widgets.CreateButton(frame, L["Count It Again"], function()
+        MailReport:CountAgain()
+    end, { width = 130, height = 24 })
+    local againWidth = Theme.TextWidth and countAgain.label and Theme.TextWidth(countAgain.label)
+    if type(againWidth) == "number" and againWidth + 16 > 130 then
+        countAgain:SetWidth(math.ceil(againWidth) + 16)
+    end
+    countAgain:SetPoint("RIGHT", done, "LEFT", -8, 0)
+    countAgain:Hide()
+    frame.countAgain = countAgain
 
     local visits = Widgets.CreateButton(frame, L["See all visits"], function()
         frame:Hide()
@@ -663,6 +687,12 @@ function MailReport:Show(haul, opts)
 
     StopAll("report")
 
+    -- A saved visit the player left out of the totals, reopened: told plainly,
+    -- with no record and no fanfare.
+    local leftOut = opts.replay and ns.MailHaul and ns.MailHaul.IsLeftOut
+        and ns.MailHaul.IsLeftOut(haul) or false
+    self.shown, self.shownOpts = haul, opts
+
     frame.who:SetText(haul.sample and L["sample"] or WhoWhen(haul))
     frame.sources:SetText(MailReport.Sources(haul))
     frame.amount:SetText(Util.FormatMoney(0))
@@ -671,7 +701,9 @@ function MailReport:Show(haul, opts)
     local ribbonText
     -- Reopened from the Sales tab, a record is told as one it was then,
     -- not as news.
-    if haul.recordHaul then
+    if leftOut then
+        ribbonText = nil
+    elseif haul.recordHaul then
         ribbonText = L.Format(opts.replay and L["BEST HAUL AT THE TIME!  Old best %s"] or L["NEW BEST HAUL!  Old best %s"],
             Util.FormatMoney(haul.previousBest or 0, { short = true }))
     elseif haul.recordSale then
@@ -693,6 +725,18 @@ function MailReport:Show(haul, opts)
     else
         frame.ribbon:Hide()
     end
+
+    if leftOut then
+        frame.leftOutRibbon:ClearAllPoints()
+        frame.leftOutRibbon:SetPoint("TOPLEFT", PAD, y - 2)
+        frame.leftOutRibbon:SetPoint("TOPRIGHT", -PAD, y - 2)
+        frame.leftOutRibbon.text:SetText(L["Left out of your totals. It stays saved here."])
+        frame.leftOutRibbon:Show()
+        y = y - 32
+    else
+        frame.leftOutRibbon:Hide()
+    end
+    if leftOut then frame.countAgain:Show() else frame.countAgain:Hide() end
 
     -- The rows.
     local lines = MailReport.Lines(haul)
@@ -722,7 +766,7 @@ function MailReport:Show(haul, opts)
                 stop = function() row.bar:Set(line.share, line.color == "text" and "accent" or line.color) end })
         end
 
-        if line.best then
+        if line.best and not leftOut then
             -- The best sale beats gold for a while.
             MailReport.Start({ slot = "report:best", duration = 2.4, delay = delay + 0.2,
                 apply = function(p) row.glow:SetAlpha(0.16 * math.sin(p * 3 * math.pi) ^ 2) end,
@@ -757,13 +801,31 @@ function MailReport:Show(haul, opts)
     frame:Show()
     if frame.Raise then frame:Raise() end
 
-    self:Animate(haul, ribbonText ~= nil, opts)
+    self:Animate(haul, ribbonText ~= nil, opts, leftOut)
+
+    -- Redrawn in place (Count It Again): everything at its end, no sound.
+    if opts.still then StopAll("report") end
+end
+
+--- Count It Again on a left out visit's report: back in the totals, and the
+--- report redrawn as any counted visit's, without playing it again.
+function MailReport:CountAgain()
+    local haul = self.shown
+    if not (haul and ns.MailHaul and ns.MailHaul.SetLeftOut) then return end
+    ns.MailHaul:SetLeftOut(haul, false)
+
+    local opts = {}
+    for key, value in pairs(self.shownOpts or {}) do opts[key] = value end
+    opts.still = true
+    self:Show(haul, opts)
 end
 
 --- The opening: fade in, the shine, the count-up, the pop, the ribbon.
-function MailReport:Animate(haul, hasRibbon, opts)
+function MailReport:Animate(haul, hasRibbon, opts, leftOut)
+    opts = opts or {}
     local frame = self.frame
-    local record = haul.recordHaul or haul.recordSale
+    -- A left out visit holds no record now: no fanfare, no gold glow.
+    local record = not leftOut and (haul.recordHaul or haul.recordSale)
 
     MailReport.Start({ slot = "report:open", duration = 0.25,
         apply = function(p)
@@ -795,7 +857,7 @@ function MailReport:Animate(haul, hasRibbon, opts)
 
     local countTime = math.min(2.2, 1.0 + 0.1 * math.log10(math.max(10, haul.total or 0)))
 
-    MailReport.Play("haul")
+    if not opts.still then MailReport.Play("haul") end
 
     CountUp("report:count", frame.amount, 0, haul.total or 0, countTime, 0.2, function()
         Pop("report:pop", frame.amount, 26, 0)
