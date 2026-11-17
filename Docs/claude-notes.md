@@ -2739,3 +2739,17 @@ of the game's time, worst as a craft finished; under 2% with it off). Fixed in
   strata or level changed (`self.placed`).
 
 Tested in `tools/test_craftstutter.lua`. Not yet seen in game.
+
+## Soulbound crafts on the Profit tab (2026-11-17)
+
+A bind-on-pickup craft used to be left out of every Profit list, though a
+vendor still buys it and it can still be disenchanted. Now
+`Profit:Analyse` leaves out only the auction house for one
+(`analysis.soulbound`, no `ways.auction`, no rival or own-listing read):
+under Best, Vendor, DE and Vendor and DE it is costed from the ways left
+and can earn the skill-up star; under AH, and as the sale the Sell tab
+would make (method nil, used by Queue, Posting, Sales), it stays unpriced
+with "binds on pickup, so it cannot be sold". `SkillUp:GetRecommended`
+ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
+draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
+seen in game.
