@@ -41,6 +41,11 @@
 --      stands left of the game's quest list, and nothing moves in a fight.
 --  16. The gear at the foot of the rail shows once an addon has the All
 --      Addons page and opens it there, on the addon showing when it can.
+--  17. A place's own addon (`prefer`): up on another addon as a vendor
+--      opens, the window turns to Butler when it has moved in and wants
+--      the vendor, and goes back to the addon open before as it closes,
+--      every visit; Butler opening it first changes nothing; without
+--      Butler, or with Butler not wanting it, it stays where it was.
 --  14. Two game windows at once (the character sheet at a vendor, heard by
 --      HookScript): it docks beside the newest and goes back beside the
 --      other when that one closes.
@@ -660,6 +665,72 @@ do
     b.allAddons, c.allAddons = nil, nil
     SW.FillRail()
     assert(not gear:IsShown(), "gone again with the page")
+    SW.Open("gamma")
+end
+
+-- 17. Butler at the vendor (a player saw Farmer instead, 2026-11-17).
+do
+    assert(SW.PLACES.vendor.prefer == "butler", "the vendor names Butler")
+    assert(SW.PLACES.vendor.only == nil, "the rail stays at the vendor")
+    SW.Open("gamma")
+    assert(not SW.Docked(), "up on gamma, away from any vendor")
+    -- Without Butler the vendor changes nothing.
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(SW.Docked() and BlackthornesWindow.current == c, "no Butler: it stays on gamma")
+    SW.Left("vendor")
+    assert(BlackthornesWindow.current == c and not SW.Docked(), "still gamma after")
+
+    local dbBu = {}
+    local wantsVendor = true
+    local bu = Entry("butler", 6, dbBu, true)
+    bu.host.wants = function(place) return place == "vendor" and wantsVendor end
+    SW:Join(bu)
+    -- Twice over: the second visit must be Butler too.
+    for visit = 1, 2 do
+        now = now + 5
+        SW.Arrived("vendor")
+        assert(SW.Docked(), "docks at the vendor, visit " .. visit)
+        assert(BlackthornesWindow.current == bu, "turns to Butler, visit " .. visit)
+        SW.Left("vendor")
+        assert(SW.IsOpen() and not SW.Docked() and BlackthornesWindow.current == c,
+            "back on gamma as the vendor closes, visit " .. visit)
+    end
+    -- Butler opened it a moment before the event: nothing turns twice.
+    now = now + 5
+    local enters = 0
+    for _, line in ipairs(log) do if line == "enter butler" then enters = enters + 1 end end
+    SW.Open("butler")
+    SW.Arrived("vendor")
+    local after = 0
+    for _, line in ipairs(log) do if line == "enter butler" then after = after + 1 end end
+    assert(after == enters + 1, "Butler laid in once")
+    SW.Left("vendor")
+    assert(BlackthornesWindow.current == c, "back on gamma after Butler opened it")
+    -- Butler's "open at vendors" unticked: it stays on gamma.
+    wantsVendor = false
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(BlackthornesWindow.current == c, "Butler not wanting the vendor: still gamma")
+    SW.Left("vendor")
+    -- A broken answer changes nothing either.
+    bu.host.wants = function() error("broken") end
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(BlackthornesWindow.current == c, "a broken answer: still gamma")
+    SW.Left("vendor")
+    -- Only the vendor turns to Butler.
+    bu.host.wants = nil
+    now = now + 5
+    SW.Arrived("mail")
+    assert(BlackthornesWindow.current == c, "the mailbox keeps gamma")
+    SW.Left("mail")
+    -- Closed, the vendor opens nothing by itself.
+    SW.Close()
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(not SW.IsOpen(), "closed, it stays closed at the vendor")
+    SW.Left("vendor")
     SW.Open("gamma")
 end
 

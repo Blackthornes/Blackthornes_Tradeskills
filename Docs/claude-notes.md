@@ -865,6 +865,20 @@ at most `UI.GOALS_MAX_EXTRA` (200) and scroll past it, and
 `ButlerTabs:Grow` gives room back when they shrink, never below
 `BaseSize`. FILE_VERSION 10. Tested in `tools/test_sharedwindow.lua`
 (and Butler's `tools/test_onewindow.lua`).
+
+Butler at the vendor (a player's report in #bug-reports, the owner pressed
+Start Fix, 2026-11-17; `UI/SharedWindow.lua` FILE_VERSION 13, in all five):
+`PLACES.vendor.prefer = "butler"`. Up on another addon as a vendor opens,
+`SharedWindow.Arrived` turns the window to Butler (`SharedWindow.Preferred`)
+when Butler has moved in and its host's `wants("vendor")` says yes ("Vendors"
+ticked, the Butler Bar off; a failing answer counts as no). Unlike `only`, the
+row of addon buttons stays. `hub.back` is kept first, so closing the vendor
+goes back to the addon open before. Before, the window kept the addon picked
+last, and the next vendor after `Left` reopened it came up on that addon.
+Butler's own open (`UI:AtVendor`) then finds itself shown and does nothing,
+in either order. Without Butler nothing changes. Tested in
+`tools/test_sharedwindow.lua` (all five) and Butler's `tools/test_onewindow.lua`.
+Not yet seen in game.
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
