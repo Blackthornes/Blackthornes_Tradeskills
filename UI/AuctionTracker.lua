@@ -89,6 +89,12 @@ end
 local function RowName(row)
     local name = Util.GetItemName(row.itemID, row.link)
     if type(name) ~= "string" then name = "?" end
+    -- No link and the client has not sent the item yet: the name is a
+    -- stand-in until it does, and the rows are drawn again then.
+    if not row.link and row.itemID and Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, known = pcall(C_Item.GetItemInfo, row.itemID)
+        if not (ok and type(known) == "string") then AuctionTrackerUI.awaitingNames = true end
+    end
     if Util.ColorItemName then
         local ok, colored = pcall(Util.ColorItemName, row.itemID, name)
         if ok and type(colored) == "string" then return colored end
@@ -339,6 +345,20 @@ function AuctionTrackerUI:Build()
         SavePlace(f)
     end)
     frame:SetScript("OnShow", function() AuctionTrackerUI:Refresh(true) end)
+
+    -- An item the client had not sent yet showed by number: drawn again once
+    -- it arrives. A burst of arrivals is one redraw, and only while a row is
+    -- waiting on one.
+    local redrawQueued = false
+    ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", function()
+        if redrawQueued or not AuctionTrackerUI.awaitingNames or not frame:IsShown() then return end
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            AuctionTrackerUI.awaitingNames = false
+            AuctionTrackerUI:Refresh(true)
+        end)
+    end)
     frame:EnableMouseWheel(true)
     frame:SetScript("OnMouseWheel", function(_, delta) AuctionTrackerUI:Scroll(delta) end)
     Theme.TopSheen(frame, 0.06)

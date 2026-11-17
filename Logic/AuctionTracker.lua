@@ -99,7 +99,10 @@ function AuctionTracker:Rows()
         out[#out + 1] = row
     end
 
+    -- Read live at one house; the other house's are as last read.
+    local liveHouse
     if Auctions and Auctions.ownedIDs and type(Auctions.live) == "table" then
+        liveHouse = Auctions.liveHouse or "home"
         local readAt = Auctions.liveAt or now
         for _, live in ipairs(Auctions.live) do
             local ends = live.ends
@@ -112,15 +115,17 @@ function AuctionTracker:Rows()
                 unit = live.unit, ends = ends, roughEnd = rough,
             })
         end
-    elseif Auctions and Auctions.GetListings then
+    end
+    if Auctions and Auctions.GetListings then
         local ok, listings = pcall(Auctions.GetListings, Auctions)
         local me = CharacterKey()
         if ok and type(listings) == "table" then
             for index, listing in ipairs(listings) do
-                if listing.who == me and not listing.ended then
+                if listing.who == me and not listing.ended
+                    and (listing.house or "home") ~= liveHouse then
                     Add(("s:%s:%s:%s:%d"):format(tostring(listing.itemID), tostring(listing.unit),
                         tostring(listing.ends), index), {
-                        itemID = listing.itemID, quantity = listing.quantity or 1,
+                        itemID = listing.itemID, link = listing.link, quantity = listing.quantity or 1,
                         unit = listing.unit, ends = listing.ends, roughEnd = listing.roughEnd,
                     })
                 end
