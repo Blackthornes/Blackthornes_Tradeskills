@@ -433,6 +433,13 @@ local DEFAULTS = {
         -- Level Up's "Can afford" (2026-10-22): only crafts whose missing
         -- materials the gold carried can buy. Never rename it.
         levelUpCanAfford = false,
+        -- The recipe wishlist (2026-11-17): stars on recipes to learn, and
+        -- a note at a vendor or trainer that teaches one. Off unless ticked.
+        -- "Wishlist First" on Level Up's LEARN NEXT line and on Recipes to
+        -- Learn puts starred recipes at the top. Never rename these.
+        recipeWishlistOn = false,
+        levelUpWishlistFirst = true,
+        recipeBookWishlistFirst = true,
         -- Road to 300's "Pick By:" (2026-10-27): "lowest" ranks recipes by
         -- what their materials cost, "real" takes off what a craft sells
         -- back for. Never rename it.
@@ -787,6 +794,10 @@ local DEFAULTS = {
     -- items the queue made for those actions, never more than are carried.
     -- See Logic/QueueActions.lua.
     queueMarks = {},
+
+    -- The recipe wishlist (2026-11-17): GUID -> recipeID -> true, the
+    -- recipes each character starred. Never rename it. See Logic/Wishlist.lua.
+    recipeWishlist = {},
 
     -- What the selling test at a vendor found: { at, result }. See
     -- UI/SellMarked.lua.

@@ -606,6 +606,22 @@ function ItemTooltip:AddRecipeLines(lines, itemID)
     end
 
     for _, line in ipairs(recipe) do lines[#lines + 1] = line end
+    self:AddWishlistLine(lines, itemID)
+end
+
+--- "On your wishlist", one gold line on a recipe item that teaches a
+--- recipe the character playing starred (Logic/Wishlist.lua, 2026-11-17).
+--- It follows the recipe lines' Off, Shift or Always.
+function ItemTooltip:AddWishlistLine(lines, itemID)
+    local wishlist, book = ns.Wishlist, ns.RecipeBook
+    if not (wishlist and wishlist:IsOn() and book and book.ForItem) then return end
+    local ok, record = pcall(book.ForItem, book, itemID)
+    if not ok or type(record) ~= "table" or not wishlist:Has(record.recipeID) then return end
+    if not ItemTooltip.Shows("recipe") then
+        lines.held = true
+        return
+    end
+    lines[#lines + 1] = { L["On your wishlist"], "" }
 end
 
 --- What it cost the last time you made one, what it last went up at, and
