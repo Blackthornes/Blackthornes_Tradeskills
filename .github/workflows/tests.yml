@@ -61,3 +61,15 @@ jobs:
 
       - name: The private-files check catches what it should
         run: python tools/test_check_private_files.py
+
+      - name: The house rules check catches what it should
+        run: python tools/test_check_house_rules.py
+
+      - name: The change checklist reads, and every item is whole
+        run: python tools/test_checklist_for_change.py
+
+      - name: House rules on this change (warns only, never fails)
+        continue-on-error: true
+        run: |
+          git fetch --quiet --deepen=300 origin main:refs/remotes/origin/main || true
+          python tools/check_house_rules.py

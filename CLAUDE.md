@@ -14,6 +14,18 @@ It never ships: `.pkgmeta` leaves it out of the zip and
 
 CLAUDE.md is kept short on purpose (a 144 KB one ran every session out of room). Feature histories and full call details were moved word for word, nothing deleted: `Docs/claude-notes-sisters.md` (what Farmer, Equipment and Butler call here, and what Tradeskills calls there) and `Docs/claude-notes.md` (every other feature, plus the house kit, Discord, What's New, one window, minimap and similar shared notes). Grep a heading there, read about 150 lines at a time. Add new feature notes to those files, not here. Keep here only standing rules, the big files map and the short call lists below.
 
+## Checking a change
+
+Before every PR, follow `.claude/skills/verify/SKILL.md`: a bug fix starts
+with a test that fails the way the game failed; act the steps out in the
+fake game; run `python tools/check_house_rules.py` (player words and dark
+glass, lines this change adds) and `python tools/checklist_for_change.py`
+(the items in `Docs/change-checklist.md` this change touches). Every PR
+body ends with `Checked:` and `Not checked:` lines. After three failed
+rounds, stop and ask the owner. A miss a diff could have shown gets a
+checklist item in the fix's PR. Details under "Checking a change" in
+`Docs/claude-notes.md`.
+
 ## Calls between addons (keep stable; details in Docs/claude-notes-sisters.md)
 
 All read only, inside a pcall, no TOC dependency unless noted. If one changes, change the other repo in the same breath.

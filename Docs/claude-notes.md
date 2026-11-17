@@ -2604,3 +2604,44 @@ overcut price with a known craft cost is raised, to
 up for item auctions), basis "minprofit". At Minimum Profit 0 it is the
 break even price. Prices tab and list prices still apply after it. Tested
 in `tools/test_minprofitpost.lua`.
+
+## Checking a change
+
+The owner said yes (2026-11-16) to five ideas from the Claude Code team's
+writeup on verification, in all five addons, after fixes kept passing the
+tests and then needing a fix in game (the one window snapping back mid-drag,
+TSM Sold a Day). The same in every addon; keep them the same.
+
+- **The verify recipe** (`.claude/skills/verify/SKILL.md`), followed before
+  every PR. A bug fix starts with a test that fails the way the game failed,
+  then passes with the fix. The steps are acted out in the fake game
+  (`tools/testenv.lua`, or Tradeskills' module stubs), and when the fake game
+  allowed something Forever does not, it is fixed in the same PR.
+- **The change checklist** (`Docs/change-checklist.md`,
+  `tools/checklist_for_change.py`). Past misses, each with a trigger read
+  from the diff (`Files:` a path pattern, `Lines:` a pattern on changed
+  lines), a `Check:` and a `Why:`. The tool prints only the items a change
+  touches. A miss a diff could have shown gets an item in its fix's PR; an
+  item goes when the code it guards does. `tools/test_checklist_for_change.py`
+  checks every item is whole.
+- **How it was checked.** Every PR body ends with `Checked: tests | fake
+  game | in game | none yet` (each that is true) and `Not checked:` (what
+  only the real game shows). "in game" only after the owner saw it.
+- **House rules** (`tools/check_house_rules.py`, tested by
+  `tools/test_check_house_rules.py`). Looks at lines a change adds, against
+  origin/main: em-dashes, hype words and questions in `L["..."]` and
+  `L.Format("...")`, and the old `row`/`rowAlt` list bands. A line kept on
+  purpose ends with `-- house-ok`. `--all` reports the whole addon (older
+  lines still use the old bands in a few places). CI runs it on each change
+  as warn only.
+- **Always-true tests** (property tests): `tools/test_properties_window.lua`
+  (the same in all five: a window's spot comes back at any UI scale, the
+  size setting stays in range), `tools/test_properties_serialize.lua`
+  (Farmer and Tradeskills: shared data comes back the same, broken text
+  never raises), and `tools/test_properties.lua` (Tradeskills: Characters:Same;
+  Butler: Errands:IsMe). Fixed seeds, so a failure repeats. The window test
+  found that `SharedWindow.Clamp` lets not-a-number through (2026-11-17); the
+  one line fix waits on the owner's yes, and the test leaves 0/0 out until
+  then.
+- **Three tries, then ask.** A check still failing after three rounds stops
+  the thread. Never skip, loosen or rerun a test to get green.
