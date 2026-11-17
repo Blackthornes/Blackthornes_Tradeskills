@@ -2794,6 +2794,14 @@ up for item auctions), basis "minprofit". At Minimum Profit 0 it is the
 break even price. Prices tab and list prices still apply after it. Tested
 in `tools/test_minprofitpost.lua`.
 
+Only for listing what is already in the bags (the owner, 2026-11-17: on, it
+made the Profit tab show every craft as worth making). The raise happens
+only when `ChoosePostPrice` gets its fourth argument, `forSale`, which
+`Posting:GetPostPrice` and the `/bts price` "you would post at" line pass.
+The Profit tab (`Profit:Analyse`), Queue, Level Up, Disenchanting, craft
+tooltips and the crafted-cost "Profit now" line ask without it and keep the
+market's price. Tested in `tools/test_minprofitlistonly.lua`.
+
 ## Checking a change
 
 The owner said yes (2026-11-16) to five ideas from the Claude Code team's

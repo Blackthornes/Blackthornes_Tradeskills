@@ -53,42 +53,51 @@ check("off: basis is match", basis, "match")
 
 settings.postAtMinProfit = true
 local why
-price, basis, why = Profit:ChoosePostPrice(5)
+price, basis, why = Profit:ChoosePostPrice(5, nil, nil, true)
 check("on: lists at the least that makes Minimum Profit", price, 13685)
 check("on: basis is minprofit", basis, "minprofit")
 check("on: says why", why ~= nil and why:find("1000c", 1, true) ~= nil, true)
 
 settings.minProfit = 0
-price, basis, why = Profit:ChoosePostPrice(5)
+price, basis, why = Profit:ChoosePostPrice(5, nil, nil, true)
 check("Minimum Profit 0: lists where you break even", price, 12632)
 check("break even says so", why, "others sell for less, so it lists where you break even")
 settings.minProfit = 1000
 
 rival = 20000
-price, basis = Profit:ChoosePostPrice(5)
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
 check("a rival above that is matched as before", price, 20000)
 rival = 11000
 
 commodity = true
-price = Profit:ChoosePostPrice(5)
+price = Profit:ChoosePostPrice(5, nil, nil, true)
 check("a commodity lists at the same least price", price, 13685)
 commodity = false
 
 known = false
-price, basis = Profit:ChoosePostPrice(5)
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
 check("cost unknown: stays as before", basis, "match")
 known = true
 
 mine = 15000
-price, basis = Profit:ChoosePostPrice(5)
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
 check("a higher Prices tab floor still wins", price, 15000)
 check("its basis stays floor", basis, "floor")
 mine = nil
 
 settings.undercutCopper = 50
-price, basis = Profit:ChoosePostPrice(5)
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
 check("undercutting below it lists at the least too", price, 13685)
 settings.undercutCopper = 0
+
+-- The owner (2026-11-17): it only lists what is in the bags at the
+-- minimum. Every other ask (Profit tab, Queue, Level Up, craft lists) keeps
+-- the market's price, so turning it on never makes every craft look worth it.
+price, basis = Profit:ChoosePostPrice(5)
+check("on, not for sale: the craft keeps the rival's price", price, 11000)
+check("on, not for sale: basis stays match", basis, "match")
+price, basis = Profit:ChooseMarketPostPrice(5)
+check("on, market price: no floor either", basis, "match")
 
 if failures > 0 then
     error(string.format("%d minimum profit post check(s) failed", failures), 0)

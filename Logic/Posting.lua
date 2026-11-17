@@ -583,7 +583,7 @@ end
 -- `link` false says the caller already knows the copy has none.
 function Posting:GetPostPrice(itemID, link)
     if link == nil then link = self:ListedCopy(itemID) end
-    return ns.Profit:ChoosePostPrice(itemID, nil, link or nil)
+    return ns.Profit:ChoosePostPrice(itemID, nil, link or nil, true)
 end
 
 -- The link of the copy each item would be listed from, when it names a random

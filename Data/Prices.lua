@@ -2044,7 +2044,7 @@ ns.RegisterCommand("price", L["<item link or name>: what the auction house says"
     if record.rivalMin then
         -- Asked of the chooser rather than worked out again here, so this
         -- cannot drift from the price the Sell tab would actually use.
-        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID, nil, nil, true)
 
         ns.PrintRaw(L.Format("  cheapest rival %s   you would post at %s (%s)",
             Util.FormatMoney(record.rivalMin),
@@ -2058,7 +2058,7 @@ ns.RegisterCommand("price", L["<item link or name>: what the auction house says"
     else
         -- No rival on record. Asked of the chooser for the same reason as
         -- above: this must not drift from the price the Sell tab would use.
-        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID, nil, nil, true)
 
         if ns.Prices:HoldsLowest(itemID) then
             ns.PrintRaw(L.Format("  |c%syou hold the lowest listing|r", ns.COLORS.profit))

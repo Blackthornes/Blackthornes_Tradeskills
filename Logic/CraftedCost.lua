@@ -298,8 +298,10 @@ function CraftedCost:Lines(itemID, price)
 
     -- An estimate from the materials is not a price anyone pays, so no
     -- profit is worked out on it.
-    if not price and ns.Posting and ns.Posting.GetPostPrice then
-        local ok, chosen, basis = pcall(ns.Posting.GetPostPrice, ns.Posting, itemID)
+    -- The market's price, not Post at Minimum Profit's, so this says what
+    -- others pay now.
+    if not price and ns.Profit and ns.Profit.ChoosePostPrice then
+        local ok, chosen, basis = pcall(ns.Profit.ChoosePostPrice, ns.Profit, itemID)
         if ok and basis ~= "derived" then price = chosen end
     end
 
