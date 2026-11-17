@@ -1326,6 +1326,16 @@ function CraftPanel:Attach(besideOnly)
         return
     end
 
+    -- Folded with nothing queued: out of sight until something is queued.
+    if self:WaitsForQueue() then
+        self.waitingForQueue = true
+        self:StopSlicedRefresh()
+        if self.queuedFrame then self.queuedFrame:Hide() end
+        frame:Hide()
+        return
+    end
+    self.waitingForQueue = false
+
     frame:Show()
     self:Refresh()
 
@@ -1452,6 +1462,29 @@ end
 function CraftPanel:IsCollapsed()
     if self.inOne then return false end
     return self.squeezed == true or ns.Collapse.IsCollapsed(COLLAPSE_KEY)
+end
+
+--- Folded to its title with nothing queued, the pane stays out of sight
+--- (a player's report, 2026-11-17: the folded title strip still sat over
+--- other addons' windows). Only the player's own fold counts, not the fold
+--- under a sheet. It comes back once something is queued, and /bts pane
+--- shows it anyway.
+function CraftPanel.StaysHidden(folded, queued, byHand)
+    return folded == true and not byHand and (tonumber(queued) or 0) <= 0
+end
+
+function CraftPanel:WaitsForQueue()
+    if self.inOne then return false end
+    local count = 0
+    local Queue = ns.Queue
+    if Queue and type(Queue.Count) == "function" then
+        local ok, n = pcall(Queue.Count, Queue)
+        if ok then count = n end
+    end
+    local Collapse = ns.Collapse
+    local folded = Collapse and type(Collapse.IsCollapsed) == "function"
+        and Collapse.IsCollapsed(COLLAPSE_KEY)
+    return CraftPanel.StaysHidden(folded, count, self.shownByHand)
 end
 
 --- The height the pane takes, given its full height.
@@ -1647,6 +1680,10 @@ function CraftPanel:Reflow()
         self:Place()
         if self.stripMode then return end
         if self.frame:IsShown() then return end
+        if self:WaitsForQueue() then
+            self.waitingForQueue = true
+            return
+        end
         self.frame:Show()
         self:Refresh()
         return
@@ -2564,6 +2601,20 @@ end
 -- rows already on screen, the queued crafts list, the buttons and the total,
 -- are redrawn on the spot, and the full refresh follows as before.
 function CraftPanel:OnQueueChanged()
+    -- Folded with nothing queued, the pane steps out of sight; the first
+    -- craft queued while the profession window is open brings it back.
+    if self.frame and not self.inOne and not self.stripMode then
+        if self.frame:IsShown() and self:WaitsForQueue() then
+            self:Hide()
+            self.waitingForQueue = true
+            return
+        end
+        if self.waitingForQueue and not self.frame:IsShown() and not self:WaitsForQueue()
+            and ns.Crafting and ns.Crafting.isTradeSkillOpen then
+            self:Attach(true)
+        end
+    end
+
     if self.frame and self.frame:IsShown() and not self:IsCollapsed() and self.list then
         for _, line in ipairs(self.list:GetData() or {}) do
             local _, entry = ns.Queue:Find(line.recipeID, true)
@@ -2673,11 +2724,14 @@ end
 -- anything" has to be answerable from the chat frame.
 function CraftPanel:Toggle()
     if self:IsShown() then
+        self.shownByHand = false
         self:Hide()
         ns.Print(L["craft pane hidden. It comes back when you open a profession."])
         return
     end
 
+    -- Asked for by hand: shown even when folded with nothing queued.
+    self.shownByHand = true
     self:Attach()
 
     if self:IsShown() then
@@ -2735,6 +2789,8 @@ function CraftPanel:OnEnable()
     end)
 
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", function()
+        CraftPanel.shownByHand = false
+        CraftPanel.waitingForQueue = false
         CraftPanel:Hide()
         local tabs = ns.TSTabs
         if tabs and tabs.DockClosed then tabs:DockClosed("profession") end
