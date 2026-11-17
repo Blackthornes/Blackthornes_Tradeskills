@@ -2860,3 +2860,47 @@ kept per item until a rebuild. Long lists are broken into lines of about
 Settings: Tooltips page, "Used In Recipes:" Off / Shift / Always
 (`tooltipUsedIn`, on; `tooltipUsedInShift`, off; never rename), in "All
 Lines". Tested in `tools/test_usedin.lua`.
+
+## Leave Out of Report (2026-11-17)
+
+The owner said build it from a mockup (2026-11-17). On the Sales tab's
+Mailbox visits view, a right-click on a visit opens the house row menu
+titled MAILBOX VISIT: See Report (what a left click does) and Leave Out of
+Report, or Count It Again once left out. It sets `leftOut = true` on the
+saved visit in `ns.db.mailHauls[realm]` (never rename it; nothing is
+deleted, and the visit still drops off the end with the rest). The list's
+rows are views of their records (`record` on the view), so
+`MailHaul:SetLeftOut` writes to the record and to `MailHaul.last` when it
+is that visit's copy. `MailHaul.IsLeftOut` is the one test. Left out
+visits are skipped by `MailHaul:Records` (best haul and best sale, so the
+fanfare too), `MailHaul:TotalSince` (Today, Last 7 days) and the visits
+line's collected, which adds "%d left out". The row is dimmed with a Left
+Out tag in place of "best haul". A replayed report of a left out visit
+shows a plain glass ribbon, no record glow or sound, and Count It Again
+beside Close, which redraws the report quietly (`opts.still`). Tested in
+`tools/test_mailhaul.lua` and `tools/test_sales.lua`. Not yet seen in game.
+
+## Minimums by profession
+
+The owner said build it (2026-11-17, from a mockup): each profession can
+have its own Minimum Profit and Minimum Margin. Saved account wide as
+`professionMinimums` (never rename it): `[English profession] = { profit =
+copper, margin = percent }`, either missing for the usual. One lookup,
+`Profit:MinimumsFor(recipe, analysis, itemID or profession name)`, returns
+profit, margin and the profession's name when its own number was used;
+else `minProfit` and `minMarginPercent`. The profession comes from the
+recipe's skill line (`Recipes.EnglishProfessionName`), else
+`Auctions:ProfessionOf`. Used by `Profit:GetRanked` (Profit tab, Queue
+All; numbers a caller passes still hold for every craft),
+`SkillUp:IsWorthIt`, `Profit:MinimumProfitPrice` and the undercut check in
+`ChooseRivalPostPrice`; the last two name the profession in their "why"
+line. Deals, Disenchanting and Vendor Flips stay on the usual numbers.
+Pricing page: "Minimums by Profession:" under Minimum Margin, one dark
+glass row per profession (`MinimumRow` in `UI/Tab_Settings.lua`, like
+`StockRow`), profit in silver with a g/s/c preview, margin with %, an x
+that clears both (`Profit:ClearProfessionMinimums`). The Profit tab's empty
+list names the profession picked when it has its own numbers, or says
+some have their own with all shown. Export carries `M<Name>:profit:margin`
+("-" for empty) in the limits section. Tested in
+`tools/test_professionminimums.lua`, `tools/test_uifit.lua` and
+`tools/test_disenchantbutton.lua`. Not yet seen in game.

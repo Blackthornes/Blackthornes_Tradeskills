@@ -840,6 +840,53 @@ check("and lets go of the keyboard", undercut.editBox:HasFocus(), false)
 UI.tabs.settings.refresh()
 check("the next redraw shows it", undercut.editBox.text, "25")
 
+-- Minimums by Profession (2026-11-17): a profit and a margin box per
+-- profession under Minimum Margin, empty for the usual, typed in silver.
+local ownMinimums = {}
+ns.Profit.GetProfessionMinimums = function(_, name)
+    local own = ownMinimums[name]
+    if own then return own.profit, own.margin end
+end
+ns.Profit.SetProfessionMinimum = function(_, name, field, value)
+    ownMinimums[name] = ownMinimums[name] or {}
+    ownMinimums[name][field] = value
+end
+ns.Profit.ClearProfessionMinimums = function(_, name) ownMinimums[name] = nil end
+ns.Profit.MinimumsFor = function() return 500, 10 end
+ns.Auctions.StockProfessions = function() return { "Alchemy", "Cooking" } end
+ns.Auctions.ProfessionLabel = function(_, name) return name end
+ns.Auctions.GetProfessionLimit = function() return nil end
+ns.Auctions.SetProfessionLimit = noop
+settings.minProfit, settings.minMarginPercent = 500, 10
+UI.tabs.settings.refresh()
+
+local alchemyBoxes = {}
+for _, box in ipairs(made.CreateNumberBox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Alchemy" then alchemyBoxes[#alchemyBoxes + 1] = box end
+end
+-- The Queue page's Keep in Stock by Profession row is named Alchemy too.
+check("Alchemy gets a profit box and a margin box (and its stock box)", #alchemyBoxes, 3)
+local alchemyProfit, alchemyMargin = alchemyBoxes[2], alchemyBoxes[3]
+if alchemyProfit then
+    check("an empty profit box shows the usual 5 silver", alchemyProfit.editBox.text, "")
+    alchemyProfit.editBox:SetFocus()
+    alchemyProfit.editBox:SetText("1")
+    alchemyProfit.editBox.scripts.OnEnterPressed(alchemyProfit.editBox)
+    check("typing 1 saves 1 silver for Alchemy", ownMinimums.Alchemy and ownMinimums.Alchemy.profit, 100)
+    alchemyMargin.editBox:SetFocus()
+    alchemyMargin.editBox:SetText("0")
+    alchemyMargin.editBox.scripts.OnEnterPressed(alchemyMargin.editBox)
+    check("a margin of 0 is kept, not cleared", ownMinimums.Alchemy.margin, 0)
+    UI.tabs.settings.refresh()
+    check("the redraw shows Alchemy's 1", alchemyProfit.editBox.text, "1")
+    local clear
+    for _, button in ipairs(allButtons) do
+        if button:GetParent() == alchemyProfit:GetParent() then clear = button end
+    end
+    check("an x shows on a row with its own numbers", clear ~= nil, true)
+end
+
 -- Pages (2026-10-08): the settings sit on category pages picked along the
 -- top, with what each does in a tooltip until Show descriptions is ticked.
 

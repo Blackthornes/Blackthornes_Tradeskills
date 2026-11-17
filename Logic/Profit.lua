@@ -247,6 +247,125 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
 end
 
 --------------------------------------------------------------------------------
+-- Minimums by profession
+--------------------------------------------------------------------------------
+
+-- The owner said build it (2026-11-17, from a mockup): each profession can
+-- have its own Minimum Profit and Minimum Margin. Account wide in
+-- `professionMinimums` (never rename it):
+--   [a profession's English name] = { profit = copper, margin = percent }
+-- Either can be missing, and a missing one uses minProfit or
+-- minMarginPercent. The Profit tab, Queue All, Level Up's "worth it" pick,
+-- Post at Minimum Profit and the undercut check follow it. Deals,
+-- Disenchanting and Vendor Flips stay on the usual numbers.
+
+--- A profession's name as the client shows it.
+local function ProfessionLabel(profession)
+    if ns.Auctions and ns.Auctions.ProfessionLabel then
+        local ok, name = pcall(ns.Auctions.ProfessionLabel, ns.Auctions, profession)
+        if ok and name then return name end
+    end
+    return L[profession] or profession
+end
+
+--- A profession's own numbers, either one nil when it uses the usual.
+-- @return profit (copper) or nil, margin (percent) or nil
+function Profit:GetProfessionMinimums(profession)
+    local all = ns.db and ns.db.professionMinimums
+    local own = type(profession) == "string" and type(all) == "table" and all[profession]
+    if type(own) ~= "table" then return nil, nil end
+    return tonumber(own.profit), tonumber(own.margin)
+end
+
+--- Set one of a profession's numbers: field "profit" (copper) or "margin"
+--- (percent). nil puts it back to the usual; 0 shows everything.
+function Profit:SetProfessionMinimum(profession, field, value)
+    if not ns.db or type(profession) ~= "string" or profession == "" then return end
+    if field ~= "profit" and field ~= "margin" then return end
+
+    value = tonumber(value)
+    if value then
+        value = math.max(0, math.floor(value))
+        if field == "margin" then value = math.min(100, value) end
+    end
+
+    ns.db.professionMinimums = ns.db.professionMinimums or {}
+    local own = ns.db.professionMinimums[profession] or {}
+    own[field] = value
+    ns.db.professionMinimums[profession] = (own.profit or own.margin) and own or nil
+
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- Put both of a profession's numbers back to the usual.
+function Profit:ClearProfessionMinimums(profession)
+    if not ns.db or not ns.db.professionMinimums or type(profession) ~= "string" then return end
+    ns.db.professionMinimums[profession] = nil
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- Does any profession have a number of its own?
+function Profit:HasProfessionMinimums()
+    for profession in pairs(ns.db and ns.db.professionMinimums or {}) do
+        local profit, margin = self:GetProfessionMinimums(profession)
+        if profit or margin then return true end
+    end
+    return false
+end
+
+--- The English name of the profession a recipe, an analysis, an item or a
+--- profession name is about, or nil.
+function Profit:ProfessionFor(what)
+    local recipes = ns.Recipes
+    local english = recipes and recipes.EnglishProfessionName
+    if type(what) == "string" then
+        if english then
+            local ok, name = pcall(english, what)
+            if ok and name then return name end
+        end
+        return what
+    end
+    if type(what) == "table" then
+        if what.skillLineID and english then
+            local ok, name = pcall(english, { skillLineID = what.skillLineID })
+            if ok and name then return name end
+        end
+        what = what.outputItemID or what.itemID
+    end
+    if type(what) ~= "number" then return nil end
+
+    if ns.Auctions and ns.Auctions.ProfessionOf then
+        local name = ns.Auctions:ProfessionOf(what)
+        if name then return name end
+    end
+    -- The character playing's own recipes, when the shared index has none.
+    local recipeID = ns.Cost and ns.Cost.FindAnyRecipeForItem and ns.Cost:FindAnyRecipeForItem(what)
+    local recipe = recipeID and recipes and recipes.GetAny and recipes:GetAny(recipeID)
+    if recipe and recipe.skillLineID and english then
+        local ok, name = pcall(english, { skillLineID = recipe.skillLineID })
+        if ok and name then return name end
+    end
+    return nil
+end
+
+--- The Minimum Profit and Minimum Margin a craft must clear: its
+--- profession's own numbers first, else minProfit and minMarginPercent.
+-- @param what a recipe or analysis (by its skill line), an itemID, or a
+--             profession's name
+-- @return profit (copper), margin (percent), and the profession's English
+--         name when one of its own numbers was used (nil otherwise)
+function Profit:MinimumsFor(what)
+    local profit = ns.Config:Get("minProfit") or 0
+    local margin = ns.Config:Get("minMarginPercent") or 0
+
+    local profession = what ~= nil and self:ProfessionFor(what) or nil
+    local ownProfit, ownMargin = self:GetProfessionMinimums(profession)
+    if ownProfit == nil and ownMargin == nil then return profit, margin, nil end
+
+    return ownProfit or profit, ownMargin or margin, profession
+end
+
+--------------------------------------------------------------------------------
 -- Post at Minimum Profit
 --------------------------------------------------------------------------------
 
@@ -306,11 +425,17 @@ end
 -- @return price, why  -- nil when the rival's price is fine or it is off
 function Profit:MinimumProfitPrice(itemID, price, basis)
     if not price or not Profit.RIVAL_BASES[basis] or not self:PostAtMinimumProfit() then return nil end
-    local minProfit = math.max(0, ns.Config:Get("minProfit") or 0)
+    local minProfit, _, profession = self:MinimumsFor(itemID)
+    minProfit = math.max(0, minProfit or 0)
     local least = self:LeastProfitablePrice(itemID, minProfit)
     if not least or price >= least then return nil end
     if minProfit <= 0 then
         return least, L["others sell for less, so it lists where you break even"]
+    end
+    -- Named when the profession's own number was the one used.
+    if profession then
+        return least, L.Format("others sell for less, so it lists at the least that still makes your %s profit for %s",
+            Util.FormatMoney(minProfit, { noColor = true }), ProfessionLabel(profession))
     end
     return least, L.Format("others sell for less, so it lists at the least that still makes your %s profit",
         Util.FormatMoney(minProfit, { noColor = true }))
@@ -438,10 +563,18 @@ function Profit:ChooseRivalPostPrice(itemID, knownCost, link)
                 Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
-    local minProfit = ns.Config:Get("minProfit") or 0
+    local minProfit, _, profession = self:MinimumsFor(itemID)
 
     if profit >= minProfit then return underPrice, "undercut" end
 
+    if profession then
+        return matchPrice, "match",
+            L.Format("undercutting to %s leaves %s profit, below your %s minimum for %s",
+                Util.FormatMoney(underPrice, { noColor = true }),
+                Util.FormatMoney(profit, { noColor = true }),
+                Util.FormatMoney(minProfit, { noColor = true }),
+                ProfessionLabel(profession))
+    end
     return matchPrice, "match",
         L.Format("undercutting to %s leaves %s profit, below your %s minimum",
             Util.FormatMoney(underPrice, { noColor = true }),
@@ -1263,8 +1396,27 @@ end
 function Profit:GetRanked(opts)
     opts = opts or {}
 
-    local minProfit = opts.minProfit or ns.Config:Get("minProfit") or 0
-    local minMargin = (opts.minMargin or ns.Config:Get("minMarginPercent") or 0) / 100
+    -- Numbers given by the caller hold for every craft; otherwise each
+    -- craft clears its own profession's (MinimumsFor), read once a
+    -- profession.
+    local fixedProfit, fixedMargin = opts.minProfit, opts.minMargin
+    local usualProfit = ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config:Get("minMarginPercent") or 0
+    local anyOwn = self:HasProfessionMinimums()
+    local bySkillLine = {}
+    local function Minimums(analysis)
+        local profit, margin = usualProfit, usualMargin
+        if anyOwn and analysis.skillLineID then
+            local known = bySkillLine[analysis.skillLineID]
+            if not known then
+                local p, m = self:MinimumsFor({ skillLineID = analysis.skillLineID })
+                known = { p, m }
+                bySkillLine[analysis.skillLineID] = known
+            end
+            profit, margin = known[1], known[2]
+        end
+        return fixedProfit or profit, (fixedMargin or margin) / 100
+    end
 
     local results = {}
 
@@ -1287,6 +1439,7 @@ function Profit:GetRanked(opts)
             if not analysis.priceable then
                 keep = opts.includeUnpriceable == true
             else
+                local minProfit, minMargin = Minimums(analysis)
                 if analysis.profit < minProfit then keep = false end
                 if keep and analysis.margin < minMargin then keep = false end
                 if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end

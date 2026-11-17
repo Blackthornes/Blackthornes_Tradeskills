@@ -652,13 +652,63 @@ local function ItemsValue(list)
     return value
 end
 
---- The best haul and best single sale before this one.
+--- Whether a saved visit was left out of the totals by the player. A left
+--- out visit stays saved and listed; it just stops counting toward the best
+--- haul, best sale, Today and Last 7 days.
+function MailHaul.IsLeftOut(haul)
+    return type(haul) == "table" and haul.leftOut == true
+end
+
+--- Leave a saved visit out of the totals, or count it again. Only marks the
+--- record (`leftOut`, never renamed); nothing is deleted.
+-- @return true when the mark changed
+function MailHaul:SetLeftOut(haul, on)
+    if type(haul) ~= "table" then return false end
+    -- A row of the Sales tab is a view of its record; the mark goes on the record.
+    haul = rawget(haul, "record") or haul
+    on = on and true or nil
+
+    -- The saved record and any copy of it (the report of the visit just
+    -- closed is the untrimmed copy) carry the same mark.
+    local targets = { haul }
+    for _, saved in ipairs(self:GetHistory()) do
+        if saved ~= haul and saved.t == haul.t and saved.who == haul.who then targets[#targets + 1] = saved end
+    end
+    if self.last and self.last ~= haul and self.last.t == haul.t and self.last.who == haul.who then
+        targets[#targets + 1] = self.last
+    end
+
+    local changed = false
+    for _, target in ipairs(targets) do
+        if target.leftOut ~= on then
+            target.leftOut = on
+            changed = true
+        end
+    end
+
+    if changed and ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    return changed
+end
+
+--- How many saved visits are left out.
+function MailHaul:LeftOutCount(history)
+    local n = 0
+    for _, haul in ipairs(history or self:GetHistory()) do
+        if MailHaul.IsLeftOut(haul) then n = n + 1 end
+    end
+    return n
+end
+
+--- The best haul and best single sale before this one. Left out visits
+--- don't count.
 function MailHaul:Records(history)
     local bestHaul, bestSale = 0, 0
 
     for _, haul in ipairs(history or self:GetHistory()) do
-        if (haul.total or 0) > bestHaul then bestHaul = haul.total end
-        if haul.best and (haul.best.amount or 0) > bestSale then bestSale = haul.best.amount end
+        if not MailHaul.IsLeftOut(haul) and (haul.total or 0) > bestHaul then bestHaul = haul.total end
+        if not MailHaul.IsLeftOut(haul) and haul.best and (haul.best.amount or 0) > bestSale then
+            bestSale = haul.best.amount
+        end
     end
 
     return bestHaul, bestSale
@@ -668,7 +718,9 @@ end
 function MailHaul:TotalSince(since)
     local total = 0
     for _, haul in ipairs(self:GetHistory()) do
-        if (haul.t or 0) >= since then total = total + (haul.total or 0) end
+        if (haul.t or 0) >= since and not MailHaul.IsLeftOut(haul) then
+            total = total + (haul.total or 0)
+        end
     end
     return total
 end

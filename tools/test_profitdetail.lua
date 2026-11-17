@@ -335,4 +335,20 @@ for _, label in ipairs(labels) do
 end
 check("one a craft shows no x", not still)
 
+print("\nthe row menu sets Keep in Stock")
+local RowMenu = ns.ProfitTab.RowMenu
+local oldStock = ns.StockBox
+local openedFor
+ns.StockBox = { Open = function(_, itemID) openedFor = itemID end }
+local lines = RowMenu({ recipeID = 1, name = "Runecloth Bag", outputItemID = 100 })
+check("Queue One stays first", lines[1].text == "Queue One")
+check("Set Keep in Stock comes next", lines[2] and lines[2].text == "Set Keep in Stock")
+lines[2].run()
+check("it opens the box for the item", openedFor == 100)
+local enchant = RowMenu({ recipeID = 2, name = "Enchant Bracer" })
+local offered = false
+for _, line in ipairs(enchant) do if line.text == "Set Keep in Stock" then offered = true end end
+check("a craft with nothing to hold has no Set Keep in Stock", not offered)
+ns.StockBox = oldStock
+
 print(("\n%d check(s) passed\n"):format(checks))

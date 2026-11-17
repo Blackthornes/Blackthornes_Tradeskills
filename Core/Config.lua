@@ -702,6 +702,12 @@ local DEFAULTS = {
     -- never rename it. See Auctions:GetLimit.
     professionStockLimits = {},
 
+    -- [a profession's English name] = { profit = copper, margin = percent }:
+    -- that profession's own Minimum Profit and Minimum Margin, either one
+    -- missing for the usual (2026-11-17). Account wide; never rename it.
+    -- See Profit:MinimumsFor.
+    professionMinimums = {},
+
     -- recipeID -> the craft's name: crafts the player told the Profit tab to
     -- stop recommending. Account wide; the name is kept so Settings can list
     -- one the character playing does not know. See Profit:SetIgnored.

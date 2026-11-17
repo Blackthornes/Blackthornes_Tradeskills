@@ -481,19 +481,35 @@ local function UpdateListingRow(row, listing)
     row.when:SetTextColor(Theme.Unpack(color))
 end
 
+--- Whether a mailbox visit was left out of the totals by the player.
+local function VisitLeftOut(haul)
+    return ns.MailHaul and ns.MailHaul.IsLeftOut and ns.MailHaul.IsLeftOut(haul) or false
+end
+
 --- One mailbox visit: what was collected, and the best sale in it.
 local function UpdateVisitRow(row, haul)
     local best = haul.best
 
     Theme.SetItemIcon(row.icon, best and best.itemID)
 
-    local head = L.Format("Collected %s", Util.FormatMoney(haul.total, { short = true }))
-    if haul.recordHaul then head = head .. L.Format("  |c%sbest haul|r", ns.COLORS.accent) end
-    row.name:SetText(head)
-    row.name:SetTextColor(Theme.Unpack("text"))
+    -- Left out of the totals by the player: kept in its place, greyed, with
+    -- a Left Out tag where "best haul" sat.
+    local leftOut = VisitLeftOut(haul)
+    local money = { short = true, noColor = leftOut or nil }
 
-    row.amount:SetText(Util.FormatMoney(haul.total, { short = true }))
-    row.amount:SetTextColor(Theme.Unpack("accent"))
+    local head = L.Format("Collected %s", Util.FormatMoney(haul.total, money))
+    if leftOut then
+        head = head .. L.Format("  |c%s%s|r", ns.COLORS.muted or ns.COLORS.accent, L["Left Out"])
+    elseif haul.recordHaul then
+        head = head .. L.Format("  |c%sbest haul|r", ns.COLORS.accent)
+    end
+    row.name:SetText(head)
+    row.name:SetTextColor(Theme.Unpack(leftOut and "dim" or "text"))
+
+    row.amount:SetText(Util.FormatMoney(haul.total, money))
+    row.amount:SetTextColor(Theme.Unpack(leftOut and "dim" or "accent"))
+    if row.icon and row.icon.SetDesaturated then pcall(row.icon.SetDesaturated, row.icon, leftOut and true or false) end
+    if row.icon and row.icon.SetAlpha then row.icon:SetAlpha(leftOut and 0.5 or 1) end
 
     local parts = {}
     if (haul.salesCount or 0) > 0 then
@@ -511,10 +527,32 @@ local function UpdateVisitRow(row, haul)
     if who ~= "" then parts[#parts + 1] = who end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
-    row.detail:SetTextColor(Theme.Unpack("muted"))
+    row.detail:SetTextColor(Theme.Unpack(leftOut and "dim" or "muted"))
 
     row.when:SetText(Util.FormatAgeAgo(haul.t and (time() - haul.t)))
     row.when:SetTextColor(Theme.Unpack("dim"))
+end
+
+--- The saved visit behind a row of the Mailbox visits view.
+local function VisitRecord(data)
+    return type(data) == "table" and rawget(data, "record") or data
+end
+
+--- Right-click on a mailbox visit: see its report, or leave it out of the
+--- totals (and count it again). Nothing is deleted.
+local function OpenVisitMenu(data)
+    if not (ns.RowMenu and ns.MailHaul and ns.MailHaul.SetLeftOut) then return end
+    local record = VisitRecord(data)
+    local leftOut = VisitLeftOut(record)
+    if GameTooltip then GameTooltip:Hide() end
+    ns.RowMenu:Open({
+        { text = L["See Report"], run = function()
+            if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
+        end },
+        { text = leftOut and L["Count It Again"] or L["Leave Out of Report"], run = function()
+            ns.MailHaul:SetLeftOut(record, not leftOut)
+        end },
+    }, { title = L["MAILBOX VISIT"] })
 end
 
 --- What a group of sales made, for the line under a name.
@@ -1379,7 +1417,8 @@ local function Refresh()
 
         for index = #history, 1, -1 do
             -- Flagged on a view of it, so nothing is written into saved data.
-            local haul = setmetatable({ haul = true }, { __index = history[index] })
+            -- `record` is the saved visit itself, for Leave Out of Report.
+            local haul = setmetatable({ haul = true, record = history[index] }, { __index = history[index] })
 
             local best = haul.best
             if query == "" or (best and Matches(best.itemID, best.name, query)) then
@@ -1485,15 +1524,25 @@ local function Refresh()
 
     if state.view == "visits" then
         local history = ns.MailHaul and ns.MailHaul:GetHistory() or {}
-        local collected = 0
-        for _, haul in ipairs(history) do collected = collected + (haul.total or 0) end
+        -- Visits the player left out still count as visits, but not toward
+        -- collected or best haul; the line says how many, so the gap is clear.
+        local collected, leftOut = 0, 0
+        for _, haul in ipairs(history) do
+            if VisitLeftOut(haul) then
+                leftOut = leftOut + 1
+            else
+                collected = collected + (haul.total or 0)
+            end
+        end
         local best = ns.MailHaul and ns.MailHaul:Records() or 0
 
-        widgets.summary:SetText(L.Format(#history == 1 and L["%d visit  ·  collected %s  ·  best haul %s"]
+        local line = L.Format(#history == 1 and L["%d visit  ·  collected %s  ·  best haul %s"]
                 or L["%d visits  ·  collected %s  ·  best haul %s"],
             #history,
             Util.FormatMoney(collected, { short = true }),
-            Util.FormatMoney(best, { short = true })))
+            Util.FormatMoney(best, { short = true }))
+        if leftOut > 0 then line = line .. "  ·  " .. L.Format("%d left out", leftOut) end
+        widgets.summary:SetText(line)
         widgets.carried:Hide()
         return
     end
@@ -1761,6 +1810,12 @@ local function Build(container)
             if data.haul then
                 GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
                 GameTooltip:SetText(L["Click to see this visit's report again"], 1, 1, 1)
+                if VisitLeftOut(data) then
+                    GameTooltip:AddLine(L["This visit is left out of your totals."], 0.8, 0.8, 0.8, true)
+                    GameTooltip:AddLine(L["Right-click to count it again."], 0.6, 0.6, 0.6, true)
+                else
+                    GameTooltip:AddLine(L["Right-click to leave it out of your totals."], 0.6, 0.6, 0.6, true)
+                end
                 GameTooltip:Show()
                 return
             end
@@ -1780,7 +1835,11 @@ local function Build(container)
             if data.haul or data.methodRow or data.professionRow or data.methodItem or not state.selected then return false end
             return SelectionKey(data) == state.selected
         end,
-        onClick = function(data)
+        onClick = function(data, _, mouseButton)
+            if data.haul and mouseButton == "RightButton" then
+                OpenVisitMenu(data)
+                return
+            end
             if data.methodRow then
                 ToggleMethod(data.method.key)
                 Refresh()
