@@ -255,6 +255,18 @@
 -- capped = true } with no recipe, so Butler can name the rank to train.
 -- QueueSkillUp puts one in the queue (Queue:Ensure).
 --
+-- Butler's "Keep Level Up Materials:" (a player asked, the owner said
+-- build it, 2026-11-17, off unless ticked in Butler) keeps what the Level
+-- Up list still needs:
+--
+--   _G.BlackthornesTS.Butler:LevelUpMaterials()   -- a table, or nil; reads only
+--
+-- { [itemID] = profession (the client's name) } for every material of a
+-- recipe the character playing knows (not a dropped profession) while that
+-- craft is orange or yellow ("optimal" or "medium"), Cooking and First Aid
+-- too. Prices play no part. Kept for 60 seconds or until the recipes are
+-- read again. nil on any error.
+--
 -- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
 -- owner said build it, off unless ticked in Butler) asks, only while that
 -- is on, whether a bag item is worth more made into something:
@@ -2023,6 +2035,75 @@ function Butler:QueueSkillUp(recipeID)
     local ok, done, why = pcall(queue.Ensure, queue, recipeID, 1)
     if ok and done then return true end
     return false, ok and why or L["the queue would not take it"]
+end
+
+--------------------------------------------------------------------------------
+-- Materials still used to level, for Butler's "Keep Level Up Materials:"
+--------------------------------------------------------------------------------
+
+local LEVEL_UP_SECONDS = 60
+local levelUpMats, levelUpKey, levelUpAt
+
+--- Every material a craft on the Level Up list still uses while that craft
+--- is orange or yellow for the character playing. Read straight from the
+--- recipes (the Level Up tab's own list, less its prices), so it stays
+--- cheap enough to ask for every bag item.
+local function LevelUpMaterials()
+    local recipes, skillUp = ns.Recipes, ns.SkillUp
+    if not (recipes and recipes.GetAll and skillUp and skillUp.GetForRecipe) then return nil end
+    local key = (SelfKey() or "?") .. ":" .. RecipesStamp()
+    if levelUpMats and levelUpKey == key and Now() - (levelUpAt or 0) < LEVEL_UP_SECONDS then
+        return levelUpMats
+    end
+
+    -- Recipes in a fixed order, so an item used by two professions is
+    -- named the same way every time.
+    local ids, known = {}, recipes:GetAll() or {}
+    for recipeID, recipe in pairs(known) do
+        if type(recipe) == "table" and type(recipe.reagents) == "table" then ids[#ids + 1] = recipeID end
+    end
+    table.sort(ids, function(a, b) return tostring(a) < tostring(b) end)
+
+    local answer, lookup, names = {}, {}, {}
+    local english = recipes.SKILL_LINE_PROFESSIONS or {}
+    for _, recipeID in ipairs(ids) do
+        local recipe = known[recipeID]
+        local dropped = recipes.IsDropped and recipes:IsDropped(recipe)
+        local info = not dropped and skillUp:GetForRecipe(recipeID, recipe) or nil
+        if info and SKILL_UP_TIERS[info.tier] then
+            local line = recipe.skillLineID
+            local name = line and names[line]
+            if line and name == nil then
+                local found = ProfessionOf(line, lookup)
+                name = found and found.professionName or english[line] or false
+                names[line] = name
+            end
+            if name then
+                for _, reagent in ipairs(recipe.reagents) do
+                    local itemID = type(reagent) == "table" and tonumber(reagent.itemID)
+                    if itemID and (answer[itemID] == nil or name < answer[itemID]) then
+                        answer[itemID] = name
+                    end
+                end
+            end
+        end
+    end
+
+    levelUpMats, levelUpKey, levelUpAt = answer, key, Now()
+    return answer
+end
+
+--- { [itemID] = profession name (the client's) } for every material a
+--- craft the character playing knows still uses while it gives a point
+--- (orange or yellow). An item two professions use names the first by
+--- name. Never raises, writes nothing; nil on any error. A fresh table
+--- each time.
+function Butler:LevelUpMaterials()
+    local ok, answer = pcall(LevelUpMaterials)
+    if not (ok and type(answer) == "table") then return nil end
+    local copy = {}
+    for itemID, name in pairs(answer) do copy[itemID] = name end
+    return copy
 end
 
 --------------------------------------------------------------------------------
