@@ -416,6 +416,11 @@ dust or shard.
 
 ## Still unverified
 
+- `UnitFactionGroup("npc")` at a goblin auctioneer (Booty Bay, Gadgetzan,
+  Everlook) is taken to give no side, which is how Tradeskills tells the
+  neutral auction house from your own (`Auctions:CurrentHouse`). Not yet
+  seen in game (2026-11-17).
+
 **How a profession window can be opened from the addon.** Casting is
 protected, so the Queue tab lays a `SecureActionButtonTemplate` button
 (type `spell`, the profession's name, or Smelting for Mining) over its craft

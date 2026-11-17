@@ -449,7 +449,10 @@ end
 
 --- One listing from a character's last auction house reading.
 local function UpdateListingRow(row, listing)
-    row.name:SetText(ItemLabel(listing.itemID, nil))
+    -- Its saved link names it when the client has not sent the item yet.
+    local label = ItemLabel(listing.itemID, nil)
+    if listing.link and not Util.GetItemQualityColor(listing.itemID) then label = listing.link end
+    row.name:SetText(label)
     ApplyNameColor(row.name, listing.itemID)
 
     if listing.unit then
