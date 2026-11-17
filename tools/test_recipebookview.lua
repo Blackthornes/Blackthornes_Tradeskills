@@ -345,5 +345,95 @@ ns.Widgets.CreateCheckbox = savedCheckbox
 ns.Wishlist, ns.WishlistUI = savedWishlist, savedWishlistUI
 ns.Profit = savedProfitForWish
 
+print("\nrecipes to learn: a narrow list keeps the name readable")
+-- The Level Up tab's Learn Next showed "Encha..." in tall rows: every
+-- column took its room and the name had about 60 (2026-11-17).
+ns.Profit = ns.Profit or {}
+ns.Profit.WayTag = ns.Profit.WayTag or function() return nil end
+local narrow = View.New({ order = "skill" })
+narrow.Build(Frame())
+local headings = narrow._widgets.headings
+headings.GetWidth = function() return 560 end
+narrow.Refresh()
+local set = narrow._squeezed()
+check("DEMAND steps aside first", set.demand, true)
+check("then DISENCHANT", set.disenchant, true)
+check("SKILL stays", set.skill, nil)
+check("LEARN FROM stays", set.learn, nil)
+local row = Frame()
+local savedCreateLabel = ns.Theme.CreateLabel
+ns.Theme.CreateLabel = function()
+  local label = Label()
+  label.SetPoint = function(self, a, _, _, x) if a == "RIGHT" then self.right = x end end
+  return label
+end
+list.opts.createRow(row)
+ns.Theme.CreateLabel = savedCreateLabel
+list.opts.updateRow(row, list.data[1])
+check("the name keeps its least room", 560 + row.name.right - 30 >= View.NAME_MIN, true)
+headings.GetWidth = function() return 2000 end
+narrow.Refresh()
+check("a wide list shows every column again", next(narrow._squeezed()), nil)
+
+print("\nrecipes to learn: Have Skill and Learn From")
+-- On the Level Up tab's copy only, shared with its LEARN NEXT line.
+local config = { levelUpHaveSkill = false, levelUpLearnFrom = "trainerVendor" }
+local savedConfig = ns.Config
+ns.Config = { Get = function(_, k) return config[k] end, Set = function(_, k, v) config[k] = v end }
+local filterAsked
+ns.LearnNext = {
+  LEARN_FROM = { "trainerVendor", "trainer", "vendor", "drop", "quest", "any" },
+  LEARN_FROM_DEFAULT = "trainerVendor",
+  Filter = function(input, o)
+    filterAsked = o
+    local kept, counts = {}, { drop = 0 }
+    for _, entry in ipairs(input) do
+      local ways = entry.place.ways
+      if not (o.haveSkill and entry.locked) and (o.learnFrom == "any"
+          or (o.learnFrom == "trainerVendor" and (ways.trainer or ways.vendor))
+          or ways[o.learnFrom]) then
+        kept[#kept + 1] = entry
+      end
+      if ways.drop then counts.drop = counts.drop + 1 end
+    end
+    return kept, counts
+  end,
+}
+ns.RecipeBook.AllWays = function(_, rec)
+  if rec == enchant then return { trainer = true } end
+  return { drop = true }
+end
+ns.Recipes.GetLearnedProfessions = function()
+  return { { name = "Enchanting", skillLevel = 50, maxSkillLevel = 75 } }
+end
+rows[2].profession = "Enchanting"
+local plain = View.New({ order = "skill" })
+plain.Build(Frame())
+check("the Profit copy has no filters", plain._widgets.haveSkill, nil)
+local made = {}
+ns.Widgets.CreateCheckbox = function(_, text)
+  local box = Stub({ text = text, SetChecked = function(self, v) self.checkedNow = v end })
+  made[text] = box
+  return box
+end
+local filtered = View.New({ order = "skill", showSkill = true, filters = true })
+filtered.Build(Frame())
+filtered._state.profession = "all"
+filtered.Refresh()
+check("Have Skill shows", made["Have Skill"] ~= nil, true)
+check("Learn From shows", filtered._widgets.learnFrom ~= nil, true)
+check("it starts on the shared choice", filterAsked.learnFrom, "trainerVendor")
+check("trainer or vendor keeps the trainer's recipe", #list.data, 1)
+check("which is the enchant", list.data[1].recipeID, 2)
+check("each way counted in the menu", filtered._widgets.learnFrom.options[4].note, 2)
+config.levelUpLearnFrom = "any"
+filtered.Refresh()
+check("a choice made on LEARN NEXT is read here too", #list.data, 3)
+config.levelUpHaveSkill = true
+filtered.Refresh()
+check("Have Skill leaves out what you can't learn yet", #list.data, 1)
+check("an Enchanting recipe within 50 stays", list.data[1].recipeID, 2)
+ns.Config, ns.LearnNext = savedConfig, nil
+
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")
