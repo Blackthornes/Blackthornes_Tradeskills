@@ -400,6 +400,15 @@ local CAST_KEPT_FOR = 10
 -- craft of the batch stayed on the queue.
 local AFTER_BATCH_SECONDS = 3
 
+--- A line about crafting from the queue ("made 1 of X, 4 left", "crafting
+-- 5x X..."). Craft Messages on the Tooltips page (`craftChat`, on unless
+-- unticked) keeps them out of chat; a player asked, 2026-11-17. Warnings
+-- and refusals still show.
+local function SayCraft(...)
+    if ns.Config and ns.Config.Get and ns.Config:Get("craftChat") == false then return end
+    ns.Print(...)
+end
+
 --- How many are still queued after a "made N of X" line, or nil when all are done.
 local function LeftText(left)
     if left and left > 0 then return left end
@@ -509,7 +518,7 @@ function Crafting:OnBagUpdate()
                     dependencyMade = true
                     unclaimed[output] = unclaimed[output] - made * perCraft
 
-                    ns.Print(L.Format("made %d of %s, as materials for another craft", made,
+                    SayCraft(L.Format("made %d of %s, as materials for another craft", made,
                         ns.Recipes:GetDisplayLink(entry.recipeID)))
 
                 elseif made > 0 then
@@ -535,10 +544,10 @@ function Crafting:OnBagUpdate()
 
                     local stillLeft = LeftText(left)
                     if stillLeft then
-                        ns.Print(L.Format("made %d of %s, %d left", made,
+                        SayCraft(L.Format("made %d of %s, %d left", made,
                             ns.Recipes:GetDisplayLink(entry.recipeID), stillLeft))
                     else
-                        ns.Print(L.Format("made %d of %s, all done", made,
+                        SayCraft(L.Format("made %d of %s, all done", made,
                             ns.Recipes:GetDisplayLink(entry.recipeID)))
                     end
                 end
@@ -638,9 +647,9 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
                 local left = entry.quantity - 1
                 ns.Queue:SetQuantity(entry.recipeID, left)
                 if LeftText(left) then
-                    ns.Print(L.Format("made 1 of %s, %d left", ns.Recipes:GetDisplayLink(entry.recipeID), left))
+                    SayCraft(L.Format("made 1 of %s, %d left", ns.Recipes:GetDisplayLink(entry.recipeID), left))
                 else
-                    ns.Print(L.Format("made 1 of %s, all done", ns.Recipes:GetDisplayLink(entry.recipeID)))
+                    SayCraft(L.Format("made 1 of %s, all done", ns.Recipes:GetDisplayLink(entry.recipeID)))
                 end
             end
             return
@@ -734,7 +743,7 @@ function Crafting:Start(recipeID, count)
         return false
     end
 
-    ns.Print(L.Format("crafting %dx %s...", count, ns.Recipes:GetDisplayLink(recipeID)))
+    SayCraft(L.Format("crafting %dx %s...", count, ns.Recipes:GetDisplayLink(recipeID)))
 
     self:StartWatching()
     return true

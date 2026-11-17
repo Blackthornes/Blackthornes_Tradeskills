@@ -486,6 +486,8 @@ local DEFAULTS = {
         disenchantSound = true,
         -- What each disenchant gave, said in chat (Logic/DisenchantLog.lua).
         disenchantChat = true,
+        -- The "made 1 of X, 4 left" lines while crafting from the queue.
+        craftChat = true,
         -- The cheer when Set goal makes a Farmer goal.
         goalSound = true,
         -- Farmer goals made with Set goal move with the queue, and go
