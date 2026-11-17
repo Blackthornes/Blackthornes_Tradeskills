@@ -185,6 +185,29 @@ ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][charac
 `sellOutUnsold[itemID]`.
 Tested in `tools/test_sellout.lua`. Not yet seen in game.
 
+## The neutral auction house keeps its own reading
+
+A player found (2026-11-17, a clear bug the owner said fix) that after a
+visit to a neutral auction house Keep in stock and Sales thought nothing
+was listed, and names showed as "item 12345". The game shows only the
+auctions at the house you stand at, and each visit wrote one reading over
+the other. Now `Auctions:CurrentHouse()` reads the auctioneer once a visit
+(`UnitFactionGroup("npc")`: Alliance or Horde is "home", no side is
+"neutral", an auctioneer that can't be read is "home") and
+`Auctions:HouseTable(kind)` gives that house's reading: the home house's
+stays where it always was (`postedAuctions[realm]`, so old saves read as
+home) and the neutral one's is `postedAuctions[realm].neutral`, the same
+shape (never rename it). A reading replaces only its own house's.
+`GetPostedCount` and `GetListings` add both (each listing carries
+`house`); `GetOwnPostedCount`, `GetOwnMinPrice` and `GetAge` read the house
+open now. The drawer's other characters list only this house's; the
+tracker lists live rows plus your own from the other house. Saved listings
+keep the item's `link`, so Still listed and the tracker name an item the
+client has not sent yet; the tracker also redraws on
+`GET_ITEM_INFO_RECEIVED`. Neutral readings are not sent to a linked
+account (its message is unchanged). Tested in
+`tools/test_neutralhouse.lua`. Not yet seen in game.
+
 ## Your auctions and undercuts
 
 A player asked (2026-10-14, the owner said build it, from a mockup) for an
@@ -654,6 +677,28 @@ reported until a turn-in is seen. `tools/test_writs.lua` and
 `test_writs_locale.lua` put the typed IDs aside (but Golden Rod's and Gift
 of Arthas's) so their find-by-name checks still run.
 
+## Writs done today
+
+A player asked, the owner tapped Build it on the mockup (2026-11-17): the
+Craftsman's Writs list marks each order the character playing turned in
+today and says when new orders come in. Saved account wide as
+`merchantsFavor.writsDone[guid][questID] = resetAt` (never rename), written
+from `QUEST_TURNED_IN` by the writ's `quest` in `Data/CraftsmansWrits.lua`
+(`Writs:MarkDone`), and from `C_QuestLog.IsQuestFlaggedCompleted` at login
+and when the list opens (`Writs:ReadFlagged`), only when `UnitGUID` reads.
+Done means `time() < resetAt`; no clean-up, the next turn-in writes over
+its own mark. The reset is `Writs.SecondsToReset` (`C_DateAndTime.GetSecondsUntilDailyReset`,
+then `GetQuestResetTime`, in a pcall). Without one the clock words hide and
+a turn-in counts for a day (a mark from an earlier session clears once the
+game's done flag reads false). The row gets a green Done Today tag and
+fades in place; the line over the list (moved up from the foot, as in the
+mockup) says "Done Today: N of M" (of the priced writs) and "New Orders
+In:"; a zone heading adds "· N done today"; the tooltip and the picked
+writ's note say when it can be done again. The clocks move once a minute
+only while the list shows (`DealsWrits:Tick`); a mark running out redraws
+the list once. `/bts probe` prints the three calls under "Writs". Tested in
+`tools/test_writs.lua`. Not yet seen in game.
+
 ## The favor goal
 
 The owner said build it (2026-10-20, from a mockup): a Merchant's Favor
@@ -873,6 +918,20 @@ small craft pane opens beside the profession window; the one window stays
 on everywhere else. Opened by hand there, the pane moves into it as always.
 Tested in `tools/test_onewindow.lua` (part 8).
 
+Butler at the vendor (a player's report in #bug-reports, the owner pressed
+Start Fix, 2026-11-17; `UI/SharedWindow.lua` FILE_VERSION 13, in all five):
+`PLACES.vendor.prefer = "butler"`. Up on another addon as a vendor opens,
+`SharedWindow.Arrived` turns the window to Butler (`SharedWindow.Preferred`)
+when Butler has moved in and its host's `wants("vendor")` says yes ("Vendors"
+ticked, the Butler Bar off; a failing answer counts as no). Unlike `only`, the
+row of addon buttons stays. `hub.back` is kept first, so closing the vendor
+goes back to the addon open before. Before, the window kept the addon picked
+last, and the next vendor after `Left` reopened it came up on that addon.
+Butler's own open (`UI:AtVendor`) then finds itself shown and does nothing,
+in either order. Without Butler nothing changes. Tested in
+`tools/test_sharedwindow.lua` (all five) and Butler's `tools/test_onewindow.lua`.
+Not yet seen in game.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
@@ -898,6 +957,22 @@ settings. Its face is the Blackthornes sign, a gold B in a ring of thorns on
 a dark round face (the owner picked it over the anvil, 2026-10-28):
 `Media/Frame/MinimapBadge.tga`, drawn by `tools/make_minimap_art.py` (the
 same tool in all five; rerun it, never edit the TGA). Not yet seen in game.
+
+The launcher for addon bars (asked 2026-11-17, the owner said build it;
+`UI/SharedMinimap.lua` FILE_VERSION 4, the same in all five): when another
+addon has already loaded LibDataBroker-1.1, the copy that draws signs up one
+launcher named "Blackthornes" with it, once (`SharedMinimap.Launcher`,
+`hub.launcher`; tried again at each Apply and at PLAYER_LOGIN, since a bar
+may load after us). LibStub is read with `rawget` and the library asked for
+quietly (`silent = true`) inside a pcall; we never ship LibStub or the
+library, so without them nothing changes. Icon `Media/Frame/MinimapBadge`,
+label "Blackthornes AddOns". Clicks (`SharedMinimap.LauncherClick`): left
+opens the shared menu beside the bar's frame (`ToggleMenu(anchor)`,
+`hub.menuAnchor`), right opens the All Addons settings
+(`SharedWindow.OpenAllAddons`, else the first addon's settings), middle runs
+Farmer's `middle` (brings back its panels). The tooltip reuses the shared
+button's lines, no new words. Never name the bar addon that asked. Tested in
+`tools/test_sharedminimap.lua` (part 7). Not yet seen in game.
 
 ## Off, Shift or Always on tooltips
 
@@ -2733,3 +2808,17 @@ of the game's time, worst as a craft finished; under 2% with it off). Fixed in
   strata or level changed (`self.placed`).
 
 Tested in `tools/test_craftstutter.lua`. Not yet seen in game.
+
+## Soulbound crafts on the Profit tab (2026-11-17)
+
+A bind-on-pickup craft used to be left out of every Profit list, though a
+vendor still buys it and it can still be disenchanted. Now
+`Profit:Analyse` leaves out only the auction house for one
+(`analysis.soulbound`, no `ways.auction`, no rival or own-listing read):
+under Best, Vendor, DE and Vendor and DE it is costed from the ways left
+and can earn the skill-up star; under AH, and as the sale the Sell tab
+would make (method nil, used by Queue, Posting, Sales), it stays unpriced
+with "binds on pickup, so it cannot be sold". `SkillUp:GetRecommended`
+ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
+draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
+seen in game.

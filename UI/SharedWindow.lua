@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 12
+local FILE_VERSION = 13
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -90,6 +90,8 @@ SharedWindow.PRIOR_FOR = 0.5
 -- The game's windows the one window docks beside: the events that open and
 -- close each, and the frames it may be (read only). `only` is the one addon
 -- needed there: while it shows, the row of addon buttons is left out.
+-- `prefer` is the addon the place is for, the row kept: up on another addon
+-- as the place opens, the window turns to it (SharedWindow.Preferred).
 -- `interaction` names the window's Enum.PlayerInteractionType, with the
 -- number to use when the client has no Enum. The first frame shown wins,
 -- so an open letter, which stands right of the mailbox, comes before it;
@@ -101,7 +103,7 @@ SharedWindow.PLACES = {
     mail = { show = "MAIL_SHOW", hide = "MAIL_CLOSED", frames = { "OpenMailFrame", "MailFrame" },
         follow = { "OpenMailFrame" }, interaction = { "MailInfo", 17 } },
     vendor = { show = "MERCHANT_SHOW", hide = "MERCHANT_CLOSED", frames = { "MerchantFrame" },
-        interaction = { "Merchant", 5 } },
+        prefer = "butler", interaction = { "Merchant", 5 } },
     trainer = { show = "TRAINER_SHOW", hide = "TRAINER_CLOSED", frames = { "ClassTrainerFrame" },
         interaction = { "Trainer", 7 } },
     -- Added 2026-11-16 (the owner said build it, from the UI cleanup
@@ -1266,6 +1268,22 @@ local function Follow(place)
     end
 end
 
+--- The addon `key`'s place is for (`prefer`), or nil: only when it has
+--- moved in and, if its host has `wants(place)`, that says yes (Butler's
+--- "open at vendors" box). A host whose answer fails is left alone.
+function SharedWindow.Preferred(key)
+    local place = SharedWindow.PLACES[key]
+    local want = place and place.prefer
+    if not (want and SharedWindow.Hosts(want)) then return nil end
+    local entry = hub.entries[want]
+    local wants = entry.host.wants
+    if type(wants) == "function" then
+        local ok, yes = pcall(wants, key)
+        if not (ok and yes) then return nil end
+    end
+    return entry
+end
+
 --- One of the game's windows opened.
 function SharedWindow.Arrived(key)
     if not SharedWindow.PLACES[key] then return end
@@ -1296,6 +1314,11 @@ function SharedWindow.Arrived(key)
     else
         hub.back = { key = hub.current and hub.current.key, open = true }
     end
+    -- Up on another addon at a place that is for one (Butler at the vendor;
+    -- a player saw Farmer come up there instead, 2026-11-17): turn to it.
+    -- hub.back still takes it back to the addon open before.
+    local preferred = SharedWindow.Preferred(key)
+    if preferred and hub.current ~= preferred then SharedWindow.Pick(preferred.key) end
     -- The game shows its window on the same event: place ours a moment after.
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function() SharedWindow.Dock() end)

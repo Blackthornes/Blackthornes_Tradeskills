@@ -33,6 +33,58 @@ function Auctions:GetTable()
     return ns.db.postedAuctions[realmKey]
 end
 
+-- Which auction house a reading came from.
+--
+-- The game only shows you your auctions at the house you stand at. The
+-- neutral houses (Booty Bay, Gadgetzan, Everlook) keep their own list, so
+-- one reading wrote over the other: a visit to the goblins (often nothing
+-- listed there) and Keep in stock and Sales thought nothing was up at home.
+-- Each house now keeps its own reading. The home house's stays where it
+-- always was, so older saves read as the home house's; the neutral house's
+-- is in `neutral` beside it, the same shape (never rename it).
+Auctions.HOUSES = { "home", "neutral" }
+
+--- One house's reading on this realm: "home" (also old saves) or "neutral".
+function Auctions:HouseTable(kind)
+    local record = self:GetTable()
+    if kind ~= "neutral" then return record end
+    if type(record.neutral) ~= "table" then record.neutral = { items = {} } end
+    record.neutral.items = record.neutral.items or {}
+    return record.neutral
+end
+
+--- The house of the auctioneer you are talking to, without remembering it.
+-- A side's own auctioneer is the home house. One who answers to no side
+-- (the goblins) is the neutral house. One that cannot be read is taken as
+-- home, as every reading was before.
+-- @return "home" or "neutral", and whether the auctioneer was read at all
+local function ReadHouse()
+    local ok, kind = pcall(function()
+        if type(UnitExists) ~= "function" or not UnitExists("npc") then return nil end
+        if type(UnitFactionGroup) ~= "function" then return nil end
+        local faction = UnitFactionGroup("npc")
+        if faction == "Alliance" or faction == "Horde" then return "home" end
+        if faction == nil or faction == "Neutral" or faction == "" then return "neutral" end
+        return nil
+    end)
+    if ok and kind then return kind, true end
+    return "home", false
+end
+
+--- The auction house open now ("home" or "neutral"). Read from the
+--- auctioneer once a visit and kept until the house closes.
+function Auctions:CurrentHouse()
+    if self.house then return self.house end
+    local kind, read = ReadHouse()
+    if read then self.house = kind end
+    return kind
+end
+
+--- Forget which house it was, at the end of a visit.
+function Auctions:OnHouseClosed()
+    self.house = nil
+end
+
 --- Who is reading: listings are kept per character within the realm.
 local function CharacterKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or "?"
@@ -95,17 +147,29 @@ end
 -- Except a reading older than the longest auction. An alt whose listings sold
 -- and who never went back to the auction house kept them counted for good: a
 -- sale sends gold rather than the item, so nothing ever took them off.
+--
+-- Listings at the neutral house are listed too, so both houses add up.
 function Auctions:GetPostedCount(itemID)
     if not itemID then return 0 end
 
     local record = self:GetTable()
+    local total = self:PostedAt(record, itemID, true)
+    if type(record.neutral) == "table" then
+        total = total + self:PostedAt(record.neutral, itemID, false)
+    end
+    return total
+end
+
+--- Units of an item listed at one house, from its readings.
+-- @param legacy  read a reading saved before characters were kept apart
+function Auctions:PostedAt(record, itemID, legacy)
     local byCharacter = record.byCharacter
 
     -- Saved before readings were kept per character: nobody knows whose it
     -- is, so it stands until a character reads its own.
     if not byCharacter or next(byCharacter) == nil then
-        if Outlived(record.updatedAt) then return 0 end
-        local listed = record.items[itemID] or 0
+        if not legacy or Outlived(record.updatedAt) then return 0 end
+        local listed = (record.items and record.items[itemID]) or 0
         return math.max(0, listed - ReturnedSince(itemID, nil, record.updatedAt))
     end
 
@@ -129,34 +193,46 @@ local BAND_MOST = { [0] = 30 * 60, [1] = 2 * 3600, [2] = 12 * 3600, [3] = 48 * 3
 -- read and when it ends. One that has ended since has sold or come back in the
 -- mail; the reading cannot say which.
 --
--- @return array of { itemID, quantity, unit, ends, who, readAt, ended },
---         and how many characters have been read since listings were kept
+-- Both houses' listings, each marked with its house.
+--
+-- @return array of { itemID, quantity, unit, ends, who, readAt, ended, house,
+--         link }, and how many characters have been read since listings
+--         were kept
 function Auctions:GetListings()
     local record = self:GetTable()
-    local out, characters = {}, 0
+    local out, characters, counted = {}, 0, {}
     local now = time()
 
-    for who, reading in pairs(record.byCharacter or {}) do
-        if type(reading.listings) == "table" then
-            characters = characters + 1
-
-            for _, listing in ipairs(reading.listings) do
-                local ends = listing.ends
-                if not ends and listing.band and BAND_MOST[listing.band] then
-                    ends = (reading.updatedAt or now) + BAND_MOST[listing.band]
+    for _, house in ipairs(self.HOUSES) do
+        local byCharacter = house == "home" and record.byCharacter
+            or (type(record.neutral) == "table" and record.neutral.byCharacter)
+        for who, reading in pairs(byCharacter or {}) do
+            if type(reading.listings) == "table" then
+                if not counted[who] then
+                    counted[who] = true
+                    characters = characters + 1
                 end
 
-                out[#out + 1] = {
-                    itemID = listing.itemID,
-                    quantity = listing.quantity or 1,
-                    unit = listing.unit,
-                    ends = ends,
-                    roughEnd = listing.ends == nil,
-                    who = who,
-                    readAt = reading.updatedAt,
-                    ended = ends ~= nil and ends <= now
-                        or Outlived(reading.updatedAt),
-                }
+                for _, listing in ipairs(reading.listings) do
+                    local ends = listing.ends
+                    if not ends and listing.band and BAND_MOST[listing.band] then
+                        ends = (reading.updatedAt or now) + BAND_MOST[listing.band]
+                    end
+
+                    out[#out + 1] = {
+                        itemID = listing.itemID,
+                        quantity = listing.quantity or 1,
+                        unit = listing.unit,
+                        ends = ends,
+                        roughEnd = listing.ends == nil,
+                        who = who,
+                        readAt = reading.updatedAt,
+                        ended = ends ~= nil and ends <= now
+                            or Outlived(reading.updatedAt),
+                        house = house,
+                        link = type(listing.link) == "string" and listing.link or nil,
+                    }
+                end
             end
         end
     end
@@ -164,16 +240,19 @@ function Auctions:GetListings()
     return out, characters
 end
 
---- How many units of an item this character has listed. Verifying a new
---- listing compares against this, since a reading only ever shows your own.
+--- How many units of an item this character has listed at the house open
+--- now. Verifying a new listing compares against this, since a reading only
+--- ever shows your own, and only this house's.
 function Auctions:GetOwnPostedCount(itemID)
     if not itemID then return 0 end
 
-    local record = self:GetTable()
+    local house = self:CurrentHouse()
+    local record = self:HouseTable(house)
     local reading = record.byCharacter and record.byCharacter[CharacterKey()]
     if reading then return (reading.items and reading.items[itemID]) or 0 end
+    if house == "neutral" then return 0 end
 
-    return record.items[itemID] or 0
+    return (record.items and record.items[itemID]) or 0
 end
 
 --- The auction IDs of an item you had listed at the last read this session,
@@ -189,13 +268,13 @@ end
 --- auctions have not been read or hold none of it.
 function Auctions:GetOwnMinPrice(itemID)
     if not itemID then return nil end
-    local prices = self:GetTable().prices
+    local prices = self:HouseTable(self:CurrentHouse()).prices
     return prices and prices[itemID] or nil
 end
 
 --- When your auctions were last read, or nil if never.
 function Auctions:GetAge()
-    local updatedAt = self:GetTable().updatedAt
+    local updatedAt = self:HouseTable(self:CurrentHouse()).updatedAt
     if not updatedAt then return nil end
     return time() - updatedAt
 end
@@ -449,8 +528,8 @@ end
 -- get you anything you do not already own. Three sources count against it:
 --
 --   posted  units listed on the auction house
---   onHand  units in bags and bank (equipped gear is not counted -- it is in
---           use, not stock)
+--   onHand  units in bags and bank that could be sold (equipped gear and
+--           soulbound copies are not counted -- they can never be listed)
 --   inMail  units waiting in the mailbox, which is where an expired auction
 --           lands; owned, but in neither of the two above
 --   queued  units the craft queue will produce, so queueing 2 and looking again
@@ -485,7 +564,11 @@ function Auctions:GetRoom(itemID, ignoreRecipeID, useLearned)
         limit = learned or 0
     end
     local posted = self:GetPostedCount(itemID)
-    local onHand = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
+    local inventory = ns.Inventory
+    local onHand = (inventory.GetSellableBagCount and inventory:GetSellableBagCount(itemID)
+            or inventory:GetBagCount(itemID))
+        + (inventory.GetSellableBankCount and inventory:GetSellableBankCount(itemID)
+            or inventory:GetBankCount(itemID))
     local inMail = ns.Inventory:GetMailCount(itemID)
 
     local queued = 0
@@ -788,6 +871,12 @@ function Auctions:ReadOwned(opts)
                 -- client gives them, else from the rough time band.
                 local listing = { itemID = itemID, quantity = quantity }
                 if unit and unit > 0 then listing.unit = unit end
+                -- Its link, so Still listed and the tracker can name it
+                -- after a reload, before the client has the item again.
+                local linkOk, savedLink = pcall(function()
+                    return type(info.itemLink) == "string" and info.itemLink ~= "" and info.itemLink .. "" or nil
+                end)
+                if linkOk and savedLink then listing.link = savedLink end
                 local secondsOk, seconds = pcall(function() return tonumber(info.timeLeftSeconds) end)
                 if secondsOk and seconds and seconds >= 0 then
                     listing.ends = readAt + seconds
@@ -833,27 +922,30 @@ function Auctions:ReadOwned(opts)
         end
     end
 
+    -- Only this house's reading is replaced; the other house's stands.
+    local house = self:HouseTable(self:CurrentHouse())
     local record = self:GetTable()
-    local changed = record.auctionCount ~= count or not SameCounts(record.items, items)
+    local changed = house.auctionCount ~= count or not SameCounts(house.items, items)
 
     -- Counted so `/bts auctions` can say whether a reading ever happened. An
     -- item with nothing listed and an item never read for at all look the
     -- same in the stored table, and only one of those is a bug.
     self.readCount = (self.readCount or 0) + 1
 
-    record.items = items
-    record.prices = prices
+    house.items = items
+    house.prices = prices
     self:RememberListed(record, seenPrices, readAt)
 
-    record.byCharacter = record.byCharacter or {}
-    record.byCharacter[CharacterKey()] = { items = items, updatedAt = time(), listings = listings }
+    house.byCharacter = house.byCharacter or {}
+    house.byCharacter[CharacterKey()] = { items = items, updatedAt = time(), listings = listings }
     -- This session only: auction IDs are for telling a new listing apart.
     self.ownedIDs = ids
     self.live, self.liveAt = live, readAt
+    self.liveHouse = self:CurrentHouse()
     if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final, sold) end
     if ns.AuctionTracker and ns.AuctionTracker.OnRead then pcall(ns.AuctionTracker.OnRead, ns.AuctionTracker) end
-    record.updatedAt = time()
-    record.auctionCount = count
+    house.updatedAt = time()
+    house.auctionCount = count
 
     if changed then
         ns.Debug(("read %d of your auction(s), %d different item(s)"):format(
@@ -961,7 +1053,10 @@ function Auctions:OnEnable()
 
     self.openRefreshes = 0
 
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() Auctions:OnHouseClosed() end)
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
+        Auctions:OnHouseClosed()
         -- Slight delay: the auction house is not ready to answer queries the
         -- instant it opens.
         C_Timer.After(0.5, function()
@@ -971,6 +1066,7 @@ function Auctions:OnEnable()
             -- expired while it was shut -- and closing and reopening within
             -- five seconds is an ordinary thing to do, not a duplicate.
             Auctions.openRefreshes = (Auctions.openRefreshes or 0) + 1
+            Auctions:CurrentHouse()
             Auctions:Refresh({ force = true })
         end)
     end)

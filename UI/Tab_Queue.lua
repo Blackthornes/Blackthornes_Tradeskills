@@ -1039,7 +1039,8 @@ end
 local function Refresh()
     if not widgets.craftList then return end
 
-    local queue = ns.Queue:GetAll()
+    -- With "Only My Crafts:" ticked, only this character's crafts.
+    local queue = ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll()
 
     -- Copy so sorting for display never reorders the stored queue.
     local entries = {}
@@ -1060,9 +1061,13 @@ local function Refresh()
     UpdateAltNote(shopping)
     AnnounceAltCrafts(shopping)
 
+    -- Crafts on the queue, all for other characters, under "Only My Crafts:".
+    widgets.emptyLabel:SetText((#entries == 0 and #queue < ns.Queue:Count())
+        and L["Nothing queued for this character.\nCrafts for your other characters show when you log in on them."]
+        or L["Nothing queued.\nRight-click a craft on the Profit tab to add one."])
     widgets.emptyLabel:SetShown(#entries == 0)
 
-    local totals = ns.Queue:GetTotals()
+    local totals = ns.Queue:GetTotals(entries)
     -- From the list already built above, not a second walk of everything.
     local shoppingCost, unknown = ns.Queue:GetShoppingTotal(shopping)
 
@@ -1080,7 +1085,7 @@ local function Refresh()
         return
     end
 
-    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime()
+    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime(entries)
     widgets.craftTime = craftTime
     local unpriced = totals.priceable and "" or L["  (some unpriced)"]
 

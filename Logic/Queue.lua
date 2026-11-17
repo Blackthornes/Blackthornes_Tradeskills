@@ -31,6 +31,35 @@ function Queue:Count()
     return #self:GetAll()
 end
 
+--- Is this queued craft made by the character playing?
+--- When the client won't say who is playing, every craft counts as theirs,
+--- so nothing is hidden on a guess (one key per character).
+function Queue:IsMine(entry)
+    local selfKey = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if not selfKey then return true end
+    local crafter = self:GetCrafter(entry)
+    local characters = ns.Characters
+    if characters and characters.IsPlaying then
+        local ok, playing = pcall(characters.IsPlaying, characters, crafter)
+        if ok then return playing == true end
+    end
+    return crafter == selfKey
+end
+
+--- The crafts the Queue tab and the craft pane list: the whole queue, or
+--- with "Only My Crafts:" ticked, only the crafts this character makes.
+--- The stored queue is never changed; other characters see their crafts
+--- when they log in.
+function Queue:Shown()
+    local all = self:GetAll()
+    if not (ns.Config and ns.Config:Get("queueOnlyMine") == true) then return all end
+    local shown = {}
+    for _, entry in ipairs(all) do
+        if self:IsMine(entry) then shown[#shown + 1] = entry end
+    end
+    return shown
+end
+
 --- @param manualOnly skip derived sub-craft entries
 function Queue:Find(recipeID, manualOnly)
     local fallbackIndex, fallback
@@ -1855,11 +1884,12 @@ end
 -- bag are cheaper to make, the bag's cost already includes the wool. Adding
 -- the bolt crafts on top paid for that wool twice. Nor are the bolts sold, so
 -- they earn no profit.
-function Queue:GetTotals()
+-- @param list the crafts to add up (Queue:Shown); the whole queue when nil
+function Queue:GetTotals(list)
     local totals = { crafts = 0, cost = 0, profit = 0, priceable = true }
     local entries = self:GetEntryCosts()
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(list or self:GetAll()) do
         local priced = entries[entry]
 
         totals.crafts = totals.crafts + entry.quantity
@@ -1888,11 +1918,12 @@ end
 -- @return { seconds, timed, untimed, byCrafter = { [characterKey] = seconds },
 --   untimedBy = { [characterKey] = crafts } }; seconds is nil when no craft
 --   on the queue has a known time
-function Queue:GetCraftTime()
+-- @param list the crafts to time (Queue:Shown); the whole queue when nil
+function Queue:GetCraftTime(list)
     local result = { seconds = 0, timed = 0, untimed = 0, byCrafter = {}, untimedBy = {} }
     local craftTime = ns.CraftTime
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(list or self:GetAll()) do
         local count = entry.quantity or 0
         if count > 0 then
             local crafter = self:GetCrafter(entry) or "?"

@@ -416,6 +416,21 @@ dust or shard.
 
 ## Still unverified
 
+- `UnitFactionGroup("npc")` at a goblin auctioneer (Booty Bay, Gadgetzan,
+  Everlook) is taken to give no side, which is how Tradeskills tells the
+  neutral auction house from your own (`Auctions:CurrentHouse`). Not yet
+  seen in game (2026-11-17).
+
+**The daily reset and quest done flags (added 2026-11-17).** The Deals tab's
+Craftsman's Writs mark each order done today and say when new orders come
+in. The reset clock reads `C_DateAndTime.GetSecondsUntilDailyReset()`, then
+`GetQuestResetTime()`, each inside a pcall; a number from 1 to about a day
+counts. Writs turned in with the addon off come from
+`C_QuestLog.IsQuestFlaggedCompleted(questID)` (else the old global), read at
+login and when the list opens. None of the three is seen on Forever yet:
+`/bts probe` prints what each answers under "Writs". If neither reset call
+answers, the clock hides and a turn-in counts as done for one day.
+
 **How a profession window can be opened from the addon.** Casting is
 protected, so the Queue tab lays a `SecureActionButtonTemplate` button
 (type `spell`, the profession's name, or Smelting for Mining) over its craft
