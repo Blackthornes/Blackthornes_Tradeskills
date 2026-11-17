@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 10
+local FILE_VERSION = 11
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -489,9 +489,17 @@ function SharedWindow.Build()
     frame:EnableMouse(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    -- While the player drags it, nothing places it (SharedWindow.Dragging):
+    -- the watcher below put it back beside the game's window mid-drag, so
+    -- it snapped back under the cursor (players saw it at the profession
+    -- window, 2026-11-17).
+    frame:SetScript("OnDragStart", function(self)
+        hub.dragging = true
+        self:StartMoving()
+    end)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        hub.dragging = nil
         -- Moved while docked, it keeps that spot beside this game window
         -- (SharedWindow.Dropped); its own place is kept for when the game's
         -- window closes.
@@ -555,6 +563,7 @@ function SharedWindow.Build()
         table.insert(UISpecialFrames, "BlackthornesOneWindow")
     end
     frame:SetScript("OnHide", function()
+        hub.dragging = nil
         -- Closed by the player while a game window is open (its close gem,
         -- Escape, which closes the vendor too): it stays closed when that
         -- game window goes, never coming back by itself (a player saw it
@@ -1019,16 +1028,39 @@ local function SaveDockSpot(frame, game)
     WriteAll("oneWindowDockSpots", spots)
 end
 
+--- A number as the key holds it: to a tenth, so the client's last-digit
+--- wobble in a frame's edges never reads as a move.
+local function Tenth(value)
+    if type(value) ~= "number" then return tostring(value) end
+    return string.format("%.1f", value)
+end
+
 --- Where the game's window and this one stand and how wide this one is:
 --- when any of it moves, the window is placed beside it again.
 local function Spot(frame, game)
     local ok, key = pcall(function()
-        return table.concat({ tostring(game), tostring(game:GetRight()), tostring(game:GetTop()),
-            tostring(game:GetEffectiveScale()), tostring(frame:GetWidth()),
-            tostring(frame:GetScale()), tostring(RightEdge(game:GetRight() * game:GetEffectiveScale(),
+        return table.concat({ tostring(game), Tenth(game:GetRight()), Tenth(game:GetTop()),
+            Tenth(game:GetEffectiveScale()), Tenth(frame:GetWidth()),
+            Tenth(frame:GetScale()), Tenth(RightEdge(game:GetRight() * game:GetEffectiveScale(),
             ScreenWidth())) }, ":")
     end)
     return ok and key or nil
+end
+
+--- True while the player is dragging the window. A drag whose stop was
+--- never heard (the button let go off the game's window) ends here once
+--- the mouse button is up.
+function SharedWindow.Dragging()
+    if not hub.dragging then return false end
+    local down = rawget(_G, "IsMouseButtonDown")
+    if type(down) == "function" then
+        local ok, held = pcall(down, "LeftButton")
+        if ok and not held then
+            hub.dragging = nil
+            return false
+        end
+    end
+    return true
 end
 
 --- Dock beside the game's window open now. `again` only places it anew
@@ -1036,6 +1068,7 @@ end
 function SharedWindow.Dock(again)
     local frame = hub.frame
     if not (frame and frame:IsShown() and hub.place) or InFight() then return false end
+    if SharedWindow.Dragging() then return false end
     local game = GameFrame()
     if not game then return false end
     if not hub.docked then
@@ -1183,6 +1216,7 @@ function SharedWindow.Keep()
     if not (frame and hub.place) or InFight() then return false end
     local ok, shown = pcall(frame.IsShown, frame)
     if not (ok and shown) then return false end
+    if SharedWindow.Dragging() then return false end
     if not hub.docked then return SharedWindow.Dock() end
     local game = GameFrame()
     if not game or Spot(frame, game) == hub.spot then return false end
