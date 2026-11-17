@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.33.0
+
+- Star the recipes you want to learn, and vendors and trainers tell you when they teach one.
+- Each profession can have its own minimum profit.
+- The Profit tab has a new All Recipes view, and soulbound crafts get a price.
+- Material tooltips show which professions use them.
+- Butler's leveling help now covers Cooking and First Aid.
+- Various bug fixes for Tradeskills.
+
 ## 1.32.0
 
 - There's a Post at Minimum Profit box on the Pricing page. It lists your crafts at the lowest price that still makes your Minimum Profit. It starts off.

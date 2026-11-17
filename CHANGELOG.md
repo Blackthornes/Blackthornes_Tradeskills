@@ -4,6 +4,33 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.33.0
+
+For WoW: Forever (interface 16001). `/reload` is not enough: files were added, so close the game fully and start it again after updating.
+
+- **Small Craft Queue.** A new Small Craft Queue: box on the Windows page of Settings keeps the profession window to the small craft queue beside it. It starts off.
+- **Only My Crafts.** A new Only My Crafts: box on the Queue page of Settings shows only the crafts this character makes. Crafts for your other characters stay in the queue. It starts off.
+- **Empty queue stays hidden.** The folded craft pane stays out of the way until something is queued.
+- **All Recipes.** The Profit tab has a new All Recipes view after My Crafts. It lists every recipe you know, with KEEP and IGNORE in the row. Alt-click a craft row, or pick Set Keep in Stock in a Profit row's menu, to open a small Keep in Stock box.
+- **Keep in Stock.** Worn and soulbound copies no longer count toward Keep in Stock.
+- **Soulbound crafts.** The Profit tab prices a soulbound craft by what a vendor pays or by disenchanting it.
+- **Full prices.** Recipes to Learn shows gold, silver and copper, and your skill sits above the list on the Profit tab.
+- **Neutral auction house.** A visit to a neutral auction house keeps its own listings. It no longer replaces your home listings.
+- **Writs Done Today.** Writs can be marked done today, and the list says when new orders come in.
+- **Minimums by Profession.** A new Minimums by Profession: row on the Pricing page of Settings gives each profession its own Minimum Profit and Minimum Margin.
+- **Leave Out of Report.** Right-click a visit in Mailbox visits on the Sales tab and pick Leave Out of Report. The visit stays in the list, dimmed, and stops counting toward your totals. Count It Again puts it back.
+- **Used In.** Material tooltips say which professions use the material and how many of your recipes need it. Hold Shift for the recipe names. The Used In Recipes: row is on the Tooltips page of Settings and starts on Always.
+- **Learn Next.** Level Up's LEARN NEXT line has two new filters, Have Skill and Learn From, and recipe names are easier to read.
+- **Recipe Wishlist.** A new Recipe Wishlist: box on the Mail & Vendors page of Settings, under RECIPES, puts a star on recipes to learn. A card at vendors and trainers lists the starred recipes they teach. It starts off.
+- **Craft First.** A new Craft First: box on the Pricing page of Settings keeps an item off List all when a craft you know makes it worth more. It starts off.
+- **Craft Messages.** A new Craft Messages: box on the Tooltips page of Settings turns the chat lines you get when you make something from your queue on or off. It starts on.
+- **Butler.** Butler's Profession Leveling shows Cooking and First Aid, and Butler can ask which materials your Level Up list still needs.
+- **Blackthornes button for addon bars.** If you already use an addon bar, Blackthornes now puts one button on it. Left-click opens the menu and right-click opens the All Addons page of Settings.
+- **Settings pages in one order.** Every Blackthornes addon now lists its Settings pages the same way. Sounds is on its own page.
+- **Butler at a vendor.** At a vendor the one window opens on Butler, then goes back to the addon you had open when you leave.
+- **Thunder Bluff trainers.** Show the way points to Thunder Bluff and Mulgore trainers and vendors again.
+- Various bug fixes for Tradeskills.
+
 ## 1.32.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
