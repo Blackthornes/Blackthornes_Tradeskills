@@ -29,6 +29,7 @@ For WoW: Forever (interface 16001). `/reload` is not enough: files were added, s
 - **Settings pages in one order.** Every Blackthornes addon now lists its Settings pages the same way. Sounds is on its own page.
 - **Butler at a vendor.** At a vendor the one window opens on Butler, then goes back to the addon you had open when you leave.
 - **Thunder Bluff trainers.** Show the way points to Thunder Bluff and Mulgore trainers and vendors again.
+- **Sold a Day.** Sold a Day no longer counts a look at the auction house that read only part of the listings as sales.
 - Various bug fixes for Tradeskills.
 
 ## 1.32.0

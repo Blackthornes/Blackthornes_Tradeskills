@@ -3819,3 +3819,6 @@ L["This trainer teaches a recipe on your wishlist."] = "Ce maître enseigne une 
 L["This trainer teaches %d recipes on your wishlist."] = "Ce maître enseigne %d recettes de ta liste de souhaits."
 L["You learned %s. It's off your wishlist now."] = "Tu as appris %s. Elle n'est plus dans ta liste de souhaits."
 L["On your wishlist"] = "Dans ta liste de souhaits"
+
+L["%s (%s %d)"] = "%s (%s %d)"
+L["  |c%s%s|r"] = "  |c%s%s|r"
