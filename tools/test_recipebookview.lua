@@ -300,5 +300,50 @@ check("no average, no line", View.PaybackAt(info, nil), nil)
 check("a recipe with no price, no line", View.PaybackAt({ outputItemID = 9, cost = 50 }, 100), nil)
 ns.Profit = savedProfit
 
+print("\nrecipes to learn: the recipe wishlist")
+-- Its star column and Wishlist First (2026-11-17), only while it is on.
+local starredSet, wishOn = { [2] = true }, true
+local savedProfitForWish = ns.Profit
+ns.Profit = setmetatable({ WayTag = function() return nil end }, { __index = savedProfitForWish })
+local savedWishlist, savedWishlistUI = ns.Wishlist, ns.WishlistUI
+ns.Wishlist = { IsOn = function() return wishOn end, Prune = function() return 0 end,
+  Has = function(_, id) return starredSet[id] == true end }
+local boxes = {}
+local savedCheckbox = ns.Widgets.CreateCheckbox
+ns.Widgets.CreateCheckbox = function(_, text)
+  local box = Stub({ text = text, SetShown = function(self, v) self.shownNow = v end,
+    SetChecked = function(self, v) self.checkedNow = v end })
+  boxes[text] = box
+  return box
+end
+local savedNewModule = ns.NewModule
+ns.NewModule = ns.NewModule or function(name) local m = {} ns[name] = m return m end
+assert(loadfile(lfs_cwd .. "/UI/Wishlist.lua"))("Blackthornes_TS", ns)
+ns.NewModule = savedNewModule
+local wish = View.New()
+wish.Build(Frame())
+wish.Refresh()
+check("Wishlist First shows while it is on", boxes["Wishlist First"].shownNow, true)
+check("starred recipes go first", list.data[1].recipeID, 2)
+check("the rest keep their order", list.data[2].recipeID .. "," .. list.data[3].recipeID, "1,3")
+local starRow = Frame()
+list.opts.createRow(starRow)
+starRow.star.SetShown = function(self, v) self.shownNow = v end
+starRow.data = list.data[1]   -- the list sets it before each draw
+list.opts.updateRow(starRow, list.data[1])
+check("each row wears a star", starRow.star.shownNow, true)
+check("a right-click offers to take it off", list.opts.menu(list.data[1])[1].text, "Take Off Wishlist")
+wishOn = false
+wish.Refresh()
+check("off, the box hides", boxes["Wishlist First"].shownNow, false)
+check("off, the order is as before", list.data[1].recipeID, 1)
+starRow.data = list.data[1]
+list.opts.updateRow(starRow, list.data[1])
+check("off, no star", starRow.star.shownNow, false)
+check("off, no menu line", list.opts.menu(list.data[1]), nil)
+ns.Widgets.CreateCheckbox = savedCheckbox
+ns.Wishlist, ns.WishlistUI = savedWishlist, savedWishlistUI
+ns.Profit = savedProfitForWish
+
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")

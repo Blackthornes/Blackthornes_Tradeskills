@@ -331,6 +331,10 @@ local DEFAULTS = {
         -- rename it.
         tooltipBoughtFor = true,
 
+        -- Which professions use a material, on its tooltip (asked
+        -- 2026-11-17). See ItemTooltip:AddUsedInLines. Never rename it.
+        tooltipUsedIn = true,
+
         -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
         -- true keeps that line for while Shift is held. Whether a line is on
         -- stays in its own setting above, and the sales lines' Shift is
@@ -342,6 +346,7 @@ local DEFAULTS = {
         tooltipDisenchantShift = true,
         tooltipCrateShift = false,
         tooltipBoughtShift = false,
+        tooltipUsedInShift = false,
 
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
@@ -439,6 +444,13 @@ local DEFAULTS = {
         -- "quest" or "any"). Never rename either.
         levelUpHaveSkill = false,
         levelUpLearnFrom = "trainerVendor",
+        -- The recipe wishlist (2026-11-17): stars on recipes to learn, and
+        -- a note at a vendor or trainer that teaches one. Off unless ticked.
+        -- "Wishlist First" on Level Up's LEARN NEXT line and on Recipes to
+        -- Learn puts starred recipes at the top. Never rename these.
+        recipeWishlistOn = false,
+        levelUpWishlistFirst = true,
+        recipeBookWishlistFirst = true,
         -- Road to 300's "Pick By:" (2026-10-27): "lowest" ranks recipes by
         -- what their materials cost, "real" takes off what a craft sells
         -- back for. Never rename it.
@@ -803,6 +815,10 @@ local DEFAULTS = {
     -- items the queue made for those actions, never more than are carried.
     -- See Logic/QueueActions.lua.
     queueMarks = {},
+
+    -- The recipe wishlist (2026-11-17): GUID -> recipeID -> true, the
+    -- recipes each character starred. Never rename it. See Logic/Wishlist.lua.
+    recipeWishlist = {},
 
     -- What the selling test at a vendor found: { at, result }. See
     -- UI/SellMarked.lua.

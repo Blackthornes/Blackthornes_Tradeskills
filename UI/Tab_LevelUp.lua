@@ -69,6 +69,7 @@ local state = {
     haveSkill = false,      -- Learn next's "Have Skill" (2026-11-17)
     learnFrom = "trainerVendor", -- and its "Learn From:"
     learnBuilt = nil,       -- Learn next's rows as built, before those two
+    wishlistFirst = true,   -- "Wishlist First" on the LEARN NEXT line (UI/Wishlist.lua)
     selected = nil,
 }
 
@@ -88,6 +89,9 @@ local function RowMenu(entry)
         if ns.LearnNext.CanShowWay(entry) then
             lines[1] = { text = L["Show the Way"], run = function() ns.LearnNext:ShowTheWay(entry) end }
         end
+        -- The recipe wishlist (2026-11-17): "Add to Wishlist" or "Take Off Wishlist".
+        local wish = ns.WishlistUI and ns.WishlistUI.MenuLine(entry.recipeID)
+        if wish then lines[#lines + 1] = wish end
     else
         lines[1] = { text = L["Queue One"], run = function()
             ns.Queue:Add(entry.recipeID, 1)
@@ -106,6 +110,9 @@ end
 
 -- Defined with the detail panel, used by the controls built inside it.
 local UpdateCraftButton
+
+-- Defined with the list; the Wishlist First box on a row redraws with it.
+local Refresh
 
 -- Defined after Build; Sub-crafts only rebuilds the profession list with it.
 local OnShow
@@ -338,10 +345,28 @@ local function CreateRow(row)
     row.heading:Hide()
     row.headingNote:Hide()
 
+    -- The recipe wishlist (2026-11-17): a star at the left of each recipe
+    -- to learn, and "Wishlist First" on the LEARN NEXT line. Both only
+    -- while "Recipe Wishlist:" is on.
+    if ns.WishlistUI then
+        row.star = ns.WishlistUI.CreateStar(row, function() return row.data and row.data.recipeID end)
+        row.star:SetPoint("LEFT", 4, 0)
+        row.star:Hide()
+        row.firstBox = Widgets.CreateCheckbox(row, L["Wishlist First"], function(checked)
+            state.wishlistFirst = checked
+            ns.Config:Set("levelUpWishlistFirst", checked)
+            Refresh()
+        end, state.wishlistFirst)
+        row.firstBox:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row.firstBox:HookScript("OnEnter", function(box) ns.WishlistUI.FirstTip(box) end)
+        row.firstBox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        row.firstBox:Hide()
+    end
+
     PlaceRow(row)
 end
 
-local Refresh, ResetLearnFilters
+local ResetLearnFilters
 
 --- Is this one of the Learn From choices?
 local function LearnFromKnown(value)
@@ -420,15 +445,38 @@ local function MakeLearnEmpty(row)
     row.showAll:SetPoint("LEFT", row.emptyText, "RIGHT", 12, 0)
 end
 
+--- Move a recipe to learn's icon and name over for its star, or back.
+local function PlaceStar(row, starred)
+    local room = starred and ns.WishlistUI.STAR_ROOM or 0
+    if row.starRoom == room then return end
+    row.starRoom = room
+    row.icon:SetPoint("LEFT", 8 + room, 0)
+    row.name:SetPoint("LEFT", 28 + room, 0)
+end
+
 --- The LEARN NEXT heading row, or the line saying the filters left
 --- nothing: everything else on it hidden.
 local function ShowHeadingRow(row, heading, empty)
     row.heading:SetShown(heading)
+    -- The recipe wishlist's "Wishlist First" (UI/Wishlist.lua) keeps the far
+    -- right of the line; Have Skill and Learn From stand to its left.
+    local boxShown = false
+    if ns.WishlistUI and rawget(row, "firstBox") then
+        boxShown = heading and ns.WishlistUI.Shown() and true or false
+        row.firstBox:SetShown(boxShown)
+        if boxShown then row.firstBox:SetChecked(state.wishlistFirst) end
+    end
     if heading then
         MakeHeadingFilters(row)
         row.haveSkill:SetChecked(state.haveSkill)
         row.learnFrom:SetOptions(LearnFromOptions(state.learnCounts))
         row.learnFrom:SetValue(state.learnFrom)
+        row.learnFrom:ClearAllPoints()
+        if boxShown then
+            row.learnFrom:SetPoint("RIGHT", row.firstBox, "LEFT", -12, 0)
+        else
+            row.learnFrom:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        end
     end
     -- On a narrow list the note would wrap past the line: it steps aside
     -- and the filters keep their room.
@@ -437,6 +485,7 @@ local function ShowHeadingRow(row, heading, empty)
         pcall(function()
             local room = row:GetWidth() - row.heading:GetStringWidth() - row.haveSkill:GetWidth()
                 - row.learnFromLabel:GetStringWidth() - row.learnFrom:GetWidth() - 60
+                - (boxShown and row.firstBox:GetWidth() + 12 or 0)
             noteFits = room >= 220
         end)
     end
@@ -498,6 +547,13 @@ local function UpdateRow(row, entry)
     row.data = entry
 
     ShowHeadingRow(row, entry.heading == true, entry.learnEmpty == true)
+    local hasStar = ns.WishlistUI ~= nil and rawget(row, "star") ~= nil
+    local starred = hasStar and entry.learnNext == true and ns.WishlistUI.Shown()
+    if hasStar then
+        row.star:SetShown(starred)
+        PlaceStar(row, starred)
+        if starred then row.star:Paint(false) end
+    end
     if entry.heading or entry.learnEmpty then
         if row.subButton then row.subButton:Hide() end
         if row.wayButton then row.wayButton:Hide() end
@@ -1006,6 +1062,19 @@ local function BuildDetail(parent)
     GrowToFit(learn.wayButton)
     GrowToFit(learn.queueButton)
 
+    -- The recipe wishlist (2026-11-17): "Add to Wishlist" or "On Wishlist",
+    -- sized to the longer, over Show the Way.
+    learn.wishButton = Widgets.CreateButton(learn, L["Add to Wishlist"], function()
+        local entry = state.selected
+        if not (entry and entry.learnNext and ns.Wishlist) then return end
+        ns.Wishlist:Toggle(entry.recipeID)
+    end, { width = 120, height = 24 })
+    learn.wishButton:SetPoint("BOTTOMLEFT", learn.wayButton, "TOPLEFT", 0, 6)
+    GrowToFit(learn.wishButton)
+    learn.wishButton:SetText(L["On Wishlist"])
+    GrowToFit(learn.wishButton)
+    learn.wishButton:Hide()
+
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
@@ -1072,6 +1141,12 @@ local function UpdateLearnDetail(detail, entry)
 
     learn.wayButton:SetShown(ns.LearnNext.CanShowWay(entry))
     learn.wayButton:SetEnabledState(entry.place ~= nil)
+
+    local wishShown = ns.WishlistUI ~= nil and ns.WishlistUI.Shown()
+    learn.wishButton:SetShown(wishShown)
+    if wishShown then
+        learn.wishButton:SetText(ns.Wishlist:Has(entry.recipeID) and L["On Wishlist"] or L["Add to Wishlist"])
+    end
 end
 
 local function UpdateDetail(entry)
@@ -1354,6 +1429,9 @@ local function LearnRows(reuse)
     end
     local kept, counts = ns.LearnNext.Filter(rows, { haveSkill = state.haveSkill, learnFrom = state.learnFrom })
     state.learnCounts = counts
+    -- Wishlist First (2026-11-17): starred recipes at the top, in the
+    -- order they had; the rest below as before. Sorts what was kept.
+    if state.wishlistFirst and ns.WishlistUI then kept = ns.WishlistUI.StarredFirst(kept) end
     return kept, #rows
 end
 
@@ -1542,6 +1620,7 @@ local function Build(container)
     state.haveSkill = ns.Config:Get("levelUpHaveSkill") == true
     local from = ns.Config:Get("levelUpLearnFrom")
     state.learnFrom = LearnFromKnown(from) and from or ns.LearnNext.LEARN_FROM_DEFAULT
+    state.wishlistFirst = ns.Config:Get("levelUpWishlistFirst") ~= false
     local learnNext = Widgets.CreateCheckbox(toolbar, L["Learn next"], function(checked)
         state.learnNext = checked
         ns.Config:Set("levelUpLearnNext", checked)

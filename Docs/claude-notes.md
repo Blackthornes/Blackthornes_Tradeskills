@@ -2860,6 +2860,30 @@ ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
 draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
 seen in game.
 
+## Used in on tooltips
+
+Asked 2026-11-17 (a player's idea; Trent approved the mockup and words). A
+material's tooltip says "Used in" with each profession the account's
+characters know a recipe for, and how many, most first; Shift adds a line per
+profession with up to three recipe names, easiest first, then "and N more".
+When none of them use it: the professions from the full recipe book in grey,
+"Your characters don't use it yet.", and with Shift one "For example" recipe.
+Nothing for an item no recipe uses, or a grey item.
+
+`Logic/UsedIn.lua` keeps two lookups built by `Util.NewWorker`, never on
+hover: the book one from `RecipeBook:GetAll()` and the known one from every
+character's saved recipes, leaving out dropped professions (`Recipes:IsDropped`)
+and a material that is also the recipe's output. The first tooltip starts
+both; until done the line is left out. `UsedIn:Stale()` rebuilds over frames
+and is called by `Recipes:Harvest` when it saves new recipes, by
+`ForgetCharacter`, and when a character's profession lines change. Answers are
+kept per item until a rebuild. Long lists are broken into lines of about
+`UsedIn.WIDTH` letters (`UsedIn.Wrap`), never cut.
+
+Settings: Tooltips page, "Used In Recipes:" Off / Shift / Always
+(`tooltipUsedIn`, on; `tooltipUsedInShift`, off; never rename), in "All
+Lines". Tested in `tools/test_usedin.lua`.
+
 ## Leave Out of Report (2026-11-17)
 
 The owner said build it from a mockup (2026-11-17). On the Sales tab's
@@ -2903,3 +2927,58 @@ some have their own with all shown. Export carries `M<Name>:profit:margin`
 ("-" for empty) in the limits section. Tested in
 `tools/test_professionminimums.lua`, `tools/test_uifit.lua` and
 `tools/test_disenchantbutton.lua`. Not yet seen in game.
+
+## The recipe wishlist (2026-11-17)
+
+The owner said build it, from a mockup with the words he approved
+(the "ts-recipe-wishlist" mockup). "Recipe Wishlist:" on the Mail &
+Vendors page under RECIPES, off unless ticked (`recipeWishlistOn`); off,
+nothing of it shows. `Logic/Wishlist.lua` keeps the list and reads the
+vendor or trainer; `UI/Wishlist.lua` has the star, the menu line, the
+"Wishlist First" sort and the card.
+
+- Saved account wide, one key per character:
+  `recipeWishlist[guid][recipeID] = true` (never rename). With no GUID the
+  client will read (`UnitGUID("player")` must be "Player-..."), a star does
+  nothing and nothing is written. A recipe is kept under the merged book's
+  ID (`Wishlist.Key`); `Has` finds it by either.
+- A star column at the left of Level Up's LEARN NEXT rows and of Recipes to
+  Learn (both copies), never beside the name: Profit's small star badge
+  means "raises your skill and pays". The row's icon and name move over by
+  `WishlistUI.STAR_ROOM`. Right-click: "Add to Wishlist" / "Take Off
+  Wishlist". Level Up's learn pane has an "Add to Wishlist" / "On Wishlist"
+  button over Show the Way.
+- "Wishlist First" (no colon, like "Learn next") on the LEARN NEXT heading
+  row and in Recipes to Learn's top bar, saved as `levelUpWishlistFirst`
+  and `recipeBookWishlistFirst` (on by default). It sorts the rows already
+  built (`WishlistUI.StarredFirst`), starred first in the order they had;
+  nothing is rescanned. It shares the LEARN NEXT line with the Learn Next
+  filters design (Have Skill, Learn From) when that ships.
+- At a vendor: 0.3 s after MERCHANT_SHOW (after `Vendor:Scan`), its recipe
+  items (`Vendor.merchantRecipes`, which now keep `index`) are matched with
+  `RecipeBook:ForItem`. At a trainer (TRAINER_SHOW, TRAINER_UPDATE
+  coalesced, profession trainers only by `IsTradeskillTrainer`): lines by
+  the tooltip's spell ID, else by name; lines it hides until the skill is
+  high enough are read with the "unavailable" filter flipped on and then
+  put back (`Wishlist.flipping` keeps its own TRAINER_UPDATE out), and get
+  no index, since the places differ with the filter flipped.
+- The card ("On Your Wishlist:") sits under MerchantFrame or
+  ClassTrainerFrame, dark glass rows from `Widgets.CreateScrollList`, Buy or
+  Learn one a click (`Wishlist:Buy` / `:Learn` check the place still holds
+  that recipe first). A vendor's Buy works below the skill ("Learn at
+  145"); a trainer's Learn stays grey until the trainer teaches it. Chat
+  says "This vendor sells 2 recipes on your wishlist." once per vendor or
+  trainer a login (`Wishlist.told`).
+- A starred recipe comes off on NEW_RECIPE_LEARNED, or when the book says
+  this character knows it (`Wishlist:Prune`, at a vendor, a trainer and on
+  Recipes to Learn's redraw), and chat says "You learned %s. It's off your
+  wishlist now."
+- "On your wishlist", one gold line on a recipe item's tooltip, follows the
+  recipe lines' Off, Shift or Always (`ItemTooltip:AddWishlistLine`).
+- Butler reads `Butler:WishlistHere()` (see claude-notes-sisters.md, "What
+  Butler calls here"); while Butler's Wishlist module is loaded the card
+  stays hidden.
+- Not yet seen in game: the trainer's filter flip, `BuyTrainerService`
+  from Tradeskills, the card's place under the windows, and the star art
+  at 12 px. Tested in `tools/test_wishlist.lua` and
+  `tools/test_recipebookview.lua`.

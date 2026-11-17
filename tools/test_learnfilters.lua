@@ -334,6 +334,43 @@ tabs.levelup.refresh()
 rows = Draw()
 check("a choice it doesn't know starts on the default", rows[1].learnFrom.selected, "trainerVendor")
 
+print("\nwith the recipe wishlist on")
+config.levelUpLearnFrom, config.levelUpHaveSkill = "trainerVendor", false
+ns.LearnNext.GetRows = function() built = built + 1 return {
+  Row("Big Bronze Knife", "trainer", { trainer = true }),
+  Row("Pearl Dagger", "drop", { drop = true }),
+  Row("Heavy Bronze Mace", "vendor", { vendor = true }),
+} end
+local starred = { [#"Heavy Bronze Mace"] = true }
+ns.WishlistUI = {
+  STAR_ROOM = 14,
+  Shown = function() return true end,
+  CreateStar = function(parent) local star = Obj(parent) star.Paint = noop return star end,
+  FirstTip = noop,
+  MenuLine = function(recipeID) return { text = "Add to Wishlist", recipeID = recipeID } end,
+  StarredFirst = function(rows)
+    local out = {}
+    for _, row in ipairs(rows) do if starred[row.recipeID] then out[#out + 1] = row end end
+    for _, row in ipairs(rows) do if not starred[row.recipeID] then out[#out + 1] = row end end
+    return out
+  end,
+}
+made.lists = {}
+assert(loadfile(lfs_cwd .. "/UI/Tab_LevelUp.lua"))("Blackthornes_TS", ns)
+tabs.levelup.build(Obj())
+list = made.lists[1]
+tabs.levelup.refresh()
+check("starred first, after the filter", Names(), "[LEARN NEXT], Heavy Bronze Mace, Big Bronze Knife")
+rows = Draw()
+check("Wishlist First shows on the line", rows[1].firstBox.shown, true)
+check("and the filters show beside it", rows[1].haveSkill.shown and rows[1].learnFrom.shown, true)
+rows[1].learnFrom:Pick("drop")
+check("Learn From still filters with the wishlist on", Names(), "[LEARN NEXT], Pearl Dagger")
+local menu = list.opts.menu(list.data[2])
+check("a drop row's menu keeps the wishlist line, no Show the Way",
+  menu and #menu == 1 and menu[1].text == "Add to Wishlist", true)
+ns.WishlistUI = nil
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
