@@ -316,6 +316,19 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+Mulgore's spots (2026-11-17, Show the way sent players to Tepa and other
+Thunder Bluff trainers just north of the city, reported twice): Forever's
+Mulgore map covers more ground than the one Classic's numbers were measured
+on, so a Classic spot read on it landed north of the NPC. Every other zone
+the game showed vendors in matched. `tools/classic_maps.py` moves Mulgore's
+spots in `Data/LearnSpots.lua` and `Data/VendorSpots.lua` onto Forever's map
+(once; a moved file carries its mark in the header), and
+`make_learn_spots.py` and `make_vendor_spots.py` call its `forever_spot` on
+every spot they write. `LearnNext`'s Thunder Bluff box is the city's own map
+on Forever's Mulgore (x 31 to 49, y 27 to 45). Thunder Bluff's spots seen in
+game (`Data/ForeverVendorSpots.lua`, map 1456) were right and still win.
+Tested in `tools/test_bluffspots.lua`. Not yet seen in game.
+
 ## Show the way across zones and the sea
 
 The owner said build it (2026-10-21, from a mockup) in every addon: with
