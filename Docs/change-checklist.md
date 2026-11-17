@@ -73,7 +73,7 @@ Why: "invalid key to next" when a worker started another worker (2026-11).
 ## Player words
 Lines: L\[\s*"|L\.Format\(
 Check: Plain, warm, sixth grade, no em-dashes, hype or questions
-  (`python tools/check_house_rules.py`). New words need Trent's yes. deDE and
+  (`python tools/check_house_rules.py`). New words need the owner's yes. deDE and
   the other locales change with the English.
 Why: The writing rule holds for every word a player reads.
 
@@ -105,7 +105,7 @@ Why: Hand edits were lost at the next fold-in.
 Lines: [Dd]efaults?\s*=|DEFAULTS
 Check: Big new features start off. Never change a setting the player
   already chose.
-Why: Standing rule from Trent.
+Why: Standing rule from the owner.
 
 ## Sharing code (Tradeskills)
 Files: ^Core/(Comm|Serialize)\.lua$|^Logic/Contribute\.lua$
@@ -122,7 +122,7 @@ Why: Other authors read it.
 Lines: GetValue|VendorPrice|SellPrice|quality\s*==\s*0
 Check: Grey items are priced at vendor only; everything else is
   max(auction, vendor).
-Why: Standing rule from Trent.
+Why: Standing rule from the owner.
 
 ## A setting read by price source (Tradeskills)
 Lines: TSM|Auctionator|DBRecent|DBMarket
@@ -137,8 +137,7 @@ Check: Ask Characters:Same, :IsPlaying or :Canonical, never compare by hand
   (tools/test_onecharacter.lua).
 Why: One key per character.
 
-## The fenced auction house (Tradeskills)
+## The fenced feature (Tradeskills)
 Lines: ownAuctionHouse
-Check: Blackthornes UI Auction House stays off and out of releases until
-  Trent says it is done.
-Why: Trent's hold.
+Check: It stays off and out of releases until the owner says it is done.
+Why: the owner's call.

@@ -116,7 +116,7 @@ _G.BlackthornesTS.CraftOrFarm:ForMaterial(itemID)
 
 Keep both calls stable; if one changes, change Farmer's `Logic/Pace.lua`
 or `UI/ItemTooltip.lua` too. Tested in `tools/test_craftorfarm.lua` and
-`tools/test_yourtimeview.lua`. Not yet seen in game.
+`tools/test_yourtimeview.lua`.
 
 ## How Tradeskills uses Equipment
 
@@ -162,7 +162,7 @@ ns.LearnNext:ShowTheWayFor(recipeID)  -- Show the way by recipe ID; true when a 
 
 Keep these stable; if one changes, change Equipment's `Logic/Enchants.lua`
 too. Tested in `tools/test_enchantsforyou.lua` and
-`tools/test_learnnext.lua`. Not yet seen in game.
+`tools/test_learnnext.lua`.
 
 Equipment calls back one way: when a player changes their own stat weights
 in Equipment's weights window, or picks a spec there, it calls, inside a
@@ -361,8 +361,8 @@ player's mail with money or items not sent back once already) or are
 gone for good. `Holdings()` entries carry them as `mailCount`,
 `mailSoonest`, `mailSoonCount`, `mailReturns` and `mailGone` (nil until
 read this way), as of `mailAt`; Butler counts the days since. Tested in
-`tools/test_mailrunsout.lua` and `tools/test_butler.lua`. Not yet seen in
-game. If they change, change Butler's `Logic/MailRunsOut.lua` too.
+`tools/test_mailrunsout.lua` and `tools/test_butler.lua`.
+If they change, change Butler's `Logic/MailRunsOut.lua` too.
 
 Clear Items and stale alts (a player's report, the owner said build it
 from a mockup, 2026-11-10: Butler's jobs mailed items long gone and gold
@@ -377,7 +377,7 @@ own menu calls `Butler:ClearHoldings(key or full name)` (true and the full
 name, or false and "playing", "unknown" or "error"). The job holder skips
 an alt whose bags are older than `Butler.STALE_DAYS` (30;
 `Butler.Stale`). Tested in `tools/test_clearitems.lua` and
-`tools/test_butler.lua`. Not yet seen in game.
+`tools/test_butler.lua`.
 
 At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:

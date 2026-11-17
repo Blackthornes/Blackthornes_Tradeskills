@@ -101,9 +101,9 @@ They are the same in every addon's notes; keep them the same.
 ## Running the checks (keep the output small)
 
 A full test run used to print every passing check, about 590 KB, and that
-alone ran threads out of room (found 2026-11-16). `tools/runtests.py` is now
+alone ran sessions out of room (found 2026-11-16). `tools/runtests.py` is now
 quiet: a passing suite prints nothing and a failing one prints its last 25
-lines. Keep it that way, and never pipe a tool's whole output into a thread.
+lines. Keep it that way, and never pipe a tool's whole output into a session.
 
 - `python tools/runtests.py` runs everything and prints one line (`-q`, as
   the sister addons take it, is accepted and changes nothing).
@@ -118,7 +118,7 @@ lines. Keep it that way, and never pipe a tool's whole output into a thread.
 
 ## Big files (read these in pieces)
 
-Reading a huge file whole fills the context and the thread dies. Sizes are
+Reading a huge file whole runs the session out of room. Sizes are
 from 2026-11-03 and only grow. Find more with `find . -name '*.lua' | xargs wc -lc | sort -n`.
 
 - Never read a file below whole. Use `grep -n` to find the spot, then read

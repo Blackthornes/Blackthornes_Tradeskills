@@ -79,11 +79,11 @@ def main():
 
     units, unit_names = quest_db["units"]["data"], quest_db["units"]["enUS"]
     zone_names = quest_db["zones"]["enUS"]
-    pf_items = quest_db["items"]["data"]
+    sp_items = quest_db["items"]["data"]
 
     npcs, sells = {}, {}
     for item_id in wanted:
-        entry = pf_items[item_id]
+        entry = sp_items[item_id]
         if not entry or not entry["V"]:
             continue
         ids = []

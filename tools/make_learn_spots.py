@@ -7,7 +7,7 @@ two Classic sources and the Forever client's game tables exported as CSV:
 
     python tools/make_learn_spots.py <world database dump> <quest database> <client tables>
 
-  world database dump   the same world_full_14_june_2021.sql as
+  world database dump   the same world.sql as
                         make_recipe_book.py: which trainer teaches what
   quest database        the same folder as make_recipe_book.py: where each
                         trainer and vendor stands
@@ -50,7 +50,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_recipe_book import (  # noqa: E402
-    BUILD, CREATE_ITEM, PATCH, PROFESSIONS, LEARN_SPELL, latest, lua_string, load_pfquest, tables,
+    BUILD, CREATE_ITEM, PATCH, PROFESSIONS, LEARN_SPELL, latest, lua_string, load_spawn_db, tables,
 )
 
 from lupa import lua51  # noqa: E402
@@ -99,7 +99,7 @@ def main():
         "skill_line_ability", "spell_template", "npc_trainer", "npc_trainer_template",
         "creature_template",
     })
-    quests = load_pfquest(Path(sys.argv[2]))
+    quests = load_spawn_db(Path(sys.argv[2]))
     client = Path(sys.argv[3])
 
     spells = latest(vm["spell_template"], "entry", "build", BUILD)
