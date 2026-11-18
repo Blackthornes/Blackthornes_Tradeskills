@@ -1519,11 +1519,34 @@ function Mail:NoteHeardSale(name)
         who = ns.Config:GetCharacterKey(),
         itemID = self:ResolveItemName(name),
     }
+    heard.quantity = self:HeardQuantity(name, heard.itemID, heard.who)
 
     list[#list + 1] = heard
     while #list > MAX_HEARD do table.remove(list, 1) end
 
     return heard
+end
+
+--- How many a heard sale sold: the count on the line ("Linen Cloth (5)"),
+--- else the stack of the cheapest listing of it, the one a buyer takes
+--- first, else 1.
+function Mail:HeardQuantity(name, itemID, who)
+    local count = type(name) == "string"
+        and (name:match("%((%d+)%)%s*$") or name:match("%s[xX]%s?(%d+)%s*$"))
+    if tonumber(count) then return tonumber(count) end
+    if not itemID or not (ns.Auctions and ns.Auctions.GetListings) then return 1 end
+
+    local ok, listings = pcall(ns.Auctions.GetListings, ns.Auctions)
+    if not ok or type(listings) ~= "table" then return 1 end
+    local best
+    for _, listing in ipairs(listings) do
+        if listing.itemID == itemID and not listing.ended
+            and (who == nil or listing.who == who)
+            and (not best or (listing.unit or math.huge) < (best.unit or math.huge)) then
+            best = listing
+        end
+    end
+    return best and tonumber(best.quantity) or 1
 end
 
 --- An item name as the two sides of a sale both mean it.
@@ -1592,6 +1615,8 @@ function Mail:SettleHeard()
                     and (heard.who == nil or entry.who == heard.who)
                     and SameItem(heard, entry) then
                     entry.heard = true
+                    -- When it sold, for Keep in stock (Auctions:GetPostedCount).
+                    entry.heardAt = heard.t
                     settled = true
                     break
                 end
