@@ -141,3 +141,10 @@ Why: One key per character.
 Lines: ownAuctionHouse
 Check: It stays off and out of releases until the owner says it is done.
 Why: the owner's call.
+
+## A tooltip's SetText with colours
+Lines: GameTooltip:SetText\(
+Check: Colours go text, r, g, b, alpha, wrap. With a wrap, put the alpha in
+  too (`1, 1, 1, 1, true`); never `1, 1, 1, true`.
+Why: The Profit tab's "Each craft makes" hover left out the alpha, so the
+  wrap landed in the alpha slot and the game raised on every hover.
