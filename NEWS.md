@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.34.2
+
+Fixes and changes:
+- Road to 300: Queue Step now queues only the step you click.
+
 ## 1.34.0
 
 - The craft queue and Shopping List show on the Crafting tab of the one window, and only while something is queued.
