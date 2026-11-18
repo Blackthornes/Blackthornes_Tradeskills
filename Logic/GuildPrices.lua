@@ -467,7 +467,11 @@ function GuildPrices:SayHeard(who)
     if not batch then return end
     self.heard[who] = nil
     if batch.count > 0 and self:NoticeOn() then
-        ns.Print(L.Format(L["Got prices for %d items from %s in your guild."], batch.count, batch.name))
+        if batch.count == 1 then
+            ns.Print(L.Format(L["Got prices for 1 item from %s in your guild."], batch.name))
+        else
+            ns.Print(L.Format(L["Got prices for %d items from %s in your guild."], batch.count, batch.name))
+        end
     end
 end
 

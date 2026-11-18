@@ -3830,3 +3830,4 @@ L["Says in chat when prices come in from your guild or realm."] = "Te avisa en e
 L["Got prices for %d items from %s in your guild."] = "Precios recibidos de %d objetos de %s, de tu hermandad."
 L["Got prices for %d items from %d players on your realm."] = "Precios recibidos de %d objetos de %d jugadores de tu reino."
 L["Got prices for %d items from 1 player on your realm."] = "Precios recibidos de %d objetos de 1 jugador de tu reino."
+L["Got prices for 1 item from %s in your guild."] = "Precio recibido de 1 objeto de %s, de tu hermandad."

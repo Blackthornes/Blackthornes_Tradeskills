@@ -139,8 +139,12 @@ print("\ntwo guildmates at once")
 said = {}
 FromGuild("Ana Smith", 2000, 3)
 FromGuild("Dee Brown", 3000, 4)
+FromGuild("Eli Stone", 3500, 1)
 Wait(60)
-check("one line each", #said, 2)
+check("one line each", #said, 3)
+local one
+for _, line in ipairs(said) do if line:find("Eli") then one = line end end
+check("one item reads right", one, "Got prices for 1 item from Eli Stone in your guild.")
 
 --------------------------------------------------------------------------------
 print("\nrealm prices: many players, one line, no names")

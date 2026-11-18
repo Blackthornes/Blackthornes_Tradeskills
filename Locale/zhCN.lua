@@ -3827,3 +3827,4 @@ L["Says in chat when prices come in from your guild or realm."] = "收到公会�
 L["Got prices for %d items from %s in your guild."] = "收到 %d 件物品的价格，来自公会成员 %s。"
 L["Got prices for %d items from %d players on your realm."] = "收到 %d 件物品的价格，来自服务器上的 %d 名玩家。"
 L["Got prices for %d items from 1 player on your realm."] = "收到 %d 件物品的价格，来自服务器上的 1 名玩家。"
+L["Got prices for 1 item from %s in your guild."] = "收到 1 件物品的价格，来自公会成员 %s。"
