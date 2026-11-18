@@ -534,6 +534,19 @@ next cheapest. The footer says "1 recipe skipped." (`RoadView.FootText`,
 shown only. Tested in `tools/test_roadto300.lua` and
 `tools/test_roadviewfit.lua`.
 
+Green steps (a player's report, 2026-11-18: the road called Rough
+Dynamite, yellow 30 and grey 60 on Forever, a yellow step while the
+game's window showed it green). Green starts halfway from yellow to grey
+(`RoadPlan.Edges`, `RoadPlan.Band`, as `LearnNext.Tier`); a step ends
+where yellow turns green, carries `tier` ("optimal", "medium", "easy"),
+is drawn in that colour and a green one's chip says "some crafts". `Best`
+takes a green craft only when no orange or yellow one is there, even if
+cheaper a point. A known recipe's colour the game's window showed
+(`SkillUp:GetForRecipe`, tier and skill) wins over the book: when they
+disagree `RoadPlan.Agree` moves yellow, green and grey together by as
+much as it takes, as a copy reading through to the record. Tested in
+`tools/test_roadto300.lua`.
+
 Trainers inside a dungeon (2026-11-16, the owner's screenshot: "Train Artisan
 Enchanting" named no trainer and had no Show the Way). `Data/LearnSpots.lua`
 drops any trainer with no outdoor spot, and Classic's only Artisan
