@@ -2103,6 +2103,10 @@ end
 local QUEUED_WIDTH = 250
 local QUEUED_ROW_HEIGHT = 30
 local QUEUED_GAP = 4
+-- On the one window's Crafting tab: a little wider than the drawer, with
+-- the tab's room to spare.
+local ONE_QUEUED_WIDTH = 280
+local ONE_QUEUED_GAP = 8
 
 CraftPanel.QUEUED_WIDTH = QUEUED_WIDTH
 
@@ -2559,23 +2563,95 @@ function CraftPanel.QueuedFits(paneRight, screenRight)
     return paneRight + QUEUED_GAP + QUEUED_WIDTH <= screenRight
 end
 
---- Show the queued crafts beside the pane while anything is queued.
+--- Is the one window's Crafting tab wide enough for the queued crafts on
+--- its right? Too narrow, they step away so the crafts stay readable (the
+--- Queue tab still has them all).
+-- @param width the tab's width, nil when not laid out yet
+function CraftPanel.QueuedFitsInOne(width)
+    if type(width) ~= "number" or width <= 0 then return true end
+    return width >= PANEL_WIDTH + ONE_QUEUED_GAP + ONE_QUEUED_WIDTH
+end
+
+--- Lay the pane into the one window's Crafting tab: the whole tab, or its
+--- left part with the queued crafts on the right (the owner asked for the
+--- drawer's lists there, 2026-11-18). Re-placed only when that changes.
+function CraftPanel:LayOutInOne(column)
+    local container, frame = self.oneContainer, self.frame
+    if not (container and frame) then return end
+    column = column and true or false
+    if self.columnInOne == column then return end
+    self.columnInOne = column
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+    frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT",
+        column and -(ONE_QUEUED_WIDTH + ONE_QUEUED_GAP) or 0, 0)
+end
+
+--- The queued crafts into the Crafting tab's right side, without the
+--- drawer's own rim, the way the pane sits there.
+function CraftPanel:QueuedIntoOne(frame)
+    local container = self.oneContainer
+    if self.queuedInOne == container then return end
+    self.queuedInOne = container
+    frame:SetParent(container)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
+    frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
+    frame:SetWidth(ONE_QUEUED_WIDTH)
+    frame:SetClampedToScreen(false)
+    local trim = rawget(frame, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(frame, 0)
+end
+
+--- Back to the drawer beside the pane, rim and all.
+function CraftPanel:QueuedBeside(frame)
+    if not self.queuedInOne then return end
+    self.queuedInOne = nil
+    frame:Hide()
+    frame:SetParent(self.frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    frame:SetWidth(QUEUED_WIDTH)
+    frame:SetClampedToScreen(true)
+    local trim = rawget(frame, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(frame, 0.08)
+end
+
+--- Show the queued crafts beside the pane while anything is queued: past
+--- its right edge, or on the right of the one window's Crafting tab.
 function CraftPanel:RefreshQueued()
-    -- In the one window the Queue tab sits beside Crafting, so the list
-    -- doesn't hang out past the window.
-    local wanted = self.frame and self.frame:IsShown() and not self.inOne
+    local container = self.inOne and self.oneContainer or nil
+    local wanted = self.frame and self.frame:IsShown()
         and not self:IsCollapsed() and ns.Queue:Count() > 0
-        and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
+    if wanted and container then
+        local ok, width = pcall(container.GetWidth, container)
+        wanted = CraftPanel.QueuedFitsInOne(ok and width or nil)
+    elseif wanted then
+        wanted = CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
+    end
 
     -- With "Only My Crafts:" ticked, only this character's crafts.
     local entries = wanted and (ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll())
     if not entries or #entries == 0 then
         if self.queuedFrame then self.queuedFrame:Hide() end
+        if container then self:LayOutInOne(false) end
         return
     end
 
     local frame = self:BuildQueued()
-    frame:SetHeight(self.frame:GetHeight())
+    local height
+    if container then
+        self:QueuedIntoOne(frame)
+        self:LayOutInOne(true)
+        local ok, tall = pcall(container.GetHeight, container)
+        height = ok and tonumber(tall) or 0
+    else
+        self:QueuedBeside(frame)
+        height = self.frame:GetHeight()
+        frame:SetHeight(height)
+    end
     local opening = not frame:IsShown()
     frame:Show()
     if opening and ns.Motion then ns.Motion:Open(frame, 0) end
@@ -2585,7 +2661,7 @@ function CraftPanel:RefreshQueued()
 
     -- Between the title and the footer, shared with the shopping list when
     -- it is showing.
-    local available = frame:GetHeight() + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
+    local available = height + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
     local shown = self:IsShoppingShown()
 
     -- Built once for the rows and the total: it walks the queue, the bags
@@ -2673,6 +2749,8 @@ function CraftPanel:Hide()
     self:StopSlicedRefresh()
     if self.stripMode then self:LeaveStrip() end
     if self.frame then self.frame:Hide() end
+    -- In the one window the queued crafts sit in the tab, not on the pane.
+    if self.queuedFrame then self.queuedFrame:Hide() end
 end
 
 --- Lay the pane into the one window's Crafting tab (UI/Main.lua's
@@ -2684,9 +2762,10 @@ function CraftPanel:IntoOne(container)
     if self.stripMode then self:LeaveStrip() end
     self.inOne = true
     self.squeezed = false
+    self.oneContainer = container
     frame:SetParent(container)
-    frame:ClearAllPoints()
-    frame:SetAllPoints(container)
+    self.columnInOne = nil
+    self:LayOutInOne(false)
     if frame.SetToplevel then frame:SetToplevel(false) end
     pcall(frame.SetFrameStrata, frame, container:GetFrameStrata() or "MEDIUM")
     local trim = rawget(frame, "titan")
@@ -2694,6 +2773,7 @@ function CraftPanel:IntoOne(container)
     Theme.SetHalo(frame, 0)
     self:ApplyBody()
     if self.queuedFrame then self.queuedFrame:Hide() end
+    -- Refresh brings the queued crafts back on the tab's right side.
     if ns.Crafting and ns.Crafting.isTradeSkillOpen then
         frame:Show()
         self:Refresh()
@@ -2705,6 +2785,9 @@ end
 function CraftPanel:OutOfOne()
     if not self.inOne then return end
     self.inOne = false
+    self.oneContainer = nil
+    self.columnInOne = nil
+    if self.queuedFrame then self:QueuedBeside(self.queuedFrame) end
     local frame = self.frame
     if not frame then return end
     self:StopSlicedRefresh()

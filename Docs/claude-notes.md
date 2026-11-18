@@ -2768,6 +2768,22 @@ since it is where crafts are queued. The one window's Crafting tab and the
 craft strip are unchanged. No new setting or words. Tested in
 `tools/test_craftpane.lua`.
 
+## Queued crafts on the one window's Crafting tab (2026-11-18)
+
+The owner asked for the drawer's Queued crafts and Shopping List on the one
+window's Crafting tab, on its right, and said build it from a mockup
+(`previews/ts-crafting-tab-queue/` in the project files). Before, the
+queued crafts were hidden while the pane sat in the one window. Now
+`RefreshQueued` puts the same frame (`queuedFrame`) into the tab
+(`CraftPanel:QueuedIntoOne`: the tab's right side, `ONE_QUEUED_WIDTH` 280,
+full height, the drawer's rim and halo off) and lays the pane into the rest
+(`LayOutInOne(true)`, re-placed only when the column comes or goes). It
+shows while anything is queued and the tab is wide enough
+(`CraftPanel.QueuedFitsInOne`: the pane's 350 plus the column); else the
+pane takes the whole tab. `OutOfOne` puts it back beside the pane
+(`QueuedBeside`). Hide list, Craft, the cross and right-click work as in the
+drawer; no new setting or words. Tested in `tools/test_shoppinglist.lua`.
+
 ## Crate Shopping List (the Buy tab at the auction house)
 
 The owner asked and said build it (2026-11-16, from a mockup; design notes

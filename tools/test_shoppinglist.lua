@@ -102,6 +102,130 @@ do
 end
 
 print("")
+print("On the one window's Crafting tab")
+
+-- The owner asked (2026-11-18) for the drawer's queued crafts and shopping
+-- list on the one window's Crafting tab, on its right. Acted out with plain
+-- frames: open the profession window with the one window on, queue a craft,
+-- empty the queue, then leave the one window.
+do
+  local function fakeFrame(width, height)
+    local f = { shown = false, points = {}, width = width, height = height }
+    function f:Show() self.shown = true end
+    function f:Hide() self.shown = false end
+    function f:IsShown() return self.shown end
+    function f:SetShown(on) self.shown = on and true or false end
+    function f:SetParent(p) self.parent = p end
+    function f:GetParent() return self.parent end
+    function f:ClearAllPoints() self.points = {} end
+    function f:SetPoint(point, rel, relPoint, x, y)
+      self.points[point] = { rel = rel, relPoint = relPoint, x = x or 0, y = y or 0 }
+    end
+    function f:SetWidth(w) self.width = w end
+    function f:GetWidth() return self.width end
+    function f:SetHeight(h) self.height = h end
+    function f:GetHeight() return self.height end
+    function f:GetRight() return 0 end
+    function f:SetClampedToScreen(on) self.clamped = on end
+    function f:SetText(t) self.text = t end
+    function f:SetData(d) self.data = d end
+    return f
+  end
+
+  local queued = 0
+  local saved = { Queue = ns.Queue, Collapse = ns.Collapse, Motion = ns.Motion }
+  local oldHalo = ns.Theme.SetHalo
+  ns.Theme.SetHalo = function(frame, alpha) frame.halo = alpha end
+  ns.Collapse = { IsCollapsed = function() return false end, CONTENT_TOP = -30 }
+  ns.Motion = nil
+  ns.Queue = {
+    Count = function() return queued end,
+    GetAll = function()
+      local all = {}
+      for i = 1, queued do all[i] = { recipeID = i } end
+      return all
+    end,
+    GetShoppingList = function() return {} end,
+  }
+  local oldTotal, oldOpen = CraftPanel.ShoppingTotalText, CraftPanel.GetOpenRecipeIDs
+  CraftPanel.ShoppingTotalText = function() return "To buy 0c" end
+  CraftPanel.GetOpenRecipeIDs = function() return {} end
+
+  local tab = fakeFrame(900, 430)
+  local pane = fakeFrame(350, 430)
+  pane.shown = true
+  local drawer = fakeFrame(250, 430)
+  drawer.titan = fakeFrame()
+  drawer.titan.shown = true
+  drawer.parent = pane
+  CraftPanel.frame, CraftPanel.queuedFrame = pane, drawer
+  CraftPanel.queuedTitle, CraftPanel.queuedList, CraftPanel.shoppingList = fakeFrame(), fakeFrame(), fakeFrame()
+  CraftPanel.shoppingHeading, CraftPanel.shoppingColumns = fakeFrame(), fakeFrame()
+  CraftPanel.shoppingToggle, CraftPanel.shoppingTotal = fakeFrame(), fakeFrame()
+  CraftPanel.inOne, CraftPanel.oneContainer, CraftPanel.columnInOne = true, tab, nil
+  CraftPanel:LayOutInOne(false)
+
+  CraftPanel:RefreshQueued()
+  check("nothing queued: no queued crafts", drawer.shown, false)
+  check("and the crafts fill the tab", pane.points.BOTTOMRIGHT.x, 0)
+
+  queued = 2
+  CraftPanel:RefreshQueued()
+  check("a craft queued: the queued crafts show", drawer.shown, true)
+  check("inside the tab", drawer.parent, tab)
+  check("on its right", drawer.points.TOPRIGHT and drawer.points.TOPRIGHT.rel, tab)
+  check("the full height of the tab", drawer.points.BOTTOMRIGHT and drawer.points.BOTTOMRIGHT.rel, tab)
+  check("without the drawer's own rim", drawer.titan.shown, false)
+  check("the crafts make room for them", pane.points.BOTTOMRIGHT.x < -250, true)
+  check("with the count in the title", CraftPanel.queuedTitle.text, "Queued crafts (2)")
+  check("and the shopping list under them", CraftPanel.shoppingList.shown, true)
+
+  local placed = 0
+  local realSet = pane.SetPoint
+  pane.SetPoint = function(...) placed = placed + 1; return realSet(...) end
+  CraftPanel:RefreshQueued()
+  check("another refresh does not move the pane again", placed, 0)
+  pane.SetPoint = realSet
+
+  check("too narrow a tab: the crafts keep the room", CraftPanel.QueuedFitsInOne(500), false)
+  check("wide enough: room for both", CraftPanel.QueuedFitsInOne(900), true)
+  check("not laid out yet: shown", CraftPanel.QueuedFitsInOne(nil), true)
+  tab.width = 500
+  CraftPanel:RefreshQueued()
+  check("a narrow tab hides them", drawer.shown, false)
+  check("and the crafts fill it again", pane.points.BOTTOMRIGHT.x, 0)
+  tab.width = 900
+
+  CraftPanel:RefreshQueued()
+  queued = 0
+  CraftPanel:RefreshQueued()
+  check("the queue empties: they go", drawer.shown, false)
+  check("the crafts take the whole tab", pane.points.BOTTOMRIGHT.x, 0)
+
+  queued = 1
+  CraftPanel:RefreshQueued()
+  CraftPanel.OutOfOne = CraftPanel.OutOfOne
+  CraftPanel.inOne = true
+  local oldStop = CraftPanel.StopSlicedRefresh
+  CraftPanel.StopSlicedRefresh = function() end
+  pane.SetToplevel = function() end
+  pane.SetFrameStrata = function() end
+  pane.titan = nil
+  CraftPanel.ApplyBody = function() end
+  CraftPanel:OutOfOne()
+  check("leaving the one window: back on the pane", drawer.parent, pane)
+  check("beside its right edge", drawer.points.TOPLEFT and drawer.points.TOPLEFT.relPoint, "TOPRIGHT")
+  check("drawer width again", drawer.width, CraftPanel.QUEUED_WIDTH)
+  check("rim back on", drawer.titan.shown, true)
+
+  CraftPanel.StopSlicedRefresh = oldStop
+  CraftPanel.ShoppingTotalText, CraftPanel.GetOpenRecipeIDs = oldTotal, oldOpen
+  CraftPanel.frame, CraftPanel.queuedFrame, CraftPanel.inOne, CraftPanel.oneContainer = nil, nil, false, nil
+  ns.Theme.SetHalo = oldHalo
+  ns.Queue, ns.Collapse, ns.Motion = saved.Queue, saved.Collapse, saved.Motion
+end
+
+print("")
 print("Showing and hiding")
 
 do
