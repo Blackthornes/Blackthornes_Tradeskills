@@ -565,6 +565,22 @@ gets this, not only Alchemy; fishing does not. Tested in
 `tools/test_roadto300.lua` and `tools/test_queuebuys.lua`.
 
 
+Rank trainers by name (2026-11-18, players on Discord): a trainer's number
+in `Data/LearnSpots.lua` is the highest recipe it teaches, which also counts
+specialty trainers who teach no rank (Brumn Winterhoof, an Elemental
+Leatherworking trainer in Arathi, was offered for Expert Leatherworking and
+Cured Thick Hide; Josephine Lister, a Shadoweave trainer in Undercity, for
+Artisan Tailoring). `LearnNext.RANK_TRAINERS[line][cap]` names who teaches
+each rank, checked against Forever's trainer lists, and `TrainerFor` uses it
+first (falling back to the highest recipe when it names no one the data has).
+`LearnNext.SPECIALISTS[line][name]` (a name pattern, or false) keeps specialty
+trainers out of `Place` unless the recipe is theirs or no plain trainer of
+the side teaches that high. `LearnNext.TOWNS` names Daryl Stack and Serge
+Hinott for Tarren Mill in words (their spots stay on the Alterac Mountains
+map). Sources agree Expert is 125 (level 20) and Artisan 200 (level 35); a
+player said Expert Leatherworking needed 150, most likely because the
+Arathi trainer was the wrong one. Tested in `tools/test_learnnext.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
