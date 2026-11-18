@@ -391,6 +391,15 @@ function ItemTooltip:LinesFor(itemID, count, link)
         value = ns.Prices:GetValue(itemID, "market")
     end
 
+    -- Your other account's scan, when it saw the item after this one did:
+    -- that is your own play too, and an account that never scans would
+    -- otherwise say "not scanned yet" on every item it was sent.
+    local linkedAt
+    if ns.Prices.GetLinkedValue then
+        local linked, at = ns.Prices:GetLinkedValue(itemID, "market", value)
+        if linked and linked > 0 then value, linkedAt = linked, at end
+    end
+
     -- A random suffix with a price of its own ("of the Monkey" can sell for
     -- far more than "of the Spirit"): the value and lowest posting are this
     -- suffix's, as the auction house lists it, not every suffix's together.
@@ -438,6 +447,12 @@ function ItemTooltip:LinesFor(itemID, count, link)
         if seen and time() - seen > fresh then
             text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(time() - seen))
         end
+    elseif linkedAt then
+        local fresh = ns.Config and ns.Config:Get("staleAfterSeconds") or (48 * 3600)
+        local age = time() - linkedAt
+        if age > fresh then
+            text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(age))
+        end
     elseif ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
         local age = ns.Prices:GetAge(itemID)
         if age then
@@ -450,6 +465,11 @@ function ItemTooltip:LinesFor(itemID, count, link)
     local lowest
     if rollEntry then
         local min = tonumber(rollEntry.min)
+        if min and min > 0 then
+            lowest = { L["Lowest posting"], Util.FormatMoney(min, { short = true }) }
+        end
+    elseif linkedAt then
+        local min = ns.Prices:GetLinkedValue(itemID, "lowest")
         if min and min > 0 then
             lowest = { L["Lowest posting"], Util.FormatMoney(min, { short = true }) }
         end

@@ -531,4 +531,31 @@ function keyTip:GetPrimaryTooltipInfo() error("secret") end
 check("a key that raises costs nothing", ItemTooltip.KeySuffix(keyTip), nil)
 time = realTime
 
+
+-- Your other account's scan (the account link): a second account that
+-- never scans was sent prices, but its tooltips said "not scanned yet"
+-- on every item, so players thought sharing did nothing (2026-11-18).
+do
+  local realTime = time
+  local now = 1790000000
+  time = function() return now end
+  local LINKED = { [RUNECLOTH] = { market = 5000, lowest = 4800, at = now - 60 },
+                   [COPPER_BAR] = { market = 1700, lowest = 1650, at = now - 3 * 24 * 3600 } }
+  ns.Prices.GetLinkedValue = function(_, itemID, which)
+    local held = LINKED[itemID]
+    if not held then return nil end
+    return (which == "lowest") and held.lowest or held.market, held.at
+  end
+  ns.settings.staleAfterSeconds = 48 * 3600
+  local linked = ItemTooltip:LinesFor(RUNECLOTH, nil)
+  check("the other account's price shows on the tooltip", Find(linked, "Auction value")[2], "<5000>")
+  check("with its cheapest listing", Find(linked, "Lowest posting")[2], "<4800>")
+  linked = ItemTooltip:LinesFor(COPPER_BAR, nil)
+  check("an old one from the other account says how old", Find(linked, "Auction value")[2], "<1700>  (72h ago)")
+  ns.Prices.GetLinkedValue = nil
+  ns.settings.staleAfterSeconds = nil
+  check("not linked: back to not scanned yet", ItemTooltip:LinesFor(RUNECLOTH, nil)[1][2], "not scanned yet")
+  time = realTime
+end
+
 print("test_itemtooltip: ok")

@@ -1461,6 +1461,16 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   after this account's own record. A scan finishing (`WatchScans`) sends
   in about 5 s (`SendSoon(PRICES_KEY)`). The Sharing status adds "N prices
   from their scan AGO". Tested in `tools/test_linkprices.lua`.
+  The tooltip shows it too (2026-11-18, players on two EU accounts said
+  sharing did nothing): its Auction value and Lowest posting read only
+  this account's scans (`GetScanValue`), so an account that never scans
+  said "not scanned yet" on every item it was sent. Now
+  `Prices:GetLinkedValue(itemID, which)` (the partner's price and when,
+  only when newer than this account's own) feeds both `GetValue` and the
+  tooltip, with its age once past the stale setting. Guild and realm
+  prices still stay off the tooltip. Tested in `tools/test_itemtooltip.lua`
+  and `tools/test_linkprices.lua` (also two accounts with different
+  server names for one realm).
 
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
