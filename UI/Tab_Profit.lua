@@ -1019,7 +1019,7 @@ local function BuildDetail(parent)
         local yield = detail.yield
         if not (type(yield) == "number" and yield > 1) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, true)
+        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)

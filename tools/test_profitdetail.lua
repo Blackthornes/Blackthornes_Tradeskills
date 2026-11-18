@@ -120,7 +120,17 @@ C_Timer = { After = function() end, NewTicker = function() return Stub() end }
 local tooltip = {}
 GameTooltip = Stub({
     SetOwner = function() tooltip = {} end,
-    SetText = function(_, text) tooltip[#tooltip + 1] = text end,
+    -- The game reads SetText(text, r, g, b, alpha, wrap) and raises when
+    -- a colour or the alpha is not a number (a Discord report, 2026-11-18).
+    SetText = function(_, text, ...)
+        tooltip[#tooltip + 1] = text
+        for i = 1, math.min(select("#", ...), 4) do
+            local value = select(i, ...)
+            if value ~= nil and type(value) ~= "number" then
+                error("bad argument #" .. (i + 2) .. " to 'SetText'")
+            end
+        end
+    end,
     AddLine = function(_, text) tooltip[#tooltip + 1] = text end,
     AddDoubleLine = function(_, left) tooltip[#tooltip + 1] = left end,
     IsShown = function() return true end,
@@ -326,6 +336,21 @@ for _, label in ipairs(labels) do
     if label.shown ~= false and tostring(label.text or ""):find(" x2$") then marked = true end
 end
 check("a price in the summary shows x2", marked)
+
+-- Hovering the price says how many one craft makes, and does not raise.
+local yieldShown, yieldRaised = false, nil
+for _, frame in ipairs(frames) do
+    local onEnter = frame.scripts and frame.scripts.OnEnter
+    if onEnter then
+        tooltip = {}
+        local ok, err = pcall(onEnter, frame)
+        if tostring(tooltip[1] or ""):find("Each craft makes 2") then
+            yieldShown, yieldRaised = true, (not ok) and err or nil
+        end
+    end
+end
+check("the price's hover says how many one craft makes", yieldShown)
+check("and the game takes it without an error", yieldShown and yieldRaised == nil)
 
 analyses[1] = setmetatable({ recipeID = 6, yield = 1 }, { __index = analyses[1] })
 list.opts.onClick(analyses[1], 1, "LeftButton")
