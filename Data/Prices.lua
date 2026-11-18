@@ -983,6 +983,24 @@ function Prices:PreferredTSM(itemID, which)
     return AskOther(ns.TSMPrices, itemID, which)
 end
 
+--- Your other account's price for an item and when it saw it, when that
+--- is newer than this account's own scan (or this account never priced
+--- it), else nil. Prices:GetValue uses it, and the tooltip shows it as the
+--- auction value, since it is your own play (Logic/AccountLink.lua).
+--- `scanned` is this account's own price, when the caller has it already.
+function Prices:GetLinkedValue(itemID, which, scanned)
+    if which == "rival" then return nil end
+    local link = ns.AccountLink
+    if not (link and link.PriceFor) then return nil end
+    local shared, sharedAt = link:PriceFor(itemID, which)
+    if not shared then return nil end
+    if scanned == nil then scanned = self:GetScanValue(itemID, which) end
+    local record = self:GetTable()[itemID]
+    local seen = type(record) == "table" and tonumber(record.seen) or 0
+    if not scanned or (sharedAt or 0) > seen then return shared, sharedAt end
+    return nil
+end
+
 function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
     if which == "rival" then return scanned end
@@ -1005,16 +1023,11 @@ function Prices:GetValue(itemID, which)
     -- Your other account's newest scan (Logic/AccountLink.lua, whenever the
     -- two accounts are linked) comes first: it is your own play,
     -- so it wins whenever it saw the item after this account last did.
-    local link = ns.AccountLink
-    if not filled and link and link.PriceFor then
-        local shared, sharedAt = link:PriceFor(itemID, which)
+    if not filled then
+        local shared = self:GetLinkedValue(itemID, which, scanned)
         if shared then
-            local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and tonumber(record.seen) or 0
-            if not scanned or (sharedAt or 0) > seen then
-                scanned = shared
-                filled = true
-            end
+            scanned = shared
+            filled = true
         end
     end
 
