@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.34.3
+
+Fixes and changes:
+- The cooldown timer no longer shows an error.
+- Road to 300 steps show in green.
+- In Recipes to Learn, a click on Skill sorts by skill again.
+
 ## 1.34.2
 
 Fixes and changes:

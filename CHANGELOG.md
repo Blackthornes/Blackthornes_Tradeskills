@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.34.3
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Cooldowns.** Fixed an error in the cooldown timer.
+- **Road to 300.** Steps show in green when nothing better is known, and the game's own colours still win.
+- **Recipes to Learn.** A click on the Skill column sorts by skill again.
+
 ## 1.34.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
