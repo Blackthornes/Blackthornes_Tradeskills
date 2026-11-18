@@ -494,6 +494,23 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- How long after asking for a cancel the game's answer counts as that cancel.
+AHQueue.CANCEL_ANSWER_SECONDS = 10
+
+--- One of your auctions left the list (AUCTION_CANCELED): a cancel you just
+--- asked for, or a sale or an auction running out.
+-- @return true when it was your cancel
+function AHQueue:OnAuctionGone()
+    local asked = self.cancelAskedAt
+    if asked and GetTime() - asked <= self.CANCEL_ANSWER_SECONDS then
+        self.cancelAskedAt = nil
+        self:Yield(PLAYER_QUIET, "you just cancelled an auction")
+        return true
+    end
+    ns.Debug("one of your auctions sold or ran out")
+    return false
+end
+
 function AHQueue:OnEnable()
     -- The player listing or cancelling something by hand is the clearest signal
     -- that the channel is theirs for the moment.
@@ -501,8 +518,19 @@ function AHQueue:OnEnable()
         AHQueue:Yield(PLAYER_QUIET, "you just listed an auction")
     end)
 
+    -- The game sends AUCTION_CANCELED when one of your auctions sells too,
+    -- so the debug line said "you just cancelled" for a sale. Only a cancel
+    -- asked for in the last few seconds is one; anything else sold or ran
+    -- out, which is not the player at the auction house and needs no pause.
+    if type(hooksecurefunc) == "function" and type(C_AuctionHouse) == "table"
+        and type(C_AuctionHouse.CancelAuction) == "function" then
+        pcall(hooksecurefunc, C_AuctionHouse, "CancelAuction", function()
+            AHQueue.cancelAskedAt = GetTime()
+        end)
+    end
+
     ns.RegisterEvent(self, "AUCTION_CANCELED", function()
-        AHQueue:Yield(PLAYER_QUIET, "you just cancelled an auction")
+        AHQueue:OnAuctionGone()
     end)
 
     -- Both of these may be absent on this client; RegisterEvent handles that.
