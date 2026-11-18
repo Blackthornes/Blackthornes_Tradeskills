@@ -8,7 +8,9 @@
 -- their side teaches (Logic/LearnNext.lua), its price counted once. Below
 -- yellow every craft gives a point; from yellow to grey the chance falls
 -- to nothing, (grey - skill) / (grey - yellow), so a point takes
--- 1 / chance crafts. A step is one recipe in one colour; it ends where the
+-- 1 / chance crafts. Green starts halfway from yellow to grey, and a green
+-- craft is taken only when no orange or yellow one is there. A step is one
+-- recipe in one colour; it ends where the
 -- colour changes, a trainer is due or another recipe is clearly cheaper.
 --
 -- Trainer steps follow Classic's ranks: Journeyman at 50 (level 10) to 150,
@@ -139,6 +141,62 @@ function RoadPlan.Chance(record, skill)
     return math.min(1, chance + RoadPlan.Overtime())
 end
 
+--- Where a recipe turns yellow, green and grey. Green starts halfway from
+--- yellow to grey, as the game has it (LearnNext.Tier).
+function RoadPlan.Edges(record)
+    local yellow, grey = record.yellow, record.grey
+    if not (yellow and grey) then return nil end
+    return yellow, record.green or math.floor((yellow + grey) / 2), grey
+end
+
+--- The colour a craft is at a skill: "optimal" (orange), "medium" (yellow),
+--- "easy" (green) or "trivial" (grey); nil when the colours are not known.
+function RoadPlan.Band(record, skill)
+    local yellow, green, grey = RoadPlan.Edges(record)
+    if not yellow then return nil end
+    if skill >= grey then return "trivial" end
+    if skill < yellow then return "optimal" end
+    if skill < green then return "medium" end
+    return "easy"
+end
+
+--- A recipe's colours moved to agree with what a profession window showed
+--- (a player's report, 2026-11-18: the road called Rough Dynamite yellow
+--- while the game showed it green). `seen` is { tier, skill }: the game's
+--- colour for the recipe at that skill. When the book's colours disagree,
+--- all three move together by as much as it takes, the way Forever moved
+--- them (Data/LearnSpots.lua). Returns the record itself when they agree,
+--- else a copy that reads through to it.
+function RoadPlan.Agree(record, seen)
+    local yellow, green, grey = RoadPlan.Edges(record)
+    local tier, at = seen and seen.tier, seen and tonumber(seen.skill)
+    if not (yellow and tier and at and at > 0) then return record end
+    local shift = 0
+    if tier == "optimal" then
+        if at >= yellow then shift = at + 1 - yellow end
+    elseif tier == "medium" then
+        if at < yellow then shift = at - yellow
+        elseif at >= green then shift = at + 1 - green end
+    elseif tier == "easy" then
+        if at < green then shift = at - green
+        elseif at >= grey then shift = at + 1 - grey end
+    elseif tier == "trivial" then
+        if at < grey then shift = at - grey end
+    end
+    if shift == 0 then return record end
+    return setmetatable({ yellow = yellow + shift, green = green + shift, grey = grey + shift },
+        { __index = record })
+end
+
+--- What the game last showed for a recipe's colour, { tier, skill }, or nil.
+function RoadPlan.Seen(recipeID)
+    local skillUp = ns.SkillUp
+    if not (skillUp and skillUp.GetForRecipe and recipeID) then return nil end
+    local ok, seen = pcall(skillUp.GetForRecipe, skillUp, recipeID)
+    if ok and type(seen) == "table" and seen.tier and type(seen.skill) == "number" then return seen end
+    return nil
+end
+
 --- What a vendor pays for one of an item, or nil.
 function RoadPlan.SellValue(itemID)
     local util = ns.Util
@@ -238,7 +296,10 @@ function RoadPlan:Candidates(line)
                 place = ok and where or nil
             end
             if known or place then
-                list[#list + 1] = { record = record, known = known, place = place }
+                -- The game's own colour wins over the book's when a window
+                -- showed it.
+                local shown = known and RoadPlan.Agree(record, RoadPlan.Seen(record.recipeID)) or record
+                list[#list + 1] = { record = shown, known = known, place = place }
             end
         end
     end
@@ -328,13 +389,24 @@ local function PointCost(candidate, skill, learned, real)
     return cost
 end
 
+-- The cheapest recipe a point at a skill. A green craft only now and then
+-- gives a point, so one is taken only when no orange or yellow craft is
+-- there (a player's report, 2026-11-18: they keep green for the last point
+-- or two).
 local function Best(candidates, skill, learned, real)
-    local best, bestCost
+    local best, bestCost, green, greenCost
     for _, candidate in ipairs(candidates) do
         local cost = PointCost(candidate, skill, learned, real)
-        if cost and (not bestCost or cost < bestCost) then best, bestCost = candidate, cost end
+        if cost then
+            if RoadPlan.Band(candidate.record, skill) == "easy" then
+                if not greenCost or cost < greenCost then green, greenCost = candidate, cost end
+            elseif not bestCost or cost < bestCost then
+                best, bestCost = candidate, cost
+            end
+        end
     end
-    return best, bestCost
+    if best then return best, bestCost end
+    return green, greenCost
 end
 
 --- The road, worked out from priced candidates.
@@ -391,8 +463,10 @@ function RoadPlan:Plan(opts)
                     break
                 end
                 local record = candidate.record
-                local orange = p < record.yellow
-                local bandEnd = orange and record.yellow or record.grey
+                local yellow, green, grey = RoadPlan.Edges(record)
+                local tier = RoadPlan.Band(record, p)
+                local orange = tier == "optimal"
+                local bandEnd = orange and yellow or (tier == "medium" and green) or grey
                 limit = math.min(limit, bandEnd)
 
                 local q, crafts = p, 0
@@ -409,7 +483,7 @@ function RoadPlan:Plan(opts)
                     kind = "craft", record = record, recipeID = record.recipeID, name = record.name,
                     outputItemID = record.outputItemID, from = p, to = q,
                     crafts = math.max(1, math.ceil(crafts - 1e-9)),
-                    orange = orange, done = done, price = candidate.price,
+                    orange = orange, tier = tier, done = done, price = candidate.price,
                     sells = candidate.price and candidate.price.sells,
                 }
                 if not candidate.known and not learned[record.recipeID] then
@@ -1373,7 +1447,7 @@ function RoadPlan.Texts(step, professionName, level, line)
     texts.title = L.Format("Make %d %s", step.crafts, ItemName(step.outputItemID, step.name))
     texts.range = L.Format("%d to %d", step.from, step.to)
     if step.done then return texts end
-    texts.chip = step.orange and L["every craft"] or L["most crafts"]
+    texts.chip = (step.orange and L["every craft"]) or (step.tier == "easy" and L["some crafts"]) or L["most crafts"]
     for _, need in ipairs(step.needs or {}) do texts.lines[#texts.lines + 1] = RoadPlan.NeedText(need) end
     if RoadPlan.Covered(step) then texts.lines[#texts.lines + 1] = L["You have enough for this step."] end
     if step.learn then

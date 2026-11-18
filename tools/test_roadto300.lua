@@ -6,7 +6,9 @@
 --   2. Each stretch takes the recipe cheapest a point, known or taught by a
 --      trainer or vendor of the player's side; its price counted once.
 --   3. A step is one recipe in one colour: orange is "every craft",
---      yellow "most crafts", and its crafts are 1 / chance a point.
+--      yellow "most crafts", green "some crafts", and its crafts are
+--      1 / chance a point. Green is taken only when nothing orange or
+--      yellow is there.
 --   4. Trainer steps at Classic's ranks, Journeyman at 50 to 150 and so on,
 --      a level chip and "You're level N." when the level is short.
 --   5. Steps below the skill now are done; what the bags and bank hold
@@ -218,24 +220,25 @@ do
   ns.LearnNext.TrainerFor = saved
 end
 
-local grinding = steps[plan.current + 1]
-check("a known recipe first, while it is cheapest", grinding.recipeID, 2)
-check("from the skill now", grinding.from, 62)
-check("yellow: most crafts", Road.Texts(grinding, "Blacksmithing", 15, 164).chip, "most crafts")
-check("1 / chance a point: 2 points take 17 crafts", grinding.crafts, 17)
-check("known: nothing to learn", grinding.learn, nil)
+-- The grinding stone is known and cheaper a point, but green at 62 (green
+-- from 55): the belt, orange, wins (a player's report, 2026-11-18).
+local grinding = Find(function(s) return s.kind == "craft" and s.recipeID == 2 and not s.done end)
+check("a known green recipe waits while an orange one is there", grinding, nil)
+check("yellow: most crafts", Road.Texts(
+  { kind = "craft", tier = "medium", crafts = 1, from = 45, to = 55, name = "x", needs = {} },
+  "Blacksmithing", 15, 164).chip, "most crafts")
 
 local beltStep = Find(function(s) return s.kind == "craft" and s.recipeID == 3 and not s.done end)
-check("the belt takes over where cheaper", beltStep and beltStep.from, 64)
+check("the belt from the skill now", beltStep and beltStep.from, 62)
 check("to the cap the next recipe beats it", beltStep and beltStep.to, 75)
-check("every craft a point", beltStep and beltStep.crafts, 11)
+check("every craft a point", beltStep and beltStep.crafts, 13)
 check("still to learn, at its trainer", beltStep and beltStep.learn and beltStep.learn.kind, "trainer")
 texts = Road.Texts(beltStep, "Blacksmithing", 15, 164)
-check("Make N item", texts.title, "Make 11 Copper Chain Belt")
+check("Make N item", texts.title, "Make 13 Copper Chain Belt")
 check("chip", texts.chip, "every craft")
-check("range", texts.range, "64 to 75")
+check("range", texts.range, "62 to 75")
 check("materials from bags then bank", texts.lines[1],
-  "Needs 66 Copper Bar. You have 51, buy 5. Your banker has 10.")
+  "Needs 78 Copper Bar. You have 51, buy 17. Your banker has 10.")
 check("where it is learned, with the trainer's zone", texts.lines[2],
   "Learn it from the Blacksmithing trainer in " .. tostring(beltStep.learn.zone) .. ".")
 check("the trainer has a zone", beltStep.learn.zone ~= nil, true)
@@ -247,7 +250,7 @@ vendorStep.learn.zone = nil
 check("and without a zone", Road.Texts(vendorStep, "Blacksmithing", 15, 164).lines[1],
   "You don't know this recipe yet. Buy it from a vendor.")
 check("sells some back", texts.lines[#texts.lines], "Sells for about 1800c each, so it pays some back.")
-check("cost: what to buy and the recipe", beltStep.cost, 5 * 20 + 50)
+check("cost: what to buy and the recipe", beltStep.cost, 17 * 20 + 50)
 
 local coarse = Find(function(s) return s.kind == "craft" and s.recipeID == 4 end)
 check("a cheaper recipe takes over when reached", coarse ~= nil, true)
@@ -347,7 +350,7 @@ ns.Queue = {
   EnsureBuy = function(_, id, count, _, forRecipe) bought[id] = { count, forRecipe } return true end,
 }
 check("a recipe to learn puts its materials to buy", Road:QueueStep(beltStep), true)
-check("all of them", bought[BAR] and bought[BAR][1], 66)
+check("all of them", bought[BAR] and bought[BAR][1], 78)
 check("tied to the recipe", bought[BAR] and bought[BAR][2].recipeID, 3)
 check("with how many crafts it is for", bought[BAR] and bought[BAR][2].crafts, beltStep.crafts)
 local known = { kind = "craft", recipeID = 2, crafts = 7, needs = {} }
@@ -764,6 +767,61 @@ local single = { steps = { { kind = "craft", done = true, needs = {} }, only, { 
   shopping = { { itemID = HERB, count = 3, buy = 3 } } }
 check("one step left needs no list of its own", Road.Listed(single)[1], only)
 ns.Vendor, ns.Queue = savedVendor, nil
+
+-- A player's report (2026-11-18): the road called Rough Dynamite (yellow
+-- at 30, grey at 60 on Forever) a yellow step while the game's window
+-- showed it green. Green starts halfway, at 45.
+print("\ngreen steps")
+local dynamite = { recipeID = 3919, name = "Rough Dynamite", skill = 1, yellow = 30, grey = 60,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+check("yellow before halfway", Road.Band(dynamite, 44), "medium")
+check("green from halfway", Road.Band(dynamite, 45), "easy")
+check("grey at grey", Road.Band(dynamite, 60), "trivial")
+local function OnlyPlan(list, skill)
+  return Road:Plan({ line = 164, skill = skill, max = 75, level = 15, candidates = list, owned = {} })
+end
+local function Priced(record, cost, known)
+  return { record = record, known = known ~= false,
+    price = { cost = cost, reagents = { { itemID = BAR, quantity = 1, unit = cost } } } }
+end
+local alone = OnlyPlan({ Priced(dynamite, 10) }, 40)
+local tiers = {}
+for _, step in ipairs(alone.steps) do
+  if not step.done and step.kind == "craft" then tiers[#tiers + 1] = step.tier .. " " .. step.from .. "-" .. step.to end
+end
+check("a yellow step ends where green starts", tiers[1], "medium 40-45")
+check("then a green step (to the trainer at 50)", tiers[2], "easy 45-50")
+check("and green on to grey", tiers[3], "easy 50-60")
+local greenStep
+for _, step in ipairs(alone.steps) do if step.tier == "easy" and not step.done then greenStep = step end end
+check("a green step says some crafts", Road.Texts(greenStep, "Engineering", 15, 202).chip, "some crafts")
+
+-- A green craft is left for when nothing orange or yellow is there, even
+-- when it is cheaper a point.
+local dearer = { recipeID = 3920, name = "Dearer", skill = 1, yellow = 50, grey = 90,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+local both = OnlyPlan({ Priced(dynamite, 1), Priced(dearer, 50) }, 46)
+local first
+for _, step in ipairs(both.steps) do
+  if not step.done and step.kind == "craft" then first = first or step end
+end
+check("yellow wins over a cheaper green", first and first.recipeID, 3920)
+local greenEarly = false
+for _, step in ipairs(both.steps) do
+  if not step.done and step.tier == "easy" and step.from < 70 then greenEarly = true end
+end
+check("no green step while a yellow one is there", greenEarly, false)
+
+-- What the game's window showed wins over the book.
+check("the book agrees: the same record", Road.Agree(dynamite, { tier = "medium", skill = 40 }), dynamite)
+local moved = Road.Agree(dynamite, { tier = "easy", skill = 40 })
+check("green at 40 moves green to 40", moved.green, 40)
+check("and grey with it", moved.grey, 55)
+check("and yellow with it", moved.yellow, 25)
+check("it still reads through to the recipe", moved.recipeID, 3919)
+check("grey seen at 50 moves grey to 50", Road.Agree(dynamite, { tier = "trivial", skill = 50 }).grey, 50)
+check("orange seen at 30 moves yellow to 31", Road.Agree(dynamite, { tier = "optimal", skill = 30 }).yellow, 31)
+check("no reading: the book", Road.Agree(dynamite, nil), dynamite)
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
