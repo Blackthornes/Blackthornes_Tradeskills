@@ -45,6 +45,9 @@ GuildPrices.ASK_AFTER = 45            -- seconds after login
 GuildPrices.ANSWER_SCAN_AGE = 24 * HOUR  -- a scan older than this is not sent again
 GuildPrices.ANSWER_EVERY = HOUR       -- at most one catch-up sent an hour
 GuildPrices.ANSWER_WAIT = 20          -- longest wait before answering
+-- Chat Notice (2026-11-18): one chat line per guildmate's batch, said once
+-- it has been quiet this many seconds.
+GuildPrices.NOTICE_QUIET = 30
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -394,6 +397,7 @@ function GuildPrices:OnPrices(sender, body, channel)
     end
 
     local taken, refused = 0, 0
+    local items = {}
     for idText, marketText, lowestText in list:gmatch("(%w+),(%w+),?(%w*);") do
         if tally.items >= self.MAX_PER_SENDER_HOUR then break end
         tally.items = tally.items + 1
@@ -404,6 +408,7 @@ function GuildPrices:OnPrices(sender, body, channel)
             and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
             and not TooFar(itemID, market) then
             self:Store(itemID, who, at, market, lowest)
+            items[itemID] = true
             if ns.PriceHistory and ns.PriceHistory.Fill then ns.PriceHistory:Fill(itemID, lowest, at) end
             taken = taken + 1
         else
@@ -413,7 +418,61 @@ function GuildPrices:OnPrices(sender, body, channel)
 
     if taken > 0 then ns.Prices.changes = (ns.Prices.changes or 0) + 1 end
     if taken > 0 then self.lastHeard = { who = sender:match("^[^%-]+") or sender, at = now } end
+    if taken > 0 then self:NoteHeard(sender, who, items) end
     if refused > 0 then self.refused = (self.refused or 0) + refused end
+end
+
+--------------------------------------------------------------------------------
+-- Chat Notice: one line per guildmate's batch, off unless ticked
+--------------------------------------------------------------------------------
+
+function GuildPrices:NoticeOn()
+    return ns.Config and ns.Config:Get("sharedChatNotice") == true
+end
+
+--- Prices from a guildmate were taken. A scan arrives in many messages, so
+--- the items are gathered and said once the guildmate has gone quiet.
+function GuildPrices:NoteHeard(sender, who, items, now)
+    if not self:NoticeOn() then return end
+    now = now or time()
+    self.heard = self.heard or {}
+    local batch = self.heard[who]
+    if not batch then
+        batch = { name = sender:match("^[^%-]+") or sender, items = {}, count = 0 }
+        self.heard[who] = batch
+    end
+    for itemID in pairs(items) do
+        if not batch.items[itemID] then
+            batch.items[itemID] = true
+            batch.count = batch.count + 1
+        end
+    end
+    batch.last = now
+    if batch.waiting then return end
+    batch.waiting = true
+    local function Check()
+        local quiet = time() - (batch.last or 0)
+        if quiet < self.NOTICE_QUIET then
+            C_Timer.After(self.NOTICE_QUIET - quiet, Check)
+            return
+        end
+        self:SayHeard(who)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(self.NOTICE_QUIET, Check) end
+end
+
+--- Say one batch in chat and forget it.
+function GuildPrices:SayHeard(who)
+    local batch = self.heard and self.heard[who]
+    if not batch then return end
+    self.heard[who] = nil
+    if batch.count > 0 and self:NoticeOn() then
+        if batch.count == 1 then
+            ns.Print(L.Format(L["Got prices for 1 item from %s in your guild."], batch.name))
+        else
+            ns.Print(L.Format(L["Got prices for %d items from %s in your guild."], batch.count, batch.name))
+        end
+    end
 end
 
 --------------------------------------------------------------------------------

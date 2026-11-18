@@ -3820,3 +3820,11 @@ L["On your wishlist"] = "在你的心愿单上"
 
 L["%s (%s %d)"] = "%s (%s %d)"
 L["  |c%s%s|r"] = "  |c%s%s|r"
+
+-- Chat Notice for shared prices (2026-11-18)
+L["Chat Notice:"] = "聊天提示："
+L["Says in chat when prices come in from your guild or realm."] = "收到公会或服务器的价格时，在聊天框里告诉你。"
+L["Got prices for %d items from %s in your guild."] = "收到 %d 件物品的价格，来自公会成员 %s。"
+L["Got prices for %d items from %d players on your realm."] = "收到 %d 件物品的价格，来自服务器上的 %d 名玩家。"
+L["Got prices for %d items from 1 player on your realm."] = "收到 %d 件物品的价格，来自服务器上的 1 名玩家。"
+L["Got prices for 1 item from %s in your guild."] = "收到 1 件物品的价格，来自公会成员 %s。"
