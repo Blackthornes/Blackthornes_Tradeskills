@@ -148,3 +148,11 @@ Check: Colours go text, r, g, b, alpha, wrap. With a wrap, put the alpha in
   too (`1, 1, 1, 1, true`); never `1, 1, 1, true`.
 Why: The Profit tab's "Each craft makes" hover left out the alpha, so the
   wrap landed in the alpha slot and the game raised on every hover.
+
+## Column headings that hide or step aside
+Lines: Columns:Squeeze|Columns:Place\(.*headings|SortableHeadings
+Check: The sorter's `Sync()` runs after every heading layout, not only when
+  the set of hidden headings changes, and once right after the sorter is made.
+Why: Recipes to Learn synced only on a change. The game laid the headings
+  out while the sorter was being made, so hidden headings kept their clicks
+  at their old spots, and a click on SKILL sorted by DISENCHANT.

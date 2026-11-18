@@ -769,11 +769,16 @@ local function NewView(opts)
         end
         squeezed = found
         ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8, visible = ColumnVisible })
+        -- Every time, not only when the set aside changes: a heading set
+        -- aside keeps its old spot, and its click must go with it. The game
+        -- can lay the headings out while the sort arrows are still being
+        -- made (asking a heading's width does it), before there is a sorter
+        -- to tell; a player's SKILL click then sorted by DISENCHANT.
+        if widgets.sorter then widgets.sorter:Sync() end
         local key = table.concat(keys, ",")
         if key ~= squeezedKey then
             squeezedKey = key
             layoutVersion = layoutVersion + 1
-            if widgets.sorter then widgets.sorter:Sync() end
             if widgets.list then widgets.list:Refresh() end
         end
     end
@@ -958,7 +963,11 @@ local function NewView(opts)
             price = function(entry) return entry.price end,
             learn = function(entry) return entry.known and L["Known"] or entry.learn end,
         }, function() instance.Refresh() end)
-        if widgets.sorter then widgets.sorter:SetText({ "name", "learn" }) end
+        if widgets.sorter then
+            widgets.sorter:SetText({ "name", "learn" })
+            -- Only headings that show take clicks, from the start.
+            widgets.sorter:Sync()
+        end
 
         -- Right-click the headings to choose the columns.
         ns.Columns:Attach(headings, "recipes", widgets.sorter)
