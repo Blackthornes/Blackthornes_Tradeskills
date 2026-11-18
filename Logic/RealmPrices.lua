@@ -53,6 +53,10 @@ RealmPrices.MAX_PER_SENDER_HOUR = 4000
 RealmPrices.MAX_ITEM_ID = 10000000
 RealmPrices.MAX_STORED = 20000        -- items kept for a realm
 RealmPrices.SEND_GAP = 3              -- seconds between messages to the channel
+-- Chat Notice (2026-11-18): realm prices trickle in from many players, so
+-- they are added up and said once quiet, at most once every NOTICE_EVERY.
+RealmPrices.NOTICE_QUIET = 30
+RealmPrices.NOTICE_EVERY = 10 * 60
 RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
 RealmPrices.REJOIN_DELAY = 5          -- seconds after the player leaves it by hand
 RealmPrices.BACK_OFF = 15 * 60        -- seconds of quiet after the first refusal
@@ -472,6 +476,7 @@ function RealmPrices:OnPrices(sender, body, channel, channelName, target)
     end
 
     local taken = 0
+    local items = {}
     for idText, marketText, lowestText in list:gmatch("(%w+),(%w+),?(%w*);") do
         if tally.items >= self.MAX_PER_SENDER_HOUR then break end
         tally.items = tally.items + 1
@@ -482,10 +487,71 @@ function RealmPrices:OnPrices(sender, body, channel, channelName, target)
             and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
             and not TooFar(itemID, market) then
             self:Store(itemID, who, at, market, lowest)
+            items[itemID] = true
             taken = taken + 1
         end
     end
     if taken > 0 then ns.Prices.changes = (ns.Prices.changes or 0) + 1 end
+    if taken > 0 then self:NoteHeard(who, items, now) end
+end
+
+--------------------------------------------------------------------------------
+-- Chat Notice: one line for many players, off unless ticked
+--------------------------------------------------------------------------------
+
+function RealmPrices:NoticeOn()
+    return ns.Config and ns.Config:Get("sharedChatNotice") == true
+end
+
+--- Prices from a player on the realm were taken. Players are counted by
+--- the same hash the save keeps, never named.
+function RealmPrices:NoteHeard(who, items, now)
+    if not self:NoticeOn() then return end
+    now = now or time()
+    local batch = self.heard
+    if not batch then
+        batch = { items = {}, count = 0, players = {}, playerCount = 0 }
+        self.heard = batch
+    end
+    for itemID in pairs(items) do
+        if not batch.items[itemID] then
+            batch.items[itemID] = true
+            batch.count = batch.count + 1
+        end
+    end
+    if not batch.players[who] then
+        batch.players[who] = true
+        batch.playerCount = batch.playerCount + 1
+    end
+    batch.last = now
+    if batch.waiting then return end
+    batch.waiting = true
+    local function Check()
+        local t = time()
+        local wait = math.max(self.NOTICE_QUIET - (t - (batch.last or 0)),
+            (self.lastNotice or -math.huge) + self.NOTICE_EVERY - t)
+        if wait > 0 then
+            C_Timer.After(wait, Check)
+            return
+        end
+        self:SayHeard(t)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(self.NOTICE_QUIET, Check) end
+end
+
+--- Say what came in from the realm in one line and forget it.
+function RealmPrices:SayHeard(now)
+    local batch = self.heard
+    if not batch then return end
+    self.heard = nil
+    if batch.count > 0 and self:NoticeOn() then
+        self.lastNotice = now or time()
+        if batch.playerCount == 1 then
+            ns.Print(L.Format(L["Got prices for %d items from 1 player on your realm."], batch.count))
+        else
+            ns.Print(L.Format(L["Got prices for %d items from %d players on your realm."], batch.count, batch.playerCount))
+        end
+    end
 end
 
 --------------------------------------------------------------------------------

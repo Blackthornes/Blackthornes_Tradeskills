@@ -664,6 +664,10 @@ local DEFAULTS = {
         -- unticked since the owner asked 2026-10-28; never rename it. See
         -- Logic/RealmPrices.lua and Config:RealmPricesOnOnce.
         realmPrices = true,
+        -- Say in chat when prices come in from the guild or realm (the
+        -- owner, 2026-11-18). Off unless ticked; never rename it. See
+        -- GuildPrices:NoteHeard and RealmPrices:NoteHeard.
+        sharedChatNotice = false,
         enchantWindow = false,
         -- Send your own disenchant results and recipe skills to the
         -- addon's maker (2026-10-18). Off unless ticked; never rename it.

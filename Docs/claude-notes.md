@@ -3043,3 +3043,14 @@ vendor or trainer; `UI/Wishlist.lua` has the star, the menu line, the
   stays hidden.
 - Tested in `tools/test_wishlist.lua` and
   `tools/test_recipebookview.lua`.
+
+## Chat Notice for shared prices
+
+Trent said build it (2026-11-18, from a mockup with the words): "Chat Notice:"
+on the SHARING page under Realm Prices, saved `sharedChatNotice` (off unless
+ticked; never rename it). `GuildPrices:NoteHeard` says one line per
+guildmate's batch once they go quiet (`NOTICE_QUIET`), naming them in full;
+`RealmPrices:NoteHeard` adds up every player's prices into one line, counted
+by the save's hash and never named, at most once every `NOTICE_EVERY`.
+Farmer has the same switch for guild drops. Sharing is never announced in
+release notes. Tested in `tools/test_sharednotice.lua`.

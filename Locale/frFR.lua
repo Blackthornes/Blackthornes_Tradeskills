@@ -3822,3 +3822,10 @@ L["On your wishlist"] = "Dans ta liste de souhaits"
 
 L["%s (%s %d)"] = "%s (%s %d)"
 L["  |c%s%s|r"] = "  |c%s%s|r"
+
+-- Chat Notice for shared prices (2026-11-18)
+L["Chat Notice:"] = "Avis dans le chat :"
+L["Says in chat when prices come in from your guild or realm."] = "Te prévient dans le chat quand des prix arrivent de ta guilde ou de ton royaume."
+L["Got prices for %d items from %s in your guild."] = "Prix reçus pour %d objets de %s, de ta guilde."
+L["Got prices for %d items from %d players on your realm."] = "Prix reçus pour %d objets de %d joueurs de ton royaume."
+L["Got prices for %d items from 1 player on your realm."] = "Prix reçus pour %d objets d'un joueur de ton royaume."
