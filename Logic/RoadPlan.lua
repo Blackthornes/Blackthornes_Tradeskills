@@ -1383,7 +1383,8 @@ function RoadPlan.Texts(step, professionName, level, line)
             if place and place.zone then
                 -- A trainer inside a dungeon is named by the dungeon, though
                 -- the pin goes on its door (LearnNext.INSIDE_TRAINERS).
-                texts.lines[1] = L.Format("%s trainer in %s", professionName, place.inside or place.zone)
+                local where = ns.LearnNext.ZoneName and ns.LearnNext.ZoneName(place) or place.inside or place.zone
+                texts.lines[1] = L.Format("%s trainer in %s", professionName, where)
             end
         end
         return texts

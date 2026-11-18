@@ -476,9 +476,53 @@ check("Horde Expert Enchanting", Trainer(333, 225), "Hgarth")
 zoneHere = "Thunder Bluff"
 check("Thunder Bluff Expert Leatherworking stays in the city", Trainer(165, 225), "Una")
 check("Thunder Bluff Artisan Leatherworking stays on Kalimdor", Trainer(165, 300), "Hahrana Ironhide")
+-- Specialty trainers teach only their own recipes, not a rank (2026-11-18:
+-- players were sent to Arathi for Expert Leatherworking and Cured Thick
+-- Hide, and to Undercity for Artisan Tailoring).
 zoneHere = "Undercity"
-check("Undercity Artisan Leatherworking stays on the Eastern Kingdoms",
-  LN.ContinentOf((LN:TrainerFor(165, 300) or {}).zone), "E")
+check("Undercity Artisan Leatherworking is Feralas, the Horde's only one", Trainer(165, 300), "Hahrana Ironhide")
+zoneHere = "Arathi Highlands"
+check("Arathi Expert Leatherworking is Una, not an Elemental trainer", Trainer(165, 225), "Una")
+zoneHere = "Undercity"
+check("Undercity Expert Tailoring", Trainer(197, 225), "Josef Gregorian")
+check("Horde Artisan Tailoring is Tarren Mill's", Trainer(197, 300), "Daryl Stack")
+check("Tarren Mill is named for its town", LN.ZoneName(LN:TrainerFor(197, 300)), "Tarren Mill")
+check("its pin keeps the map it is on", (LN:TrainerFor(197, 300) or {}).zone, "Alterac Mountains")
+check("Horde Artisan Blacksmithing is Booty Bay's", Trainer(164, 300), "Brikk Keencraft")
+check("Horde Artisan Engineering is Gadgetzan's", Trainer(202, 300), "Buzzek Bracketswing")
+zoneHere = "Arathi Highlands"
+do
+  local hide = { skillLineID = 165, skill = 175, trainerCost = 2800, name = "Cured Thick Hide" }
+  check("Cured Thick Hide is learned from Una", (LN:Place(hide) or {}).name, "Una")
+  local weave = { skillLineID = 197, skill = 235, trainerCost = 5000, name = "Shadoweave Gloves" }
+  zoneHere = "Undercity"
+  check("Shadoweave stays with its own trainer", (LN:Place(weave) or {}).name, "Josephine Lister")
+  local plain = { skillLineID = 197, skill = 235, trainerCost = 5000, name = "Runecloth Robe" }
+  check("a plain Artisan recipe goes to the Artisan trainer", (LN:Place(plain) or {}).name, "Daryl Stack")
+  local elemental = { skillLineID = 165, skill = 240, trainerCost = 5000, name = "Volcanic Leggings" }
+  check("a recipe only a specialist teaches still finds one", (LN:Place(elemental) or {}).name ~= nil, true)
+end
+UnitFactionGroup = function() return "Alliance" end
+zoneHere = "Ironforge"
+check("Alliance Expert Leatherworking is Telonis", Trainer(165, 225), "Telonis")
+check("Alliance Artisan Leatherworking is Aerie Peak's", Trainer(165, 300), "Drakk Stonehand")
+check("Alliance Artisan Tailoring is Theramore's", Trainer(197, 300), "Timothy Worthington")
+check("Alliance Expert Blacksmithing", Trainer(164, 225), "Bengus Deepforge")
+check("Alliance Artisan Alchemy is Feathermoon's", Trainer(171, 300), "Kylanna Windwhisper")
+UnitFactionGroup = function() return "Horde" end
+zoneHere = "Undercity"
+for line, list in pairs(LN.SPECIALISTS) do
+  for name in pairs(list) do
+    for _, side in ipairs({ "Alliance", "Horde" }) do
+      UnitFactionGroup = function() return side end
+      for _, cap in ipairs({ 150, 225, 300 }) do
+        check(string.format("%s %d to %d is never the specialist %s", side, line, cap, name),
+          Trainer(line, cap) ~= name, true)
+      end
+    end
+  end
+end
+UnitFactionGroup = function() return "Horde" end
 check("Darnassus is on Kalimdor", LN.ContinentOf("Darnassus"), "K")
 check("an island is on neither", LN.ContinentOf("Zephras Isle"), nil)
 UnitFactionGroup = function() return "Alliance" end

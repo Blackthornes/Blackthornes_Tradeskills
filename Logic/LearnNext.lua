@@ -188,6 +188,74 @@ LearnNext.INSIDE_TRAINERS = {
     [333] = { { "Annora", "Badlands", 44.4, 12.2, "", 300, "Uldaman" } },
 }
 
+--- Trainers who teach a rank, by Classic skill line and the rank's cap
+--- (150 Journeyman, 225 Expert, 300 Artisan). A trainer's number in the
+--- data is the highest recipe it teaches, which also counts specialty
+--- trainers who teach no rank at all (2026-11-18: Expert Leatherworking
+--- sent players to Brumn Winterhoof in Arathi, an Elemental trainer, and
+--- Artisan Tailoring to Josephine Lister in Undercity, a Shadoweave one).
+--- Checked against Forever's trainer lists. A line with no list here
+--- (Mining) still goes by the highest recipe.
+local function Set(...)
+    local set = {}
+    for _, name in ipairs({ ... }) do set[name] = true end
+    return set
+end
+LearnNext.RANK_TRAINERS = {
+    [164] = {                                            -- Blacksmithing
+        [150] = Set("Snarl", "Karn Stonehoof", "James Van Brunt", "Traugh",
+                    "Rotgath Stonebeard", "Therum Deepforge", "Clarise Gnarltree"),
+        [225] = Set("Saru Steelfury", "Bengus Deepforge"),
+        [300] = Set("Brikk Keencraft"),
+    },
+    [165] = {                                            -- Leatherworking
+        [150] = Set("Karolek", "Tarn", "Arthur Moore", "Brawn", "Krulmoo Fullmoon",
+                    "Faldron", "Fimble Finespindle", "Simon Tanner", "Aayndia Floralwind"),
+        [225] = Set("Una", "Telonis"),
+        [300] = Set("Hahrana Ironhide", "Drakk Stonehand"),
+    },
+    [171] = {                                            -- Alchemy
+        [150] = Set("Yelmak", "Bena Winterhoof", "Doctor Marsh", "Serge Hinott", "Jaxin Chong",
+                    "Sylvanna Forestmoon", "Tally Berryfizz", "Lilyssia Nightbreeze", "Kylanna",
+                    "Alchemist Narett"),
+        [225] = Set("Doctor Herbert Halsey", "Ainethil"),
+        [300] = Set("Rogvar", "Kylanna Windwhisper"),
+    },
+    [197] = {                                            -- Tailoring
+        [150] = Set("Magar", "Tepa", "Rhiannon Davis", "Mahani", "Grarnik Goodstitch",
+                    "Me'lynn", "Jormund Stonebrow", "Sellandus"),
+        [225] = Set("Josef Gregorian", "Georgio Bolero"),
+        [300] = Set("Daryl Stack", "Timothy Worthington"),
+    },
+    [202] = {                                            -- Engineering
+        [150] = Set("Nogg", "Franklin Lloyd", "Trixie Quikswitch", "Lilliam Sparkspindle",
+                    "Finbus Geargrind"),
+        [225] = Set("Roxxik", "Springspindle Fizzlegear"),
+        [300] = Set("Buzzek Bracketswing"),
+    },
+    [333] = {                                            -- Enchanting
+        [150] = Set("Godan", "Teg Dawnstrider", "Lavinia Crowe", "Taladan", "Gimble Thistlefuzz",
+                    "Lucan Cordell", "Xylinnia Starshine"),
+        [225] = Set("Hgarth", "Kitta Firewind"),
+        [300] = Set("Annora"),
+    },
+}
+
+--- Specialty trainers, by Classic skill line: they teach only their
+--- specialty's recipes. A recipe goes to them only when no other trainer
+--- of the player's side teaches that high, or when its name is one of
+--- theirs (the pattern, where there is one).
+LearnNext.SPECIALISTS = {
+    [164] = { ["Grumnus Steelshaper"] = false, ["Okothos Ironrager"] = false,
+              ["Ironus Coldsteel"] = false, ["Borgosh Corebender"] = false },
+    [165] = { ["Brumn Winterhoof"] = false, ["Sarah Tanner"] = false,
+              ["Peter Galen"] = false, ["Thorkaf Dragoneye"] = false,
+              ["Caryssia Moonhunter"] = false, ["Se'Jib"] = false },
+    [197] = { ["Josephine Lister"] = "^Shadoweave", ["Jalane Ayrole"] = "^Shadoweave" },
+    [202] = { ["Tinkmaster Overspark"] = false, ["Oglethorpe Obnoticus"] = false,
+              ["Nixx Sprocketspring"] = false, ["Vazario Linkgrease"] = false },
+}
+
 --- A trainer row as a place to go: its spot where the game saw it stand,
 --- else the data's; a dungeon's trainer carries `inside`.
 local function TrainerPlace(row)
@@ -199,10 +267,18 @@ local function TrainerPlace(row)
     }
 end
 
---- Where a trainer place is, in words: the dungeon for one inside, else
---- the zone.
+--- Trainers the data keeps under a zone players don't know them by: Tarren
+--- Mill's spots are on the Alterac Mountains map, but players look for
+--- them in Tarren Mill (2026-11-18). Words only; the pin keeps the zone.
+LearnNext.TOWNS = {
+    ["Daryl Stack"] = "Tarren Mill",
+    ["Serge Hinott"] = "Tarren Mill",
+}
+
+--- Where a trainer place is, in words: the dungeon for one inside, the
+--- town players know it by, else the zone.
 function LearnNext.ZoneName(place)
-    return place and (place.inside or place.zone) or nil
+    return place and (place.inside or LearnNext.TOWNS[place.name or ""] or place.zone) or nil
 end
 
 --- Where a recipe is learned: the trainer or vendor to go to.
@@ -219,17 +295,31 @@ function LearnNext:Place(record)
         local line = ns.RecipeBook.ClassicLine and ns.RecipeBook.ClassicLine(record.skillLineID)
             or record.skillLineID
         local needs = record.classicSkill or record.skill or 0
+        local specialists = LearnNext.SPECIALISTS[line] or {}
+        local plain, special, own = {}, {}, {}
         for _, row in ipairs((spots.TRAINERS or {})[line] or {}) do
             if OnSide(row[5], side) then sideTop = math.max(sideTop or 0, row[6] or 0) end
             if OnSide(row[5], side) and (row[6] or 0) >= needs then
                 local seen = SeenAt(row[1], row[2], "trainer")
-                trainers[#trainers + 1] = {
+                local place = {
                     kind = "trainer", name = row[1], zone = row[2],
                     x = seen and seen.x or row[3], y = seen and seen.y or row[4],
                     mapID = seen and seen.mapID, price = record.trainerCost,
                 }
+                local pattern = specialists[row[1]]
+                if pattern == nil then
+                    plain[#plain + 1] = place
+                elseif pattern and type(record.name) == "string" and record.name:find(pattern) then
+                    own[#own + 1] = place
+                else
+                    special[#special + 1] = place
+                end
             end
         end
+        -- A specialty's own recipe goes to its trainer; any other recipe to
+        -- a plain trainer, and to a specialist only when no plain one
+        -- teaches that high.
+        trainers = (#own > 0 and own) or (#plain > 0 and plain) or special
     end
 
     local vendors = {}
@@ -312,19 +402,34 @@ end
 function LearnNext:TrainerFor(line, needs)
     local side = Side()
     local from = (needs or 0) - 75
-    local trainers = {}
-    for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
-        if OnSide(row[5], side) and (row[6] or 0) > from then
-            trainers[#trainers + 1] = TrainerPlace(row)
-        end
+    local ranks = LearnNext.RANK_TRAINERS[line]
+    local named = ranks and ranks[needs]
+    local specialists = LearnNext.SPECIALISTS[line] or {}
+    -- Who teaches the rank: by name where the list has the rank, else by
+    -- the highest recipe, never a specialty trainer. A list that names no
+    -- trainer the data has for this side falls back to the highest recipe.
+    local function Teaches(row, byName)
+        if byName then return named[row[1]] == true end
+        return specialists[row[1]] == nil and (row[6] or 0) > from
     end
-    if #trainers == 0 then
-        for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
-            if OnSide(row[5], side) and (row[6] or 0) > from then
+    local function Gather(byName)
+        local trainers = {}
+        for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
+            if OnSide(row[5], side) and Teaches(row, byName) then
                 trainers[#trainers + 1] = TrainerPlace(row)
             end
         end
+        if #trainers == 0 then
+            for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
+                if OnSide(row[5], side) and Teaches(row, byName) then
+                    trainers[#trainers + 1] = TrainerPlace(row)
+                end
+            end
+        end
+        return trainers
     end
+    local trainers = named and Gather(true) or {}
+    if #trainers == 0 then trainers = Gather(false) end
     return Nearest(trainers, side)
 end
 
@@ -621,7 +726,7 @@ function LearnNext:ShowTheWay(row)
             place.zone, place.x, place.y))
     elseif place.zone then
         ns.Print(L.Format("Can't pin %s (%s): %s. They are in %s.", who, what,
-            WHY[why] or L["no exact spot is known for them"], place.zone))
+            WHY[why] or L["no exact spot is known for them"], LearnNext.ZoneName(place)))
     else
         ns.Print(L.Format("Can't pin %s (%s): %s.", who, what,
             WHY[why] or L["no exact spot is known for them"]))
