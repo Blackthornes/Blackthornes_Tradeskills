@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.34.0
+
+- The craft queue and Shopping List show on the Crafting tab of the one window, and only while something is queued.
+Fixes and changes:
+- An item that sold is no longer logged as cancelled, and restocking starts when your listed count hits 0.
+- Road to 300 sends each rank to the trainer who teaches it.
+- Hovering a recipe that makes more than one item in the Profit tab no longer shows an error.
+
 ## 1.33.0
 
 - Star the recipes you want to learn, and vendors and trainers tell you when they teach one.

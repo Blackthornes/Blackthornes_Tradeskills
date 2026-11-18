@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.34.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Queue on the Crafting tab.** The craft queue and the Shopping List show on the one window's Crafting tab. They show only while something is queued.
+- **Sold items.** An item that sold is no longer logged as cancelled. Restocking happens when your listed count reaches 0.
+- **Road to 300.** Each rank sends you to the trainer who teaches it.
+- **Profit tab.** Hovering a recipe that makes more than one item no longer shows an error.
+
 ## 1.33.0
 
 For WoW: Forever (interface 16001). `/reload` is not enough: files were added, so close the game fully and start it again after updating.
