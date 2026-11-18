@@ -75,6 +75,14 @@ Cooldowns.MIN_SECONDS = 60
 Cooldowns.LOGIN_DELAY = 10
 -- How long after a cast or item event before reading.
 Cooldowns.READ_DELAY = 1
+-- The longest the next-ready timer waits before looking again. C_Timer.After
+-- refuses a wait much past three weeks (seen 2026-11-18), and an alt's saved
+-- cooldown can be far off; a timer that fires early just looks again.
+Cooldowns.MAX_WAIT = 6 * 3600
+-- The game's clock (GetTime) counts in a 32 bit number of milliseconds. Once
+-- it wraps, a start read from before shows this far in the future (about 50
+-- days), so a one day transmute read as 50 days left (seen 2026-11-18).
+Cooldowns.CLOCK_WRAP = 2 ^ 32 / 1000
 
 -- Moves whenever what is kept changes, for lists that show it.
 Cooldowns.version = 0
@@ -124,7 +132,10 @@ local function Left(start, duration)
     local ok, left = pcall(function()
         if type(start) ~= "number" or type(duration) ~= "number" then return nil end
         if start == 0 or duration < Cooldowns.MIN_SECONDS then return 0 end
-        return math.max(0, start + duration - GetTime())
+        local clock = GetTime()
+        if start > clock then start = start - Cooldowns.CLOCK_WRAP end
+        -- Never more left than the cooldown is long, whatever the client says.
+        return math.min(duration, math.max(0, start + duration - clock))
     end)
     if ok then return left end
     return nil
@@ -535,7 +546,7 @@ function Cooldowns:Schedule()
     end
     if not soonest then return end
     local generation = self.generation
-    C_Timer.After(soonest - now + 1, function()
+    C_Timer.After(math.min(soonest - now + 1, Cooldowns.MAX_WAIT), function()
         if Cooldowns.generation ~= generation then return end
         Cooldowns:Announce()
         Cooldowns:Schedule()
