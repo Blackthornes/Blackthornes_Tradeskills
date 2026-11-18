@@ -551,43 +551,6 @@ function RoadPlan.Shopping(steps)
     return list, cost
 end
 
---- Is a step already on the queue (Queue All, or its own Queue Step)?
---- Then the queue counts its materials, and the road's line must not.
-local function Queued(step)
-    local queue = ns.Queue
-    local want = step.queueCrafts or step.crafts or 0
-    if not queue then return false end
-    local ok, held = pcall(function()
-        if not step.learn then
-            local _, entry = queue:Find(step.recipeID, true)
-            return entry ~= nil and (entry.quantity or 0) >= want
-        end
-        for _, line in ipairs(queue:GetBuys()) do
-            if line.forRecipe == step.recipeID and (tonumber(line.forCrafts) or 0) >= want then return true end
-        end
-        return false
-    end)
-    return ok and held == true
-end
-
---- How many of each vendor-stocked material the craft steps after `step`
---- still need, for Queue Step to put on the list in one go. A step already
---- queued is left out: the queue counts it.
-function RoadPlan.VendorAfter(plan, step)
-    local counts, after = {}, false
-    for _, other in ipairs(plan and plan.steps or {}) do
-        if after and not other.done and other.kind == "craft" and not Queued(other) then
-            for _, need in ipairs(other.needs or {}) do
-                if need.count > 0 and FromVendor(need.itemID) then
-                    counts[need.itemID] = (counts[need.itemID] or 0) + need.count
-                end
-            end
-        end
-        if other == step then after = true end
-    end
-    return counts
-end
-
 --- How many of an item the character playing's other characters hold:
 --- bags, bank and (unless turned off) mail, as last saved, only those it
 --- can mail (same realm and side, not another account's), each character
@@ -805,16 +768,18 @@ end
 
 --- Queue Step: the step's crafts in the queue, or for a recipe still to
 --- learn, its materials on the list to buy (as Learn next's Queue materials).
--- With the plan, the vendor-stocked materials (vials, thread) of every
--- step after this one go on the list too, so one stop at the vendor buys
--- them all (a player's report, 2026-11-17). Set, not added: queueing the
--- next step moves the line on, and the queue counts that step's own.
+-- Only the step clicked (the owner, 2026-11-18): it once put the vendor
+-- materials of every later step on the list too, which read as the whole
+-- road queued. Queue All is the one button for the whole road. The road's
+-- "Get everything before you start" row still adds up every material.
+-- With the plan, lines that older Queue Step left for this road
+-- (`forRoad`) come off, so its list holds only what was asked for.
 -- @return true when something went on
 function RoadPlan:QueueStep(step, plan)
     local queue = ns.Queue
     if not (step and step.kind == "craft" and queue) then return false end
     if plan and queue.SetRoadBuys then
-        pcall(queue.SetRoadBuys, queue, plan.line, RoadPlan.VendorAfter(plan, step), plan.professionName)
+        pcall(queue.SetRoadBuys, queue, plan.line, {}, plan.professionName)
     end
     if not step.learn and queue.Ensure then
         local ok, done = pcall(queue.Ensure, queue, step.recipeID, step.queueCrafts or step.crafts)
@@ -841,7 +806,8 @@ function RoadPlan:QueueAll(plan)
     for _, step in ipairs(plan and plan.steps or {}) do
         if not step.done and step.kind == "craft" and self:QueueStep(step) then count = count + 1 end
     end
-    -- Every step is queued now, so the queue counts all their vials.
+    -- Every step is queued now, so the queue counts all their vials, and
+    -- no line for this road is left from before.
     local queue = ns.Queue
     if plan and queue and queue.SetRoadBuys then
         pcall(queue.SetRoadBuys, queue, plan.line, {}, plan.professionName)

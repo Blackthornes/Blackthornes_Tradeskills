@@ -564,6 +564,13 @@ to buy (the shop row tells you how many to gather). Every crafting road
 gets this, not only Alchemy; fishing does not. Tested in
 `tools/test_roadto300.lua` and `tools/test_queuebuys.lua`.
 
+Queue Step queues only its own step (the owner, 2026-11-18: one click
+queued the whole road). The `RoadPlan.VendorAfter` part above put every
+later step's vendor materials on the list with each Queue Step, which read
+as the whole road queued; it is gone. Queue Step (with the plan) now calls
+`Queue:SetRoadBuys(line, {})`, so `forRoad` lines an older build left come
+off. Queue All is the only button for the whole road; the shop row still
+adds up every material. Tested in `tools/test_roadto300.lua`.
 
 Rank trainers by name (2026-11-18, players on Discord): a trainer's number
 in `Data/LearnSpots.lua` is the highest recipe it teaches, which also counts

@@ -748,23 +748,14 @@ ns.Queue = {
 }
 Road:QueueStep(brewSteps[1], brew)
 check("Queue Step still queues its own crafts", ensuredBrew[201], brewSteps[1].crafts)
-check("the rest of the road's vials go on the list", roadBuys and roadBuys.counts[VIAL],
-  vials - brewSteps[1].needs[2].count)
-check("never the herbs (you gather those)", roadBuys and roadBuys.counts[HERB], nil)
-check("kept for this profession's road", roadBuys and roadBuys.line, 171)
-Road:QueueStep(brewSteps[#brewSteps], brew)
-check("the last step leaves no more vials to buy", roadBuys and next(roadBuys.counts), nil)
-ns.Queue.Find = function(_, id)
-  if id == brewSteps[#brewSteps].recipeID then return 1, { quantity = brewSteps[#brewSteps].queueCrafts } end
-end
-ns.Queue.GetBuys = function() return {} end
-Road:QueueStep(brewSteps[1], brew)
-local before = 0
-for i = 2, #brewSteps do
-  if brewSteps[i].recipeID ~= brewSteps[#brewSteps].recipeID then before = before + brewSteps[i].needs[2].count end
-end
-check("a step already queued is left to the queue", roadBuys and (roadBuys.counts[VIAL] or 0), before)
-ns.Queue.Find, ns.Queue.GetBuys = nil, nil
+-- The owner (2026-11-18): one click on a step queued the whole road. Queue
+-- Step queues only the step clicked: no later step's crafts, and none of
+-- the rest of the road's vials on the list to buy.
+local others = 0
+for id in pairs(ensuredBrew) do if id ~= 201 then others = others + 1 end end
+check("no other step is queued", others, 0)
+check("none of the rest of the road's vials go on the list", roadBuys and next(roadBuys.counts), nil)
+check("old lines for this road come off", roadBuys and roadBuys.line, 171)
 roadBuys = nil
 Road:QueueAll(brew)
 check("Queue All queues every step, so the road's own line goes", roadBuys and next(roadBuys.counts), nil)
