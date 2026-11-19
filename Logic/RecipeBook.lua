@@ -328,6 +328,22 @@ function RecipeBook:GetAll()
             record.skill = fixed
         end
     end
+    -- What a trainer's own window showed (Logic/TrainerRecipes.lua, then
+    -- the shipped Data/ForeverTrainerRecipes.lua): its price, and the skill
+    -- it asks for, which is the game's own. A recipe Forever added has no
+    -- trainer price in the book until then (2026-11-19).
+    local trainers = ns.TrainerRecipes
+    if trainers and trainers.All then
+        for recipeID in pairs(trainers:All()) do
+            local record = merged[recipeID] or (aliases[recipeID] and merged[aliases[recipeID]])
+            local row = record and trainers:Get(recipeID)
+            if row then
+                if type(row.cost) == "number" then record.trainerCost = row.cost end
+                if type(row.skill) == "number" and row.skill > 0 then record.skill = row.skill end
+                record.trainerSeen = true
+            end
+        end
+    end
     for itemID, learned in pairs(SkillTable(false) or {}) do
         if type(learned) == "table" and type(learned.skill) == "number" then
             local row = book.ITEMS[itemID]

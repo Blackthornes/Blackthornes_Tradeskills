@@ -615,6 +615,28 @@ map). Sources agree Expert is 125 (level 20) and Artisan 200 (level 35); a
 player said Expert Leatherworking needed 150, most likely because the
 Arathi trainer was the wrong one. Tested in `tools/test_learnnext.lua`.
 
+### Trainer recipes from the trainer's window (2026-11-19)
+
+A player's report: Road to 300 never offered Forever's new trainer recipes
+(First Aid's Lesser Healing Potion, Simple Poultice and the like), since the
+book had no trainer price for any recipe Forever added (`Data/ForeverRecipes.lua`
+rows carry no `t`). The owner chose "Learn from trainer visits".
+`Logic/TrainerRecipes.lua` reads a profession trainer's lines on
+`TRAINER_SHOW` (hidden ones with the filter flipped and put back, as the
+Wishlist does), matched by the tooltip's spell ID, else the one recipe with
+that name, and keeps `trainerRecipes[recipeID] = { cost, skill, at }` account
+wide (never rename it). `RecipeBook:GetAll` lays them over the book: the
+trainer's price becomes `trainerCost` and its skill `skill` (the game's own;
+Lesser Healing Potion is 55 at the trainer, 85 in the client table, which
+is its yellow). The road and Learn Next then send the player to that
+profession's trainers. The shipped `Data/ForeverTrainerRecipes.lua`
+(`tools/forever_trainer_recipes.py <save>`, part of each fold-in) fills in
+for characters who never visited; a character's own visit wins. First rows
+(six First Aid lines) came from a player's trainer screenshot. Prices are
+set by the server, so no site lists Forever's (checked 2026-11-19); the
+fold-in is the only source. RoadPlan's key carries `TrainerRecipes.version`.
+Tested in `tools/test_trainerrecipes.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
