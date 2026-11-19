@@ -849,7 +849,10 @@ end
 
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
 -- Returns the number of items recorded.
-function Prices:CommitScan(observations, scannedAt)
+-- @param partial true for a quick scan that stopped before it read every
+--   row: its counts stay out of Sold a Day (see Record), and it is not a
+--   full scan, so the full scan stamp is left alone.
+function Prices:CommitScan(observations, scannedAt, partial)
     scannedAt = scannedAt or time()
 
     local recorded = 0
@@ -860,12 +863,13 @@ function Prices:CommitScan(observations, scannedAt)
         local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
             self:Summarise(listings, self:GetScanValue(itemID, "market"))
         if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
+            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder,
+                partial == true or nil)
             recorded = recorded + 1
         end
     end
 
-    self:SetLastFullScan(scannedAt)
+    if not partial then self:SetLastFullScan(scannedAt) end
     return recorded
 end
 
