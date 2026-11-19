@@ -1726,8 +1726,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- Last line of defence on the price, wherever it came from. An item
-    -- auction needs at least a silver, and whole silver once a copper price
-    -- has failed this session (Util.wholeSilverOnly). A price arriving here
+    -- auction needs at least a silver. A price arriving here
     -- from a caller has not necessarily been through the chooser, so it is
     -- checked again rather than trusted.
     if not isCommodity and not Util.IsItemAuctionPrice(unitPrice) then
@@ -2934,9 +2933,7 @@ function Posting:ResolvePending(posted, appeared, target)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(L.Format("%s did not appear in your auctions.",
             Util.GetItemLabel(pending.itemID)))
-        if Posting:FallBackToWholeSilver(pending) then
-            -- Quietly: the next click lists it in whole silver.
-        elseif pending.many and not pending.joined then
+        if pending.many and not pending.joined then
             ns.Warn(L["listing several at once may not work here, so the next click lists one."])
         else
             ns.Warn(L["the auction house may be refusing listings; try Blizzard's own Sell tab."])
@@ -2951,17 +2948,15 @@ function Posting:ResolvePending(posted, appeared, target)
     end
 end
 
---- A gear listing with copper in its price that did not go up: list in
---- whole silver for the rest of the session, so the next click still works.
---- Forever took copper when tried (2026-11-16); this is the safety net if it
---- ever stops. True when it just switched.
+--- A gear listing with copper in its price that did not go up.
+--- Forever takes copper on gear (tried in game 2026-11-16), and the owner
+--- asked (2026-11-19) that gear always lists to the copper, so a miss never
+--- switches to whole silver: one missed listing, often only a slow or
+--- misread auctions list, had rounded every gear price after it up to a
+--- silver for the rest of the session. Always false; the caller warns as
+--- for any other miss. `Util.wholeSilverOnly` stays for the tests only.
 function Posting:FallBackToWholeSilver(pending)
-    if Util.wholeSilverOnly or not pending or pending.isCommodity then return false end
-    local price = tonumber(pending.unitPrice)
-    if not price or price % 100 == 0 then return false end
-    Util.wholeSilverOnly = true
-    Posting.changes = (Posting.changes or 0) + 1
-    return true
+    return false
 end
 
 --- Sample the auction house throttle over a few seconds.

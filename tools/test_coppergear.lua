@@ -1,8 +1,7 @@
 -- Gear, bags and wands match and undercut to the copper on Forever (tried in
 -- game 2026-11-16, after a player's report): a 0c undercut against a rival at
--- 2g 45s 37c lists at 2g 45s 37c, not 2g 46s. The one silver floor stays, and
--- a listing with copper that fails to go up switches to whole silver for the
--- rest of the session (Posting:FallBackToWholeSilver).
+-- 2g 45s 37c lists at 2g 45s 37c, not 2g 46s. The one silver floor stays. A
+-- missed listing never switches to whole silver (tools/test_coppermiss.lua).
 
 local ns = {}
 ns.COLORS = setmetatable({}, {__index = function() return "ffffffff" end})
