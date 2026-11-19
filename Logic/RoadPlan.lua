@@ -776,6 +776,7 @@ local function Key(profession, level)
         tostring(ns.Queue and ns.Queue.version or 0),
         RoadPlan.PickBy(),
         tostring(RoadPlan.skipVersion),
+        tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
         tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
         profession.line == RoadPlan.FISHING and tostring(RoadPlan.FarmerPaceVersion()) or "",

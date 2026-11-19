@@ -95,7 +95,8 @@ They are the same in every addon's notes; keep them the same.
   "Refresh shipped data", never announced, never the save or caches
   committed. If his PC can't be reached, ask once (Try again or Skip it).
   Tools: `tools/forever_vendor_spots.py <Blackthornes_TS.lua>`,
-  `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`, and
+  `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`,
+  `tools/forever_trainer_recipes.py <Blackthornes_TS.lua>`, and
   `tools/make_forever_recipes.py` after a client-table re-pull.
 
 ## Running the checks (keep the output small)
