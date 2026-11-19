@@ -214,6 +214,42 @@ do
     check("a new size draws", updates > 0, true)
 end
 
+-- 4. A player's recording (2026-11-19): resizing the one window, which
+-- scales it, made the one queued craft vanish from the Crafting tab while
+-- the title still said "(1)". The list was exactly one row tall, and at
+-- most sizes the game reads 30 back as a hair under it.
+print("")
+print("A list one row tall in a scaled window")
+do
+    local ns = NewNamespace()
+    Load(ns, "/Core/Util.lua")
+    Load(ns, "/UI/Widgets.lua")
+
+    local list = ns.Widgets.CreateScrollList(NewFrame(), { rowHeight = 30 })
+    local data = { { id = 1 } }
+    for _, tall in ipairs({ 30, 29.99997, 30.00003, 29.6 }) do
+        list.height = tall
+        list.scripts.OnSizeChanged(list, 250 + tall, tall)
+        list:SetData(data)
+        local row = list.rows[1]
+        check(("the queued craft shows at %s tall"):format(tall),
+            row ~= nil and row.data == data[1] and row:IsShown(), true)
+    end
+
+    -- Two rows in a list a hair under two rows tall: both show, no scrollbar.
+    list.height = 59.9999
+    list:SetData({ { id = 1 }, { id = 2 } })
+    check("two rows a hair short both show", list.rows[2] ~= nil and list.rows[2]:IsShown(), true)
+    check("and need no scrollbar", list.canScroll, false)
+
+    -- A list clearly too short still leaves the row out, so nothing hangs
+    -- over the footer.
+    list.height = 25
+    list:SetData(data)
+    check("a list too short for a row draws none",
+        list.rows[1].data == nil and not list.rows[1]:IsShown(), true)
+end
+
 for key, value in pairs(saved) do _G[key] = value end
 
 print("")

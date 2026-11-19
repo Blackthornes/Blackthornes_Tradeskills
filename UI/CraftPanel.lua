@@ -2753,6 +2753,24 @@ function CraftPanel:Hide()
     if self.queuedFrame then self.queuedFrame:Hide() end
 end
 
+--- A resized Crafting tab may now have room for the queued crafts on its
+--- right, or no longer have it: asked again once the size settles, not on
+--- every step of the drag. Hooked once per tab.
+function CraftPanel:WatchTabSize(container)
+    if not container or rawget(container, "craftPaneSized") or not container.HookScript then return end
+    container.craftPaneSized = true
+    container:HookScript("OnSizeChanged", function()
+        if CraftPanel.queuedSizePending then return end
+        CraftPanel.queuedSizePending = true
+        C_Timer.After(0.1, function()
+            CraftPanel.queuedSizePending = false
+            if CraftPanel.inOne and CraftPanel.oneContainer == container then
+                CraftPanel:RefreshQueued()
+            end
+        end)
+    end)
+end
+
 --- Lay the pane into the one window's Crafting tab (UI/Main.lua's
 --- TSTabs:SettleDock, while the one window sits beside the profession
 --- window). Its own rim, halo and fold go; the tab's area holds it.
@@ -2763,6 +2781,7 @@ function CraftPanel:IntoOne(container)
     self.inOne = true
     self.squeezed = false
     self.oneContainer = container
+    self:WatchTabSize(container)
     frame:SetParent(container)
     self.columnInOne = nil
     self:LayOutInOne(false)
