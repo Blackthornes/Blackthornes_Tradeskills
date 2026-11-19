@@ -3089,3 +3089,20 @@ guildmate's batch once they go quiet (`NOTICE_QUIET`), naming them in full;
 by the save's hash and never named, at most once every `NOTICE_EVERY`.
 Farmer has the same switch for guild drops. Sharing is never announced in
 release notes. Tested in `tools/test_sharednotice.lua`.
+
+## The List It question in its own window
+
+Trent's Spellstone from the bags was blocked (2026-11-19): "Blackthornes_TS
+has been blocked from an action only available to the Blizzard UI". The
+"List It / Skip" question before a listing was shown in the game's own pop-up
+(`StaticPopup_Show`), which marks the box as ours; the game lends that box to
+its own questions later (replace a weapon's enchant), and their protected step
+was blocked. The question is now `UI/PostConfirm.lua` (`ns.PostConfirm`:
+`Show({ text, itemID, data, accept, skip })`, `IsShown`, `Close`, `Accept`,
+`Skip`), same words, icon and buttons, titled "Auction House"; Escape and the
+close gem skip, a newer question replaces an open one without listing or
+skipping it, and the auction house closing takes it down. `Posting:AcceptConfirm`
+and `Posting:SkipConfirm` do what the old popup's OnAccept and OnCancel did.
+Never call `StaticPopup_Show`, `StaticPopup_Hide` or add to `StaticPopupDialogs`
+from any file: `tools/test_gamepopup.lua` fails if a loaded file does. The
+window is checked in `tools/test_postconfirm.lua`.
