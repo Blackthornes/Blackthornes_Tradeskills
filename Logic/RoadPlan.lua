@@ -272,6 +272,216 @@ local function LineOf(record, memo)
     return found or line
 end
 
+--------------------------------------------------------------------------------
+-- Recipes that need reputation (a player's report, the owner said so,
+-- 2026-11-19): the road sent a player to a Redridge vendor for a pattern
+-- they couldn't buy, their standing too low, after they had bought its
+-- materials. A recipe only a vendor teaches is left off the road while it
+-- needs a standing the character doesn't have. The need is read off the
+-- recipe item's own tooltip ("Requires Faction - Friendly"), or off what a
+-- vendor showed (VendorPins). The character's standing is read from the
+-- game; when it can't be told, the line's red colour says it, and when
+-- neither can, the recipe stays off. An item the client hasn't loaded is
+-- left off until it arrives, then the road is worked out again. Nothing is
+-- saved; `standingVersion` is in the plan's key.
+--------------------------------------------------------------------------------
+
+RoadPlan.standingVersion = 0
+RoadPlan.STANDINGS = { "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
+
+local needsRead = {}  -- [itemID] = { faction, standing, red } or false, this session
+local loading = {}    -- [itemID] = true while the client fetches it
+local sawNeed = false -- a recipe on a road needed a standing this session
+
+local function PlainText(value)
+    local ok, copy = pcall(function()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
+    return ok and copy or nil
+end
+
+local function TipText(line)
+    if type(line) ~= "table" then return nil end
+    local text = line.leftText
+    if text == nil and type(line.args) == "table" then
+        for _, arg in ipairs(line.args) do
+            if type(arg) == "table" and arg.field == "leftText" then text = arg.stringVal end
+        end
+    end
+    text = PlainText(text)
+    return text and (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
+--- Is a tooltip line red, the game's colour for a need not met? nil when
+--- the line carries no colour.
+local function IsRed(line)
+    local ok, red = pcall(function()
+        local c = type(line) == "table" and line.leftColor
+        if type(c) ~= "table" or type(c.r) ~= "number" then return nil end
+        return c.r > 0.9 and (c.g or 0) < 0.3 and (c.b or 0) < 0.3
+    end)
+    if ok then return red end
+    return nil
+end
+
+local function RequiresPattern()
+    local vendor = ns.Vendor
+    if vendor and type(vendor.RequiresPattern) == "function" then
+        local ok, pattern, factionAt = pcall(vendor.RequiresPattern)
+        if ok and pattern then return pattern, factionAt or 1 end
+    end
+    return "^Requires (.+) %- (.+)$", 1
+end
+
+--- What a recipe item's tooltip says it needs: { faction, standing, red },
+--- false when it needs no standing, nil while the client fetches it.
+function RoadPlan.ItemNeeds(itemID)
+    if type(itemID) ~= "number" then return false end
+    if needsRead[itemID] ~= nil then return needsRead[itemID] end
+    local tips = rawget(_G, "C_TooltipInfo")
+    if type(tips) ~= "table" or type(tips.GetItemByID) ~= "function" then return false end
+    local items = rawget(_G, "C_Item")
+    if type(items) == "table" and type(items.IsItemDataCachedByID) == "function" then
+        local ok, cached = pcall(items.IsItemDataCachedByID, itemID)
+        if ok and cached == false then
+            if not loading[itemID] and type(items.RequestLoadItemDataByID) == "function" then
+                loading[itemID] = true
+                pcall(items.RequestLoadItemDataByID, itemID)
+            end
+            if loading[itemID] then return nil end
+        end
+    end
+    local found = false
+    local ok = pcall(function()
+        local data = tips.GetItemByID(itemID)
+        if type(data) ~= "table" or type(data.lines) ~= "table" then return end
+        local pattern, factionAt = RequiresPattern()
+        for _, line in ipairs(data.lines) do
+            local text = TipText(line)
+            local a, b = nil, nil
+            if text then a, b = text:match(pattern) end
+            if a and b then
+                if factionAt == 2 then a, b = b, a end
+                found = { faction = a, standing = b, red = IsRed(line) }
+            end
+        end
+    end)
+    if not ok then found = false end
+    needsRead[itemID] = found
+    return found
+end
+
+--- A standing's place, 1 (Hated) to 8 (Exalted), by the game's own words
+--- for it in the client's language, or nil.
+function RoadPlan.StandingRank(label)
+    label = PlainText(label)
+    if not label then return nil end
+    for i = 1, 8 do
+        if label == PlainText(rawget(_G, "FACTION_STANDING_LABEL" .. i))
+            or label == PlainText(rawget(_G, "FACTION_STANDING_LABEL" .. i .. "_FEMALE")) then
+            return i
+        end
+    end
+    for i, english in ipairs(RoadPlan.STANDINGS) do
+        if label == english then return i end
+    end
+    return nil
+end
+
+--- The character's standing with a faction, by its name, 1 to 8, or nil
+--- when the game doesn't list it.
+function RoadPlan.PlayerStanding(faction)
+    faction = PlainText(faction)
+    if not faction then return nil end
+    local found
+    pcall(function()
+        local rep = rawget(_G, "C_Reputation")
+        if type(rep) == "table" and type(rep.GetNumFactions) == "function"
+            and type(rep.GetFactionDataByIndex) == "function" then
+            for index = 1, tonumber(rep.GetNumFactions()) or 0 do
+                local data = rep.GetFactionDataByIndex(index)
+                if type(data) == "table" and data.name == faction and type(data.reaction) == "number" then
+                    found = data.reaction + 0
+                    return
+                end
+            end
+        end
+        local count, info = rawget(_G, "GetNumFactions"), rawget(_G, "GetFactionInfo")
+        if type(count) == "function" and type(info) == "function" then
+            for index = 1, tonumber(count()) or 0 do
+                local name, _, standing = info(index)
+                if name == faction and type(standing) == "number" then
+                    found = standing + 0
+                    return
+                end
+            end
+        end
+    end)
+    return found
+end
+
+--- Does a recipe item need a standing the character doesn't have? true or
+--- false, or nil while the client fetches the item.
+function RoadPlan.NeedsStanding(itemID)
+    local need = RoadPlan.ItemNeeds(itemID)
+    if not need then
+        local pins = ns.VendorPins
+        local ok, sellers = false, nil
+        if pins and pins.RecipeSellers then ok, sellers = pcall(pins.RecipeSellers, pins, itemID) end
+        for _, seller in ipairs(ok and type(sellers) == "table" and sellers or {}) do
+            if seller.faction and seller.standing then
+                need = { faction = seller.faction, standing = seller.standing }
+                break
+            end
+        end
+    end
+    if need == nil then return nil end
+    if not need then return false end
+    sawNeed = true
+    local want, have = RoadPlan.StandingRank(need.standing), RoadPlan.PlayerStanding(need.faction)
+    if want and have then return have < want end
+    if need.red ~= nil then return need.red end
+    return true
+end
+
+local refreshSoon = false
+local function StandingsMoved()
+    RoadPlan.standingVersion = RoadPlan.standingVersion + 1
+    local after = rawget(_G, "C_Timer") and C_Timer.After
+    if refreshSoon or type(after) ~= "function" then return end
+    refreshSoon = true
+    after(0.5, function()
+        refreshSoon = false
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end)
+end
+
+--- An item the road was waiting on arrived (or the client has none).
+function RoadPlan.OnItemInfo(itemID, success)
+    if not (itemID and loading[itemID]) then return end
+    loading[itemID] = nil
+    needsRead[itemID] = nil
+    if success == false then needsRead[itemID] = false end
+    StandingsMoved()
+end
+
+--- A standing changed: read every need again, the next time the road is
+--- drawn. Every kill can raise one, so nothing is redrawn here, and only
+--- when a recipe needing one was seen.
+function RoadPlan.OnFaction()
+    for key, need in pairs(needsRead) do
+        if need then needsRead[key] = nil end
+    end
+    if sawNeed then RoadPlan.standingVersion = RoadPlan.standingVersion + 1 end
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(RoadPlan, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+        RoadPlan.OnItemInfo(itemID, success)
+    end)
+    ns.RegisterEvent(RoadPlan, "UPDATE_FACTION", function() RoadPlan.OnFaction() end)
+end
+
 --- The recipes that could level a profession: known, or taught by a trainer
 --- or vendor of the player's side. Each { record, known, place }.
 function RoadPlan:Candidates(line)
@@ -298,6 +508,12 @@ function RoadPlan:Candidates(line)
             if not known and (record.trainerCost or record.recipeItems) and ns.LearnNext then
                 local ok, where = pcall(ns.LearnNext.Place, ns.LearnNext, record)
                 place = ok and where or nil
+            end
+            -- Only a vendor teaches it, and it needs a standing the
+            -- character doesn't have (or can't tell yet): off the road.
+            if not known and place and place.kind == "vendor"
+                and RoadPlan.NeedsStanding(place.itemID) ~= false then
+                place = nil
             end
             if known or place then
                 -- The game's own colour wins over the book's when a window
@@ -777,6 +993,7 @@ local function Key(profession, level)
         RoadPlan.PickBy(),
         tostring(RoadPlan.skipVersion),
         tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
+        tostring(RoadPlan.standingVersion),
         tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
         profession.line == RoadPlan.FISHING and tostring(RoadPlan.FarmerPaceVersion()) or "",

@@ -664,6 +664,23 @@ set by the server, so no site lists Forever's (checked 2026-11-19); the
 fold-in is the only source. RoadPlan's key carries `TrainerRecipes.version`.
 Tested in `tools/test_trainerrecipes.lua`.
 
+No recipes that need reputation (a player's report, the owner said so,
+2026-11-19): the road sent a player to a Redridge vendor for a pattern their
+standing was too low to buy, after they had bought its materials.
+`RoadPlan:Candidates` leaves off a recipe only a vendor teaches while
+`RoadPlan.NeedsStanding(itemID)` is not false: the need comes off the recipe
+item's tooltip (`ItemNeeds`, the "Requires %s - %s" line through
+`Vendor.RequiresPattern`) or a vendor's offer (`VendorPins:RecipeSellers`'
+`faction`, `standing`); the character's standing from `C_Reputation` or
+`GetFactionInfo` by name (`PlayerStanding`, `StandingRank` by the game's
+`FACTION_STANDING_LABEL` words), else the line's red colour, else off. An
+item the client hasn't loaded is asked for and left off until
+`GET_ITEM_INFO_RECEIVED`; `standingVersion` is in the plan's key and moves
+then, and on `UPDATE_FACTION` once a need was seen (no redraw on that
+one, since every kill can raise a standing). Known recipes and trainer
+steps are untouched; Learn Next still lists them. Nothing saved. Tested in
+`tools/test_roadto300.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
