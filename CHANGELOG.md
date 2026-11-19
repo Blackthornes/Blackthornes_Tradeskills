@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.35.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **One Window switch.** Every Blackthornes window has a gold gem on its title bar. It swaps between the one window and each addon's own windows.
+- **Road to 300 trainers.** When you open a profession trainer, Tradeskills notes the recipes it teaches, with their price and the skill each needs. Road to 300 and Learn Next then offer them. Some trainer recipes are known ahead of your visit.
+- **Road to 300 standing.** A recipe only a vendor teaches stays off the road while you lack the standing it asks for.
+- **Disenchanting.** Disenchant value is the average of every result, counting each by its chance.
+- **Prices tab.** Item names fill in once the game loads them.
+- **Craft queue.** The queued craft stays showing when you resize the window.
+- **Snipe.** Snipe lists only show finds your Spending Cap can buy.
+- **Crafted gear.** A crafted piece with a suffix is priced by that suffix.
+
 ## 1.34.5
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
