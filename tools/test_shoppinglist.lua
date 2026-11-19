@@ -194,7 +194,21 @@ do
   CraftPanel:RefreshQueued()
   check("a narrow tab hides them", drawer.shown, false)
   check("and the crafts fill it again", pane.points.BOTTOMRIGHT.x, 0)
+
+  -- Made wide again by the player: nothing else asks, so the tab's own
+  -- size change brings them back, once the size settles.
+  local timers, oldTimer = {}, C_Timer
+  C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
+  function tab:HookScript(name, fn) self.hooks = self.hooks or {}; self.hooks[name] = fn end
+  CraftPanel:WatchTabSize(tab)
+  CraftPanel:WatchTabSize(tab)
   tab.width = 900
+  tab.hooks.OnSizeChanged(tab, 900, 430)
+  tab.hooks.OnSizeChanged(tab, 901, 430)
+  check("a drag's steps wait for one redraw", #timers, 1)
+  timers[1]()
+  check("made wide again, the queued crafts come back", drawer.shown, true)
+  C_Timer = oldTimer
 
   CraftPanel:RefreshQueued()
   queued = 0
