@@ -25,7 +25,7 @@
 -- Values follow the house rules: materials at what they cost to buy (a
 -- vendor's price for what a vendor sells), what one craft gets back the way
 -- the Level Up tab works it out (LevelUp:GetReturns: a grey item at vendor
--- only, a disenchant at its most likely result), and nothing is ever priced
+-- only, a disenchant at its average result), and nothing is ever priced
 -- from a missing number.
 
 local _, ns = ...

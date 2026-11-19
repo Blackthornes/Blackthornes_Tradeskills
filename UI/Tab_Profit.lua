@@ -616,9 +616,8 @@ local function ShowBreaksInto(owner, analysis)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
         GameTooltip:AddDoubleLine(
-            ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
-                outcome.counted == false and L["  (bonus)"] or ""),
+            ("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
+                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)),
             outcome.price and L.Format("%s each", Util.FormatMoney(outcome.price, { noColor = true, short = true }))
                 or L["no price"],
             1, 1, 1, 0.8, 0.8, 0.8)

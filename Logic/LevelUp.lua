@@ -120,8 +120,8 @@ end
 --- What one craft gets back, each way it can be turned into gold.
 --
 -- The house rules: a grey item is worth what a vendor pays and nothing more,
--- and a disenchant counts at its most likely result alone (rarer ones are a
--- bonus). Disenchanted materials still have to be sold, so they lose the
+-- and a disenchant counts at its average, each result by its chance.
+-- Disenchanted materials still have to be sold, so they lose the
 -- auction house cut like any listing. A soulbound craft never reaches the
 -- auction house, but a vendor and a disenchant still take it.
 --

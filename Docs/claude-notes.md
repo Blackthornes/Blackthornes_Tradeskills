@@ -886,6 +886,21 @@ Shift or Always, Shift unless picked (`tooltipDisenchantResults`, on;
 `tooltipDisenchantShift`, true; Shift key "disenchant"; never rename
 them). Tested in `tools/test_disenchantresults.lua`.
 
+## Disenchant value is the average
+
+A player's math (2026-11-19, the owner picked "Use the true average"):
+`Disenchant:GetValue` is each outcome's worth (price times average count)
+times its chance, summed. The chances are not scaled to add up to one, since
+your own results can have a shard turn up beside the dust. From 2026-10-03
+to then it was the most likely outcome alone, with the rest tagged
+"(bonus)"; that overstated an item whose likely result was its dearest
+(Burnside Rifle showed 4g 27s 50c, the average is 3g 40s 63c). The tag is
+gone. A rarer material with no price counts as nothing and `partial` is
+true (the tooltip says "or more"); an unpriced likely material still
+means no value. Each outcome carries `counted` (always true) and `likely`
+(the one a disenchant most often gives; Shuffle reads it). Tested in
+`tools/test_disenchant.lua`.
+
 ## Enchant costs on tooltips
 
 A player asked (2026-10-14, the owner agreeing) for an enchant's material

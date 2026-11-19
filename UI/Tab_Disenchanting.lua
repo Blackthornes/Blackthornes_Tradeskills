@@ -711,10 +711,9 @@ local function DrawOutcomes(detail, breakdown)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
 
-        -- Only the most likely outcome is the value; the rest are a bonus.
-        line.name:SetText(("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-            Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
-            outcome.counted == false and L["  (bonus)"] or ""))
+        -- Each disenchant gives one of these; the value is their average.
+        line.name:SetText(("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
+            Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then

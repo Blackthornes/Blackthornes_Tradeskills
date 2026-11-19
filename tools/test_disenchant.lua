@@ -53,6 +53,7 @@ local items = {
     [1010] = { 2, 31, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Lesser Mystic Wand" },
     [1011] = { 2, 26, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Dire Wand" },
     [1012] = { 2, 26, "INVTYPE_FEET", 4, 0, 50 },     -- green armour, level 26
+    [1013] = { 2, 56, "INVTYPE_RANGEDRIGHT", 2, 2, 50, "Burnside Rifle" },
 }
 
 C_Item = {
@@ -67,8 +68,8 @@ C_Item = {
 local prices = {
     [STRANGE_DUST] = 160, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
     [GREATER_MAGIC] = 1000,
-    [1001] = 700,    -- worth less sold than disenchanted (800)
-    [1002] = 5000,   -- worth more sold than disenchanted (1500)
+    [1001] = 700,    -- worth less sold than disenchanted (1025)
+    [1002] = 5000,   -- worth more sold than disenchanted (1445)
 }
 
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
@@ -185,21 +186,33 @@ check("a level 58 epic gives a Nexus Crystal", epic[1].itemID == NEXUS)
 
 print("\nvalue")
 
--- Only the most likely outcome counts (2026-10-03); the essence and
--- the shard are a bonus. 5 dust on average at 160 each.
+-- Each disenchant gives one outcome, so the value is their average by
+-- chance (2026-11-19). 75% of 5 dust at 160 (600), 15% of 1.5 astral at
+-- 1000 (225), 10% of one shard at 2000 (200).
 local value, partial, breakdown = Disenchant:GetValue(1001)
-check("armour is worth 800 copper disenchanted, its dust", value == 800)
-check("never partial", partial == nil)
-check("the dust is what is counted", breakdown.outcomes[1].counted == true)
-check("the shard is a bonus", breakdown.outcomes[3].counted == false)
+check("armour is worth 1025 copper disenchanted, on average", value == 1025)
+check("not partial when all is priced", partial == nil)
+check("every outcome counts", breakdown.outcomes[1].counted and breakdown.outcomes[3].counted)
+check("the dust is the likely one", breakdown.outcomes[1].likely == true
+    and breakdown.outcomes[3].likely == false)
 
--- 1.5 essence on average at 1000 each.
-check("the weapon is worth 1500, its essence", Disenchant:GetValue(1002) == 1500)
+check("the weapon is worth 1445 on average", Disenchant:GetValue(1002) == 1445)
 
 prices[SMALL_GLIMMERING] = nil
 value, partial = Disenchant:GetValue(1001)
-check("an unpriced shard changes nothing", value == 800 and partial == nil)
+check("an unpriced shard counts as nothing, and says so", value == 825 and partial == true)
 prices[SMALL_GLIMMERING] = 2000
+
+-- A player's tooltip (2026-11-19): Burnside Rifle, 75% 1-2 Greater Eternal
+-- Essence at 2g 85s, 20% 1-2 Illusion Dust at 30s 01c, 5% one Large
+-- Brilliant Shard at 2g 20s. It showed 4g 27s 50c, 1.5 essence as if every
+-- disenchant gave one. The average is 32062.5 + 900.3 + 1100 = 34063.
+local rifle = Disenchant:GetOutcomes(1013)
+check("the rifle breaks into essence, dust and a shard", rifle and #rifle == 3
+    and rifle[1].itemID == 16203 and rifle[2].itemID == 16204 and rifle[3].itemID == 14344)
+prices[16203], prices[16204], prices[14344] = 28500, 3001, 22000
+check("the rifle is worth 3g 40s 63c, not 4g 27s 50c", Disenchant:GetValue(1013) == 34063)
+prices[16203], prices[16204], prices[14344] = nil, nil, nil
 
 prices[STRANGE_DUST], saved.dust = nil, prices[STRANGE_DUST]
 check("an unpriced dust leaves no value", Disenchant:GetValue(1001) == nil)
@@ -211,9 +224,9 @@ check("an item that cannot be disenchanted has no value", Disenchant:GetValue(10
 print("\nthe Profit tab")
 
 local cheap = Profit:Analyse(1001)
-check("the craft carries its disenchant value", cheap.disenchantValue == 800)
+check("the craft carries its disenchant value", cheap.disenchantValue == 1025)
 check("and knows it can be disenchanted", cheap.disenchantable == true)
-check("it sells for less than that", cheap.unitRevenue < 800)
+check("it sells for less than that", cheap.unitRevenue < 1025)
 check("so disenchanting beats selling", cheap.disenchantBeatsSale == true)
 
 local dear = Profit:Analyse(1002)
@@ -222,7 +235,7 @@ check("a white craft has no disenchant value", Profit:Analyse(1005).disenchantab
 
 local soulbound = Profit:Analyse(1008)
 check("a soulbound craft still shows its disenchant value", soulbound.soulbound
-    and soulbound.disenchantValue == 800)
+    and soulbound.disenchantValue == 1025)
 
 -- The ranking is profit, whatever disenchanting is worth.
 local ranked = Profit:GetRanked({})
@@ -238,10 +251,10 @@ check("a soulbound craft is listed against its vendor price", byID[1008]
     and byID[1008].sells == 500 and byID[1008].sellsAt == "vendor")
 check("one worth more sold is not", byID[1002] == nil)
 check("nor one that cannot be disenchanted", byID[1005] == nil)
--- 800 of materials, less the 5% auction cut when they are sold: 760. Less
--- the 100 the craft costs: 660, the same sum the Disenchanting tab does.
-check("the auction cut comes off the disenchant value", byID[1001].net == 760)
-check("profit is that less materials", byID[1001].gain == 660)
+-- 1025 of materials, less the 5% auction cut when they are sold: 974. Less
+-- the 100 the craft costs: 874, the same sum the Disenchanting tab does.
+check("the auction cut comes off the disenchant value", byID[1001].net == 974)
+check("profit is that less materials", byID[1001].gain == 874)
 
 check("unticked, every disenchantable craft shows",
     #Disenchant:GetCraftRows({ beatsOnly = false }) == 3)
