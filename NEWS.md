@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.34.5
+
+Fixes and changes:
+- Listing a Spellstone or other bag item no longer gets blocked. List It and Skip show in our own window.
+- Gear lists price to the copper.
+- Road to 300 counts materials you own as free when Charge for Own Materials is off, and the "Get everything before you start" row is gone.
+- A Quick Scan that stops partway keeps what it read.
+
 ## 1.34.4
 
 Fixes and changes:

@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.34.5
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Listing from a bag item.** Fixed the "blocked" pop-up when you list a Spellstone or other bag item. List It and Skip now open in Tradeskills' own window.
+- **Gear prices.** Gear lists now price to the copper, even after a listing was missed.
+- **Road to 300.** Materials you already own count as free when Charge for Own Materials: is off, so hides get used first. The "Get everything before you start" row is gone.
+- **Quick Scan.** If it stops partway, it keeps the rows it already read.
+
 ## 1.34.4
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
