@@ -3,7 +3,9 @@
 -- and said build it, 2026-10-30, first on Classic, then copied here by hand
 -- for Forever): a house-look window with a rail down its
 -- left side, a button for each addon loaded, and the picked addon's pages
--- beside it. One size, one size grip, one fold gem, one place.
+-- beside it. One size, one size grip, one fold gem, one place. A swap gem
+-- beside the fold gem splits it back into each addon's own window, and the
+-- same gem on those windows joins them again (SharedWindow.AddSwap).
 --
 -- The same file in all five addons; a fix to it belongs in all five. There
 -- is no shared core addon, so, like UI/SharedMinimap.lua, every copy signs
@@ -48,7 +50,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 13
+local FILE_VERSION = 14
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -537,6 +539,9 @@ function SharedWindow.Build()
     if ns.FoldWindow and ns.FoldWindow.Add and rawget(frame, "trim") then
         pcall(ns.FoldWindow.Add, ns.FoldWindow, frame, {})
     end
+    -- And left of that, the swap gem: it splits the addons back into their
+    -- own windows (SharedWindow.AddSwap).
+    if rawget(frame, "trim") then pcall(SharedWindow.AddSwap, frame, nil) end
 
     -- The rail down the left side, and the area the picked addon's pages fill.
     local rail = CreateFrame("Frame", nil, frame)
@@ -1599,6 +1604,226 @@ function SharedWindow.HookPlaces()
 end
 pcall(SharedWindow.HookPlaces)
 
+--------------------------------------------------------------------------------
+-- The swap gem (the owner said build it, 2026-11-19, from the mockup): a
+-- gold gem left of the fold gem, so a window's gems run swap, fold, close.
+-- On the one window it shows two panes side by side and splits the addons
+-- back into their own windows; on an addon's own window it shows one pane
+-- with a rail line and joins them into the one window. Either way it is the
+-- one choice for all five addons, `SetOn`, the same as the "One Window:"
+-- box on the All Addons page (which reads it as it shows). No new setting
+-- and no new saved key.
+--
+-- Only real windows get it: the one window and the windows an addon lays
+-- into it, each signed up with `SharedWindow.AddSwap(frame, key)` after its
+-- fold gem. Floating arrows, bars and trackers do not.
+--
+-- A host may give three more calls for the swap, each optional:
+--   tab()      the tab showing now, or nil
+--   show(tab)  open on that tab (nil: where it would open anyway), in the
+--              one window or its own as the choice now stands
+--   hide()     close its own windows
+-- Without `show` the swap falls back to `open` (split) or `Open` (join).
+--------------------------------------------------------------------------------
+
+SharedWindow.SWAP_GEM = 22
+SharedWindow.SWAP_GAP = 2
+
+local SWAP_MEDIA = ([[Interface\AddOns\%s\Media\Frame\]]):format(tostring(ADDON))
+local SWAP_INK = { 0.165, 0.110, 0.024 }
+local SWAP_GOLD = { 0.910, 0.784, 0.451 }
+-- How thick the panes' lines are drawn on the gem's face.
+local SWAP_LINE = 1.5
+
+local function Width(object)
+    if not object then return nil end
+    local ok, width = pcall(object.GetWidth, object)
+    if ok and type(width) == "number" and width > 0 then return width end
+    return nil
+end
+
+-- One ink line on the gem's face, its top left corner `x`, `y` from the
+-- middle (y up).
+local function SwapInk(button, x, y, width, height)
+    local ink = button:CreateTexture(nil, "OVERLAY", nil, 2)
+    ink:SetColorTexture(SWAP_INK[1], SWAP_INK[2], SWAP_INK[3], 1)
+    ink:SetSize(width, height)
+    ink:SetPoint("TOPLEFT", button, "CENTER", x, y)
+    return ink
+end
+
+-- A pane: the outline of a box.
+local function SwapPane(button, x, y, width, height, glyph)
+    glyph[#glyph + 1] = SwapInk(button, x, y, width, SWAP_LINE)
+    glyph[#glyph + 1] = SwapInk(button, x, y - height + SWAP_LINE, width, SWAP_LINE)
+    glyph[#glyph + 1] = SwapInk(button, x, y, SWAP_LINE, height)
+    glyph[#glyph + 1] = SwapInk(button, x + width - SWAP_LINE, y, SWAP_LINE, height)
+end
+
+--- The gold gem with its glow and a lit copy for the mouse, as the fold gem
+--- has, and its panes: two side by side (split) or one with a rail line
+--- (join).
+local function SwapGem(button, join)
+    local glow = button:CreateTexture(nil, "BACKGROUND")
+    glow:SetTexture(SWAP_MEDIA .. "Glow")
+    glow:SetPoint("CENTER")
+    local size = Width(button) or SharedWindow.SWAP_GEM
+    glow:SetSize(size * 2.2, size * 2.2)
+    glow:SetVertexColor(SWAP_GOLD[1], SWAP_GOLD[2], SWAP_GOLD[3], 1)
+    pcall(glow.SetBlendMode, glow, "ADD")
+
+    local gem = button:CreateTexture(nil, "ARTWORK")
+    gem:SetTexture(SWAP_MEDIA .. "FoldGem")
+    gem:SetAllPoints(button)
+
+    local lit = button:CreateTexture(nil, "ARTWORK", nil, 1)
+    lit:SetTexture(SWAP_MEDIA .. "FoldGem")
+    lit:SetAllPoints(button)
+    pcall(lit.SetBlendMode, lit, "ADD")
+
+    local glyph = {}
+    if join then
+        SwapPane(button, -6, 5, 12, 10, glyph)
+        glyph[#glyph + 1] = SwapInk(button, -3, 5, SWAP_LINE, 10)
+    else
+        SwapPane(button, -6, 5, 5, 10, glyph)
+        SwapPane(button, 1, 5, 5, 10, glyph)
+    end
+
+    local function Light(p)
+        glow:SetAlpha(0.25 + 0.55 * p)
+        lit:SetAlpha(0.45 * p)
+    end
+    Light(0)
+    button.Light = Light
+    button.glyph = glyph
+end
+
+--- The gem's card: what a click does, and that the same gem undoes it.
+function SharedWindow.SwapTooltip(button)
+    if not (GameTooltip and button) then return end
+    GameTooltip:SetOwner(button, "ANCHOR_TOP")
+    if rawget(button, "join") then
+        GameTooltip:SetText(L["Join Into One Window"], 1, 1, 1)
+        GameTooltip:AddLine(L["Puts every Blackthornes addon in one window, with a button for each down the side."],
+            0.9, 0.88, 0.81, true)
+        GameTooltip:AddLine(L["You can split them again with this same button."], 0.5, 0.82, 0.5, true)
+    else
+        GameTooltip:SetText(L["Split Into Own Windows"], 1, 1, 1)
+        GameTooltip:AddLine(L["Gives each addon its own window again."], 0.9, 0.88, 0.81, true)
+        GameTooltip:AddLine(L["You can join them back with this same button."], 0.5, 0.82, 0.5, true)
+    end
+    GameTooltip:Show()
+end
+
+--- Give a dressed window its swap gem, left of its fold gem (or of its
+--- close gem when it has none). `key` is the addon whose own window this
+--- is; nil for the one window. Returns the button, once per window.
+function SharedWindow.AddSwap(frame, key)
+    if type(frame) ~= "table" or type(CreateFrame) ~= "function" then return nil end
+    local trim = rawget(frame, "titan")
+    if type(trim) ~= "table" then return nil end
+    local have = rawget(frame, "blackthornesSwap")
+    if have then return have end
+
+    local join = key ~= nil
+    local ok, button = pcall(CreateFrame, "Button", nil, trim)
+    if not (ok and button) then return nil end
+    frame.blackthornesSwap = button
+    button.swapKey = key
+    button.join = join
+
+    local fold = rawget(frame, "blackthornesFold")
+    fold = type(fold) == "table" and fold.button or nil
+    local beside = fold or rawget(trim, "closeButton")
+    local size = SharedWindow.SWAP_GEM
+    -- The Blizzard window style's buttons are the game's size: match them.
+    if rawget(trim, "blizzard") then size = Width(beside) or size end
+    button:SetSize(size, size)
+    if beside then
+        local besideSize = Width(beside) or size
+        button:SetPoint("CENTER", beside, "CENTER", -(besideSize / 2 + size / 2 + SharedWindow.SWAP_GAP), 0)
+    else
+        button:SetPoint("CENTER", trim, "TOPRIGHT", -(8 + size + SharedWindow.SWAP_GAP), -8)
+    end
+    SwapGem(button, join)
+
+    button:SetScript("OnEnter", function(self)
+        self.hovered = true
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(self, "hover", 1, 0.12, self.Light)
+        else
+            self.Light(1)
+        end
+        SharedWindow.SwapTooltip(self)
+    end)
+    button:SetScript("OnLeave", function(self)
+        self.hovered = false
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(self, "hover", 0, 0.18, self.Light)
+        else
+            self.Light(0)
+        end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    button:SetScript("OnClick", function(self)
+        if GameTooltip then GameTooltip:Hide() end
+        local drawer = SharedWindow.Drawer()
+        local api = drawer and drawer.api or SharedWindow
+        local swap = type(api.Swap) == "function" and api.Swap or SharedWindow.Swap
+        swap(rawget(self, "swapKey"), rawget(self, "join"))
+    end)
+    return button
+end
+
+-- A host's swap call, in a pcall: true and its answer when it has one.
+local function HostCall(entry, name, ...)
+    local host = entry and entry.host
+    local fn = type(host) == "table" and host[name]
+    if type(fn) ~= "function" then return false, nil end
+    local ok, answer = pcall(fn, ...)
+    if not ok then
+        if ns.Debug then pcall(ns.Debug, "one window swap:", tostring(answer)) end
+        return false, nil
+    end
+    return true, answer
+end
+
+--- The swap gem's click. `join` true: from `key`'s own window, every own
+--- window closes and the one window opens on `key`, on the same tab.
+--- `join` false: from the one window, it closes and the addon showing opens
+--- in its own window, on the same tab, at its own spot. In a fight nothing
+--- moves; it happens as the fight ends.
+function SharedWindow.Swap(key, join)
+    if InFight() then
+        hub.swapAfterFight = { key = key, join = join and true or false }
+        return false
+    end
+    hub.swapAfterFight = nil
+    if join then
+        local entry = key and hub.entries[key] or nil
+        local _, tab = HostCall(entry, "tab")
+        for _, each in pairs(hub.entries) do HostCall(each, "hide") end
+        SharedWindow.SetOn(true)
+        if entry and type(entry.host) == "table" then
+            HostCall(entry, "show", tab)
+            if not SharedWindow.IsOpen() then SharedWindow.Open(entry.key) end
+        else
+            SharedWindow.Open(key)
+        end
+        return true
+    end
+    local entry = hub.current or SharedWindow.Picked()
+    local _, tab = HostCall(entry, "tab")
+    SharedWindow.SetOn(false)
+    if entry then
+        local shown = HostCall(entry, "show", tab)
+        if not shown and type(entry.open) == "function" then pcall(entry.open) end
+    end
+    return true
+end
+
+
 -- Every copy listens; only the one that draws acts.
 if CreateFrame then
     local events = CreateFrame("Frame")
@@ -1617,6 +1842,9 @@ if CreateFrame then
     events:SetScript("OnEvent", function(_, event, kind)
         if event == "PLAYER_LOGIN" then SharedWindow.HookPlaces() return end
         if event == "PLAYER_REGEN_ENABLED" then
+            -- The swap gem clicked in a fight happens now.
+            local swap = hub.swapAfterFight
+            if swap and IsDrawer() then SharedWindow.Swap(swap.key, swap.join) end
             if shelves.afterFight and IsDrawer() then
                 shelves.afterFight = nil
                 SharedWindow.ShelfLay()
