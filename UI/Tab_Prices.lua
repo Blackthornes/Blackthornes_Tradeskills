@@ -380,6 +380,9 @@ local function UpdateRow(row, entry)
     if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
 
     entry.label = Util.GetItemLabel(entry.itemID)
+    -- An item the game had not loaded yet shows "item 1234". The row
+    -- remembers it, so its name is put in once the game sends it.
+    row.waitsFor = entry.label == L.Format("item %d", entry.itemID) and entry.itemID or nil
     -- An item with its own price says so, in gold, beside its name.
     if Mine(entry.itemID) then
         Theme.SetRowName(row.name, L.Format("%s  |c%smy price|r", entry.label, ns.COLORS.warn))
@@ -1059,6 +1062,64 @@ function Refresh()
 end
 
 --------------------------------------------------------------------------------
+-- Names that arrive late
+--------------------------------------------------------------------------------
+
+-- A player's report (2026-11-19): moving between tabs, mostly during a scan,
+-- the rows read "item 1234" until something redrew them. A scan pulls in
+-- thousands of items and the game drops older ones from its cache, so a row
+-- can be drawn before its name is back. When the game sends the name of an
+-- item a row on screen is waiting for, the rows on screen are drawn again
+-- (a few dozen, not the whole list), a burst of names in one pass.
+local namesQueued = false
+
+local function ListShown()
+    local list = widgets.list
+    return list ~= nil and (not list.IsVisible or list:IsVisible())
+end
+
+local function WaitingOnScreen(itemID)
+    local rows = widgets.list and widgets.list.rows
+    if type(rows) ~= "table" then return false end
+    for index = 1, #rows do
+        local row = rows[index]
+        if row and row.waitsFor and row.data and (not row.IsShown or row:IsShown())
+            and (itemID == nil or row.waitsFor == itemID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function DrawArrivedNames()
+    namesQueued = false
+    if not ListShown() then return end
+    widgets.list:Refresh()
+    local picked = state.selected
+    if picked and widgets.detail and widgets.detail.title then
+        local title = widgets.detail.title.GetText and widgets.detail.title:GetText()
+        if title == L.Format("item %d", picked.itemID) then UpdateDetail(picked) end
+    end
+end
+
+--- The game sent an item's name (GET_ITEM_INFO_RECEIVED).
+function UI._PricesNameArrived(itemID, success)
+    if success == false or namesQueued or not ListShown() then return end
+    local picked = state.selected
+    local forDetail = picked and itemID and picked.itemID == itemID
+    if not forDetail and not WaitingOnScreen(itemID) then return end
+    namesQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.2, DrawArrivedNames)
+    else
+        DrawArrivedNames()
+    end
+end
+
+--- For the tests: the tab's widgets and state.
+function UI._PricesWidgets() return widgets, state, UpdateRow end
+
+--------------------------------------------------------------------------------
 -- Build
 --------------------------------------------------------------------------------
 
@@ -1215,6 +1276,12 @@ local function BuildDetails(container)
     widgets.detail = detail
 
     UpdateDetail(nil)
+
+    if ns.RegisterEvent then
+        ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+            UI._PricesNameArrived(itemID, success)
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------
