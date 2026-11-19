@@ -217,6 +217,26 @@ function Snipe:Finds() return self.finds end
 --- Remaining under the cap.
 function Snipe:Left() return math.max(0, self:Cap() - self.spent) end
 
+--- Can the cap left buy at least one of this find? Prices are each, so a
+--- stack whose single unit costs more than what's left is no find at all.
+function Snipe.Fits(price, left)
+    return type(price) == "number" and type(left) == "number" and price <= left
+end
+
+--- Take out the finds the cap left can't buy even one of, so the list only
+--- offers what the player can afford. The one being bought stays.
+-- @return true when a find was taken out
+function Snipe:FitCap()
+    local left, pendingFind = self:Left(), self.pending and self.pending.find
+    local kept = {}
+    for _, find in ipairs(self.finds) do
+        if find == pendingFind or Snipe.Fits(find.price, left) then kept[#kept + 1] = find end
+    end
+    if #kept == #self.finds then return false end
+    self.finds = kept
+    return true
+end
+
 local function Say(text)
     if ns.Notice and ns.Notice.Show then
         local ok = pcall(ns.Notice.Show, ns.Notice, text, { hold = 5, key = "snipe" })
@@ -741,7 +761,7 @@ function Snipe:OnBrowseResults()
     end
     for id, hit in pairs(cheapest) do
         local worth = mine.batch[id]
-        if Snipe.IsDealFor(hit.price, worth, kind, pct) then
+        if Snipe.IsDealFor(hit.price, worth, kind, pct) and Snipe.Fits(hit.price, self:Left()) then
             kept[#kept + 1] = {
                 itemID = id, price = hit.price, qty = hit.qty, worth = worth,
                 deal = Snipe.Deal(hit.price, worth), kind = kind,
@@ -755,8 +775,9 @@ function Snipe:OnBrowseResults()
             end
         end
     end
-    table.sort(kept, Snipe.Better)
     self.finds = kept
+    self:FitCap()
+    table.sort(self.finds, Snipe.Better)
     if fresh then self:Chime() end
     Moved()
     self:Later()
@@ -970,8 +991,11 @@ function Snipe:Buy(find, auto)
     local units = self:UnitsFor(find)
     if units < 1 then
         if auto then find.retryAt = Now() + self.READY_KEEP; return end
-        if self.running then return self:CapReached() end
+        if self.running and self:Left() <= 0 then return self:CapReached() end
+        -- Cap money is still left for cheaper finds: keep going without
+        -- this one, rather than stopping the whole session.
         Say(L["That costs more than your Spending Cap has left."])
+        if self.running and self:FitCap() then Moved() end
         return
     end
 
@@ -1383,6 +1407,8 @@ function Snipe:Bought()
     if not pending.item and ns.AHBuys and ns.AHBuys.Record then
         pcall(ns.AHBuys.Record, ns.AHBuys, pending.itemID, pending.count)
     end
+    -- What's left of the cap may no longer reach every find.
+    self:FitCap()
     Moved()
     if self:Left() <= 0 then
         if self.running then self:CapReached() else self.finds = {}; Moved() end
