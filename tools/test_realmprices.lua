@@ -5,10 +5,12 @@
 --   1. Off by default: nothing joins, nothing goes out, nothing is taken.
 --   2. On: the channel is joined, and its join and leave lines are hidden.
 --   3. A scan goes out one message at a time, only on our channel.
---   4. A price is used only once 3 players sent one, and the middle is taken.
+--   4. One player's price is used (the owner, 2026-11-18); with several,
+--      the middle is taken.
 --   5. Names are never kept, only a hash of them.
---   6. A price far from a fresh one of your own is refused; your own fresh
---      scan wins, and so does a guild price.
+--   6. A price under 5% or over 10 times the one you know (your own, even
+--      old, else your guild's) is refused; your own fresh scan wins, and so
+--      does a guild price.
 --   7. Not shared again within the hour, or when 3 others covered the scan.
 --   8. Whispers, the guild and other channels are not listened to.
 --   9. Old prices are pruned.
@@ -202,7 +204,7 @@ check("our notice is filtered", ana.ns.RealmPrices.FilterNotice(nil, "CHAT_MSG_C
 check("trade chat's is not", ana.ns.RealmPrices.FilterNotice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_CHANGED",
     "", "", "2. Trade", "", 0, 2, "", "Trade"), false)
 check("nothing heard yet", ana.ns.RealmPrices:Describe(),
-    "Listening for prices from your realm. A price is used once 3 players agree on it.")
+    "Listening for prices from your realm. They fill in prices you don't have yet.")
 
 --------------------------------------------------------------------------------
 print("\nleft by hand, joined again")
@@ -278,7 +280,7 @@ end)(), true)
 
 current = bob
 local Realm = bob.ns.RealmPrices
-check("one player is not enough", Realm:GetValue(2589), nil)
+check("one player's price is used", (Realm:GetValue(2589)), 1000)
 check("Bob heard Ana's announcement", Realm:Covering(clock - 60), 1)
 
 current = carl
@@ -290,10 +292,11 @@ Run()
 current = bob
 check("three players: the middle is used", (Realm:GetValue(2589)), 1100)
 check("the cheapest listing comes too", (Realm:GetValue(2589, "lowest")), 1090)
-check("two players are still not enough", Realm:GetValue(2592), nil)
+check("two players: the middle of the two", (Realm:GetValue(2592)), 510)
 check("rival is never answered", Realm:GetValue(2589, "rival"), nil)
 check("Bob has no scan: GetValue uses the realm's", bob.ns.Prices:GetValue(2589), 1100)
-check("Ana does not keep her own echo", ana.ns.RealmPrices:GetValue(2589), nil)
+-- Ana keeps Carl's price only: not her own echo, and Dora's is 900 times hers.
+check("Ana does not keep her own echo", #ana.ns.db.realmPrices["Forever-Alliance"][2589] / 4, 1)
 check("the status counts prices and players", Realm:Describe(), "2 realm prices kept, from 3 players.")
 
 do
@@ -362,6 +365,37 @@ bob.settings.guildPrices = false
 bob.settings.realmPrices = false
 check("realm prices off: his own again", bob.ns.Prices:GetValue(2589), 1500)
 bob.settings.realmPrices = true
+
+do
+    -- One player's price is guarded by the price you know, even an old one
+    -- of your own (the owner, 2026-11-18): under 5% or over 10 times it is
+    -- refused.
+    local Comm = bob.ns.Comm
+    local function Send(sender, itemID, value)
+        Realm:OnPrices(sender, Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(itemID) .. ","
+            .. Comm.ToBase36(value) .. ";", "CHANNEL", "BTSPricesA", "4. BTSPricesA")
+    end
+    bob.ns.Prices:GetTable()[2600] = { market = 1000, minBuyout = 1000, seen = clock - 10 * 86400 }
+    Send("Eve-Realm", 2600, 40)
+    check("under 5% of his old price is refused", Realm:GetValue(2600), nil)
+    Send("Eve-Realm", 2600, 60)
+    check("a bit over 5% is taken", (Realm:GetValue(2600)), 60)
+    Send("Fay-Realm", 2600, 12000)
+    check("over 10 times his old price is refused", (Realm:GetValue(2600)), 60)
+    check("his old price gives way to one player's newer one", bob.ns.Prices:GetValue(2600), 60)
+
+    bob.ns.GuildPrices.GetValue = function(_, itemID) if itemID == 2601 then return 2000, clock end end
+    Send("Eve-Realm", 2601, 50)
+    check("with no price of his own, under 5% of the guild's is refused", Realm:GetValue(2601), nil)
+    Send("Eve-Realm", 2601, 25000)
+    check("and over 10 times it", Realm:GetValue(2601), nil)
+    Send("Eve-Realm", 2601, 1500)
+    check("a price near the guild's is kept", (Realm:GetValue(2601)), 1500)
+    bob.ns.GuildPrices.GetValue = function() return nil end
+
+    Send("Eve-Realm", 2602, 7)
+    check("nothing known: one player's price fills the gap", bob.ns.Prices:GetValue(2602), 7)
+end
 
 --------------------------------------------------------------------------------
 print("\nwhat is not listened to")

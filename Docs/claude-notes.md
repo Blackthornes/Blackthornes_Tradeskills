@@ -1601,12 +1601,17 @@ region's prices don't fit another's). When on it
 joins a hidden channel for the side (`BTSPrices` plus A, H or N), hides its
 join lines, and shares the last scan (Y announce, then Z prices, the guild's
 batches) one message every `SEND_GAP` seconds, never in a fight, at most once
-an hour, and not when `MIN_SENDERS` others covered that scan. Kept by a hash
+an hour, and not when `COVERED_BY` (3) others covered that scan. Kept by a hash
 of the sender's name, never the name, in `realmPrices[realm][itemID]` and
-`realmPricesSent` (never rename either). A price is used only once 3 players
-sent one, the middle of the last 5, and only to fill a gap after your own
-scans and your guild's (`Prices:GetValue`), before TSM and Auctionator. A
-price far from a fresh one of your own is refused. `Comm` hands handlers the
+`realmPricesSent` (never rename either). Since 2026-11-18 (the owner, in
+place of "3 players agree") one player's price is used, the middle of the
+last 5 once several sent one, and only to fill a gap after your own scans
+and your guild's (`Prices:GetValue`), before TSM and Auctionator. A price
+under 5% (`LOW` 20) or over 10 times (`FAR`) the one you know, your own
+even if old, else your guild's, is refused (`RealmPrices.TooFar`). Guild
+prices the same day: a guildmate's price scanned after your own replaces
+it, fresh or not (`GuildPrices:GetValue`'s `since`); the 10x guard against
+a fresh price of yours stays. `Comm` hands handlers the
 channel's name and target as fourth and fifth arguments. Tested in
 `tools/test_realmprices.lua`.
 Left by hand (a player's report, 2026-11-06): a `YOU_LEFT` notice for our

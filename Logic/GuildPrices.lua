@@ -11,9 +11,9 @@
 --   * After a scan, its prices go to the guild, at most once an hour, and not
 --     at all when a guildmate shared a scan from about the same time.
 --   * Guildmates' prices are kept apart from yours, in
---     `guildPrices[realm][itemID]` (never rename it), and only fill gaps:
---     an item you have never priced, or whose price has gone stale while
---     theirs is newer. Your own scans always win.
+--     `guildPrices[realm][itemID]` (never rename it). They fill gaps, and
+--     since 2026-11-18 (the owner) a guildmate's price newer than your own
+--     replaces it, even a fresh one (Prices:GetValue).
 --   * Each item keeps the last price from up to three guildmates, and the
 --     middle one is used, so one wrong price is outvoted. A price far from a
 --     fresh one of your own is not taken at all.
@@ -124,23 +124,36 @@ end
 --- What guildmates say an item is worth: the middle of their last prices.
 -- `which` as Prices:GetValue: "market" (default), "min" or "lowest" read
 -- the cheapest listing, "rival" is never answered.
+-- With `since`, only prices scanned after it count (Prices:GetValue asks
+-- for those newer than your own scan).
 -- @return copper, and when the newest of those scans was; nil without
-function GuildPrices:GetValue(itemID, which, now)
+function GuildPrices:GetValue(itemID, which, now, since)
     if which == "rival" then return nil end
     local realm = RealmTable(false)
     local list = realm and realm[itemID]
     if type(list) ~= "table" then return nil end
 
     now = now or time()
-    local values, newest = {}, nil
+    local low = (which == "min" or which == "lowest")
+    -- Prices are read many times a redraw, and an item mostly has one
+    -- guildmate's price: that one is answered without a table.
+    local first, values, newest
     for index = 1, #list, STRIDE do
         local at = list[index + 1]
-        local value = (which == "min" or which == "lowest") and list[index + 3] or list[index + 2]
-        if type(at) == "number" and type(value) == "number" and now - at <= self.USE_FOR then
-            values[#values + 1] = value
+        local value = low and list[index + 3] or list[index + 2]
+        if type(at) == "number" and type(value) == "number" and now - at <= self.USE_FOR
+            and (not since or at > since) then
+            if not first then
+                first = value
+            else
+                values = values or { first }
+                values[#values + 1] = value
+            end
             if not newest or at > newest then newest = at end
         end
     end
+    if not first then return nil end
+    if not values then return first, newest end
     return Median(values), newest
 end
 

@@ -2248,7 +2248,7 @@ local function Build(outer)
 
     CreateSection(pages.sharing, 2, L["GUILD"])
     local guildRow = CreateRow(pages.sharing, 2, L["Guild Prices:"],
-        L["Swaps scans with guildmates who use Tradeskills. Your own scans always win."])
+        L["Swaps scans with guildmates who use Tradeskills. The newest scan is used, yours or theirs."])
     widgets.guildPrices = Widgets.CreateCheckbox(guildRow, L["On"], function(checked)
         Config:Set("guildPrices", checked)
         UI:RefreshActiveTab()
