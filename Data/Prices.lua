@@ -1013,11 +1013,11 @@ function Prices:GetValue(itemID, which)
         scanned = preferred
     end
 
-    -- Guildmates' prices (Logic/GuildPrices.lua, off unless the player turns
-    -- it on) fill a gap: an item never priced here, or one whose price has
-    -- gone stale while theirs is newer. A fresh scan of your own always wins.
-    -- Only asked when it could be used: their answer is sorted out of every
-    -- guildmate's, and prices are read many times a redraw.
+    -- Guildmates' prices (Logic/GuildPrices.lua) fill a gap, an item never
+    -- priced here, and replace your own price whenever a guildmate saw the
+    -- item after you last did, fresh or not (the owner, 2026-11-18). Only
+    -- their prices from after your scan count, so an older one never wins.
+    -- A price 10 times away from a fresh one of yours was never kept.
     local filled = preferred and true or nil
 
     -- Your other account's newest scan (Logic/AccountLink.lua, whenever the
@@ -1032,15 +1032,16 @@ function Prices:GetValue(itemID, which)
     end
 
     local guild = ns.GuildPrices
-    if not filled and guild and guild.IsOn and guild:IsOn() and (not scanned or self:IsStale(itemID)) then
-        local shared, sharedAt = guild:GetValue(itemID, which)
-        if shared then
+    if not filled and guild and guild.IsOn and guild:IsOn() then
+        local since
+        if scanned then
             local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and record.seen or 0
-            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then
-                scanned = shared
-                filled = true
-            end
+            since = type(record) == "table" and tonumber(record.seen) or 0
+        end
+        local shared = guild:GetValue(itemID, which, nil, since)
+        if shared then
+            scanned = shared
+            filled = true
         end
     end
 

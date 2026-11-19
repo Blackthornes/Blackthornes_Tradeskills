@@ -14,14 +14,15 @@
 --     send to it, but throttles hard: about 8 at once, and one every half
 --     second was still too fast. So a scan goes out a message every
 --     SEND_GAP seconds, at most once an hour, never in a fight, and not at
---     all when MIN_SENDERS others already shared a scan from about then.
+--     all when COVERED_BY others already shared a scan from about then.
 --   * Only item numbers and prices go out. Senders are kept by a hash of
 --     their name, never the name, in `realmPrices[realm][itemID]` (never
 --     rename it).
---   * A price is used only once MIN_SENDERS players have sent one for the
---     item, and the middle of the last SENDERS_PER_ITEM is taken, so one
---     player's silly price is outvoted. A price far from a fresh one of your
---     own is not taken at all.
+--   * One player's price is used (the owner, 2026-11-18, in place of "3
+--     players agree"). Once several have sent one, the middle of the last
+--     SENDERS_PER_ITEM is taken. A price under 5% of the one you know (your
+--     own, else your guild's) or over 10 times it is not taken at all
+--     (RealmPrices.TooFar).
 --   * It only fills gaps, after your own scans and your guild's prices
 --     (Data/Prices.lua). Used for USE_FOR, kept KEEP, as guild prices are.
 --   * When the server refuses what we send (a player's chat filled with
@@ -46,9 +47,11 @@ RealmPrices.HEARD_COVERS = 30 * 60    -- others' scans this close cover yours
 RealmPrices.KEEP = 7 * 24 * HOUR
 RealmPrices.USE_FOR = 3 * 24 * HOUR
 RealmPrices.MAX_ITEMS = 2000          -- items one share sends
-RealmPrices.MIN_SENDERS = 3           -- players needed before a price is used
+RealmPrices.MIN_SENDERS = 1           -- players needed before a price is used
+RealmPrices.COVERED_BY = 3            -- others' shares that make ours not needed
 RealmPrices.SENDERS_PER_ITEM = 5      -- the last prices kept for an item
-RealmPrices.FAR = 10
+RealmPrices.FAR = 10                  -- over 10x the price you know is refused
+RealmPrices.LOW = 20                  -- under 1/20 (5%) of it is refused
 RealmPrices.MAX_PER_SENDER_HOUR = 4000
 RealmPrices.MAX_ITEM_ID = 10000000
 RealmPrices.MAX_STORED = 20000        -- items kept for a realm
@@ -396,7 +399,7 @@ function RealmPrices:WhyNotShare(now)
     local mine = self:LastSent()
     if mine and mine.scanAt and mine.scanAt >= scanAt then return "already shared" end
     if mine and mine.at and now - mine.at < self.SHARE_EVERY then return "shared within the hour" end
-    if self:Covering(scanAt) >= self.MIN_SENDERS then return "others shared one" end
+    if self:Covering(scanAt) >= self.COVERED_BY then return "others shared one" end
     if Comm.ChannelNumber(self:ChannelName()) <= 0 then return "not in the channel" end
     return nil, scanAt
 end
@@ -452,11 +455,20 @@ function RealmPrices:OnAnnounce(sender, body, channel, channelName, target)
     if not self.heard[who] or at > self.heard[who] then self.heard[who] = at end
 end
 
-local function TooFar(itemID, value)
+--- Whether a stranger's price is too far from the one you know: your own
+--- scan, even an old one, else your guild's. Under 5% of it (LOW) or over
+--- 10 times it (FAR) is refused. Nothing known, nothing refused.
+function RealmPrices.TooFar(itemID, value)
     local own = ns.Prices:GetTable()[itemID]
-    if type(own) ~= "table" or type(own.market) ~= "number" or ns.Prices:IsStale(itemID) then return false end
-    return value > own.market * RealmPrices.FAR or value * RealmPrices.FAR < own.market
+    local known = type(own) == "table" and type(own.market) == "number" and own.market > 0 and own.market or nil
+    if not known and ns.GuildPrices and ns.GuildPrices.GetValue then
+        local ok, guild = pcall(ns.GuildPrices.GetValue, ns.GuildPrices, itemID)
+        if ok and type(guild) == "number" and guild > 0 then known = guild end
+    end
+    if not known then return false end
+    return value > known * RealmPrices.FAR or value * RealmPrices.LOW < known
 end
+local TooFar = RealmPrices.TooFar
 
 function RealmPrices:OnPrices(sender, body, channel, channelName, target)
     if not FromUs(channel, channelName, target) or Comm.IsMe(sender) or not self:IsOn() then return end
@@ -564,7 +576,7 @@ function RealmPrices:Describe()
         and L["You're not in the price channel right now. Tradeskills tries again every minute."] or nil
     local count = self:Count()
     if count == 0 then
-        return away or L["Listening for prices from your realm. A price is used once 3 players agree on it."]
+        return away or L["Listening for prices from your realm. They fill in prices you don't have yet."]
     end
     local shown = ns.Util and ns.Util.Comma and ns.Util.Comma(count) or tostring(count)
     local players = self:Players()
