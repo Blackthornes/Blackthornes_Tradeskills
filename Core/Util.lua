@@ -554,7 +554,11 @@ end
 --
 -- The eighth field of item:ID:enchant:gem1:gem2:gem3:gem4:suffix:... in the
 -- link. Negative numbers are suffixes too, so anything but 0 counts.
-local function ParseSuffix(link)
+--
+-- Forever leaves that field empty and names the suffix with a bonus ID
+-- further along (item:15012::::::::18:1485:::1:12722, "of the Bear"), after
+-- unique, level, spec, modifiers, context and the count of bonuses.
+local function LinkFields(link, most)
     if type(link) ~= "string" then return nil end
     local body = link:match("item:([%-%d:]+)")
     if not body then return nil end
@@ -563,19 +567,54 @@ local function ParseSuffix(link)
     for field in (body .. ":"):gmatch("([^:]*):") do
         index = index + 1
         fields[index] = field
-        if index >= 7 then break end
+        if index >= most then break end
     end
+    return fields
+end
 
-    local suffix = tonumber(fields[7] or "")
+local function ParseSuffix(link)
+    local fields = LinkFields(link, 7)
+    local suffix = fields and tonumber(fields[7] or "")
     if not suffix or suffix == 0 then return nil end
     return suffix
 end
 
+-- No link has needed more bonuses than this; a wild count reads no further.
+local BONUS_MOST = 16
+
+local function ParseBonuses(link)
+    local bonuses = {}
+    local fields = LinkFields(link, 13 + BONUS_MOST)
+    local count = fields and tonumber(fields[13] or "") or 0
+    for index = 1, math.min(count, BONUS_MOST) do
+        local bonus = tonumber(fields[13 + index] or "")
+        if bonus and bonus ~= 0 then bonuses[#bonuses + 1] = bonus end
+    end
+    return bonuses
+end
+
+--- The bonus IDs an item link carries, as a list (empty for none).
+function Util.LinkBonuses(link)
+    local ok, bonuses = pcall(ParseBonuses, link)
+    return ok and bonuses or {}
+end
+
+--- The random suffix a link names, or nil for none. On Forever it is the
+--- number the auction house keeps that suffix under (Prices.ResolveSuffix,
+--- set as Util.ResolveSuffix), and the second value says whether it could
+--- be placed: false means "a suffix copy, which one not known yet", and the
+--- first value is then only a stand-in, never one to save a price under.
 function Util.LinkSuffix(link)
     -- Inside a pcall: a link read in an instance can be a secret value that
     -- raises when it is matched.
     local ok, suffix = pcall(ParseSuffix, link)
-    return ok and suffix or nil
+    if ok and suffix then return suffix, true end
+
+    local resolve = Util.ResolveSuffix
+    if type(resolve) ~= "function" then return nil end
+    local resolved, found, sure = pcall(resolve, link)
+    if resolved and found then return found, sure == true end
+    return nil
 end
 
 --- A player-readable label for an item: its clickable link when the client has

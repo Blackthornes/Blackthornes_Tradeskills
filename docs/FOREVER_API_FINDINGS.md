@@ -537,3 +537,20 @@ though the game shows them as the same realm. Within one account the
 answer stays the same. So a realm is compared by a key with spaces, case
 and the "Realm N" part left out (`RealmKey`, in Tab_Characters, Queue,
 QueueMail, Butler, GoldGoal and GoldLog), never by the raw name.
+
+## A random suffix is a bonus ID in the link, another number in the auction key (2026-11-19)
+
+Read from saved links and saved suffix prices, not from a probe.
+
+- A link leaves the old suffix field empty and carries a bonus ID after
+  the count of bonuses: `item:15012::::::::18:1485:::1:12722` is "Lupine
+  Slippers of the Bear", `item:14123::::::::10:1486:::1:12733` "Ritual
+  Cape of Power". Bonus IDs seen run from about 12719 to 12920, and more
+  than one can share a name.
+- The auction house's item key names the suffix with `itemSuffix`, a
+  different number: every one saved was 14298 to 14473.
+- Nothing in the client is known to turn one into the other, so
+  Tradeskills joins them as it sees a link beside its key
+  (`Prices:LearnSuffix`) or by the name's tail (`Prices:LearnKeyName`).
+- Still unverified: that `C_AuctionHouse.GetItemKeyInfo(key).itemName`
+  carries the suffix, and that it answers with the auction house shut.
