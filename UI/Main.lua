@@ -173,6 +173,9 @@ function UI:Build()
             if not folded then UI:RefreshActiveTab() end
         end })
     end
+    -- And left of it, the swap gem: it joins every Blackthornes addon into
+    -- the one window (UI/SharedWindow.lua).
+    if ns.SharedWindow and ns.SharedWindow.AddSwap then ns.SharedWindow.AddSwap(window, "tradeskills") end
 
     window:SetScript("OnDragStart", function(self)
         -- Still rising into place: land it first, or the opening would keep
@@ -2902,6 +2905,11 @@ end
 TSTabs.host = {
     enter = function(area) TSTabs:Enter(area) end,
     leave = function() TSTabs:Leave() end,
+    -- For the swap gem (SharedWindow.AddSwap): the tab up now, open on a
+    -- tab wherever Tradeskills now belongs, and close its own window.
+    tab = function() return TSTabs:SwapTab() end,
+    show = function(key) TSTabs:SwapShow(key) end,
+    hide = function() TSTabs:SwapHide() end,
 }
 
 --- The window is asked to open. With "One Window:" ticked and Tradeskills
@@ -2941,4 +2949,47 @@ function TSTabs:SetOneWindow(on)
         if One and One.Close then pcall(One.Close) end
     end
     if onSettings then UI:OpenSettings() end
+end
+
+--- True for the tabs that are only there while docked beside a game
+--- window (the Auction House, Crafting and Mail tabs).
+function TSTabs.DockTab(key)
+    if key == "auctionhouse" then return true end
+    for _, dock in pairs(UI.DOCK_TABS) do
+        if dock.key == key then return true end
+    end
+    return false
+end
+
+--- The tab up now, or nil when the window is shut.
+function TSTabs:SwapTab()
+    if not TSShown(UI.window) then return nil end
+    return UI.activeTab
+end
+
+--- Open on `key` (nil: the tab it would open on anyway), in the one window
+--- when it is on, else in Tradeskills' own window. A docked tab (the
+--- auction house's, the profession window's, the mailbox's) is left where
+--- it goes by itself: its drawer or pane hangs beside the game's window
+--- again, as before the one window, and the own window stays shut.
+function TSTabs:SwapShow(key)
+    UI:Build()
+    if key and TSTabs.DockTab(key) then
+        if self.area or not TSTabs.One() or not TSTabs.One().On() then return end
+        key = nil
+    end
+    if key and not UI.tabs[UI.MOVED_TABS[key] or key] then key = nil end
+    if TSTabs:Route(key) then return end
+    if key == "settings" then
+        UI:OpenSettings()
+        return
+    end
+    UI:Show()
+    if key then UI:SelectTab(key) end
+end
+
+--- Close Tradeskills' own window.
+function TSTabs:SwapHide()
+    if self.area then return end
+    if TSShown(UI.window) then UI:Hide() end
 end

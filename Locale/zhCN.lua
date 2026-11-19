@@ -253,6 +253,12 @@ L["check the cast bar is kept on top while crafting"] = "检查制造时施法�
 
 -- UI/Collapse.lua
 L["Expand this window"] = "展开这个窗口"
+L["Split Into Own Windows"] = "拆分为独立窗口"
+L["Gives each addon its own window again."] = "让每个插件重新拥有自己的窗口。"
+L["You can join them back with this same button."] = "用同一个按钮可以把它们重新合并。"
+L["Join Into One Window"] = "合并为一个窗口"
+L["Puts every Blackthornes addon in one window, with a button for each down the side."] = "把所有 Blackthornes 插件放进一个窗口，侧边每个插件都有一个按钮。"
+L["You can split them again with this same button."] = "用同一个按钮可以再次把它们拆开。"
 L["Collapse this window"] = "收起这个窗口"
 
 -- Logic/BagsFull.lua
