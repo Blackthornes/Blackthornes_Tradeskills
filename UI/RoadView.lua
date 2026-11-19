@@ -135,9 +135,7 @@ local function UpdateRow(row, step)
     local plan = RoadView.plan
     local current = plan and plan.steps[plan.current] == step
 
-    if step.kind == "shop" then
-        row.icon:Hide()
-    elseif step.kind == "craft" and step.outputItemID then
+    if step.kind == "craft" and step.outputItemID then
         Theme.SetItemIcon(row.icon, step.outputItemID)
         row.icon:Show()
     elseif step.kind == "fish" then

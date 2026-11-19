@@ -585,6 +585,12 @@ to buy (the shop row tells you how many to gather). Every crafting road
 gets this, not only Alchemy; fishing does not. Tested in
 `tools/test_roadto300.lua` and `tools/test_queuebuys.lua`.
 
+The shop row is gone (the owner, 2026-11-19: "get rid of this gather
+before you start"; each step lists what it needs and has Queue Step).
+`RoadPlan.Shopping`, `plan.shopping`, `plan.shopCost` and the `kind =
+"shop"` row were taken out, with their two locale lines; `RoadPlan.Listed`
+is `Shown`'s list. The paragraph above is kept as history.
+
 Queue Step queues only its own step (the owner, 2026-11-18: one click
 queued the whole road). The `RoadPlan.VendorAfter` part above put every
 later step's vendor materials on the list with each Queue Step, which read
