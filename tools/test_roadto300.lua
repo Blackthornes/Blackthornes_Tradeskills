@@ -823,6 +823,56 @@ check("grey seen at 50 moves grey to 50", Road.Agree(dynamite, { tier = "trivial
 check("orange seen at 30 moves yellow to 31", Road.Agree(dynamite, { tier = "optimal", skill = 30 }).yellow, 31)
 check("no reading: the book", Road.Agree(dynamite, nil), dynamite)
 
+print("\nCharge for Own Materials off: what you own is free when picking")
+-- Leatherworking at 85 (a player's report, 2026-11-19): with the box off,
+-- the road still charged for the Medium Hide in the bags and never cured
+-- it, though Cured Medium Hide was orange and cost only its salt.
+local HIDE, SALT, LEATHER = 4232, 4289, 2318
+local function Leather(id, name, skill, yellow, grey, reagents)
+  local cost, lines, recs = 0, {}, {}
+  for _, r in ipairs(reagents) do
+    cost = cost + r[2] * r[3]
+    lines[#lines + 1] = { itemID = r[1], quantity = r[2], unit = r[3] }
+    recs[#recs + 1] = { itemID = r[1], quantity = r[2] }
+  end
+  return { record = { recipeID = id, name = name, skill = skill, yellow = yellow, grey = grey,
+    reagents = recs }, known = true, price = { cost = cost, reagents = lines } }
+end
+local function LeatherPlan(valueOwned)
+  return Road:Plan({
+    line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+    valueOwned = valueOwned,
+    candidates = {
+      Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+      Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+    },
+  })
+end
+check("charged: the belt is cheaper", FirstCraft(LeatherPlan(true)).recipeID, 3767)
+local freePlan = LeatherPlan(false)
+local cure = FirstCraft(freePlan)
+check("free: cure the hides you have first", cure.recipeID, 3817)
+check("only as many as the hides you have", cure.crafts <= 12, true)
+local cured, nextOne = 0, nil
+for _, step in ipairs(freePlan.steps) do
+  if not step.done and step.kind == "craft" then
+    if step.recipeID == 3817 and not nextOne then cured = cured + step.crafts
+    else nextOne = nextOne or step end
+  end
+end
+check("cures about the hides you have", cured >= 10 and cured <= 13, true)
+check("then the belt once the hides run out", nextOne and nextOne.recipeID, 3767)
+check("the cure step costs only salt", cure.cost, cure.crafts * 5)
+settings.valueOwnedMaterials = false
+check("the setting is read when not given", FirstCraft(Road:Plan({
+  line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+  candidates = {
+    Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+    Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+  },
+})).recipeID, 3817)
+settings.valueOwnedMaterials = true
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")

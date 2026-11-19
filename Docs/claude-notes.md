@@ -504,6 +504,14 @@ By real cost a craft never counts for less than `RoadPlan.REAL_FLOOR`
 sold for more than it cost had a cost below 0, which looked cheaper a
 point the lower its chance fell, so the road stayed on it to grey, 144
 yellow crafts for 20 points). The step's own gold figure is unchanged.
+With Charge for Own Materials off (`valueOwnedMaterials = false`), what
+the character owns (bags, bank, alts) is free when the road picks
+(2026-11-19, a player's report: it never cured the Medium Hide in their
+bags, though Cured Medium Hide was orange and cost only salt). It is used
+up as the road walks (`Spare`, `UseUp` in `RoadPlan:Plan`), so the road
+moves on once it runs out; owned materials still count
+`RoadPlan.OWNED_SHARE` (1%) so a likelier point wins a tie. The setting is
+part of the plan's key; `opts.valueOwned` overrides it in tests.
 The drop-down lists them (the owner found only Enchanting and Tailoring,
 2026-11-08): `RoadPlan:Professions` takes a line `ClassicLine` does not
 know by its English name (`Recipes.EnglishProfessionName`, so a second
