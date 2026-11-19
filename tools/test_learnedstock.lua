@@ -154,6 +154,22 @@ check("waiting for it to run low: no restock", Queue:RestockSold(BOOTS) == nil)
 config.restockWhenLow = false
 check("not waiting: one more of the 3", Queue:RestockSold(BOOTS) == 1 and queued(1) == 1)
 
+-- A sale tops stock all the way back up, not by one (Trent, 2026-11-19):
+-- with 1 of 5 left, a sale queues the 4 that are missing.
+ns.db.queue = {}
+ns.db.postLimits[BOOTS] = 5
+bags[BOOTS] = 1
+check("a sale queues all that is missing", Queue:RestockSold(BOOTS) == 1 and queued(1) == 4, queued(1))
+check("then no room left: nothing more", Queue:RestockSold(BOOTS) == nil and queued(1) == 4, queued(1))
+-- Once it runs low, Restock When Down To fills the whole gap too.
+ns.db.queue = {}
+bags[BOOTS] = 1
+config.restockWhenLow, config.restockAt = true, 1
+check("run low: the whole gap is queued", Queue:RestockSold(BOOTS) == 1 and queued(1) == 4, queued(1))
+config.restockWhenLow, config.restockAt = false, 0
+ns.db.postLimits[BOOTS] = 3
+bags[BOOTS] = 2
+
 -- "Stock from your sales" off: nothing learned, so Queue All and a sale
 -- leave a craft with no number alone (a player found Queue All adding
 -- crafts the STOCK column showed no number for).
@@ -208,7 +224,7 @@ local fromMail = SaleAlarm:RestockFromMail({
     { kind = "sold", itemID = BOOTS, name = "Boots", heard = true },
     { kind = "sold", itemID = 999, name = "Rock" },
 })
-check("an unheard sale in the mail queues another", fromMail == 1 and queued(1) == 1, queued(1))
+check("an unheard sale in the mail fills the stock back up", fromMail == 1 and queued(1) == 2, queued(1))
 check("and chat says so once", printed[#printed]
     == "Boots sold while you were away: queued more to keep your stock up.", printed[#printed])
 check("nothing new: nothing said", SaleAlarm:RestockFromMail({}) == 0)
