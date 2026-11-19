@@ -838,9 +838,9 @@ end
 -- Forever takes copper in their price, down to a floor of one silver (tried
 -- in game 2026-11-16, after a player's report), so a 0c undercut can match a
 -- rival to the copper. Older versions rounded to whole silver because the
--- server once refused copper there. Should a listing with copper in it ever
--- fail to go up, Posting sets `wholeSilverOnly` and these go back to whole
--- silver for the rest of the session, so the next click still lists.
+-- server once refused copper there. `wholeSilverOnly` brings that back for the
+-- tests only: nothing in play sets it (the owner, 2026-11-19, after a missed
+-- listing had turned it on and gear went up a silver over the cheapest).
 Util.wholeSilverOnly = false
 
 --- A price an item auction will take, rounded down.
