@@ -1621,10 +1621,10 @@ function Posting:OnEnable()
         local data = Posting.confirming
         Posting.confirming = nil
 
-        local okVisible, visible = pcall(StaticPopup_Visible, "BLACKTHORNES_TS_CONFIRM_POST")
-        if not (okVisible and visible) then return end
+        local ask = ns.PostConfirm
+        if not (ask and ask:IsShown()) then return end
 
-        pcall(StaticPopup_Hide, "BLACKTHORNES_TS_CONFIRM_POST")
+        ask:Close()
         if data then
             ns.Print(L.Format("the auction house closed, so %s was not listed.",
                 Util.GetItemLabel(data.itemID)))
@@ -1966,57 +1966,28 @@ end
 -- Confirmation
 --------------------------------------------------------------------------------
 
--- Blizzard's own popup rather than a custom frame: it is already the thing
--- players trust for "are you sure", and its button click is a hardware event,
--- which posting requires.
+-- Asked in Tradeskills' own window (UI/PostConfirm.lua), never the game's
+-- pop-up: showing that box from an addon leaves it marked as ours, and the
+-- game's own next question in it (replace a weapon's enchant, say) is then
+-- blocked as "Blackthornes_TS has been blocked from an action only available
+-- to the Blizzard UI" (Trent's Spellstone, 2026-11-19). Its List It button
+-- is a click, which posting needs.
 
--- Adding a key is fine. Assigning the global itself is not: writing
--- "StaticPopupDialogs = StaticPopupDialogs or {}" from addon code taints the
--- global variable, and then Blizzard's own popup machinery reads a tainted
--- value and gets "blocked from an action only available to the Blizzard UI"
--- the next time it shows any dialog of its own.
-if type(StaticPopupDialogs) == "table" then
+--- List It in the confirmation.
+function Posting:AcceptConfirm(data)
+    data = data or self.confirming
+    if not data then return end
 
-StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
-    text = "%s",
-    button1 = L["List It"],
-    button2 = L["Skip"],
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    -- Above the default dialogs, so it is not buried by the auction house.
-    preferredIndex = 3,
-    -- Widens the popup and keeps the text to the middle, which leaves room
-    -- on the left for the item's icon beside the four lines. The icon is
-    -- drawn over the alert sign that goes there (ShowConfirmIcon).
-    showAlert = true,
+    self.confirming = nil
+    self:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
+end
 
-    OnAccept = function(self)
-        local data = (self and self.data) or Posting.confirming
-        if not data then return end
-
-        Posting.confirming = nil
-        Posting:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
-    end,
-
-    -- "override" is the game replacing this dialog with the next one (a
-    -- second List click while it was open): not a skip, and clearing the
-    -- listing here left the new dialog's Yes with nothing to list.
-    OnCancel = function(self, _, reason)
-        if reason == "override" then return end
-        local data = (self and self.data) or Posting.confirming
-        Posting.confirming = nil
-        if data then Posting:PassOver(data.itemID) end
-        ns.Print(L["skipped."])
-    end,
-
-    -- The game lends this popup frame to other dialogs later, so the icon
-    -- goes with this one.
-    OnHide = function(self)
-        Posting:HideConfirmIcon(self)
-    end,
-}
-
+--- Skip in the confirmation (or Escape, or its close gem).
+function Posting:SkipConfirm(data)
+    data = data or self.confirming
+    self.confirming = nil
+    if data then self:PassOver(data.itemID) end
+    ns.Print(L["skipped."])
 end
 
 --- Show the confirmation for a listing whose price is already settled.
@@ -2125,76 +2096,19 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     return text .. "\n\n" .. L["List it at this price, or skip it."]
 end
 
--- The item's icon in the confirmation, one texture per popup frame it has
--- been shown in. Kept here rather than written onto the game's frames.
-local confirmIcons = setmetatable({}, { __mode = "k" })
-
--- The question mark icon, for an item whose icon the game has not got yet.
-local UNKNOWN_ICON = 134400
-
--- Narrower than this, the popup did not make room beside its text, and an
--- icon would sit on top of the words.
-local WIDE_POPUP = 400
-
---- Put the item's icon beside the confirmation's text. It is not a line of
---- its own: the four lines stay exactly as they were.
-function Posting:ShowConfirmIcon(dialog, itemID)
-    if type(dialog) ~= "table" or type(dialog.CreateTexture) ~= "function" then return false end
-
-    local ok, shown = pcall(function()
-        local width = dialog:GetWidth()
-        if not width or width < WIDE_POPUP then return false end
-
-        local icon = confirmIcons[dialog]
-        if not icon then
-            icon = dialog:CreateTexture(nil, "OVERLAY", nil, 7)
-            confirmIcons[dialog] = icon
-        end
-
-        -- Over the alert sign when there is one, so the sign never shows
-        -- through; otherwise where it would have been.
-        local name = dialog.GetName and dialog:GetName()
-        local alert = dialog.AlertIcon or (name and _G[name .. "AlertIcon"])
-
-        icon:ClearAllPoints()
-        if type(alert) == "table" and alert.IsShown and alert:IsShown() then
-            icon:SetAllPoints(alert)
-        else
-            icon:SetSize(36, 36)
-            icon:SetPoint("LEFT", dialog, "LEFT", 24, 0)
-        end
-
-        icon:SetTexture(Util.GetItemIcon(itemID) or UNKNOWN_ICON)
-        icon:Show()
-        return true
-    end)
-
-    return ok and shown or false
-end
-
-function Posting:HideConfirmIcon(dialog)
-    local icon = dialog and confirmIcons[dialog]
-    if icon then pcall(icon.Hide, icon) end
-end
-
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text, byHand)
     local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice, byHand = byHand or nil }
     self.confirming = confirming
 
-    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
-    if dialog then
-        -- Set again after showing: replacing an open dialog cancels the old
-        -- one first, on clients that do not say it was an override.
-        self.confirming = confirming
-        dialog.data = confirming
-
-        -- Only the dialog now showing carries an icon, whichever frame an
-        -- earlier one used.
-        for frame in pairs(confirmIcons) do
-            if frame ~= dialog then self:HideConfirmIcon(frame) end
-        end
-        self:ShowConfirmIcon(dialog, itemID)
-    else
+    local ask = ns.PostConfirm
+    local shown = ask and ask:Show({
+        text = text,
+        itemID = itemID,
+        data = confirming,
+        accept = function(data) Posting:AcceptConfirm(data) end,
+        skip = function(data) Posting:SkipConfirm(data) end,
+    })
+    if not shown then
         self.confirming = nil
         ns.Warn(L["could not open the confirmation dialog; nothing was listed."])
     end

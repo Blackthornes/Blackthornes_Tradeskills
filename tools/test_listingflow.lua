@@ -17,7 +17,6 @@
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
 local GLOBALS = { "CreateFrame", "C_Container", "ItemLocation", "GetTime", "time", "C_Timer",
-    "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
     "C_AuctionHouse" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
@@ -54,25 +53,22 @@ C_Container = {
 }
 ItemLocation = { CreateFromBagAndSlot = function() return { IsValid = function() return true end } end }
 
--- The game's popups, as far as these checks need them.
+-- The question window's state (set by ns.PostConfirm below).
 local popup
-StaticPopupDialogs = {}
-StaticPopup_Show = function(which, text, _, data)
-    popup = Blank()
-    popup.which, popup.text, popup.data = which, text, data
-    return popup
-end
-StaticPopup_Visible = function(which) return popup and popup.which == which and popup or nil end
-StaticPopup_Hide = function(which)
-    if popup and popup.which == which then
-        local dialog = StaticPopupDialogs[which]
-        if dialog and dialog.OnHide then dialog.OnHide(popup) end
-        popup = nil
-    end
-end
 
 local said = {}
 local ns = {}
+
+-- Tradeskills' own question window (UI/PostConfirm.lua), as far as these
+-- checks need it. The game's pop-ups are never used for it.
+ns.PostConfirm = {
+    Show = function(_, ask)
+        popup = { text = ask.text, data = ask.data, itemID = ask.itemID, ask = ask }
+        return true
+    end,
+    IsShown = function() return popup ~= nil end,
+    Close = function() popup = nil end,
+}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = noop

@@ -156,3 +156,13 @@ Check: The sorter's `Sync()` runs after every heading layout, not only when
 Why: Recipes to Learn synced only on a change. The game laid the headings
   out while the sorter was being made, so hidden headings kept their clicks
   at their old spots, and a click on SKILL sorted by DISENCHANT.
+
+## The game's pop-up box
+Lines: StaticPopup_Show|StaticPopup_Hide|StaticPopupDialogs
+Check: Never show, hide or add to the game's pop-ups from addon code. Ask in
+  a window of our own (UI/PostConfirm.lua). `tools/test_gamepopup.lua` fails
+  if a loaded file calls them.
+Why: The List It question used the game's pop-up. The game lent the same box
+  to "replace your weapon's enchant" later, and a Spellstone from the bags
+  was blocked: "Blackthornes_TS has been blocked from an action only
+  available to the Blizzard UI" (2026-11-19).
