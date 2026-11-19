@@ -3,7 +3,7 @@
 --
 -- It used to be the game's own pop-up (StaticPopup_Show). Showing that box
 -- from an addon leaves it marked as the addon's, and the game lends the same
--- box to its own questions later. Trent's Spellstone (2026-11-19) was
+-- box to its own questions later. A Spellstone listing (2026-11-19) was
 -- blocked that way: "Blackthornes_TS has been blocked from an action only
 -- available to the Blizzard UI", when the game asked to replace the
 -- weapon's enchant in the box we had used. So nothing here touches the game's

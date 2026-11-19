@@ -1969,7 +1969,7 @@ end
 -- pop-up: showing that box from an addon leaves it marked as ours, and the
 -- game's own next question in it (replace a weapon's enchant, say) is then
 -- blocked as "Blackthornes_TS has been blocked from an action only available
--- to the Blizzard UI" (Trent's Spellstone, 2026-11-19). Its List It button
+-- to the Blizzard UI" (a Spellstone, 2026-11-19). Its List It button
 -- is a click, which posting needs.
 
 --- List It in the confirmation.
