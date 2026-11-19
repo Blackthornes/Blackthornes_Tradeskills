@@ -862,6 +862,89 @@ check("the setting is read when not given", FirstCraft(Road:Plan({
 })).recipeID, 3817)
 settings.valueOwnedMaterials = true
 
+print("\nno recipes that need reputation")
+-- A player's report (2026-11-19): the road sent them to a Redridge vendor
+-- for a pattern they couldn't buy, their standing too low, after they had
+-- bought its materials. A vendor's recipe that needs a standing the
+-- character doesn't have is left off; one they have the standing for stays.
+local PLAIN, FRIENDLY, CAMP = 7001, 7002, 7003
+ns.RECIPE_BOOK.RECIPES[61] = { 164, 40, 8001, 1, 1, { BAR, 2 }, "Plain Vendor Pattern" }
+ns.RECIPE_BOOK.RECIPES[62] = { 164, 40, 8002, 1, 1, { BAR, 2 }, "Friendly Pattern" }
+ns.RECIPE_BOOK.RECIPES[63] = { 164, 40, 8003, 1, 1, { BAR, 2 }, "Camp Pattern" }
+ns.LEARN_SPOTS.SKILLS[61] = { 40, 60, 80 }
+ns.LEARN_SPOTS.SKILLS[62] = { 40, 60, 80 }
+ns.LEARN_SPOTS.SKILLS[63] = { 40, 60, 80 }
+ns.RECIPE_BOOK.ITEMS[PLAIN] = { 61, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RECIPE_BOOK.ITEMS[FRIENDLY] = { 62, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RECIPE_BOOK.ITEMS[CAMP] = { 63, 500 }
+ns.RecipeBook.merged = nil
+Road:Forget()
+
+local tipLines = {
+  [FRIENDLY] = { { leftText = "Pattern: Friendly Pattern" },
+    { leftText = "Requires Lakeshire Guard - Friendly", leftColor = { r = 1, g = 0.13, b = 0.13 } } },
+  [PLAIN] = { { leftText = "Pattern: Plain Vendor Pattern" }, { leftText = "Requires Blacksmithing (40)" } },
+}
+local cached = { [PLAIN] = true, [FRIENDLY] = true, [CAMP] = true }
+local asked = {}
+C_TooltipInfo = { GetItemByID = function(id) return { lines = tipLines[id] or {} } end }
+C_Item = {
+  IsItemDataCachedByID = function(id) return cached[id] == true end,
+  RequestLoadItemDataByID = function(id) asked[#asked + 1] = id end,
+}
+local standing = nil
+C_Reputation = {
+  GetNumFactions = function() return standing and 1 or 0 end,
+  GetFactionDataByIndex = function() return { name = "Lakeshire Guard", reaction = standing } end,
+}
+local campSeller = nil
+ns.VendorPins = { RecipeSellers = function(_, id)
+  if id == CAMP and campSeller then return { campSeller } end
+  return {}
+end }
+
+check("a plain vendor recipe stays", HasCandidate(61), true)
+check("not a recipe that needs a standing you don't have", HasCandidate(62), false)
+check("the need, off the tooltip", Road.ItemNeeds(FRIENDLY).standing, "Friendly")
+check("no need on a plain one", Road.ItemNeeds(PLAIN), false)
+check("standings by the game's words", Road.StandingRank("Honored"), 6)
+standing = 5
+Road.OnFaction()
+check("there once you're Friendly", HasCandidate(62), true)
+standing = 4
+Road.OnFaction()
+check("off again at Neutral", HasCandidate(62), false)
+standing = nil
+Road.OnFaction()
+check("the red line says so when the standing can't be read", Road.NeedsStanding(FRIENDLY), true)
+
+-- A vendor the game showed selling it, with the standing it asked for.
+campSeller = { name = "Camp Quartermaster", mapID = 1433, x = 30, y = 40, gold = 100,
+  faction = "Lakeshire Guard", standing = "Honored" }
+check("a vendor that asked for a standing", HasCandidate(63), false)
+standing = 6
+check("there once you're Honored", Road.NeedsStanding(CAMP), false)
+standing = nil
+campSeller = { name = "Camp Quartermaster", mapID = 1433, x = 30, y = 40, gold = 100 }
+check("a vendor that asked for none", HasCandidate(63), true)
+
+-- An item the client hasn't loaded waits for it, then the road moves.
+local version = Road.standingVersion
+local waitItem = 7004
+ns.RECIPE_BOOK.RECIPES[64] = { 164, 40, 8004, 1, 1, { BAR, 2 }, "Waiting Pattern" }
+ns.LEARN_SPOTS.SKILLS[64] = { 40, 60, 80 }
+ns.RECIPE_BOOK.ITEMS[waitItem] = { 64, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RecipeBook.merged = nil
+check("left off while the client fetches it", HasCandidate(64), false)
+check("the client is asked for it", asked[#asked], waitItem)
+cached[waitItem] = true
+Road.OnItemInfo(waitItem, true)
+check("the road is worked out again", Road.standingVersion > version, true)
+check("on the road once it arrives", HasCandidate(64), true)
+
+C_TooltipInfo, C_Item, C_Reputation = nil, nil, nil
+ns.VendorPins = nil
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
