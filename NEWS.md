@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.35.0
+
+- Every window has a gold gem on its title bar. Click it to switch between the one window and separate windows.
+- Road to 300 learns the recipes a profession trainer teaches when you open one.
+Fixes and changes:
+- Road to 300 leaves off vendor recipes that need a standing you don't have.
+- Disenchant value is the average of every result, counting each by its chance.
+- Item names on the Prices tab fill in once the game loads them.
+- The queued craft stays showing when you resize the window.
+- Snipe lists only show finds your Spending Cap can buy.
+- Crafted pieces with a suffix are priced by that suffix.
+
 ## 1.34.5
 
 Fixes and changes:
