@@ -504,6 +504,14 @@ By real cost a craft never counts for less than `RoadPlan.REAL_FLOOR`
 sold for more than it cost had a cost below 0, which looked cheaper a
 point the lower its chance fell, so the road stayed on it to grey, 144
 yellow crafts for 20 points). The step's own gold figure is unchanged.
+With Charge for Own Materials off (`valueOwnedMaterials = false`), what
+the character owns (bags, bank, alts) is free when the road picks
+(2026-11-19, a player's report: it never cured the Medium Hide in their
+bags, though Cured Medium Hide was orange and cost only salt). It is used
+up as the road walks (`Spare`, `UseUp` in `RoadPlan:Plan`), so the road
+moves on once it runs out; owned materials still count
+`RoadPlan.OWNED_SHARE` (1%) so a likelier point wins a tie. The setting is
+part of the plan's key; `opts.valueOwned` overrides it in tests.
 The drop-down lists them (the owner found only Enchanting and Tailoring,
 2026-11-08): `RoadPlan:Professions` takes a line `ClassicLine` does not
 know by its English name (`Recipes.EnglishProfessionName`, so a second
@@ -576,6 +584,12 @@ Queue All clears them. Herbs and other gathered materials are not listed
 to buy (the shop row tells you how many to gather). Every crafting road
 gets this, not only Alchemy; fishing does not. Tested in
 `tools/test_roadto300.lua` and `tools/test_queuebuys.lua`.
+
+The shop row is gone (the owner, 2026-11-19: "get rid of this gather
+before you start"; each step lists what it needs and has Queue Step).
+`RoadPlan.Shopping`, `plan.shopping`, `plan.shopCost` and the `kind =
+"shop"` row were taken out, with their two locale lines; `RoadPlan.Listed`
+is `Shown`'s list. The paragraph above is kept as history.
 
 Queue Step queues only its own step (the owner, 2026-11-18: one click
 queued the whole road). The `RoadPlan.VendorAfter` part above put every

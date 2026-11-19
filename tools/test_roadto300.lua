@@ -693,7 +693,7 @@ check("offered again", HasCandidate(3), true)
 check("nothing skipped after", Road:IsSkipped(3), false)
 check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
 
-print("\nthe whole road's shopping, up front")
+print("\nno shopping row before the steps")
 -- A player's report (2026-11-17): Alchemy's road listed each step's herbs
 -- and vials on its own step. They gathered and bought for step one, then
 -- had to go back out for every step after. The road adds it all up first,
@@ -727,21 +727,14 @@ for _, step in ipairs(brew.steps) do
   end
 end
 check("the road has more than one brewing step", #brewSteps >= 2, true)
-local shop = {}
-for _, need in ipairs(brew.shopping or {}) do shop[need.itemID] = need end
-check("every herb on the road, added up", shop[HERB] and shop[HERB].count, herbs)
-check("every vial on the road, added up", shop[VIAL] and shop[VIAL].count, vials)
-check("what the bags hold comes off once", shop[HERB] and shop[HERB].buy, herbs - 5)
-check("the vials are the vendor's", shop[VIAL] and shop[VIAL].vendor, true)
-check("the herbs are not", shop[HERB] and shop[HERB].vendor or false, false)
-check("its cost is what is left to buy", brew.shopCost, (herbs - 5) * 10 + (vials - 2) * 4)
+-- The owner (2026-11-19): no "Get everything before you start" row. Each
+-- step lists what it needs and has Queue Step.
 local listed = Road.Listed(brew)
-check("it is the first row of the list", listed[1] and listed[1].kind, "shop")
-check("then the step to do now", listed[2], brewSteps[1])
-local shopTexts = Road.Texts(listed[1], "Alchemy", 10, 171)
-check("it says to get everything first", shopTexts.title, "Get everything before you start")
-check("one line for each material, and one for the vendor", #shopTexts.lines, 3)
-check("the vendor line names the vials", shopTexts.lines[3]:find("item " .. VIAL, 1, true) ~= nil, true)
+check("the step to do now is the first row", listed[1], brewSteps[1])
+local anyShop = false
+for _, row in ipairs(listed) do if row.kind == "shop" then anyShop = true end end
+check("no row to get everything first", anyShop, false)
+check("the plan keeps no road-wide shopping list", brew.shopping, nil)
 
 local roadBuys, ensuredBrew = nil, {}
 ns.Queue = {
@@ -762,10 +755,6 @@ check("old lines for this road come off", roadBuys and roadBuys.line, 171)
 roadBuys = nil
 Road:QueueAll(brew)
 check("Queue All queues every step, so the road's own line goes", roadBuys and next(roadBuys.counts), nil)
-local only = { kind = "craft", needs = { { itemID = HERB, count = 3, bags = 0, bank = 0, buy = 3 } } }
-local single = { steps = { { kind = "craft", done = true, needs = {} }, only, { kind = "trainer" } },
-  shopping = { { itemID = HERB, count = 3, buy = 3 } } }
-check("one step left needs no list of its own", Road.Listed(single)[1], only)
 ns.Vendor, ns.Queue = savedVendor, nil
 
 -- A player's report (2026-11-18): the road called Rough Dynamite (yellow
@@ -822,6 +811,56 @@ check("it still reads through to the recipe", moved.recipeID, 3919)
 check("grey seen at 50 moves grey to 50", Road.Agree(dynamite, { tier = "trivial", skill = 50 }).grey, 50)
 check("orange seen at 30 moves yellow to 31", Road.Agree(dynamite, { tier = "optimal", skill = 30 }).yellow, 31)
 check("no reading: the book", Road.Agree(dynamite, nil), dynamite)
+
+print("\nCharge for Own Materials off: what you own is free when picking")
+-- Leatherworking at 85 (a player's report, 2026-11-19): with the box off,
+-- the road still charged for the Medium Hide in the bags and never cured
+-- it, though Cured Medium Hide was orange and cost only its salt.
+local HIDE, SALT, LEATHER = 4232, 4289, 2318
+local function Leather(id, name, skill, yellow, grey, reagents)
+  local cost, lines, recs = 0, {}, {}
+  for _, r in ipairs(reagents) do
+    cost = cost + r[2] * r[3]
+    lines[#lines + 1] = { itemID = r[1], quantity = r[2], unit = r[3] }
+    recs[#recs + 1] = { itemID = r[1], quantity = r[2] }
+  end
+  return { record = { recipeID = id, name = name, skill = skill, yellow = yellow, grey = grey,
+    reagents = recs }, known = true, price = { cost = cost, reagents = lines } }
+end
+local function LeatherPlan(valueOwned)
+  return Road:Plan({
+    line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+    valueOwned = valueOwned,
+    candidates = {
+      Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+      Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+    },
+  })
+end
+check("charged: the belt is cheaper", FirstCraft(LeatherPlan(true)).recipeID, 3767)
+local freePlan = LeatherPlan(false)
+local cure = FirstCraft(freePlan)
+check("free: cure the hides you have first", cure.recipeID, 3817)
+check("only as many as the hides you have", cure.crafts <= 12, true)
+local cured, nextOne = 0, nil
+for _, step in ipairs(freePlan.steps) do
+  if not step.done and step.kind == "craft" then
+    if step.recipeID == 3817 and not nextOne then cured = cured + step.crafts
+    else nextOne = nextOne or step end
+  end
+end
+check("cures about the hides you have", cured >= 10 and cured <= 13, true)
+check("then the belt once the hides run out", nextOne and nextOne.recipeID, 3767)
+check("the cure step costs only salt", cure.cost, cure.crafts * 5)
+settings.valueOwnedMaterials = false
+check("the setting is read when not given", FirstCraft(Road:Plan({
+  line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+  candidates = {
+    Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+    Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+  },
+})).recipeID, 3817)
+settings.valueOwnedMaterials = true
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

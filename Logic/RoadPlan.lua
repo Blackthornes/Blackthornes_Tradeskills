@@ -111,6 +111,10 @@ RoadPlan.SWITCH = 0.85
 -- materials cost, however well it sells: the road can't bank on every one
 -- selling, and a cost at or below 0 can't be ranked a point.
 RoadPlan.REAL_FLOOR = 0.2
+-- With Charge for Own Materials off, what the character owns is free when
+-- the road picks its recipes. It still counts this share of its price, so
+-- of two free crafts the one more likely to give a point wins.
+RoadPlan.OWNED_SHARE = 0.01
 
 -- Recipes priced a frame while the plan is worked out.
 RoadPlan.BUDGET = 12
@@ -370,10 +374,20 @@ end
 
 -- What a point costs with a recipe at a skill, with its learning price
 -- spread over the points it can still give.
-local function PointCost(candidate, skill, learned, real)
+-- spare: what the character still owns, read by Spare(itemID), when owned
+-- materials are free; nil when they are charged.
+local function PointCost(candidate, skill, learned, real, spare)
     local chance = RoadPlan.Chance(candidate.record, skill)
     if chance <= 0 or not candidate.price then return nil end
     local craft = candidate.price.cost
+    if spare then
+        craft = 0
+        for _, reagent in ipairs(candidate.price.reagents or {}) do
+            local quantity = reagent.quantity or 1
+            local mine = math.min(quantity, math.max(0, spare(reagent.itemID)))
+            craft = craft + reagent.unit * ((quantity - mine) + mine * RoadPlan.OWNED_SHARE)
+        end
+    end
     if real then
         -- Never below a share of the materials: a craft that sells for more
         -- than it costs would otherwise have a cost below 0, which looks
@@ -393,10 +407,10 @@ end
 -- gives a point, so one is taken only when no orange or yellow craft is
 -- there (a player's report, 2026-11-18: they keep green for the last point
 -- or two).
-local function Best(candidates, skill, learned, real)
+local function Best(candidates, skill, learned, real, spare)
     local best, bestCost, green, greenCost
     for _, candidate in ipairs(candidates) do
-        local cost = PointCost(candidate, skill, learned, real)
+        local cost = PointCost(candidate, skill, learned, real, spare)
         if cost then
             if RoadPlan.Band(candidate.record, skill) == "easy" then
                 if not greenCost or cost < greenCost then green, greenCost = candidate, cost end
@@ -418,6 +432,8 @@ end
 -- @param opts.candidates  Candidates' list, each with `price` (Price's)
 -- @param opts.owned       { [itemID] = { bags, bank, alts } }, or nil to read them
 -- @param opts.pickBy      "lowest" (the default) or "real"
+-- @param opts.valueOwned  false: what is owned is free when picking; nil reads
+--                         Charge for Own Materials
 -- @return { steps, current, total, saved, back, stuck, skill, max, pickBy }
 function RoadPlan:Plan(opts)
     if opts.line == RoadPlan.FISHING then return RoadPlan.FishPlan(opts) end
@@ -428,6 +444,52 @@ function RoadPlan:Plan(opts)
     local learned = {}
     local steps = {}
     local stuck
+
+    -- What the character owns: bags, bank, and what the other characters
+    -- it can mail hold. Read once an item.
+    local held = {}
+    local function Held(itemID)
+        local have = held[itemID]
+        if have then return have end
+        local given = opts.owned and opts.owned[itemID]
+        if given then
+            have = { given[1] or 0, given[2] or 0, given[3] or 0 }
+        else
+            local inv = ns.Inventory
+            local okBags, bags = pcall(inv.GetBagCount, inv, itemID)
+            local okBank, bank = pcall(inv.GetBankCount, inv, itemID)
+            have = { okBags and tonumber(bags) or 0, okBank and tonumber(bank) or 0,
+                RoadPlan.AltsHold(itemID) or 0 }
+        end
+        held[itemID] = have
+        return have
+    end
+
+    -- Charge for Own Materials off (a player's report, 2026-11-19): what
+    -- the character owns is free when picking, used up as the road goes,
+    -- so it cures the hides in the bags before buying a belt's leather.
+    local valueOwned = opts.valueOwned
+    if valueOwned == nil then
+        local ok, value = pcall(function() return ns.Config and ns.Config:Get("valueOwnedMaterials") end)
+        valueOwned = not (ok and value == false)
+    end
+    local spareLeft = {}
+    local function Spare(itemID)
+        local left = spareLeft[itemID]
+        if left == nil then
+            local have = Held(itemID)
+            left = have[1] + have[2] + have[3]
+            spareLeft[itemID] = left
+        end
+        return left
+    end
+    local spare = not valueOwned and Spare or nil
+    local function UseUp(candidate, crafts)
+        if not spare then return end
+        for _, reagent in ipairs(candidate.price and candidate.price.reagents or {}) do
+            spareLeft[reagent.itemID] = Spare(reagent.itemID) - (reagent.quantity or 1) * crafts
+        end
+    end
 
     -- The cap a rank set raises it to, the first rank still to train.
     local function NextRank(cap)
@@ -457,7 +519,8 @@ function RoadPlan:Plan(opts)
                     break
                 end
 
-                local candidate = Best(candidates, p, learned, real)
+                local sp = not done and spare or nil
+                local candidate = Best(candidates, p, learned, real, sp)
                 if not candidate then
                     if not done then stuck = p end
                     break
@@ -471,10 +534,12 @@ function RoadPlan:Plan(opts)
 
                 local q, crafts = p, 0
                 repeat
-                    crafts = crafts + 1 / RoadPlan.Chance(record, q)
+                    local these = 1 / RoadPlan.Chance(record, q)
+                    crafts = crafts + these
+                    if sp then UseUp(candidate, these) end
                     q = q + 1
-                    local other, otherCost = Best(candidates, q, learned, real)
-                    local mine = PointCost(candidate, q, learned, real)
+                    local other, otherCost = Best(candidates, q, learned, real, sp)
+                    local mine = PointCost(candidate, q, learned, real, sp)
                     local switch = other and other ~= candidate and otherCost and mine
                         and otherCost < mine * RoadPlan.SWITCH
                 until q >= limit or switch
@@ -512,16 +577,8 @@ function RoadPlan:Plan(opts)
     local function Owned(itemID)
         local have = pool[itemID]
         if have then return have end
-        local given = opts.owned and opts.owned[itemID]
-        if given then
-            have = { bags = given[1] or 0, bank = given[2] or 0, alts = given[3] or 0 }
-        else
-            local inv = ns.Inventory
-            local okBags, bags = pcall(inv.GetBagCount, inv, itemID)
-            local okBank, bank = pcall(inv.GetBankCount, inv, itemID)
-            have = { bags = okBags and tonumber(bags) or 0, bank = okBank and tonumber(bank) or 0,
-                alts = RoadPlan.AltsHold(itemID) }
-        end
+        local read = Held(itemID)
+        have = { bags = read[1], bank = read[2], alts = read[3] }
         pool[itemID] = have
         return have
     end
@@ -577,52 +634,10 @@ function RoadPlan:Plan(opts)
         end
     end
 
-    local shopping, shopCost = RoadPlan.Shopping(steps)
-
     return {
         steps = steps, current = current, total = total, saved = saved, back = back, stuck = stuck,
         skill = now, max = opts.max, line = line, pickBy = real and "real" or "lowest",
-        shopping = shopping, shopCost = shopCost,
     }
-end
-
---- Does a vendor keep this in stock (vials, thread)? Read safely.
-local function FromVendor(itemID)
-    local vendor = ns.Vendor
-    if not (vendor and vendor.KeepsInStock) then return false end
-    local ok, keeps = pcall(vendor.KeepsInStock, vendor, itemID)
-    return ok and keeps == true
-end
-
---- Every material the road still needs, added up across the steps left
---- (a player's report, 2026-11-17: Alchemy's road showed each step's herbs
---- and vials on that step only, so they gathered for step one and had to
---- go back out for every step after). Each { itemID, count, bags, bank,
---- alts, buy, vendor }, in the order the road first needs them; what you
---- own comes off once, as on the steps.
--- @return the list, and what is left to buy costs
-function RoadPlan.Shopping(steps)
-    local list, byItem, cost = {}, {}, 0
-    for _, step in ipairs(steps or {}) do
-        if not step.done and step.kind == "craft" then
-            for _, need in ipairs(step.needs or {}) do
-                local line = byItem[need.itemID]
-                if not line then
-                    line = { itemID = need.itemID, count = 0, bags = 0, bank = 0, alts = 0, buy = 0,
-                        vendor = FromVendor(need.itemID) }
-                    byItem[need.itemID] = line
-                    list[#list + 1] = line
-                end
-                line.count = line.count + need.count
-                line.bags = line.bags + need.bags
-                line.bank = line.bank + need.bank
-                line.alts = line.alts + (need.alts or 0)
-                line.buy = line.buy + need.buy
-                cost = cost + need.buy * (need.unit or 0)
-            end
-        end
-    end
-    return list, cost
 end
 
 --- How many of an item the character playing's other characters hold:
@@ -670,18 +685,10 @@ function RoadPlan.Shown(steps)
     return open
 end
 
---- The list's rows: Shown's, with the whole road's shopping first while
---- more than one craft step is left to buy for.
+--- The list's rows: Shown's. The whole road's shopping row went (the
+--- owner, 2026-11-19): each step lists what it needs and has Queue Step.
 function RoadPlan.Listed(plan)
-    local rows = RoadPlan.Shown(plan and plan.steps)
-    if not plan or plan.fishing or #(plan.shopping or {}) == 0 then return rows end
-    local crafts = 0
-    for _, step in ipairs(plan.steps or {}) do
-        if not step.done and step.kind == "craft" and #(step.needs or {}) > 0 then crafts = crafts + 1 end
-    end
-    if crafts < 2 then return rows end
-    table.insert(rows, 1, { kind = "shop", needs = plan.shopping, cost = plan.shopCost or 0 })
-    return rows
+    return RoadPlan.Shown(plan and plan.steps)
 end
 
 --------------------------------------------------------------------------------
@@ -769,6 +776,7 @@ local function Key(profession, level)
         tostring(ns.Queue and ns.Queue.version or 0),
         RoadPlan.PickBy(),
         tostring(RoadPlan.skipVersion),
+        tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
         profession.line == RoadPlan.FISHING and tostring(RoadPlan.FarmerPaceVersion()) or "",
     }, "|")
@@ -844,8 +852,7 @@ end
 --- learn, its materials on the list to buy (as Learn next's Queue materials).
 -- Only the step clicked (the owner, 2026-11-18): it once put the vendor
 -- materials of every later step on the list too, which read as the whole
--- road queued. Queue All is the one button for the whole road. The road's
--- "Get everything before you start" row still adds up every material.
+-- road queued. Queue All is the one button for the whole road.
 -- With the plan, lines that older Queue Step left for this road
 -- (`forRoad`) come off, so its list holds only what was asked for.
 -- @return true when something went on
@@ -1426,20 +1433,6 @@ function RoadPlan.Texts(step, professionName, level, line)
                 local where = ns.LearnNext.ZoneName and ns.LearnNext.ZoneName(place) or place.inside or place.zone
                 texts.lines[1] = L.Format("%s trainer in %s", professionName, where)
             end
-        end
-        return texts
-    end
-
-    if step.kind == "shop" then
-        texts.title = L["Get everything before you start"]
-        local fromVendor = {}
-        for _, need in ipairs(step.needs or {}) do
-            texts.lines[#texts.lines + 1] = RoadPlan.NeedText(need)
-            if need.vendor and need.buy > 0 then fromVendor[#fromVendor + 1] = ItemName(need.itemID) end
-        end
-        if #fromVendor > 0 then
-            texts.lines[#texts.lines + 1] = L.Format("A vendor sells %s. Buy them all in one stop.",
-                table.concat(fromVendor, ", "))
         end
         return texts
     end
