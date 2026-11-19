@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.34.4
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Restocking.** After a sale, Tradeskills queues enough crafts to reach the amount you keep in stock.
+
 ## 1.34.3
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
