@@ -1243,7 +1243,7 @@ function Profit:Analyse(recipeID, characterKey, method)
             depositKnown = true, basis = "vendor", profit = revenue - cost.total }
     end
 
-    -- The most likely result, less the cut on selling the materials. No
+    -- The average result, less the cut on selling the materials. No
     -- deposit: the materials' is small, and nobody can say which listing
     -- they would join.
     if analysis.disenchantValue and analysis.disenchantValue > 0 then
@@ -1670,7 +1670,7 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
     ns.PrintRaw(L.Format("  material cost   %s", Util.FormatMoney(analysis.totalCost)))
 
     if analysis.priceBasis == "disenchant" then
-        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at its most likely result|r",
+        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at what it gives on average|r",
             ns.COLORS.profit))
         ns.PrintRaw(L.Format("  disenchants to  %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))

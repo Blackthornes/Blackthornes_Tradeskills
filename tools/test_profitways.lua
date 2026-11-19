@@ -82,7 +82,7 @@ ns.Posting = { MIN_DEPOSIT = 100, GetCachedUnitDeposit = function() return 3 end
 
 local Profit = ns.Profit
 
--- The belt disenchants to 2s of materials at the most likely result, and
+-- The belt disenchants to 2s of materials on average, and
 -- needs Enchanting 50. Who can disenchant is set per check below.
 local enchanterSkill
 local disenchantable = true

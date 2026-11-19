@@ -250,8 +250,9 @@ check("with the counts you saw", outcomes[1].min == 4 and outcomes[1].max == 6)
 check("the shard once in ten", outcomes[2].itemID == SMALL_GLIMMERING and outcomes[2].chance == 0.1)
 check("essence never, so it is not listed", #outcomes == 2)
 
--- Dust every time, 5.1 on average at 100: 510. The shard is a bonus.
-check("the value follows your results", Disenchant:GetValue(1002) == 510)
+-- Dust every time, 5.1 on average at 100: 510. The shard turned up once in
+-- ten beside the dust: 200 more on average.
+check("the value follows your results", Disenchant:GetValue(1002) == 710)
 
 check("a weapon of the same level is still on the table",
     select(2, Disenchant:GetOutcomes(1003)).source == "table")

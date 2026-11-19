@@ -133,15 +133,15 @@ Enchanter(50)
 local rows = Disenchant:GetAuctionRows()
 
 -- A level 22 green chest.
--- (Before 2026-10-03 every outcome counted by its chance. Now only the most
--- likely does: 5 dust on average at 160 = 800. Less 5% cut: 760.)
+-- (Every outcome counts by its chance, 2026-11-19: 75% of 5 dust at 160,
+-- 15% of 1.5 astral at 1000, 10% of a shard at 2000 = 1025. Less 5% cut: 974.)
 local chest = Find(rows, 2001)
 check("the green chest is listed", chest ~= nil)
-check("its disenchant value is 800", chest.value == 800)
-check("the auction cut comes off: 760", chest.net == 760)
+check("its disenchant value is 1025", chest.value == 1025)
+check("the auction cut comes off: 974", chest.net == 974)
 check("bought at the cheapest rival listing", chest.buy == 500)
-check("profit is 760 - 500 = 260", chest.gain == 260)
-check("margin is profit over the buy price", math.abs(chest.margin - 0.52) < 1e-9)
+check("profit is 974 - 500 = 474", chest.gain == 474)
+check("margin is profit over the buy price", math.abs(chest.margin - 0.948) < 1e-9)
 check("it says how many are listed", chest.listed == 3)
 
 check("his own listing is not a deal", Find(rows, 2002) == nil)
@@ -165,16 +165,16 @@ local deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
 check("a loss is not a deal", Find(deals, 2006) == nil)
 check("nothing held back with no minimums", hidden == 0)
 
-config.minProfit = 300
+config.minProfit = 500
 deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
-check("Minimum profit holds the 260 chest back", Find(deals, 2001) == nil)
+check("Minimum profit holds the 474 chest back", Find(deals, 2001) == nil)
 check("the gloves still clear it", Find(deals, 2003) ~= nil)
 check("and it says how many were held back", hidden >= 1)
 config.minProfit = 0
 
 config.minMarginPercent = 100
 deals = Disenchant:GetAuctionRows({ profitableOnly = true })
-check("Minimum margin holds the 52% chest back", Find(deals, 2001) == nil)
+check("Minimum margin holds the 94% chest back", Find(deals, 2001) == nil)
 config.minMarginPercent = 0
 
 print("\nwho can disenchant it")
@@ -468,8 +468,8 @@ list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 2001))
 
 -- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
-check("PROFIT shows 260 in green", row.cells[1].text:find("60", 1, true) and row.cells[1].color == "profit")
-check("MARGIN shows 52%", row.cells[2].text == "52%")
+check("PROFIT shows 474 in green", row.cells[1].text:find("74", 1, true) and row.cells[1].color == "profit")
+check("MARGIN shows 94% (rounded down)", row.cells[2].text == "94%")
 check("BUY shows the price", row.cells[4].text ~= "")
 check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
 
