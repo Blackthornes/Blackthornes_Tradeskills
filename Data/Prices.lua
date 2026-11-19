@@ -1224,14 +1224,191 @@ function Prices:GetSuffixEntry(itemID, suffix)
     return type(entry) == "table" and entry or nil
 end
 
---- The name the client gives one suffix of an item ("Lead Band of the
---- Monkey"), or nil while it is not loaded. Read inside a pcall.
-function Prices.SuffixName(itemID, suffix)
+--------------------------------------------------------------------------------
+-- Which suffix a copy is, on Forever
+--------------------------------------------------------------------------------
+--
+-- Forever names a suffix two ways. A link carries a bonus ID
+-- (item:8211::::::::40:1490:::1:12731) and leaves the old suffix field
+-- empty; the auction house's item key carries another number (itemSuffix,
+-- 14327 and the like), which is what `record.suffixes` is keyed by. Until
+-- 2026-11-19 nothing joined the two, so a copy in the bags was never priced
+-- by its suffix, and no suffix had a name (a player's report).
+--
+-- They are joined as they are seen together, account wide in
+-- `ns.db.suffixWords` (never rename it):
+--   bonuses[bonusID] = suffix          a link's bonus and its key's suffix
+--   tails[locale][suffix] = " of the Monkey"   what the suffix adds to a name
+
+local function SuffixWords()
+    local db = ns.db
+    if type(db) ~= "table" then return nil end
+    local words = db.suffixWords
+    if type(words) ~= "table" then
+        words = {}
+        db.suffixWords = words
+    end
+    if type(words.bonuses) ~= "table" then words.bonuses = {} end
+    if type(words.tails) ~= "table" then words.tails = {} end
+    return words
+end
+
+local function Tails(words)
+    local ok, locale = pcall(function() return _G.GetLocale and _G.GetLocale() end)
+    locale = ok and type(locale) == "string" and locale or "enUS"
+    local tails = words.tails[locale]
+    if type(tails) ~= "table" then
+        tails = {}
+        words.tails[locale] = tails
+    end
+    return tails
+end
+
+-- The client's name for an item ID or an item string, or nil. In a pcall.
+local function ItemName(item)
     local api = _G.C_Item
     local info = type(api) == "table" and api.GetItemInfo or _G.GetItemInfo
     if type(info) ~= "function" then return nil end
-    local ok, name = pcall(info, ("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    local ok, name = pcall(info, item)
     if ok and type(name) == "string" and name ~= "" then return name end
+    return nil
+end
+
+-- What a suffix adds after the item's own name (" of the Monkey"), or nil
+-- when the name is the plain one, or does not begin with it.
+local function TailOf(base, full)
+    if not (base and full) or full == base then return nil end
+    if #full <= #base or full:sub(1, #base) ~= base then return nil end
+    return full:sub(#base + 1)
+end
+
+local function LinkItemID(link)
+    return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+end
+
+local function LinkName(link)
+    return type(link) == "string" and link:match("|h%[(.-)%]|h") or nil
+end
+
+--- Keep what a suffix adds to a name, from one item's full name.
+function Prices:LearnSuffixName(itemID, suffix, fullName)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and itemID and suffix and suffix ~= 0 and type(fullName) == "string") then return false end
+    local tail = TailOf(ItemName(itemID), fullName)
+    if not tail then return false end
+    Tails(words)[suffix] = tail
+    return true
+end
+
+--- A copy's link seen beside its auction house key (a search's listing, a
+--- copy in the bags): its bonus and that suffix go together from now on.
+function Prices:LearnSuffix(link, suffix)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and suffix and suffix ~= 0 and type(link) == "string") then return false end
+
+    -- Only a link with one bonus says which bonus is the suffix.
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 1 then words.bonuses[bonuses[1]] = suffix end
+
+    if Tails(words)[suffix] == nil then
+        self:LearnSuffixName(LinkItemID(link), suffix, LinkName(link))
+    end
+    return #bonuses == 1
+end
+
+local keyNameAsked, KEY_NAME_TRIES = {}, 20
+
+--- Keep a suffix's name from the auction house's own key, once the game has
+--- it. Asked only for a suffix with no name yet.
+function Prices:LearnKeyName(key)
+    local words = SuffixWords()
+    local suffix = type(key) == "table" and tonumber(key.itemSuffix) or nil
+    if not (words and suffix and suffix ~= 0 and key.itemID) then return false end
+    if Tails(words)[suffix] ~= nil then return true end
+
+    -- A name the game has not loaded is asked for a few times, not at
+    -- every row of every scan.
+    local asked = keyNameAsked[suffix] or 0
+    if asked >= KEY_NAME_TRIES then return false end
+    keyNameAsked[suffix] = asked + 1
+
+    local AH = _G.C_AuctionHouse
+    if not (type(AH) == "table" and type(AH.GetItemKeyInfo) == "function") then return false end
+    local ok, info = pcall(AH.GetItemKeyInfo, key)
+    if not (ok and type(info) == "table") then return false end
+    return self:LearnSuffixName(key.itemID, suffix, info.itemName)
+end
+
+--- The suffix a Forever link names, as the auction house keeps it, and
+--- whether it could be placed. A copy with a suffix nothing has placed yet
+--- answers a stand-in (its bonus, negative) and false; a plain copy nil.
+function Prices.ResolveSuffix(link)
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 0 then return nil end
+    local words = SuffixWords()
+    if not words then return nil end
+
+    for _, bonus in ipairs(bonuses) do
+        local suffix = words.bonuses[bonus]
+        if suffix then return suffix, true end
+    end
+
+    -- By name: the plain name with more after it is a suffix copy.
+    local itemID, full = LinkItemID(link), LinkName(link)
+    local base = itemID and ItemName(itemID)
+    if not (base and full) or full == base then return nil end
+
+    local tail = TailOf(base, full)
+    if tail then
+        local record = Prices:GetTable()[itemID]
+        local kept = type(record) == "table" and type(record.suffixes) == "table" and record.suffixes or nil
+        local match
+        for suffix, known in pairs(Tails(words)) do
+            if known == tail and (match == nil or (kept and kept[suffix])) then match = suffix end
+        end
+        if match then
+            if #bonuses == 1 then words.bonuses[bonuses[1]] = match end
+            return match, true
+        end
+    end
+    return -bonuses[1], false
+end
+
+Util.ResolveSuffix = Prices.ResolveSuffix
+
+--- The name the client gives one suffix of an item ("Lead Band of the
+--- Monkey"), or nil while it is not known. Read inside a pcall.
+function Prices.SuffixName(itemID, suffix)
+    suffix = tonumber(suffix)
+    if not (itemID and suffix) then return nil end
+    local base = ItemName(itemID)
+    local words = SuffixWords()
+
+    if words and base then
+        local tail = Tails(words)[suffix]
+        if tail then return base .. tail end
+
+        -- A bonus known to be this suffix names it in any language.
+        for bonus, known in pairs(words.bonuses) do
+            if known == suffix then
+                local name = ItemName(("item:%d::::::::::::1:%d"):format(itemID, bonus))
+                if name and name ~= base then return name end
+                break
+            end
+        end
+
+        -- The auction house's own name for it, kept for next time.
+        if Prices:LearnKeyName({ itemID = itemID, itemLevel = 0, itemSuffix = suffix, battlePetSpeciesID = 0 }) then
+            tail = Tails(words)[suffix]
+            if tail then return base .. tail end
+        end
+    end
+
+    -- Clients that keep the suffix in the link's own field.
+    local name = ItemName(("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    if name and name ~= base then return name end
     return nil
 end
 

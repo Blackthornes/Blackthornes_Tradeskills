@@ -16,7 +16,10 @@ local Util = ns.Util
 -- The random suffix a link names, or nil (Util.LinkSuffix, when there).
 local function LinkSuffix(link)
     if type(link) ~= "string" or type(Util.LinkSuffix) ~= "function" then return nil end
-    return Util.LinkSuffix(link)
+    -- Only one that could be placed: a stand-in is never a price's key.
+    local suffix, sure = Util.LinkSuffix(link)
+    if sure == false then return nil end
+    return suffix
 end
 
 -- Blizzard rate-limits the bulk snapshot hard. Asking more often than this just
@@ -860,6 +863,7 @@ local function CombineBrowseRows(results, seen)
             -- (Prices:RecordSuffix), beside the item's.
             local suffix = tonumber(result.itemKey.itemSuffix) or 0
             if suffix ~= 0 then
+                if ns.Prices.LearnKeyName then ns.Prices:LearnKeyName(result.itemKey) end
                 item.suffixes = item.suffixes or {}
                 local own = item.suffixes[suffix]
                 if not own then
@@ -2138,7 +2142,13 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                     -- Under its random suffix too: the key's own, or the
                     -- listing's link when the search was for every suffix.
                     local suffix = tonumber(key.itemSuffix) or 0
-                    if suffix == 0 then suffix = LinkSuffix(info.itemLink) or 0 end
+                    if suffix == 0 then
+                        suffix = LinkSuffix(info.itemLink) or 0
+                    elseif ns.Prices.LearnSuffix then
+                        -- The listing's link beside its key: which bonus
+                        -- is which suffix, for the copies in the bags.
+                        ns.Prices:LearnSuffix(info.itemLink, suffix)
+                    end
                     if suffix ~= 0 then
                         bySuffix[suffix] = bySuffix[suffix] or {}
                         table.insert(bySuffix[suffix], listing)

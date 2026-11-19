@@ -35,6 +35,33 @@ rows stay by item: sales are money received, a craft can't pick its roll,
 and the game already lists searches by suffix. Tested in
 `tools/test_suffixprices.lua`.
 
+Forever names a suffix two ways, and neither is a link's old suffix field
+(found 2026-11-19 from a player's report and the owner's own save: every
+saved suffix was 14298 to 14473, and no link in any save had the field
+filled). A link carries a bonus ID (`item:15012::::::::18:1485:::1:12722`,
+"of the Bear"; several bonuses share one name), and the auction house key's
+`itemSuffix` is another number, the one `record.suffixes` is keyed by. So
+`Util.LinkSuffix` answered nil for every bag copy, and a crafted "of the
+Monkey" piece was priced, posted and judged as the plain item, while
+`Prices.SuffixName` asked the client with the key's number in the link's
+field and got no name. Now `Util.LinkSuffix(link)` answers the key's
+number through `Prices.ResolveSuffix` (set as `Util.ResolveSuffix`), with
+a second value: false means "a suffix copy, not placed yet", and the first
+is then a stand-in (the bonus, negative) that is never saved under
+(`Scanner`'s `LinkSuffix` passes it over). The two numbers are joined as
+they are seen together, account wide in `ns.db.suffixWords` (never rename
+it): `bonuses[bonusID] = suffix` from `Prices:LearnSuffix(link, suffix)`
+(a search's listing beside its key, the bag copy beside
+`GetItemKeyFromItem` in `Posting:GetSearchKey`), and
+`tails[locale][suffix] = " of the Monkey"` from `Prices:LearnKeyName(key)`
+(browse rows, `C_AuctionHouse.GetItemKeyInfo`'s `itemName`) or a link's own
+name. A link whose bonus is not known is placed by its name's tail, and
+that match is kept by its bonus. Names on the Prices tab come from the
+tail, else a known bonus, else the key's own name. Tested in
+`tools/test_foreversuffix.lua`. Not yet seen in game: that
+`GetItemKeyInfo`'s name carries the suffix, and that it answers away from
+the auction house.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every

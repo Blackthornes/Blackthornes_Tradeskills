@@ -166,3 +166,13 @@ Why: The List It question used the game's pop-up. The game lent the same box
   to "replace your weapon's enchant" later, and a Spellstone from the bags
   was blocked: "Blackthornes_TS has been blocked from an action only
   available to the Blizzard UI" (2026-11-19).
+
+## An item link in a test
+Files: tools/test_.*\.lua
+Lines: Hitem:
+Check: A test that reads a link uses Forever's shape too
+  (`item:15012::::::::18:1485:::1:12722`): the old suffix field is empty
+  and the suffix is a bonus ID. Copy a real link, never make one up.
+Why: Suffix prices were tested with Classic links only
+  (`item:1076::::::612`), so they passed while no copy in the game was
+  ever matched to its suffix (2026-11-19).

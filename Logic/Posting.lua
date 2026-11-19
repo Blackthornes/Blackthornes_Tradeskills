@@ -446,6 +446,10 @@ function Posting:GetSearchKey(itemID)
     local ok, key = pcall(C_AuctionHouse.GetItemKeyFromItem, location)
     if not ok or type(key) ~= "table" or key.itemID ~= itemID then return nil end
 
+    -- The copy's link beside the game's own key for it: from here on this
+    -- suffix is known wherever the copy is seen (Prices:LearnSuffix).
+    if ns.Prices and ns.Prices.LearnSuffix then ns.Prices:LearnSuffix(link, key.itemSuffix) end
+
     ns.Debug(("searching %s by its suffix (%s)"):format(link, tostring(key.itemSuffix)))
     return key
 end
