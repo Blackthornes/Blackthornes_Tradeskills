@@ -1188,7 +1188,7 @@ end
 --- stock, or under what your sales taught when no number is set (the owner,
 --- 2026-10-11: stock that tops itself up). It once queued one craft a sale,
 --- so stock that had dropped by more (an expired listing, Restock When Down
---- To letting go) stayed short (Trent, 2026-11-19: queue the full amount).
+--- To letting go) stayed short (the owner asked for the full amount).
 --- Never for a craft that loses money, nor while "Wait until it runs low"
 --- is waiting.
 --- @return the recipe ID queued, or nil and why: "off", "nocraft",
