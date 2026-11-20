@@ -99,6 +99,22 @@ check("on, not for sale: basis stays match", basis, "match")
 price, basis = Profit:ChooseMarketPostPrice(5)
 check("on, market price: no floor either", basis, "match")
 
+-- Light Leather, 2026-11-20: skinned leather is also a Leatherworking
+-- craft (three Ruined Leather Scraps), so with a Minimum Profit of 20s it
+-- listed at 21s 44c while the auction house sold it at 34c. Trade goods
+-- (leather, cloth, bars, herbs) are materials and list at the market.
+settings.postAtMinProfit = true
+local itemClass = 7
+C_Item = { GetItemInfoInstant = function(id) return id, "Trade Goods", "Leather", "", 1, itemClass, 6 end }
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
+check("a trade good keeps the rival's price", price, 11000)
+check("a trade good's basis stays match", basis, "match")
+itemClass = 4
+price, basis = Profit:ChoosePostPrice(5, nil, nil, true)
+check("armor still lists at the least", price, 13685)
+check("armor's basis is minprofit", basis, "minprofit")
+C_Item = nil
+
 if failures > 0 then
     error(string.format("%d minimum profit post check(s) failed", failures), 0)
 end

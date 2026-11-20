@@ -428,11 +428,27 @@ function Profit:LeastProfitablePrice(itemID, minProfit)
     return price
 end
 
+--- Is this a trade good (leather, cloth, bars, herbs and the like)?
+-- Many are also a craft (Light Leather from Ruined Leather Scraps, a bolt
+-- from cloth), but most in the bags were gathered, and a material sells at
+-- the market's price. Reported 2026-11-20: with a 20s Minimum Profit, Light
+-- Leather listed at 21s 44c while the auction house sold it at 34c.
+local TRADE_GOODS = 7
+function Profit.IsTradeGood(itemID)
+    local items = rawget(_G, "C_Item")
+    local instant = type(items) == "table" and items.GetItemInfoInstant or rawget(_G, "GetItemInfoInstant")
+    if type(instant) ~= "function" or not itemID then return false end
+    local ok, _, _, _, _, _, classID = pcall(instant, itemID)
+    return ok and classID == TRADE_GOODS
+end
+
 --- When Post at Minimum Profit is on and a rival's price leaves less than
---- the Minimum Profit, the price to list at instead and why.
+--- the Minimum Profit, the price to list at instead and why. Trade goods
+--- are left at the market's price (see IsTradeGood).
 -- @return price, why  -- nil when the rival's price is fine or it is off
 function Profit:MinimumProfitPrice(itemID, price, basis)
     if not price or not Profit.RIVAL_BASES[basis] or not self:PostAtMinimumProfit() then return nil end
+    if Profit.IsTradeGood(itemID) then return nil end
     local minProfit, _, profession = self:MinimumsFor(itemID)
     minProfit = math.max(0, minProfit or 0)
     local least = self:LeastProfitablePrice(itemID, minProfit)

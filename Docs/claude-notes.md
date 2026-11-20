@@ -2989,6 +2989,13 @@ The Profit tab (`Profit:Analyse`), Queue, Level Up, Disenchanting, craft
 tooltips and the crafted-cost "Profit now" line ask without it and keep the
 market's price. Tested in `tools/test_minprofitlistonly.lua`.
 
+Trade goods are left out (2026-11-20, the owner's report): Light Leather is
+also a Leatherworking craft (three Ruined Leather Scraps), so with a 20s
+Minimum Profit it listed at 21s 44c while the auction house sold it at 34c.
+`Profit.IsTradeGood` (item class 7: leather, cloth, bars, herbs, bolts) makes
+`MinimumProfitPrice` return nil, so materials list at the market's price.
+Tested in `tools/test_minprofitpost.lua`.
+
 ## Checking a change
 
 The owner said yes (2026-11-16) to five ideas from the Claude Code team's
