@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.35.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Trip line.** The trip line and stop dots now draw on the world map.
+- **Profit by method.** Longer periods count older sales past the last 400.
+- **Disenchant profit.** The age shown for a disenchant profit reads the material you mostly get.
+
 ## 1.35.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
