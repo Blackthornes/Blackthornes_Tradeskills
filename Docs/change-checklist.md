@@ -185,3 +185,11 @@ Check: When a field on a returned table comes to mean something else (or
 Why: Disenchant value became an average and `counted` went true on every
   outcome; the Profit tab still picked the age's material by it and read
   the rarest one, while its test stub kept the old shape (2026-11-20).
+
+
+## Two values from one call
+Lines: local \w+, \w+ = [^,]+ and [\w.:]+\(
+Check: `local x, y = thing and Call()` keeps only the first value, so `y` is
+  always nil. Declare the locals, then `if thing then x, y = Call() end`.
+Why: The trip line never drew on the world map: y was nil and the draw
+  raised inside its pcall, in all five addons (2026-11-20).
