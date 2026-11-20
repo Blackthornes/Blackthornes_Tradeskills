@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.35.4
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Prices and sales.** Your prices and sales are kept when the game gives a blank realm name.
+
 ## 1.35.3
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
