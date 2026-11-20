@@ -176,3 +176,12 @@ Check: A test that reads a link uses Forever's shape too
 Why: Suffix prices were tested with Classic links only
   (`item:1076::::::612`), so they passed while no copy in the game was
   ever matched to its suffix (2026-11-19).
+
+## A flag whose meaning changes
+Lines: counted|likely|breakdown\.outcomes
+Check: When a field on a returned table comes to mean something else (or
+  is now set on every row), grep every reader of it across Logic/ and UI/
+  and change each one, and make the test stubs hand back the new shape.
+Why: Disenchant value became an average and `counted` went true on every
+  outcome; the Profit tab still picked the age's material by it and read
+  the rarest one, while its test stub kept the old shape (2026-11-20).

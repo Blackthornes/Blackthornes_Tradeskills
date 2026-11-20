@@ -1049,10 +1049,15 @@ function Profit:Analyse(recipeID, characterKey, method)
             analysis.disenchantValue, analysis.disenchantPartial, breakdown =
                 ns.Disenchant:GetValue(recipe.outputItemID)
 
-            -- The material the value is read off, whose price's age is the
-            -- age of a disenchant profit.
+            -- The material a disenchant most often gives, whose price's
+            -- age is the age of a disenchant profit. Every outcome counts
+            -- toward the average now, so `counted` no longer picks one out:
+            -- read that way, the age was the rarest material's (the shard).
             for _, outcome in ipairs((breakdown and breakdown.outcomes) or {}) do
-                if outcome.counted then analysis.disenchantMaterial = outcome.itemID end
+                if outcome.likely or (outcome.likely == nil and outcome.counted) then
+                    analysis.disenchantMaterial = outcome.itemID
+                    break
+                end
             end
         end
     end
