@@ -1075,8 +1075,13 @@ function Mail:Reconcile(mails, complete)
         end
     end
 
+    -- A sale trimmed off here is kept, small, for Profit by method's longer
+    -- periods (Logic/MethodProfit.lua), so they don't all show one day.
     while #ledger.entries > MAX_LEDGER do
-        table.remove(ledger.entries, 1)
+        local gone = table.remove(ledger.entries, 1)
+        if ns.MethodProfit and ns.MethodProfit.KeepOlderSale then
+            pcall(ns.MethodProfit.KeepOlderSale, ns.MethodProfit, gone)
+        end
     end
 
     -- With Share Sales ticked, the other account hears in a few seconds.
