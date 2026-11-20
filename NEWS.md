@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.35.1
+
+Fixes and changes:
+- The trip line and stop dots now draw on the world map.
+- Longer periods count older sales past the last 400.
+- The age shown for a disenchant profit reads the material you mostly get.
+
 ## 1.35.0
 
 - Every window has a gold gem on its title bar. Click it to switch between the one window and separate windows.
