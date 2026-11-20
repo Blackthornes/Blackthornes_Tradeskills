@@ -79,7 +79,14 @@ local function GetPlayerIdentity()
     local ok, name = pcall(UnitName, "player")
     Scanner.playerName = (ok and name) or "?"
 
-    local realmOk, realm = pcall(GetRealmName)
+    -- An empty name (Forever 1.60.1 gives one) is no realm: "" would
+    -- tell every listing of yours apart from you, and you would undercut
+    -- yourself. Tested and copied inside the pcall, as a dungeon can hand
+    -- back a name that raises when compared.
+    local realmOk, realm = pcall(function()
+        local value = GetRealmName()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
     if realmOk and realm then
         -- ownerFullName arrives as Name-Realm with spaces stripped.
         Scanner.playerRealm = realm:gsub("%s", "")

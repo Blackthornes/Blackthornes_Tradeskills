@@ -173,7 +173,9 @@ local function HereRealm(characters)
         local name = GetRealmName()
         if type(name) == "string" and name ~= "" then return name .. "" end
     end)
-    return ok and realm or nil
+    if ok and realm then return realm end
+    -- Forever 1.60.1 gives an empty realm name: the one remembered.
+    return ns.Config and ns.Config.RealmName and ns.Config:RealmName() or nil
 end
 
 --- Does this character belong under the realm picked? A character saved

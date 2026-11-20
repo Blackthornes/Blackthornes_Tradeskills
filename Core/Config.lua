@@ -881,11 +881,60 @@ local function SafeUnitName()
     return PlainString(UnitName, "player") or "Unknown"
 end
 
-local function SafeRealmName()
-    if type(GetRealmName) == "function" then
-        return PlainString(GetRealmName) or "UnknownRealm"
+-- A realm name as saved, or nil for none ("?" and "UnknownRealm" are what
+-- was written when the client would not say).
+local function SavedRealm(value)
+    if type(value) ~= "string" or value == "" or value == "?" or value == "UnknownRealm" then return nil end
+    return value
+end
+
+--- The realm this character played on last time the client said, when it
+--- will not say now. Forever 1.60.1 hands back an empty realm name for
+--- good, and every price, sale and gold line is filed under the realm: a
+--- new name would hide them all. In order: the character's own file, its
+--- record, then the realm most of this account's characters are on (a
+--- new character on the account). Nothing is moved or renamed.
+local function RememberedRealm()
+    local charDb = type(ns.charDb) == "table" and ns.charDb or nil
+    local own = charDb and SavedRealm(charDb.realmName)
+    if own then return own end
+
+    local db = type(ns.db) == "table" and ns.db or nil
+    local characters = db and type(db.characters) == "table" and db.characters or nil
+    if not characters then return nil end
+
+    local guid = Config.characterKey or (charDb and type(charDb.guid) == "string" and charDb.guid) or nil
+    local record = guid and characters[guid]
+    local mine = type(record) == "table" and SavedRealm(record.realm)
+    if mine then return mine end
+
+    local counts, best, bestCount = {}, nil, 0
+    for _, entry in pairs(characters) do
+        local realm = type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+        if realm then
+            counts[realm] = (counts[realm] or 0) + 1
+            local count = counts[realm]
+            if count > bestCount or (count == bestCount and realm < best) then
+                best, bestCount = realm, count
+            end
+        end
     end
-    return "UnknownRealm"
+    return best
+end
+
+local function SafeRealmName()
+    local realm = type(GetRealmName) == "function" and PlainString(GetRealmName) or nil
+    if realm then
+        if type(ns.charDb) == "table" then ns.charDb.realmName = realm end
+        return realm
+    end
+    return RememberedRealm() or "UnknownRealm"
+end
+
+--- The realm's name as the client gives it, else the one remembered for this
+--- character (see RememberedRealm), else nil.
+function Config:RealmName()
+    return SavedRealm(SafeRealmName())
 end
 
 local function SafeFaction()

@@ -3252,3 +3252,7 @@ arrows, bars, trackers, the Zone Board and similar pieces get none.
 - Tested in `tools/test_swapgem.lua` (the same in all five) and
   `tools/test_swapwindows.lua` (this addon's windows in the fake game).
   Not yet seen in game.
+
+## An empty realm name (Forever 1.60.1)
+
+Forever 1.60.1 (a hotfix, announced 2026-11-20) makes GetRealmName, GetRealmID and the C_BattleNet realm fields hand back "" or 0, and scrambles the realm, server and spawn parts of Creature, Vehicle, Pet and GameObject GUIDs (player GUIDs are not named). Every reader of a mob, vendor or trainer ID from a GUID takes any text in parts 2 to 5 (`[^%-]+`), never `%d+`; a new one must too. Prices, price history, sales, the gold log, guild and realm prices and posted auctions are all filed under `Config:GetRealmKey()`, so a blank realm would have opened an empty "UnknownRealm" bucket. When the client gives no realm, `SafeRealmName` uses the one remembered: the character's own file (`BlackthornesTSCharDB.realmName`, written each time the client names it; never rename it), then its record's `realm`, then the realm most of this account's own characters are on (linked accounts' copies never count). `Config:RealmName()` gives that name for others (a new record, Gold Goal, the Characters tab). Nothing saved is moved or renamed. The scanner takes a blank realm as no realm, so your own listings stay yours. Tested in `tools/test_realmblank.lua`.

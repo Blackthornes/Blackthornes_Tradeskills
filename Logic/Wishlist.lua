@@ -386,7 +386,7 @@ end
 --- The chat line, once per vendor or trainer each login.
 function Wishlist:SayOnce(kind, count)
     local guid = Plain((Call("UnitGUID", "npc"))) or "?"
-    local npc = guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)") or guid
+    local npc = guid:match("^%a+%-[^%-]+%-[^%-]+%-[^%-]+%-[^%-]+%-(%d+)") or guid
     self.told = self.told or {}
     local key = kind .. ":" .. npc
     if self.told[key] then return false end

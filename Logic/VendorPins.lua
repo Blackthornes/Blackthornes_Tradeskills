@@ -117,7 +117,7 @@ end
 --- The NPC ID inside a creature's GUID ("Creature-0-1-2-3-4-<id>-...").
 function VendorPins.NpcID(guid)
     local ok, id = pcall(function()
-        local kind, npc = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
+        local kind, npc = guid:match("^(%a+)%-[^%-]+%-[^%-]+%-[^%-]+%-[^%-]+%-(%d+)")
         if kind == "Creature" or kind == "Vehicle" then return tonumber(npc) end
     end)
     return ok and id or nil
