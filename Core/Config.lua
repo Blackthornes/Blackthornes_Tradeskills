@@ -964,6 +964,258 @@ function Config:GetRealmKey()
     return key
 end
 
+--------------------------------------------------------------------------------
+-- Folding the blank realm's bucket back in
+--------------------------------------------------------------------------------
+
+-- Version 1.35.3 met Forever 1.60.1's empty realm name with "UnknownRealm",
+-- so a few hours of scans, sales and gold were filed under
+-- "UnknownRealm-<side>" (and a /reload in a dungeon could do the same, years
+-- of play apart). 1.35.4 reads the right realm again, which leaves that
+-- bucket stranded. This copies what it holds into the realm it came from,
+-- once. Only ever adds: nothing already under the realm is changed, and the
+-- stranded bucket itself stays as it was. Saved as `blankRealmFolded[key]`
+-- (never rename it).
+
+local function IsList(t) return t[1] ~= nil end
+
+local function CopyAll(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for k, v in pairs(value) do copy[k] = CopyAll(v) end
+    return copy
+end
+
+-- A table whose every value is a table (a list of records by key). Any
+-- other table is a record and is never mixed with another.
+local function IsHolder(t)
+    if IsList(t) then return false end
+    for _, v in pairs(t) do
+        if type(v) ~= "table" then return false end
+    end
+    return true
+end
+
+-- Adds what `into` lacks. Where both hold the same record, the realm's own
+-- one is kept.
+local function FillIn(into, from)
+    for k, v in pairs(from) do
+        local have = into[k]
+        if have == nil then
+            into[k] = CopyAll(v)
+        elseif type(have) == "table" and type(v) == "table" and IsHolder(have) and IsHolder(v) then
+            FillIn(have, v)
+        end
+    end
+end
+
+-- Price history: flat hour, value pairs. Hours the realm lacks are added;
+-- an hour both have keeps the realm's.
+local function FoldPairs(into, from)
+    local hours, merged = {}, {}
+    for i = 1, #into - 1, 2 do
+        hours[into[i]] = true
+        merged[#merged + 1] = { into[i], into[i + 1] }
+    end
+    local added = false
+    for i = 1, #from - 1, 2 do
+        if type(from[i]) == "number" and not hours[from[i]] then
+            hours[from[i]] = true
+            merged[#merged + 1] = { from[i], from[i + 1] }
+            added = true
+        end
+    end
+    if not added then return end
+    table.sort(merged, function(a, b) return a[1] < b[1] end)
+    for i = #into, 1, -1 do into[i] = nil end
+    for _, pair in ipairs(merged) do
+        into[#into + 1] = pair[1]
+        into[#into + 1] = pair[2]
+    end
+end
+
+local function FoldHistory(into, from)
+    for itemID, pairs_ in pairs(from) do
+        local have = into[itemID]
+        if type(pairs_) == "table" then
+            if type(have) ~= "table" then
+                into[itemID] = CopyAll(pairs_)
+            else
+                FoldPairs(have, pairs_)
+            end
+        end
+    end
+end
+
+-- The mail ledger: each mail is written down again on a first reading, so
+-- an entry the realm already has (the same character, kind, item and money,
+-- each matched once) is left out. The rest join in time order.
+local MAIL_DAYS = 31 * 86400
+local function SameMail(a, b)
+    return a.who == b.who and a.kind == b.kind and a.name == b.name and a.itemID == b.itemID
+        and a.net == b.net and a.quantity == b.quantity
+        and math.abs((tonumber(a.t) or 0) - (tonumber(b.t) or 0)) <= MAIL_DAYS
+end
+
+local function FoldLedger(into, from)
+    into.entries = type(into.entries) == "table" and into.entries or {}
+    into.seen = type(into.seen) == "table" and into.seen or {}
+    local entries, used, added = into.entries, {}, 0
+    local count = #entries
+    for _, entry in ipairs(type(from.entries) == "table" and from.entries or {}) do
+        if type(entry) == "table" then
+            local found = false
+            for index = 1, count do
+                local mine = entries[index]
+                if not used[index] and type(mine) == "table" and SameMail(mine, entry) then
+                    used[index], found = true, true
+                    break
+                end
+            end
+            if not found then
+                entries[#entries + 1] = CopyAll(entry)
+                added = added + 1
+            end
+        end
+    end
+    if added > 0 then
+        local order = {}
+        for index, entry in ipairs(entries) do order[entry] = index end
+        table.sort(entries, function(a, b)
+            local ta, tb = tonumber(a.t) or 0, tonumber(b.t) or 0
+            if ta ~= tb then return ta < tb end
+            return order[a] < order[b]
+        end)
+    end
+    for k, v in pairs(type(from.seen) == "table" and from.seen or {}) do
+        if into.seen[k] == nil then into.seen[k] = CopyAll(v) end
+    end
+    for k, v in pairs(from) do
+        if k ~= "entries" and k ~= "seen" and into[k] == nil then into[k] = CopyAll(v) end
+    end
+    return added
+end
+
+-- The gold log: an hour or day both have holds money from two stretches of
+-- play that never overlapped, so the two are added together.
+local function FoldGold(into, from)
+    for _, part in ipairs({ "hours", "days" }) do
+        local mine, theirs = into[part], from[part]
+        if type(theirs) == "table" then
+            if type(mine) ~= "table" then
+                into[part] = CopyAll(theirs)
+            else
+                for when, bucket in pairs(theirs) do
+                    local have = mine[when]
+                    if type(bucket) == "table" then
+                        if type(have) ~= "table" then
+                            mine[when] = CopyAll(bucket)
+                        else
+                            for source, sums in pairs(bucket) do
+                                local got = have[source]
+                                if type(sums) == "table" then
+                                    if type(got) ~= "table" then
+                                        have[source] = CopyAll(sums)
+                                    else
+                                        got.i = (tonumber(got.i) or 0) + (tonumber(sums.i) or 0)
+                                        got.o = (tonumber(got.o) or 0) + (tonumber(sums.o) or 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for k, v in pairs(from) do
+        if k ~= "hours" and k ~= "days" then
+            if into[k] == nil then
+                into[k] = CopyAll(v)
+            elseif type(into[k]) == "table" and type(v) == "table" then
+                FillIn(into[k], v)
+            end
+        end
+    end
+end
+
+local FOLDS = {
+    priceHistory = FoldHistory,
+    priceListed = FoldHistory,
+    mailLedger = FoldLedger,
+    goldLog = FoldGold,
+}
+
+--- The realm a stranded "UnknownRealm-<side>" bucket belongs to: the one
+--- realm all of this account's own characters on that side are on. Two
+--- realms, or none, and it cannot be told, so nil.
+function Config:BlankRealmHome(strandedKey)
+    local side = type(strandedKey) == "string" and strandedKey:match("^UnknownRealm%-(.+)$")
+    local characters = type(ns.db) == "table" and type(ns.db.characters) == "table" and ns.db.characters
+    if not side or not characters then return nil end
+
+    local function OnlyRealm(sameSide)
+        local found
+        for _, entry in pairs(characters) do
+            local realm = type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+            if realm and (not sameSide or entry.faction == side) then
+                if found and found ~= realm then return nil, true end
+                found = realm
+            end
+        end
+        return found
+    end
+
+    local realm, mixed = OnlyRealm(true)
+    if not realm and not mixed then realm = OnlyRealm(false) end
+    return realm and (realm .. "-" .. side) or nil
+end
+
+--- Fold every stranded "UnknownRealm-<side>" bucket into its realm, once.
+--- Returns how many saved lists took something.
+function Config:FoldBlankRealm()
+    local db = ns.db
+    if type(db) ~= "table" then return 0 end
+    local done = type(db.blankRealmFolded) == "table" and db.blankRealmFolded or {}
+
+    local stranded = {}
+    for _, value in pairs(db) do
+        if type(value) == "table" then
+            for key, bucket in pairs(value) do
+                if type(key) == "string" and key:find("^UnknownRealm%-") and type(bucket) == "table"
+                    and done[key] == nil then
+                    stranded[key] = true
+                end
+            end
+        end
+    end
+
+    local folded = 0
+    for key in pairs(stranded) do
+        local home = self:BlankRealmHome(key)
+        if home then
+            local mails = 0
+            for root, value in pairs(db) do
+                local bucket = type(value) == "table" and value ~= done and value[key]
+                if type(bucket) == "table" and next(bucket) ~= nil then
+                    local into = value[home]
+                    if type(into) ~= "table" then
+                        value[home] = CopyAll(bucket)
+                    elseif FOLDS[root] then
+                        mails = mails + (FOLDS[root](into, bucket) or 0)
+                    else
+                        FillIn(into, bucket)
+                    end
+                    folded = folded + 1
+                end
+            end
+            done[key] = { into = home, at = time(), mails = mails }
+            db.blankRealmFolded = done
+        end
+    end
+    return folded
+end
+
 -- Checked and copied inside the pcall for the same dungeon reason as the name.
 local function SafeGUID()
     local ok, guid = pcall(function()
@@ -1384,6 +1636,12 @@ function Config:Bootstrap()
 
     self:SisterKeepsOffOnce(db)
     self:RealmPricesOnOnce(db)
+
+    -- Before any module reads prices or sales, so nothing caches the realm
+    -- without them. Inside a pcall: a save it does not expect must never
+    -- stop the addon loading.
+    local ok, err = pcall(self.FoldBlankRealm, self)
+    if not ok then ns.Debug("blank realm fold:", tostring(err)) end
 end
 
 --- Realm Prices was off unless ticked until 2026-10-28, when the owner
