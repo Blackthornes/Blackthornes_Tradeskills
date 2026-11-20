@@ -90,7 +90,12 @@ ns.Disenchant = {
     IsDisenchantable = function() return disenchantable end,
     GetValue = function()
         if disenchantable then
-            return 200, nil, { outcomes = { { itemID = DUST, counted = true }, { itemID = ESSENCE } } }
+            -- As Disenchant:GetValue hands them back since the value became
+            -- an average: every outcome counted, the usual one marked likely.
+            return 200, nil, { outcomes = {
+                { itemID = DUST, counted = true, likely = true },
+                { itemID = ESSENCE, counted = true, likely = false },
+            } }
         end
     end,
     GetBestEnchanter = function() return enchanterSkill, enchanterSkill and "Ana" or nil end,
