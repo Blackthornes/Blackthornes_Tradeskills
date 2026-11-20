@@ -37,9 +37,12 @@ local Util = ns.Util
 
 -- Forever lists each profession under a second, modern skill line as well
 -- (docs/FOREVER_API_FINDINGS.md). Recipes the game shows may carry either.
+-- Cooking (2939) and First Aid (2942) too: a recipe their windows showed
+-- kept the second line, so no trainer was found to teach it and Road to 300
+-- stopped (a player's report, 2026-11-20: First Aid stuck at 82).
 local MODERN_SKILL_LINES = {
-    [2937] = 171, [2938] = 164, [2940] = 333, [2941] = 202,
-    [2945] = 165, [2946] = 186, [2948] = 197,
+    [2937] = 171, [2938] = 164, [2939] = 185, [2940] = 333, [2941] = 202,
+    [2942] = 129, [2945] = 165, [2946] = 186, [2948] = 197,
 }
 
 -- The game's item class for recipes.

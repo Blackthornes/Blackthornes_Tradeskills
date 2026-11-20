@@ -152,6 +152,38 @@ ns2.db.trainerRecipes = { [LESSER] = { cost = 150, skill = 55 } }
 ns2.RecipeBook:Invalidate()
 check("the character's own visit wins", ns2.RecipeBook:Get(LESSER).trainerCost, 150)
 
+print("\nrecipes a First Aid or Cooking window showed")
+-- A player's report (2026-11-20): First Aid stopped at 82 with nothing
+-- after it. Forever's window lists First Aid under a second skill line
+-- (2942, Cooking 2939), and every recipe it showed kept that line, so no
+-- trainer was found to teach Wool Bandage or Lesser Healing Potion.
+local ns4 = Fresh()
+ns4.Recipes.SKILL_LINE_PROFESSIONS = { [129] = "First Aid", [185] = "Cooking" }
+ns4.Recipes.EnglishProfessionName = function(p) return type(p) == "table" and p.name or p end
+ns4.db.seenRecipes = {
+  [3277] = { name = "Wool Bandage", skillLineID = 2942, outputItemID = 3530, profession = "First Aid" },
+  [LESSER] = { name = "Lesser Healing Potion", skillLineID = 2942, outputItemID = 858, profession = "First Aid" },
+  [2546] = { name = "Dry Pork Ribs", skillLineID = 2939, outputItemID = 2687, profession = "Cooking" },
+}
+ns4.RecipeBook:Invalidate()
+check("First Aid's second line is First Aid", ns4.RecipeBook.ClassicLine(2942), 129)
+check("Cooking's second line is Cooking", ns4.RecipeBook.ClassicLine(2939), 185)
+local wool = OnRoad(ns4, 3277)
+check("Wool Bandage is on the road", wool ~= nil, true)
+check("learned from a First Aid trainer", wool and wool.place and wool.place.kind, "trainer")
+check("Lesser Healing Potion is on the road", OnRoad(ns4, LESSER) ~= nil, true)
+local cands4 = ns4.RoadPlan:Candidates(129)
+for _, c in ipairs(cands4) do c.price = ns4.RoadPlan.Price(c.record) end
+local plan4 = ns4.RoadPlan:Plan({ line = 129, skill = 82, max = 150, level = 20, candidates = cands4, owned = {} })
+local learnsWool = false
+for _, step in ipairs(plan4.steps) do
+  if not step.done and step.recipeID == 3277 and step.learn then learnsWool = true end
+end
+check("the road goes on past 82", plan4.stuck, nil)
+check("and learns Wool Bandage on the way", learnsWool, true)
+local ribs = ns4.RecipeBook:Get(2546)
+check("a Cooking recipe has a trainer", ribs and ns4.LearnNext:Place(ribs) ~= nil, true)
+
 print("\nonly a profession trainer")
 local ns3 = Fresh()
 IsTradeskillTrainer = function() return false end
