@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.35.3
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300.** First Aid and Cooking recipes now find their trainer, so the road keeps going past the recipes you know.
+
 ## 1.35.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
