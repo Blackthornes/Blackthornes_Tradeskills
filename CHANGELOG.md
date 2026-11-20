@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.35.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Post at Minimum Profit.** Trade goods like leather post at the market price.
+
 ## 1.35.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

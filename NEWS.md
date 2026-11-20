@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.35.2
+
+Fixes and changes:
+- Trade goods like leather post at the market price with Post at Minimum Profit.
+
 ## 1.35.1
 
 Fixes and changes:
