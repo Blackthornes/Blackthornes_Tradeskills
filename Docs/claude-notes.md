@@ -82,6 +82,16 @@ page (`cooldownAlerts`, on unless unticked) and `/bts cooldowns`. Butler's
 makes a ready cooldown craft once, queued or not. Tested in
 `tools/test_cooldowns.lua` and `tools/test_butlerjobs.lua`.
 
+Priced to buy (a player on Discord, 2026-11-20): a craft with a cooldown
+(`Cooldowns:HasCooldown`) is never a sub-craft for the character playing
+either, as it already was not for alts (`Cost:BuildAltIndex`), so a Gold
+Bar or Arcanite Bar is priced at its buying price and the queue buys it
+rather than planning many transmutes. Set to Make on the Level Up tab
+(`alwaysSubCrafts`) it is still made. A craft first seen waiting
+invalidates Cost's index. `FindAnyRecipeForItem` still names the
+transmute, so the bar itself is priced as before. Tested in
+`tools/test_cooldowncost.lua`.
+
 
 ## Craft requests in Trade
 

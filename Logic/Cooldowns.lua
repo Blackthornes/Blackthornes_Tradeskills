@@ -216,7 +216,12 @@ local function Note(characterKey, id, fields, left)
         entry = {}
         entries[id] = entry
     end
-    if long then entry.seen = true end
+    if long and not entry.seen then
+        entry.seen = true
+        -- A craft first seen waiting stops being priced as a sub-craft
+        -- (Cost:RebuildOutputIndex), from the next price read on.
+        if ns.Cost and ns.Cost.InvalidateIndex then ns.Cost:InvalidateIndex() end
+    end
     entry.name = fields.name or entry.name
     entry.group = Cooldowns.Group(entry.name) or entry.group
     entry.recipeID = fields.recipeID or entry.recipeID
