@@ -138,6 +138,9 @@ skill-line ID spaces — a modern one and a legacy one:
 | Herbalism | 2944 | 182 |
 | Mining | 2946 | 186 |
 | Tailoring | 2948 | 197 |
+| Cooking | 2939 | 185 |
+| First Aid | 2942 | 129 |
+| Fishing | 2943 | 356 |
 
 Both IDs report the same skill level. Deduplicate by profession name or recipes
 will be counted twice.
