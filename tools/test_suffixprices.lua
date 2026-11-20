@@ -134,6 +134,8 @@ local rows = Prices:SuffixRows(BAND)
 check("each suffix listed", #rows == 2)
 check("dearest first", rows[1] and rows[1].suffix == MONKEY and rows[2].suffix == SPIRIT)
 check("an item with none lists none", #Prices:SuffixRows(2589) == 0)
+check("the count matches the rows, with no names asked", Prices:SuffixCount(BAND) == 2 and Prices:SuffixCount(2589) == 0)
+check("a row carries its listed count", rows[2] and rows[2].quantity == Prices:GetSuffixEntry(BAND, SPIRIT).quantity)
 
 local before = now
 now = now + 49 * 3600

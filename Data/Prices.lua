@@ -1424,7 +1424,7 @@ function Prices:SuffixRows(itemID)
         if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
             rows[#rows + 1] = {
                 suffix = suffix, market = entry.market, min = entry.min, rival = entry.rival,
-                seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
+                quantity = entry.quantity, seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
             }
         end
     end
@@ -1433,6 +1433,28 @@ function Prices:SuffixRows(itemID)
         return (tonumber(a.suffix) or 0) < (tonumber(b.suffix) or 0)
     end)
     return rows
+end
+
+--- How many suffixes of an item have a recent price: the rows SuffixRows
+--- would give, counted without asking the client for any name.
+function Prices:SuffixCount(itemID)
+    local record = itemID and self:GetTable()[itemID]
+    local suffixes = type(record) == "table" and record.suffixes
+    if type(suffixes) ~= "table" then return 0 end
+    local oldest, count = time() - Prices.SUFFIX_KEEP, 0
+    for _, entry in pairs(suffixes) do
+        if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+--- The suffix names known in the client's language, by suffix
+--- ({ [14322] = " of the Bear" }), for searching without asking the client.
+function Prices:SuffixTails()
+    local words = SuffixWords()
+    return words and Tails(words) or {}
 end
 
 --- What one copy is worth, by its link: its suffix's own price when one is

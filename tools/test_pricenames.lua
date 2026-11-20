@@ -59,7 +59,12 @@ local function Label()
 end
 
 local function Row()
-    local row = { name = Label(), icon = {}, star = { SetItem = function() end }, cells = {} }
+    local function Shown() return { SetShown = function() end } end
+    local row = { name = Label(), icon = Shown(), star = Shown(), cells = {} }
+    row.star.SetItem = function() end
+    row.name.SetPoint = function() end
+    row.fold = Shown()
+    row.fold.text = Label()
     for _, key in ipairs({ "market", "min", "quantity", "liquidity", "trend", "age" }) do
         row.cells[key] = Label()
     end

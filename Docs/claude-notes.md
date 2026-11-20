@@ -62,6 +62,22 @@ tail, else a known bonus, else the key's own name. Tested in
 `GetItemKeyInfo`'s name carries the suffix, and that it answers away from
 the auction house.
 
+Suffix rows on the Prices tab (a player's report, the owner said build it
+from a mockup, 2026-11-20): an item whose suffixes have recent prices
+(`Prices:SuffixCount`, no names asked) shows "N suffixes" and a gold + or -
+after its icon; open, each suffix is a row under it (`kid = true`, its own
+Market, Cheapest, Listed and Age; Moves and Trend "--"), sorted by the same
+column and never leaving its item (`SortRows`, `AddSuffixRows` in
+`UI/Tab_Prices.lua`). Open while a search finds `AUTO_OPEN_MOST` (30) or
+fewer items, else closed; a click keeps the player's choice in
+`state.open[itemID]` (session only, nothing saved). A search also reads the
+kept suffix names (`Prices:SuffixTails`, no client calls): "of the Bear"
+finds the item showing only its Bear, and so does "chestpiece of the b".
+Picking a suffix row shows its prices in the side pane under its full name,
+leaves out Your listing (read by item), and says "Stock movement and Price
+History are for every suffix together." The item count at the foot counts
+items only. Tested in `tools/test_suffixrows.lua`. Not yet seen in game.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
