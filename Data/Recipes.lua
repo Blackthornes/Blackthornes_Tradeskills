@@ -297,7 +297,7 @@ local function GetCharacterRecord(create)
         -- that raise when compared, and a stored one would raise forever.
         record = {
             name = PlainString(UnitName, "player") or "Unknown",
-            realm = PlainString(GetRealmName) or "?",
+            realm = (ns.Config.RealmName and ns.Config:RealmName()) or "?",
             recipes = {},
             inventory = {},
         }
