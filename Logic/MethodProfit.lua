@@ -71,6 +71,12 @@ local DAY = 86400
 MethodProfit.MAX_EVENTS = 3000
 MethodProfit.KEEP = 400 * DAY
 
+-- Auction sales kept once they leave the mail ledger (Data/Mail.lua keeps
+-- only its newest 400 entries). A busy seller filled the ledger in a day,
+-- so every period from Today to All showed the same day (a player's
+-- report, 2026-11-20). Kept for KEEP, at most this many.
+MethodProfit.MAX_OLDER_SALES = 6000
+
 -- Purchases kept per item, and how long one is used as a cost.
 MethodProfit.MAX_BUYS = 20
 MethodProfit.BUY_LIFE = 60 * DAY
@@ -79,7 +85,8 @@ MethodProfit.BUY_LIFE = 60 * DAY
 -- Storage
 --------------------------------------------------------------------------------
 
---- This realm's record: { events = {...}, buys = { [itemID] = {...} } }.
+--- This realm's record: { events = {...}, buys = { [itemID] = {...} },
+--- sold = {...} }. `sold` holds auction sales that left the mail ledger.
 function MethodProfit:GetLog()
     if not ns.db then return { events = {}, buys = {} } end
 
@@ -93,6 +100,7 @@ function MethodProfit:GetLog()
     end
     if type(log.events) ~= "table" then log.events = {} end
     if type(log.buys) ~= "table" then log.buys = {} end
+    if type(log.sold) ~= "table" then log.sold = {} end
 
     return log
 end
@@ -207,14 +215,42 @@ function MethodProfit:Record(method, itemID, units, income, cost, at)
     self.version = (self.version or 0) + 1
 end
 
+--- An auction sale leaving the mail ledger, kept small so Profit by method
+--- still counts it in the longer periods. Returns and the like are let go.
+function MethodProfit:KeepOlderSale(entry)
+    if type(entry) ~= "table" or entry.kind ~= "sold" then return end
+    local t = tonumber(entry.t)
+    if not t then return end
+
+    local sold = self:GetLog().sold
+    sold[#sold + 1] = {
+        t = t, id = entry.itemID, nm = (not entry.itemID) and entry.name or nil,
+        n = tonumber(entry.quantity), net = tonumber(entry.net) or 0,
+        dep = tonumber(entry.deposit), c = type(entry.cost) == "number" and entry.cost or nil,
+        b = entry.bought and true or nil, w = entry.who,
+    }
+    while #sold > self.MAX_OLDER_SALES do table.remove(sold, 1) end
+    self.version = (self.version or 0) + 1
+end
+
+--- A kept sale as the ledger entry it was, for Summary and Sellers.
+local function OlderEntry(sale)
+    return {
+        kind = "sold", t = sale.t, itemID = sale.id, name = sale.nm, quantity = sale.n,
+        net = sale.net, deposit = sale.dep, cost = sale.c, bought = sale.b, who = sale.w,
+    }
+end
+
 --- Drop events too old to be asked for. Quietly, once per login.
 function MethodProfit:Prune()
-    local events = self:GetLog().events
+    local log = self:GetLog()
     local oldest = Now() - self.KEEP
-    for i = #events, 1, -1 do
-        local event = events[i]
-        if type(event) ~= "table" or (tonumber(event.t) or 0) < oldest then
-            table.remove(events, i)
+    for _, list in ipairs({ log.events, log.sold }) do
+        for i = #list, 1, -1 do
+            local event = list[i]
+            if type(event) ~= "table" or (tonumber(event.t) or 0) < oldest then
+                table.remove(list, i)
+            end
         end
     end
 end
@@ -398,7 +434,7 @@ function MethodProfit:Summary(from, to, opts)
         local farmed = {}
 
         local entries = mail.Entries and mail:Entries() or mail:GetLedger().entries
-        for _, entry in ipairs(entries) do
+        local function CountSale(entry)
             local t = tonumber(entry.t) or 0
             if entry.kind == "sold" and t >= from and t < to and SoldBy(entry, who) then
                 local itemID = entry.itemID or names[entry.name]
@@ -430,6 +466,13 @@ function MethodProfit:Summary(from, to, opts)
                 end
             end
         end
+        -- What left the ledger first, then what is still in it.
+        for _, sale in ipairs(self:GetLog().sold) do
+            if type(sale) == "table" and (tonumber(sale.t) or 0) >= from then
+                CountSale(OlderEntry(sale))
+            end
+        end
+        for _, entry in ipairs(entries) do CountSale(entry) end
     end
 
     -- Vendor sales and disenchants, as they were written down. They have no
@@ -485,17 +528,24 @@ function MethodProfit:Sellers()
     local mail = ns.Mail
     if not (mail and (mail.Entries or mail.GetLedger)) then return {} end
     local entries = mail.Entries and mail:Entries() or mail:GetLedger().entries
-    if self.sellersFor == entries and self.sellersCount == #entries and self.sellers then
+    local older = self:GetLog().sold
+    if self.sellersFor == entries and self.sellersCount == #entries
+        and self.sellersOlder == #older and self.sellers then
         return self.sellers
     end
 
     local raw, seen = {}, {}
-    for _, entry in ipairs(entries) do
-        local by = entry.kind == "sold" and entry.who
+    local function Note(by)
         if type(by) == "string" and by ~= "" and not seen[by] then
             seen[by] = true
             raw[#raw + 1] = by
         end
+    end
+    for _, sale in ipairs(older) do
+        if type(sale) == "table" then Note(sale.w) end
+    end
+    for _, entry in ipairs(entries) do
+        Note(entry.kind == "sold" and entry.who)
     end
 
     local characters = ns.Characters
@@ -524,7 +574,7 @@ function MethodProfit:Sellers()
         return a.key < b.key
     end)
 
-    self.sellersFor, self.sellersCount, self.sellers = entries, #entries, list
+    self.sellersFor, self.sellersCount, self.sellersOlder, self.sellers = entries, #entries, #older, list
     return list
 end
 

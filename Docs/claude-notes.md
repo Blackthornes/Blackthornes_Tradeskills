@@ -1251,6 +1251,16 @@ _G.BlackthornesFarmer.Looted:Has(itemID)   -- true or false; its own records onl
 Without Farmer it stays Other sales. If Farmer changes the call, change
 `MethodProfit:Farmed` too.
 
+Older auction sales (a player's report, 2026-11-20): the mail ledger keeps
+only its newest 400 entries (`MAX_LEDGER` in `Data/Mail.lua`), which a busy
+seller fills in a day, so every period from Today to All showed the same
+numbers. A sale trimmed off the ledger now goes to
+`MethodProfit:KeepOlderSale`, kept small in `methodLog[realm].sold` (never
+rename it; `t, id, nm, n, net, dep, c, b, w`), at most `MAX_OLDER_SALES`
+(6000) and pruned at `KEEP` (400 days). `Summary` and `Sellers` read it
+before the ledger. History trimmed before this fix is gone. Tested in
+`tools/test_methodprofit.lua` and `tools/test_mail.lua`.
+
 ## What the other addons want kept (the Sell list)
 
 The owner said build it (2026-10-16): the auction house drawer's Sell list
