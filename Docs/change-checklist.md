@@ -176,3 +176,11 @@ Check: A test that reads a link uses Forever's shape too
 Why: Suffix prices were tested with Classic links only
   (`item:1076::::::612`), so they passed while no copy in the game was
   ever matched to its suffix (2026-11-19).
+  list stretched every Butler tab off the bottom of the screen (2026-11-18).
+
+## Two values from one call
+Lines: local \w+, \w+ = [^,]+ and [\w.:]+\(
+Check: `local x, y = thing and Call()` keeps only the first value, so `y` is
+  always nil. Declare the locals, then `if thing then x, y = Call() end`.
+Why: The trip line never drew on the world map: y was nil and the draw
+  raised inside its pcall, in all five addons (2026-11-20).
