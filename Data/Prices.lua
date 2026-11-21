@@ -1970,6 +1970,10 @@ function Prices:SetFavourite(itemID, on, name)
         ns.db.favouritePrices[itemID] = nil
     end
 
+    -- A list kept until the prices change (the Prices tab's) shows a
+    -- starred item with no price, so a star counts as a change.
+    self:Touch(itemID)
+
     -- A starred item keeps an hour by hour price history from the next scan.
     if ns.PriceHistory then ns.PriceHistory:Retrack() end
 end
@@ -2134,6 +2138,8 @@ function Prices:Prune()
 
     if removed > 0 then
         ns.Debug(("removed %d old price(s)"):format(removed))
+        -- No one item: lists kept until the prices change build again.
+        self:Touch()
     end
     return removed
 end
@@ -2175,6 +2181,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
+        self:Touch()
         ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, more than anyone could pay",
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end

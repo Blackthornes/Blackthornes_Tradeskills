@@ -1,0 +1,508 @@
+-- Swapping tabs stalled for a moment at the auction house (the owner's
+-- report, 2026-11-21). Picking a tab did all of its work in one frame.
+--
+-- What each pick did, and what it must do now (the smooth play rule):
+--   1. Prices built a row for every priced item, read each one's stock
+--      history and trend, and sorted them all. Now the sorted rows are kept
+--      until the prices, a star, the filters or the sort change. Kept rows
+--      read their age again, and a search is never kept.
+--   2. Profit analysed every recipe at once. Now, once it has drawn, a pick
+--      keeps the rows it had and analyses a few recipes a frame, then draws
+--      the same list an at-once refresh gives. Any other refresh answers at
+--      once and drops a ranking under way. Leaving the tab drops it too.
+--   3. A tab whose onShow is its refresh (Settings) drew twice. Now once.
+--      And every pick builds the queue's costs once (Queue:Keeping).
+
+-- Tests share one Lua state, so every global replaced here is put back,
+-- including the ones that were not set at all.
+local GLOBALS = { "ProfessionsFrame", "MailFrame", "CreateFrame", "UIParent", "GameTooltip",
+    "GetCursorPosition", "C_Timer", "UISpecialFrames", "tinsert", "GetTime", "time",
+    "AuctionHouseFrame", "BlackthornesWindow" }
+local saved = {}
+for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
+
+local function noop() end
+
+local passed, failed = 0, 0
+local function check(label, got, want)
+    local ok = got == want
+    if ok then passed = passed + 1 else failed = failed + 1 end
+    print(string.format("  %-64s %-10s %s", label, tostring(got), ok and "ok" or
+        ("WRONG, wanted " .. tostring(want))))
+end
+
+--------------------------------------------------------------------------------
+-- 1. Prices
+--------------------------------------------------------------------------------
+
+print("1. the Prices tab keeps its rows")
+
+do
+    local clock = 1000000
+    time = function() return clock end
+
+    local ITEMS = 300
+    local prices = {}
+    for itemID = 1, ITEMS do prices[itemID] = { market = itemID * 10, seen = clock - itemID } end
+
+    local read, stars = 0, {}
+    local ns = {
+        Theme = {}, Widgets = {},
+        Util = {
+            HasFunction = function() return false end,
+            Count = function(tbl) local n = 0; for _ in pairs(tbl) do n = n + 1 end; return n end,
+        },
+        UI = { RegisterTab = noop },
+        Config = { changes = 0 },
+        Mail = { GetLedger = function() return { entries = {} } end },
+        db = { characters = {} },
+    }
+    ns.Prices = {
+        changes = 0,
+        GetTable = function() return prices end,
+        GetAge = function(_, itemID) return prices[itemID] and clock - prices[itemID].seen or nil end,
+        GetSalesPerDay = function() read = read + 1; return nil end,
+        GetFavourites = function() return stars end,
+    }
+
+    assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+    assert(loadfile(lfs_cwd .. "/UI/Tab_Prices.lua"))("Blackthornes_TS", ns)
+    local List = ns.UI._PricesList
+
+    local first = List("")
+    check("the first pick reads every item", read, ITEMS)
+    check("and lists them all", #first, ITEMS)
+    check("dearest first", first[1].itemID, ITEMS)
+
+    clock = clock + 60
+    local again = List("")
+    check("a second pick reads none again", read, ITEMS)
+    check("and gives the same rows in the same order", again[1] == first[1] and again[ITEMS] == first[ITEMS], true)
+    check("with their age read again", again[1].age, ITEMS + 60)
+
+    -- A scan priced one item.
+    prices[7].market = 99999
+    ns.Prices.changes = ns.Prices.changes + 1
+    local scanned = List("")
+    check("a new price builds the list again", read, ITEMS * 2)
+    check("and the item moves to the top", scanned[1].itemID, 7)
+
+    -- A starred item with no price shows with dashes.
+    stars[9001] = true
+    ns.Prices.changes = ns.Prices.changes + 1
+    check("a star on an unpriced item adds its row", #List(""), ITEMS + 1)
+    stars[9001] = nil
+    check("a star gone without a count still drops it", #List(""), ITEMS)
+
+    -- A setting (the trend's days) and the day itself.
+    local before = read
+    ns.Config.changes = ns.Config.changes + 1
+    List("")
+    check("a changed setting builds again", read > before, true)
+    before = read
+    clock = clock + 86400
+    List("")
+    check("so does a new day", read > before, true)
+
+    -- Searching wants names, which arrive late from the game: never kept.
+    before = read
+    List("zzz")
+    List("zzz")
+    check("a search is built each time", read, before + ITEMS * 2)
+
+    before = read
+    List("")
+    check("and the plain list after it is the kept one still", read, before)
+
+    ns.UI._PricesForget()
+end
+
+--------------------------------------------------------------------------------
+-- 2. Profit
+--------------------------------------------------------------------------------
+
+print("")
+print("2. the Profit tab ranks a few recipes a frame when picked")
+
+do
+    local function NewFrame(kind)
+        local f = { kind = kind, scripts = {}, shown = true, text = "", points = {} }
+        setmetatable(f, { __index = function(_, k)
+            if type(k) == "string" and k:match("^%u") then return noop end
+        end })
+        f.SetScript = function(self, n, fn) self.scripts[n] = fn end
+        f.GetScript = function(self, n) return self.scripts[n] end
+        f.Show = function(self) self.shown = true end
+        f.Hide = function(self) self.shown = false end
+        f.SetShown = function(self, v) self.shown = v and true or false end
+        f.IsShown = function(self) return self.shown end
+        f.IsVisible = function(self) return self.shown end
+        f.SetText = function(self, t) self.text = t end
+        f.GetText = function(self) return self.text end
+        f.GetStringWidth = function(self) return #tostring(self.text or "") * 6 end
+        f.CreateTexture = function() return NewFrame() end
+        f.CreateFontString = function() return NewFrame() end
+        f.GetParent = function() return NewFrame() end
+        f.HasFocus = function() return false end
+        return f
+    end
+
+    CreateFrame = function(kind) return NewFrame(kind) end
+    UIParent = NewFrame()
+    GameTooltip = NewFrame()
+    C_Timer = { After = noop, NewTicker = function() return { Cancel = noop } end }
+    GetTime = function() return 1000 end
+
+    local ns = {}
+    ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
+    ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
+    ns.RegisterCommand, ns.RegisterEvent = noop, noop
+    ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = noop, noop, noop, noop
+    ns.Theme = setmetatable({
+        FONT = "font",
+        sizes = { tiny = 10, small = 11, normal = 12, large = 14, title = 16 },
+        Unpack = function(key) return key end,
+        ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
+        CreateHeading = function() local h = NewFrame(); h.rule = NewFrame(); return h end,
+        FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
+        TextWidth = function() return nil end,
+    }, { __index = function(_, k)
+        if type(k) == "string" and k:match("^%u") then return function() return NewFrame() end end
+    end })
+    ns.Config = { Get = function() return nil end, GetCharacterKey = function() return "me" end }
+
+    -- A worker that does PER_FRAME items each time the test steps a frame.
+    local PER_FRAME, workers = 10, {}
+    ns.Util = {
+        GetItemQualityColor = noop,
+        FormatMoney = function(copper) return tostring(copper or 0) end,
+        FormatAge = function() return "1h" end,
+        GetItemLabel = function(itemID) return "item" .. tostring(itemID) end,
+        HasFunction = function() return false end,
+        NewWorker = function(opts)
+            local worker = { index = 0, running = false }
+            function worker:Start(items)
+                self.items, self.index, self.running = items, 0, true
+                workers[#workers + 1] = self
+                return self
+            end
+            function worker:Cancel() self.running = false end
+            function worker:Step()
+                local done = 0
+                while self.running and self.index < #self.items and done < PER_FRAME do
+                    self.index = self.index + 1
+                    done = done + 1
+                    opts.onItem(self.items[self.index], self.index, self)
+                end
+                if self.running and self.index >= #self.items then
+                    self.running = false
+                    if opts.onDone then opts.onDone(self) end
+                end
+            end
+            return worker
+        end,
+    }
+    local function Frame()
+        local stepped = false
+        for _, worker in ipairs(workers) do
+            if worker.running then worker:Step(); stepped = true end
+        end
+        return stepped
+    end
+    local function Frames()
+        local count = 0
+        while Frame() do count = count + 1 end
+        return count
+    end
+
+    assert(loadfile(lfs_cwd .. "/UI/Widgets.lua"))("Blackthornes_TS", ns)
+    assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
+
+    local list
+    ns.Widgets.CreateScrollList = function(_, opts)
+        list = NewFrame()
+        list.opts = opts
+        list.SetData = function(self, data) self.data = data; self.sets = (self.sets or 0) + 1 end
+        return list
+    end
+
+    -- Fifty crafts, each worth its number; `boost` lifts one, as a new price would.
+    local RECIPES, analysed, boost = 50, 0, {}
+    local recipes = {}
+    for recipeID = 1, RECIPES do recipes[recipeID] = { name = "Craft " .. recipeID } end
+    ns.Profit.Analyse = function(_, recipeID)
+        analysed = analysed + 1
+        local profit = recipeID * 10 + (boost[recipeID] or 0)
+        return { recipeID = recipeID, name = "Craft " .. recipeID, outputItemID = recipeID, priceable = true,
+            totalCost = 10, revenue = profit + 10, unitRevenue = profit + 10, cut = 0, profit = profit,
+            margin = 0.5, craftableNow = 1, cost = { reagents = {} }, stock = 0, posted = 0, onHand = 0,
+            inMail = 0, queuedElsewhere = 0, postRoom = 9, roomInCrafts = 9, atPostLimit = false,
+            priceBasis = "market", depositKnown = true, deposit = 0 }
+    end
+    ns.Recipes = { Count = function() return RECIPES end, GetAll = function() return recipes end,
+        GetAccountWide = function() return recipes end, IsDropped = function() return false end,
+        GetAny = function(_, recipeID) return recipes[recipeID], "me" end }
+    ns.Prices = { Count = function() return 1 end }
+    ns.Auctions = { SetLimit = noop }
+    ns.db = { characters = {} }
+    ns.Queue = { Add = function() return true end }
+
+    local tabs = {}
+    ns.UI = setmetatable({ activeTab = "profit", RegisterTab = function(_, tab) tabs[tab.key] = tab end },
+        { __index = function(_, k) if type(k) == "string" and k:match("^%u") then return noop end end })
+
+    assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+    assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
+
+    local function Order(data)
+        local ids = {}
+        for index, analysis in ipairs(data) do ids[index] = analysis.recipeID end
+        return table.concat(ids, ",")
+    end
+    -- What UI:SelectTab does with the tab.
+    local function Pick()
+        tabs.profit.onShow()
+        tabs.profit.refreshPicked()
+    end
+
+    check("the tab has a redraw for when it is picked", type(tabs.profit.refreshPicked), "function")
+
+    tabs.profit.build(NewFrame())
+    Pick()
+    check("the first pick draws at once, never an empty list", #(list.data or {}), RECIPES)
+    check("every recipe analysed in that frame", analysed, RECIPES)
+    check("the best craft on top", list.data[1].recipeID, RECIPES)
+    local firstRows = list.data
+
+    -- Picked again: the rows stay, and the work is spread.
+    analysed = 0
+    Pick()
+    check("picked again, the pick itself analyses nothing", analysed, 0)
+    check("and the rows it had stay up", list.data == firstRows, true)
+    Frame()
+    check("a frame later a few recipes are done", analysed, PER_FRAME)
+    check("the old rows still up", list.data == firstRows, true)
+    local frames = Frames() + 1
+    check("done over several frames", frames, RECIPES / PER_FRAME)
+    check("then the list is drawn", list.data ~= firstRows, true)
+    local spreadOrder = Order(list.data)
+    tabs.profit.onShow()
+    tabs.profit.refresh()
+    check("the same list an at-once refresh gives", Order(list.data), spreadOrder)
+
+    -- A price changed while the tab was away: the spread ranking shows it.
+    boost[3] = 100000
+    Pick()
+    Frames()
+    check("a craft worth more now is on top after the frames", list.data[1].recipeID, 3)
+
+    -- A click or an event refreshes while a ranking is under way.
+    boost[3], boost[5] = nil, 100000
+    Pick()
+    Frame()
+    local sets = list.sets
+    tabs.profit.refresh()
+    check("a refresh under way answers at once", list.sets, sets + 1)
+    check("with what is true now", list.data[1].recipeID, 5)
+    analysed = 0
+    check("and the ranking under way is dropped", Frames(), 0)
+    check("analysing nothing more", analysed, 0)
+
+    -- Another tab picked before the ranking is done.
+    Pick()
+    Frame()
+    sets, analysed = list.sets, 0
+    ns.UI.activeTab = "queue"
+    Frames()
+    check("leaving the tab stops the ranking", analysed, 0)
+    check("and draws nothing behind the other tab", list.sets, sets)
+    ns.UI.activeTab = "profit"
+    Pick()
+    Frames()
+    check("coming back ranks afresh", list.data[1].recipeID, 5)
+
+    -- GetRanked is its three steps run straight through.
+    local opts = { includeUnpriceable = true }
+    local steps = ns.Profit:BeginRanked(opts)
+    for _, item in ipairs(steps.items) do ns.Profit:RankOne(steps, item) end
+    check("the three steps give GetRanked's list",
+        Order(ns.Profit:FinishRanked(steps)), Order(ns.Profit:GetRanked(opts)))
+end
+
+--------------------------------------------------------------------------------
+-- 3. Picking a tab
+--------------------------------------------------------------------------------
+
+print("")
+print("3. picking a tab")
+
+do
+    local function Region(parent)
+        local region = { parent = parent, shown = true, width = 0, height = 0, scale = 1,
+            points = {}, scripts = {}, frameLevel = 1 }
+        region.SetParent = function(self, p) self.parent = p end
+        region.GetParent = function(self) return self.parent end
+        region.SetSize = function(self, w, h) self.width, self.height = w, h end
+        region.SetWidth = function(self, w) self.width = w end
+        region.SetHeight = function(self, h) self.height = h end
+        region.GetWidth = function(self) return self.width end
+        region.GetHeight = function(self) return self.height end
+        region.SetScale = function(self, s) self.scale = s end
+        region.GetScale = function(self) return self.scale end
+        region.GetEffectiveScale = function(self) return self.scale end
+        region.SetPoint = function(self, point, relativeTo, relativePoint, x, y)
+            if type(relativeTo) ~= "table" then
+                relativeTo, relativePoint, x, y = self.parent, point, relativeTo, relativePoint
+            end
+            self.points = { { point, relativeTo, relativePoint, x or 0, y or 0 } }
+        end
+        region.ClearAllPoints = function(self) self.points = {} end
+        region.GetPoint = function(self)
+            local p = self.points[1]
+            if not p then return nil end
+            return p[1], p[2], p[3], p[4], p[5]
+        end
+        region.Show = function(self) self.shown = true end
+        region.Hide = function(self) self.shown = false end
+        region.SetShown = function(self, on) self.shown = on and true or false end
+        region.IsShown = function(self) return self.shown end
+        region.SetScript = function(self, name, fn) self.scripts[name] = fn end
+        region.GetScript = function(self, name) return self.scripts[name] end
+        region.HookScript = function(self, name, fn) self.scripts[name] = fn end
+        region.GetRegions = function() end
+        region.GetFrameLevel = function(self) return self.frameLevel end
+        region.SetFrameLevel = function(self, level) self.frameLevel = level end
+        region.CreateTexture = function(self) return Region(self) end
+        region.CreateFontString = function(self) return Region(self) end
+        region.GetStringWidth = function() return 40 end
+        region.GetUnboundedStringWidth = function() return 40 end
+        region.GetStringHeight = function() return 12 end
+        return setmetatable(region, { __index = function(_, key)
+            if type(key) == "string" and key:match("^%u") then return noop end
+        end })
+    end
+
+    CreateFrame = function(_, _, parent) return Region(parent) end
+    UIParent = Region()
+    UIParent.width, UIParent.height = 1280, 720
+    GameTooltip = Region()
+    GetCursorPosition = function() return 0, 0 end
+    C_Timer = { After = noop }
+    UISpecialFrames = {}
+    tinsert = table.insert
+    GetTime = function() return 0 end
+    time = os.time
+
+    local settings = {}
+    local ns = {}
+    ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
+    ns.NewModule = function(name) local m = ns[name] or {}; ns[name] = m; return m end
+    ns.RegisterCommand = noop
+    ns.RegisterEvent = function() return true end
+    ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = noop, noop, noop, noop
+    ns.db = { global = {}, settings = settings }
+    ns.Config = {
+        DEFAULTS = { settings = { windowScale = 1 } },
+        Get = function(_, key) return settings[key] end,
+        Set = function(_, key, value) settings[key] = value end,
+    }
+    ns.Scanner = { isAuctionHouseOpen = false, CanFullScan = function() return true end, StartFullScan = noop }
+    ns.Prices = { Count = function() return 0 end, GetLastScan = noop }
+    ns.Recipes = { Count = function() return 0 end }
+    ns.VersionLabel = function() return "v1.4.0" end
+    ns.Titanforged = {
+        Dress = function(_, frame)
+            local trim = Region(frame)
+            trim.closeButton = Region(trim)
+            frame.titan = trim
+            return trim
+        end,
+        Reach = function() return 0, 0, 0, 0 end,
+        Opened = noop,
+    }
+    ns.FoldWindow = {
+        Add = function(_, frame)
+            local button = Region(frame.titan)
+            frame.blackthornesFold = { button = button }
+            return button
+        end,
+        Unfold = noop,
+    }
+
+    local function Load(path) assert(loadfile(lfs_cwd .. path))("Blackthornes_TS", ns) end
+    _G.BlackthornesWindow = nil
+    Load("/Core/Util.lua")
+    Load("/UI/Theme.lua")
+    Load("/UI/Widgets.lua")
+    Load("/UI/SharedWindow.lua")
+    Load("/UI/Main.lua")
+
+    local UI = ns.UI
+
+    -- The queue's costs are built once for a whole redraw inside Keeping.
+    local keeping, builds, kept = 0, 0, nil
+    ns.Queue = {
+        Keeping = function(_, fn, ...)
+            keeping = keeping + 1
+            local ok, err = pcall(fn, ...)
+            keeping = keeping - 1
+            if keeping == 0 then kept = nil end
+            if not ok then error(err, 0) end
+        end,
+        GetEntryCosts = function()
+            if keeping == 0 then builds = builds + 1; return {} end
+            if not kept then builds = builds + 1; kept = {} end
+            return kept
+        end,
+    }
+
+    local drawn = { settings = 0, profitPlain = 0, profitPicked = 0, shown = 0 }
+    local order = {}
+    UI:RegisterTab({ key = "profit", text = "Profit", order = 1, build = noop,
+        onShow = function() order[#order + 1] = "show" end,
+        refresh = function() drawn.profitPlain = drawn.profitPlain + 1 end,
+        refreshPicked = function() drawn.profitPicked = drawn.profitPicked + 1; order[#order + 1] = "draw" end })
+    UI:RegisterTab({ key = "queue", text = "Queue", order = 2, build = noop,
+        refresh = function()
+            -- The rows, the totals and the shopping list each ask.
+            ns.Queue:GetEntryCosts(); ns.Queue:GetEntryCosts(); ns.Queue:GetEntryCosts()
+        end })
+    local function SettingsRefresh() drawn.settings = drawn.settings + 1 end
+    UI:RegisterTab({ key = "settings", text = "Settings", order = 99, build = noop,
+        onShow = SettingsRefresh, refresh = SettingsRefresh })
+    UI:RegisterTab({ key = "broken", text = "Broken", order = 50, build = noop,
+        refresh = function() error("this tab broke") end })
+
+    ns.SharedMinimap = { Join = noop }
+    UI.minimapButton = {}
+    UI:JoinSharedMinimap()
+    UI:Show()
+
+    drawn.settings = 0
+    UI:SelectTab("settings")
+    check("Settings draws once when picked, not twice", drawn.settings, 1)
+
+    builds = 0
+    UI:SelectTab("queue")
+    check("Queue builds its costs once when picked", builds, 1)
+    check("and nothing is kept past the pick", keeping, 0)
+
+    drawn.profitPlain, drawn.profitPicked, order = 0, 0, {}
+    UI:SelectTab("profit")
+    check("Profit takes its lighter redraw when picked", drawn.profitPicked, 1)
+    check("and not the at-once one as well", drawn.profitPlain, 0)
+    check("after its onShow", table.concat(order, ","), "show,draw")
+    UI:RefreshActiveTab()
+    check("any other refresh is the at-once one", drawn.profitPlain, 1)
+
+    local ok, err = pcall(UI.SelectTab, UI, "broken")
+    check("a tab that breaks still says so", ok, false)
+    check("in its own words", tostring(err):find("this tab broke", 1, true) ~= nil, true)
+    check("and leaves nothing kept", keeping, 0)
+end
+
+for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
+
+print("")
+if failed > 0 then error(("%d tab stall check(s) failed"):format(failed)) end
+print(("  tab stall: all %d checks passed"):format(passed))

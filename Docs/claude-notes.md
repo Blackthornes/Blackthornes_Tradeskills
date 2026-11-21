@@ -3379,3 +3379,31 @@ plain one. `Mail:FoldNamedSales` gives every own ledger entry with no
 `itemID` the one it can be told, at login (5 s) and after a mailbox read
 writes; it only adds `itemID`, nothing else changes. Tested in
 `tools/test_salesnames.lua`. Not yet seen in game.
+
+## Picking a tab (stalls swapping tabs, 2026-11-21)
+
+The owner's report: a short stall each time a tab was picked at the auction
+house. `UI:SelectTab` ran the tab's whole refresh in one frame. What it does
+now, tested in `tools/test_tabstall.lua`:
+
+- **Prices** keeps its sorted rows (`keptRows` in `UI/Tab_Prices.lua`) until
+  what they are built from changes: the price table and `Prices.changes`, a
+  setting (`Config.changes`), the day, the trend's days, the sort and
+  heading, the three tick boxes, and how many stars and own prices there
+  are. Kept rows get `age`, `suffixCount` and `open` read again. Never kept
+  while names are wanted (a search, a sort by name) or under Reagents Only.
+  `Prices:SetFavourite`, `Prune` and `Scrub` now call `Prices:Touch`, so
+  anything that adds or drops a row counts as a change; a new writer of the
+  price table must Touch too. About 170 ms down to 7 for 7,300 items.
+- **Profit** has `refreshPicked` on its tab: once My Crafts has drawn, a pick
+  keeps the rows up and ranks a few recipes a frame (`Util.NewWorker`, 4 ms),
+  then draws. `Profit:GetRanked` is `BeginRanked`, `RankOne` and
+  `FinishRanked` run straight through, so both give the same list. Any other
+  refresh answers at once and drops a ranking under way; so does leaving
+  the tab or the view. The first draw is at once.
+- **Every pick** runs inside `Queue:Keeping` (one build of the costs and
+  shopping list), and a tab whose `onShow` is its `refresh` (Settings) draws
+  once.
+
+A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
+stays the at-once one every event uses.

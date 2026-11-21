@@ -1425,6 +1425,21 @@ end
 --               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi",
 --               method = see Analyse }
 function Profit:GetRanked(opts)
+    local ranking = self:BeginRanked(opts)
+    for _, item in ipairs(ranking.items) do
+        self:RankOne(ranking, item)
+    end
+    return self:FinishRanked(ranking)
+end
+
+-- GetRanked in three steps, so a list that need not answer at once can
+-- analyse a few recipes a frame (the smooth play rule; the Profit tab does
+-- when it is picked): BeginRanked lists the recipes, RankOne analyses one
+-- and keeps it if it belongs, FinishRanked sorts what was kept. Run straight
+-- through they are GetRanked.
+
+--- @return ranking { items = { { recipeID, recipe }, ... }, results = {} }
+function Profit:BeginRanked(opts)
     opts = opts or {}
 
     -- Numbers given by the caller hold for every craft; otherwise each
@@ -1449,52 +1464,66 @@ function Profit:GetRanked(opts)
         return fixedProfit or profit, (fixedMargin or margin) / 100
     end
 
-    local results = {}
-
     -- Account-wide pulls in every character's cached recipes, each analysed
     -- against the bags of whoever actually knows it.
     -- Crafts of a profession the character has dropped are left out.
     local source = opts.accountWide and ns.Recipes:GetAccountWide(true) or ns.Recipes:GetAll()
 
+    local items = {}
     for recipeID, recipe in pairs(source) do
-        local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
-            and ns.Recipes:IsDropped(recipe)
-        -- An ignored craft is never analysed, so it is gone everywhere this
-        -- list is used: the rows, Queue All and the empty-list message.
-        local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
-        local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
+        items[#items + 1] = { recipeID = recipeID, recipe = recipe }
+    end
 
-        if analysis then
-            local keep = true
+    return { opts = opts, items = items, results = {}, Minimums = Minimums }
+end
 
-            if not analysis.priceable then
-                keep = opts.includeUnpriceable == true
-            else
-                local minProfit, minMargin = Minimums(analysis)
-                if analysis.profit < minProfit then keep = false end
-                if keep and analysis.margin < minMargin then keep = false end
-                if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+--- Analyse one recipe of a ranking and keep it if it belongs on the list.
+function Profit:RankOne(ranking, item)
+    local opts, results, Minimums = ranking.opts, ranking.results, ranking.Minimums
+    local recipeID, recipe = item.recipeID, item.recipe
 
-                -- Already holding as many as you want listed. Not a row
-                -- already on screen, though: queueing up to the limit would
-                -- make it vanish under the cursor.
-                if keep and analysis.atPostLimit
-                   and ns.Config:Get("hideAtPostLimit") ~= false
-                   and not opts.ignorePostLimit
-                   and not (opts.keepOrder and opts.keepOrder[recipeID]) then
-                    keep = false
-                end
-            end
+    local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
+        and ns.Recipes:IsDropped(recipe)
+    -- An ignored craft is never analysed, so it is gone everywhere this
+    -- list is used: the rows, Queue All and the empty-list message.
+    local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
+    local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
 
-            if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+    if analysis then
+        local keep = true
+
+        if not analysis.priceable then
+            keep = opts.includeUnpriceable == true
+        else
+            local minProfit, minMargin = Minimums(analysis)
+            if analysis.profit < minProfit then keep = false end
+            if keep and analysis.margin < minMargin then keep = false end
+            if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+
+            -- Already holding as many as you want listed. Not a row
+            -- already on screen, though: queueing up to the limit would
+            -- make it vanish under the cursor.
+            if keep and analysis.atPostLimit
+               and ns.Config:Get("hideAtPostLimit") ~= false
+               and not opts.ignorePostLimit
+               and not (opts.keepOrder and opts.keepOrder[recipeID]) then
                 keep = false
             end
+        end
 
-            if keep then
-                results[#results + 1] = analysis
-            end
+        if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+            keep = false
+        end
+
+        if keep then
+            results[#results + 1] = analysis
         end
     end
+end
+
+--- Sort what a ranking kept. @return the list GetRanked gives
+function Profit:FinishRanked(ranking)
+    local opts, results = ranking.opts, ranking.results
 
     local sortBy = opts.sortBy or "profit"
 

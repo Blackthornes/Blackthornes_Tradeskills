@@ -147,6 +147,46 @@ end
 
 local SortRows, SuffixMatcher, AddSuffixRows
 
+-- Picking the tab built a row for every priced item (thousands after a
+-- scan), read each one's stock history and trend, and sorted them all, in
+-- one frame (the owner's report, 2026-11-21, swapping tabs at the auction
+-- house). The sorted rows are now kept until something they are built from
+-- changes: the prices (Prices.changes, counted for stars, own prices and
+-- pruning too), a setting, the day the trend is measured from, or the
+-- filters and sort. Kept rows get their age and suffix count read again,
+-- since those move with the clock. Not kept while names are wanted (a
+-- search or a sort by name: names arrive late from the game) or under
+-- Reagents Only (it follows the recipes).
+local keptRows = { key = nil, rows = nil }
+
+local function KeptKey(prices, trendDays)
+    local sorter = widgets.sorter
+    return table.concat({
+        tostring(prices), tostring(ns.Prices.changes or 0),
+        tostring(ns.Config and ns.Config.changes or 0),
+        tostring(math.floor(time() / 86400)), tostring(trendDays),
+        tostring(state.sortBy), tostring(sorter and sorter.key), tostring(sorter and sorter.ascending),
+        tostring(state.favouritesOnly), tostring(state.mineOnly), tostring(state.enchantingOnly),
+        tostring(Util.Count and Util.Count(ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {})),
+        tostring(Util.Count and Util.Count(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {})),
+    }, ":")
+end
+
+--- The kept rows with what the clock moves read again, or nil.
+local function KeptRows(key)
+    if keptRows.key ~= key or not keptRows.rows then return nil end
+    for _, row in ipairs(keptRows.rows) do
+        row.age = ns.Prices:GetAge(row.itemID) or math.huge
+        row.suffixCount = type(row.record.suffixes) == "table" and ns.Prices.SuffixCount
+            and ns.Prices:SuffixCount(row.itemID) or 0
+        row.open = nil
+    end
+    return keptRows.rows
+end
+
+--- Forget the kept rows (for the tests, whose pretend prices change).
+function UI._PricesForget() keptRows.key, keptRows.rows = nil, nil end
+
 local function BuildList()
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
@@ -160,6 +200,11 @@ local function BuildList()
 
     local prices = ns.Prices:GetTable()
     local trendDays = ns.Prices.TrendDays and ns.Prices:TrendDays() or 7
+
+    local keepKey = not wantNames and not reagents and type(time) == "function"
+        and Util and Util.Count and KeptKey(prices, trendDays) or nil
+    local kept = keepKey and KeptRows(keepKey)
+    if kept then return AddSuffixRows(kept) end
 
     -- The Enchanting tab's materials list lives here now
     -- (2026-10-07): every enchanting material, priced or not.
@@ -245,6 +290,7 @@ local function BuildList()
     end
 
     rows = SortRows(rows)
+    if keepKey then keptRows.key, keptRows.rows = keepKey, rows end
     return AddSuffixRows(rows)
 end
 
