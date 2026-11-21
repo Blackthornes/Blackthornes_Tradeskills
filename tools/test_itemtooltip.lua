@@ -211,7 +211,7 @@ check("a stale price is still shown", lines[1][2], "<1500>  (3h ago)")
 
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
 check("a stack adds a second line", #lines, 2)
-check("named for the count", lines[2][1], "Stack of 20")
+check("named for the count", lines[2][1], "Stack of 20:")
 check("worth the multiple", lines[2][2], ("<%d>"):format(2300 * 20))
 
 check("a single item adds nothing", #ItemTooltip:LinesFor(LINEN_CLOTH, 1), 1)
@@ -380,7 +380,7 @@ RECORDS[LINEN_CLOTH] = { market = 2300, min = 1900 }
 ns.Prices.LowestListed = nil
 
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
-check("a stack total comes after it", lines[3][1], "Stack of 20")
+check("a stack total comes after it", lines[3][1], "Stack of 20:")
 
 tooltip = Tooltip(LINEN_CLOTH)
 ItemTooltip:Decorate(tooltip, nil, nil)
@@ -417,13 +417,13 @@ ns.Writs = {
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
 local opened
 for i, line in ipairs(lines) do
-    if line[1] == "You opened 6" then opened = i end
+    if line[1] == "You Opened 6:" then opened = i end
 end
 check("a sealed writ says how many were opened", opened ~= nil, true)
 check("then each writ that came out", lines[opened + 1][1] .. " " .. lines[opened + 1][2], "Bolt of Silk Cloth 3 of 6")
 check("and what the writ inside is worth", lines[opened + 3][1], "Writ inside worth about")
 check("other items get no sealed lines", #ItemTooltip:LinesFor(SILK_CLOTH, nil) > 0
-    and ItemTooltip:LinesFor(SILK_CLOTH, nil)[1][1] ~= "You opened 6", true)
+    and ItemTooltip:LinesFor(SILK_CLOTH, nil)[1][1] ~= "You Opened 6:", true)
 ns.Writs = nil
 
 ns.Prices.Get = nil
@@ -556,6 +556,38 @@ do
   ns.settings.staleAfterSeconds = nil
   check("not linked: back to not scanned yet", ItemTooltip:LinesFor(RUNECLOTH, nil)[1][2], "not scanned yet")
   time = realTime
+end
+
+-- The shared tooltip block (2026-11-21): Tradeskills hands its lines over,
+-- named in Title Case ending ":", with the stack read from the bag slot.
+do
+  check("block name for a value line", ItemTooltip.BlockLabel("Auction value"), "Auction Value:")
+  check("block name keeps an indent", ItemTooltip.BlockLabel("   Sold a day"), "   Sold a Day:")
+  check("a name not in the list stays", ItemTooltip.BlockLabel("   Linen Cloth"), "   Linen Cloth")
+  local plain = ItemTooltip.ToBlock({ "Auction value", "<2300>" })
+  check("value line name", plain[1], "Auction Value:")
+  check("value line answer", plain[2], "<2300>")
+  check("plain answer left white", plain.rightColor, nil)
+  local stale = ItemTooltip.ToBlock({ "Auction value", "not scanned yet", true })
+  check("an old or missing price is grey", stale.rightColor and math.floor(stale.rightColor[1] * 255 + 0.5), 0x7a)
+  check("an empty answer is a line on its own", ItemTooltip.ToBlock({ "On your wishlist", "" })[2], nil)
+
+  local realContainer = C_Container
+  C_Container = { GetContainerItemInfo = function(bag, slot)
+    if bag == 0 and slot == 3 then return { stackCount = 20 } end
+  end }
+  local tip = Tooltip(LINEN_CLOTH)
+  local button = { GetBagID = function() return 0 end, GetID = function() return 3 end }
+  function tip:GetOwner() return button end
+  local got, held = ItemTooltip:BlockLines(tip, nil)
+  check("block gets the value", got and got[1][1], "Auction Value:")
+  check("block reads the stack from the bag slot", got and got[2] and got[2][1], "Stack of 20:")
+  check("nothing held", held, nil)
+  function tip:GetOwner() error("secret value") end
+  got = ItemTooltip:BlockLines(tip, nil)
+  check("an owner that can't be read costs only the stack", got and #got, 1)
+  check("no lines for an item with nothing to say", ItemTooltip:BlockLines(Tooltip(123456), nil), nil)
+  C_Container = realContainer
 end
 
 print("test_itemtooltip: ok")
