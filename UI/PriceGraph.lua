@@ -478,7 +478,7 @@ local function CreatePickerIcon(graph, index)
     button.icon = icon
 
     button:SetScript("OnClick", function(self)
-        if Widgets.ItemShiftClick and Widgets.ItemShiftClick(self.itemID) then return end
+        if Widgets.ItemClick and Widgets.ItemClick(self.itemID) then return end
         graph.selected = self.itemID
         graph.suffix = nil
         graph:Refresh()
