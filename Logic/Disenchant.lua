@@ -658,38 +658,48 @@ function Disenchant:GetMaterialPrice(itemID)
     return value
 end
 
---- What disenchanting one of this item gives, in copper: its most likely
---- outcome. Anything rarer is a bonus and is not counted.
+--- What disenchanting one of this item gives, in copper, on average: each
+--- outcome's worth times its chance.
 --
 -- @return value, partial, breakdown
 --   value     nil when the item cannot be disenchanted, is not cached, or
 --             its most likely material has no price yet
---   partial   always nil now; kept so callers need not change
+--   partial   true when a rarer material has no price yet; it then counts
+--             as nothing, so the value is low rather than high
 --   breakdown { outcomes = { { itemID, name, chance, min, max, average,
---             price, worth }, ... }, facts }
+--             price, worth, counted, likely }, ... }, facts }
 function Disenchant:GetValue(itemID)
     local outcomes, facts = self:GetOutcomes(itemID)
     if not outcomes then return nil end
 
-    -- Valued at the most likely outcome alone (2026-10-03:
-    -- "disenchant value should be based on the highest chance outcome. Lucky
-    -- disenchants are a bonus."). A 20% essence or a 5% shard is not what
-    -- the next disenchant gives, so counting a share of it made breaking
-    -- an item down look better than it usually is.
+    -- Each disenchant gives one outcome, never the likely one plus extras
+    -- (a player's math, 2026-11-19: Burnside Rifle showed 1.5 essence at
+    -- 2g 85s, as if every disenchant gave it). Valuing an item at its most
+    -- likely outcome alone (2026-10-03) only played it safe when that
+    -- outcome was the cheapest; when it was the dearest it overstated. The
+    -- average over many disenchants is the honest number. The chances are
+    -- how often each material shows up, so they are not scaled to add up to
+    -- one: your own results can have a shard turn up beside the dust.
     local likely
     for index, outcome in ipairs(outcomes) do
         if not likely or outcome.chance > outcomes[likely].chance then likely = index end
     end
 
     local lines = {}
-    local value
+    local value = 0
+    local likelyPriced, partial = false, nil
 
     for index, outcome in ipairs(outcomes) do
         local average = outcome.average or (outcome.min + outcome.max) / 2
         local price = self:GetMaterialPrice(outcome.itemID)
         local worth = price and (price * average) or nil
 
-        if index == likely and worth then value = worth end
+        if worth then
+            value = value + worth * (outcome.chance or 0)
+            if index == likely then likelyPriced = true end
+        elseif index ~= likely then
+            partial = true
+        end
 
         lines[index] = {
             itemID = outcome.itemID,
@@ -701,17 +711,18 @@ function Disenchant:GetValue(itemID)
             price = price,
             -- What this outcome is worth when it is the one you get.
             worth = worth,
-            -- The outcome the value is; every other one is a bonus.
-            counted = index == likely,
+            -- Every outcome counts toward the value by its chance.
+            counted = true,
+            -- The one a disenchant most often gives.
+            likely = index == likely,
         }
     end
 
     local breakdown = { outcomes = lines, facts = facts }
 
-    if not value then return nil, nil, breakdown end
+    if not likelyPriced then return nil, nil, breakdown end
 
-    -- Never partial: only the one outcome counts, and it is priced.
-    return math.floor(value + 0.5), nil, breakdown
+    return math.floor(value + 0.5), partial, breakdown
 end
 
 --- Is this item an enchanting material a disenchant can give?
@@ -1328,10 +1339,9 @@ local function Report(input)
         local count = line.min == line.max and tostring(line.min)
             or ("%d-%d"):format(line.min, line.max)
 
-        ns.Print(("  %s%%  %sx %s  %s%s"):format(
+        ns.Print(("  %s%%  %sx %s  %s"):format(
             Util.Round(line.chance * 100, 1), count, Util.ColorItemName(line.itemID, line.name) or Util.GetItemLabel(line.itemID),
-            line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"],
-            line.counted and "" or L["  (bonus)"]))
+            line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"]))
     end
 
     if value then

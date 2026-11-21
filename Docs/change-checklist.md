@@ -141,3 +141,66 @@ Why: One key per character.
 Lines: ownAuctionHouse
 Check: It stays off and out of releases until the owner says it is done.
 Why: the owner's call.
+
+## A tooltip's SetText with colours
+Lines: GameTooltip:SetText\(
+Check: Colours go text, r, g, b, alpha, wrap. With a wrap, put the alpha in
+  too (`1, 1, 1, 1, true`); never `1, 1, 1, true`.
+Why: The Profit tab's "Each craft makes" hover left out the alpha, so the
+  wrap landed in the alpha slot and the game raised on every hover.
+
+## Column headings that hide or step aside
+Lines: Columns:Squeeze|Columns:Place\(.*headings|SortableHeadings
+Check: The sorter's `Sync()` runs after every heading layout, not only when
+  the set of hidden headings changes, and once right after the sorter is made.
+Why: Recipes to Learn synced only on a change. The game laid the headings
+  out while the sorter was being made, so hidden headings kept their clicks
+  at their old spots, and a click on SKILL sorted by DISENCHANT.
+
+## The game's pop-up box
+Lines: StaticPopup_Show|StaticPopup_Hide|StaticPopupDialogs
+Check: Never show, hide or add to the game's pop-ups from addon code. Ask in
+  a window of our own (UI/PostConfirm.lua). `tools/test_gamepopup.lua` fails
+  if a loaded file calls them.
+Why: The List It question used the game's pop-up. The game lent the same box
+  to "replace your weapon's enchant" later, and a Spellstone from the bags
+  was blocked: "Blackthornes_TS has been blocked from an action only
+  available to the Blizzard UI" (2026-11-19).
+
+## An item link in a test
+Files: tools/test_.*\.lua
+Lines: Hitem:
+Check: A test that reads a link uses Forever's shape too
+  (`item:15012::::::::18:1485:::1:12722`): the old suffix field is empty
+  and the suffix is a bonus ID. Copy a real link, never make one up.
+Why: Suffix prices were tested with Classic links only
+  (`item:1076::::::612`), so they passed while no copy in the game was
+  ever matched to its suffix (2026-11-19).
+
+## A flag whose meaning changes
+Lines: counted|likely|breakdown\.outcomes
+Check: When a field on a returned table comes to mean something else (or
+  is now set on every row), grep every reader of it across Logic/ and UI/
+  and change each one, and make the test stubs hand back the new shape.
+Why: Disenchant value became an average and `counted` went true on every
+  outcome; the Profit tab still picked the age's material by it and read
+  the rarest one, while its test stub kept the old shape (2026-11-20).
+
+
+## Two values from one call
+Lines: local \w+, \w+ = [^,]+ and [\w.:]+\(
+Check: `local x, y = thing and Call()` keeps only the first value, so `y` is
+  always nil. Declare the locals, then `if thing then x, y = Call() end`.
+Why: The trip line never drew on the world map: y was nil and the draw
+  raised inside its pcall, in all five addons (2026-11-20).
+
+
+## A client call that hands back more than one value
+Lines: GetTrainerServiceSkillReq|GetTrainerServiceInfo|GetProfessionInfo|GetSkillLineInfo
+Check: Read the value you want from the place the game gives it, not the
+  first return, and make the test's fake hand back every value in the
+  game's order. `GetTrainerServiceSkillReq` gives the skill's name first,
+  then the number, then whether it is met.
+Why: The trainer's skill was read from the name, so nothing was kept and
+  Road to 300 offered Rugged Armor Kit at 211 while the trainer asked 225;
+  the test's fake gave the number first (2026-11-21).

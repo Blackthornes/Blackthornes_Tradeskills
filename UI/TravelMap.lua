@@ -251,8 +251,10 @@ function TravelMap:Draw()
 
     for _, leg in ipairs(TravelMap.Legs(plan, here)) do
         local from, to = leg.from, leg.to
-        local x1, y1 = from and Place(from.continent, from.north, from.west)
-        local x2, y2 = to and Place(to.continent, to.north, to.west)
+        -- Not `from and Place(...)`: that keeps only x, and y reads as nil.
+        local x1, y1, x2, y2
+        if from then x1, y1 = Place(from.continent, from.north, from.west) end
+        if to then x2, y2 = Place(to.continent, to.north, to.west) end
         if x1 and x2 and from.continent == to.continent then
             for _, piece in ipairs(TravelMap.Pieces(leg.kind, x1, y1, x2, y2, aspect)) do
                 if lines >= TravelMap.MAX_PIECES then break end
@@ -270,7 +272,8 @@ function TravelMap:Draw()
         if x2 and leg.stop then AddDot(x2, y2, 0.012) end
     end
     local place = plan.place
-    local px, py = place and Place(place.continent, place.north, place.west)
+    local px, py
+    if place then px, py = Place(place.continent, place.north, place.west) end
     if px then AddDot(px, py, 0.02) end
     self:Trim(lines, dots)
 end

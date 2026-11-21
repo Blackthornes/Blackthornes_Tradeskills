@@ -718,6 +718,76 @@ do
     MailHaul.last = keptLast
 end
 
+--------------------------------------------------------------------------------
+print("")
+print("a busy seller keeps two months of visits, and the records never drop off")
+--------------------------------------------------------------------------------
+
+do
+    local realm = ns.Config:GetRealmKey()
+    local kept = ns.db.mailHauls[realm]
+    local keptLast = MailHaul.last
+    local DAY = 86400
+
+    -- A player found only 100 visits, two days back: a heavy seller fills
+    -- 100 in no time. 150 visits over the last two days, plus an old record.
+    local history = {}
+    local oldBest = { t = now - 90 * DAY, who = "A", total = 900000,
+        best = { name = "Gold", amount = 5000 } }
+    local oldSale = { t = now - 80 * DAY, who = "A", total = 3000,
+        best = { name = "Runecloth Bag", amount = 2900 } }
+    local oldPlain = { t = now - 70 * DAY, who = "A", total = 100, best = { name = "Linen Bag", amount = 100 } }
+    history[1], history[2], history[3] = oldBest, oldSale, oldPlain
+    for index = 1, 150 do
+        history[#history + 1] = { t = now - 2 * DAY + index * 60, who = "A", total = 1000,
+            best = { name = "Linen Bag", amount = 400 } }
+    end
+    ns.db.mailHauls[realm] = history
+
+    inbox = { Sold("Linen Bag", 600) }
+    Open()
+    Take(1)
+    local haul = Close()
+    MailReport.frame:Hide()
+
+    local saved = MailHaul:GetHistory()
+    local recent = 0
+    for _, visit in ipairs(saved) do
+        if visit.t >= now - 2 * DAY then recent = recent + 1 end
+    end
+    check("every visit from the last two days is still there", recent, 151)
+    check("the week counts all of them",                       haul.week, 150 * 1000 + 600)
+    check("the old visit with no record is gone",              (function()
+        for _, visit in ipairs(saved) do if visit == oldPlain then return false end end
+        return true end)(), true)
+    local bestHaul, bestSale = MailHaul:Records()
+    check("the best haul stays, though it is old",             bestHaul, 900000)
+    check("the best sale stays, though it is old",             bestSale, 5000)
+    check("oldest first, still",                               saved[1] == oldBest and saved[#saved].t == now, true)
+
+    -- Two thousand at most, the records kept even then.
+    local many = { oldBest }
+    for index = 1, 2100 do
+        many[#many + 1] = { t = now - DAY + index, who = "A", total = 10, best = { name = "Linen Bag", amount = 5 } }
+    end
+    MailHaul:TrimHistory(many, now)
+    check("never more than two thousand",                      #many, MailHaul.MAX_HAULS)
+    check("the record is still first",                         many[1], oldBest)
+    check("the oldest plain ones went",                        many[2].t, now - DAY + 102)
+
+    -- A player back from a long break keeps their last hundred.
+    local quiet = {}
+    for index = 1, 120 do
+        quiet[#quiet + 1] = { t = now - 200 * DAY + index, who = "A", total = index }
+    end
+    MailHaul:TrimHistory(quiet, now)
+    check("a long break still leaves a hundred",               #quiet, 100)
+    check("the newest hundred",                                quiet[1].t, now - 200 * DAY + 21)
+
+    ns.db.mailHauls[realm] = kept
+    MailHaul.last = keptLast
+end
+
 MailHaul:InvalidateMatchers()
 
 if failures > 0 then

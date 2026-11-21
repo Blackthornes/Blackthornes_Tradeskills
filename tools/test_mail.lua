@@ -1111,6 +1111,33 @@ do
     check("old prices are let go",               record.listedPrices[1], nil)
 end
 
+--------------------------------------------------------------------------------
+print("")
+print("a sale trimmed off a full ledger is kept for Profit by method")
+--------------------------------------------------------------------------------
+
+Reset()
+do
+    local kept = {}
+    ns.MethodProfit = { KeepOlderSale = function(_, entry) kept[#kept + 1] = entry end,
+        BuyCost = function() return nil end }
+    local full = Mail:GetLedger()
+    for i = 1, 400 do
+        full.entries[i] = { kind = "sold", name = "Old " .. i, net = 1, t = i }
+    end
+    inbox = {
+        { sender = "Auction House", subject = "Auction successful: Linen Bag",
+          money = 285,
+          invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                      bid = 300, buyout = 300, deposit = 40, cut = 15 } },
+    }
+    Mail:Read()
+    check("the ledger stays at its size",        #Mail:GetLedger().entries, 400)
+    check("the oldest sale is handed over",      kept[1] and kept[1].name, "Old 1")
+    check("only that one",                       #kept, 1)
+    ns.MethodProfit = nil
+end
+
 print("")
 if failures > 0 then
     error(("%d check(s) failed"):format(failures), 0)

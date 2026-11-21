@@ -135,9 +135,7 @@ local function UpdateRow(row, step)
     local plan = RoadView.plan
     local current = plan and plan.steps[plan.current] == step
 
-    if step.kind == "shop" then
-        row.icon:Hide()
-    elseif step.kind == "craft" and step.outputItemID then
+    if step.kind == "craft" and step.outputItemID then
         Theme.SetItemIcon(row.icon, step.outputItemID)
         row.icon:Show()
     elseif step.kind == "fish" then
@@ -155,7 +153,7 @@ local function UpdateRow(row, step)
         title = CHECK .. " " .. title
         row.name:SetTextColor(Theme.Unpack("dim"))
     elseif step.kind == "craft" then
-        title = TierColorCode(step.orange and "optimal" or "medium") .. title .. "|r"
+        title = TierColorCode(step.tier or (step.orange and "optimal") or "medium") .. title .. "|r"
         row.name:SetTextColor(Theme.Unpack("text"))
     else
         row.name:SetTextColor(Theme.Unpack(current and "accentHi" or "accent"))

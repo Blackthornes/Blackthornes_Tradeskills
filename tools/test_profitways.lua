@@ -82,7 +82,7 @@ ns.Posting = { MIN_DEPOSIT = 100, GetCachedUnitDeposit = function() return 3 end
 
 local Profit = ns.Profit
 
--- The belt disenchants to 2s of materials at the most likely result, and
+-- The belt disenchants to 2s of materials on average, and
 -- needs Enchanting 50. Who can disenchant is set per check below.
 local enchanterSkill
 local disenchantable = true
@@ -90,7 +90,12 @@ ns.Disenchant = {
     IsDisenchantable = function() return disenchantable end,
     GetValue = function()
         if disenchantable then
-            return 200, nil, { outcomes = { { itemID = DUST, counted = true }, { itemID = ESSENCE } } }
+            -- As Disenchant:GetValue hands them back since the value became
+            -- an average: every outcome counted, the usual one marked likely.
+            return 200, nil, { outcomes = {
+                { itemID = DUST, counted = true, likely = true },
+                { itemID = ESSENCE, counted = true, likely = false },
+            } }
         end
     end,
     GetBestEnchanter = function() return enchanterSkill, enchanterSkill and "Ana" or nil end,

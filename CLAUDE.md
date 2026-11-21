@@ -38,7 +38,7 @@ All read only, inside a pcall, no TOC dependency unless noted. If one changes, c
 - **Public price API for other authors:** `_G.BlackthornesTS_API` (`version`, `GetPrice`, `GetPriceAge`); never rename or change.
 - **Sharing:** `Core/Comm.lua` and `Core/Serialize.lua` are the same in Farmer (prefix `BTSshare` vs `BFRshare`); a fix belongs in both. The recipient name lists in `Logic/Contribute.lua` match Farmer's and Equipment's; change all three together.
 - **Shared files** the same in all five Forever addons (a fix belongs in all): `UI/SharedWindow.lua`, `UI/SharedMinimap.lua`, `UI/WhatsNew.lua`, `UI/About.lua`, `UI/HouseKit.lua`, `UI/TooltipShift.lua`, `UI/FoldWindow.lua`, `UI/BlizzardLook.lua`, `UI/SharedChoices.lua` (Mute All Sounds lives there: every sound goes through `ns.PlaySound` or `ns.PlaySoundFile` in `Core/Init.lua`, a new one too; see "Mute All Sounds" in Docs/claude-notes.md), `Core/SisterNote.lua`, `Logic/Travel.lua`.
-- **Shelves and dock places** (`UI/SharedWindow.lua` FILE_VERSION 13; nothing places the one window while it is dragged): floating pieces with no saved spot start on `SharedWindow.ShelfPlace`, and the craft pane and mail list become the one window's Crafting and Mail tabs. See "Shelves, dock places and the All Addons page" in Docs/claude-notes.md.
+- **Shelves and dock places** (`UI/SharedWindow.lua` FILE_VERSION 14, with the swap gem; nothing places the one window while it is dragged): floating pieces with no saved spot start on `SharedWindow.ShelfPlace`, and the craft pane and mail list become the one window's Crafting and Mail tabs. See "Shelves, dock places and the All Addons page" in Docs/claude-notes.md.
 
 ## Standing rules (short form; full wording in Docs/claude-notes.md, "Standing rules in full")
 
@@ -95,7 +95,8 @@ They are the same in every addon's notes; keep them the same.
   "Refresh shipped data", never announced, never the save or caches
   committed. If his PC can't be reached, ask once (Try again or Skip it).
   Tools: `tools/forever_vendor_spots.py <Blackthornes_TS.lua>`,
-  `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`, and
+  `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`,
+  `tools/forever_trainer_recipes.py <Blackthornes_TS.lua>`, and
   `tools/make_forever_recipes.py` after a client-table re-pull.
 
 ## Running the checks (keep the output small)

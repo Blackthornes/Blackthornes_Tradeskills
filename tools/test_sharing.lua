@@ -529,18 +529,21 @@ do
     clients[#clients] = nil
 end
 
--- Bob's own fresh scan always wins, and a far-off price is refused.
-Scan(bob, { [2589] = 1500 }, clock)
+-- Bob's own fresh scan wins over older guild prices, a guildmate's newer
+-- one replaces it (the owner, 2026-11-18), and a far-off price is refused.
+Scan(bob, { [2589] = 1500, [2590] = 2000 }, clock)
 current = bob
-check("Bob's fresh scan wins", bob.ns.Prices:GetValue(2589), 1500)
-do
-    -- A fresh scan of his own wins, so the guild is not even asked.
-    local asked, real = 0, GuildPrices.GetValue
-    GuildPrices.GetValue = function(...) asked = asked + 1; return real(...) end
-    bob.ns.Prices:GetValue(2589)
-    check("with his own fresh price the guild's is not worked out", asked, 0)
-    GuildPrices.GetValue = real
-end
+check("Bob's fresh scan wins over older guild prices", bob.ns.Prices:GetValue(2589), 1500)
+GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock - 60) .. ":" .. Comm.ToBase36(2590) .. ","
+    .. Comm.ToBase36(1800) .. ";", "GUILD")
+check("a guild price from before his scan does not replace it", bob.ns.Prices:GetValue(2590), 2000)
+GuildPrices:OnPrices("Gus-Realm", Comm.ToBase36(clock + 60) .. ":" .. Comm.ToBase36(2590) .. ","
+    .. Comm.ToBase36(1900) .. ";", "GUILD")
+check("a guild price newer than his fresh scan replaces it", bob.ns.Prices:GetValue(2590), 1900)
+check("only the prices from after his scan count", (GuildPrices:GetValue(2590, nil, nil, clock)), 1900)
+GuildPrices:OnPrices("Hal-Realm", Comm.ToBase36(clock + 120) .. ":" .. Comm.ToBase36(2590) .. ","
+    .. Comm.ToBase36(25000) .. ";", "GUILD")
+check("a newer price over 10 times his fresh one is refused", bob.ns.Prices:GetValue(2590), 1900)
 GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(2589) .. ","
     .. Comm.ToBase36(15000000) .. ";", "GUILD")
 check("a price 10,000 times his own is refused", (GuildPrices:GetValue(2589)), 1100)

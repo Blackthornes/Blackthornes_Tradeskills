@@ -25,7 +25,7 @@
 -- Values follow the house rules: materials at what they cost to buy (a
 -- vendor's price for what a vendor sells), what one craft gets back the way
 -- the Level Up tab works it out (LevelUp:GetReturns: a grey item at vendor
--- only, a disenchant at its most likely result), and nothing is ever priced
+-- only, a disenchant at its average result), and nothing is ever priced
 -- from a missing number.
 
 local _, ns = ...
@@ -37,9 +37,12 @@ local Util = ns.Util
 
 -- Forever lists each profession under a second, modern skill line as well
 -- (docs/FOREVER_API_FINDINGS.md). Recipes the game shows may carry either.
+-- Cooking (2939) and First Aid (2942) too: a recipe their windows showed
+-- kept the second line, so no trainer was found to teach it and Road to 300
+-- stopped (a player's report, 2026-11-20: First Aid stuck at 82).
 local MODERN_SKILL_LINES = {
-    [2937] = 171, [2938] = 164, [2940] = 333, [2941] = 202,
-    [2945] = 165, [2946] = 186, [2948] = 197,
+    [2937] = 171, [2938] = 164, [2939] = 185, [2940] = 333, [2941] = 202,
+    [2942] = 129, [2945] = 165, [2946] = 186, [2948] = 197,
 }
 
 -- The game's item class for recipes.
@@ -326,6 +329,22 @@ function RecipeBook:GetAll()
         local fixed = record.name and FOREVER_SKILLS[record.name:lower()]
         if fixed then
             record.skill = fixed
+        end
+    end
+    -- What a trainer's own window showed (Logic/TrainerRecipes.lua, then
+    -- the shipped Data/ForeverTrainerRecipes.lua): its price, and the skill
+    -- it asks for, which is the game's own. A recipe Forever added has no
+    -- trainer price in the book until then (2026-11-19).
+    local trainers = ns.TrainerRecipes
+    if trainers and trainers.All then
+        for recipeID in pairs(trainers:All()) do
+            local record = merged[recipeID] or (aliases[recipeID] and merged[aliases[recipeID]])
+            local row = record and trainers:Get(recipeID)
+            if row then
+                if type(row.cost) == "number" then record.trainerCost = row.cost end
+                if type(row.skill) == "number" and row.skill > 0 then record.skill = row.skill end
+                record.trainerSeen = true
+            end
         end
     end
     for itemID, learned in pairs(SkillTable(false) or {}) do

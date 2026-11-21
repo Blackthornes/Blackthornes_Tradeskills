@@ -130,11 +130,20 @@ end
 function Cost:RebuildOutputIndex()
     local index = {}
 
+    local cooldowns = ns.Cooldowns
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         -- A dropped profession's crafts are not offered as sub-crafts, nor
-        -- is one the player said never to make as a sub-craft.
+        -- is one the player said never to make as a sub-craft. Nor is a
+        -- craft with a cooldown (transmutes, Mooncloth), which can't be made
+        -- as often as a queue or a price wants (a player on Discord,
+        -- 2026-11-20: every Gold Bar was priced at its iron), unless the
+        -- player set it to Make on the Level Up tab. Alts' were already left
+        -- out (BuildAltIndex).
         local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe)
-        if recipe.outputItemID and not dropped and not self:IsNeverSubCraft(recipeID) then
+        local cooldown = cooldowns and cooldowns.HasCooldown and cooldowns:HasCooldown(recipeID)
+            and not self:IsAlwaysSubCraft(recipeID)
+        if recipe.outputItemID and not dropped and not cooldown
+            and not self:IsNeverSubCraft(recipeID) then
             index[recipe.outputItemID] = recipeID
         end
     end

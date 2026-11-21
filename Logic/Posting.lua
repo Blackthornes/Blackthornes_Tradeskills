@@ -43,7 +43,11 @@ local VERIFY_GIVE_UP = 15
 -- clicks from piling up more checks than the auction house can answer. Six
 -- since fast listing (2026-10-14): listings close together share one read
 -- back (VERIFY_SHARE), so more of them cost no more requests.
-local MAX_CONFIRMING = 6
+-- Thirty since 2026-11-21: at six, a steady run of listings (the wheel)
+-- reached the cap in about three seconds and every click after it was
+-- refused until a read back came in. A read sent after a listing settles
+-- it (VerifyPending), so thirty waiting cost no more reads than six did.
+local MAX_CONFIRMING = 30
 Posting.MAX_CONFIRMING = MAX_CONFIRMING
 
 -- A listing's read back waits for a newer listing's when that one is due
@@ -445,6 +449,10 @@ function Posting:GetSearchKey(itemID)
 
     local ok, key = pcall(C_AuctionHouse.GetItemKeyFromItem, location)
     if not ok or type(key) ~= "table" or key.itemID ~= itemID then return nil end
+
+    -- The copy's link beside the game's own key for it: from here on this
+    -- suffix is known wherever the copy is seen (Prices:LearnSuffix).
+    if ns.Prices and ns.Prices.LearnSuffix then ns.Prices:LearnSuffix(link, key.itemSuffix) end
 
     ns.Debug(("searching %s by its suffix (%s)"):format(link, tostring(key.itemSuffix)))
     return key
@@ -1621,10 +1629,10 @@ function Posting:OnEnable()
         local data = Posting.confirming
         Posting.confirming = nil
 
-        local okVisible, visible = pcall(StaticPopup_Visible, "BLACKTHORNES_TS_CONFIRM_POST")
-        if not (okVisible and visible) then return end
+        local ask = ns.PostConfirm
+        if not (ask and ask:IsShown()) then return end
 
-        pcall(StaticPopup_Hide, "BLACKTHORNES_TS_CONFIRM_POST")
+        ask:Close()
         if data then
             ns.Print(L.Format("the auction house closed, so %s was not listed.",
                 Util.GetItemLabel(data.itemID)))
@@ -1726,8 +1734,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- Last line of defence on the price, wherever it came from. An item
-    -- auction needs at least a silver, and whole silver once a copper price
-    -- has failed this session (Util.wholeSilverOnly). A price arriving here
+    -- auction needs at least a silver. A price arriving here
     -- from a caller has not necessarily been through the chooser, so it is
     -- checked again rather than trusted.
     if not isCommodity and not Util.IsItemAuctionPrice(unitPrice) then
@@ -1837,8 +1844,10 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- The listing went down the auction house's throttled channel like any
-    -- other request, so our own requests space themselves out after it.
-    if ns.AHQueue.NoteSend then ns.AHQueue:NoteSend() end
+    -- other request, so our own background requests space themselves out
+    -- after it. The read back that confirms it does not wait on it.
+    local noteListing = ns.AHQueue.NoteListing or ns.AHQueue.NoteSend
+    if noteListing then noteListing(ns.AHQueue) end
 
     if not ok then
         -- The earlier copies are still up and still to be confirmed.
@@ -1966,57 +1975,28 @@ end
 -- Confirmation
 --------------------------------------------------------------------------------
 
--- Blizzard's own popup rather than a custom frame: it is already the thing
--- players trust for "are you sure", and its button click is a hardware event,
--- which posting requires.
+-- Asked in Tradeskills' own window (UI/PostConfirm.lua), never the game's
+-- pop-up: showing that box from an addon leaves it marked as ours, and the
+-- game's own next question in it (replace a weapon's enchant, say) is then
+-- blocked as "Blackthornes_TS has been blocked from an action only available
+-- to the Blizzard UI" (a Spellstone, 2026-11-19). Its List It button
+-- is a click, which posting needs.
 
--- Adding a key is fine. Assigning the global itself is not: writing
--- "StaticPopupDialogs = StaticPopupDialogs or {}" from addon code taints the
--- global variable, and then Blizzard's own popup machinery reads a tainted
--- value and gets "blocked from an action only available to the Blizzard UI"
--- the next time it shows any dialog of its own.
-if type(StaticPopupDialogs) == "table" then
+--- List It in the confirmation.
+function Posting:AcceptConfirm(data)
+    data = data or self.confirming
+    if not data then return end
 
-StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
-    text = "%s",
-    button1 = L["List It"],
-    button2 = L["Skip"],
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    -- Above the default dialogs, so it is not buried by the auction house.
-    preferredIndex = 3,
-    -- Widens the popup and keeps the text to the middle, which leaves room
-    -- on the left for the item's icon beside the four lines. The icon is
-    -- drawn over the alert sign that goes there (ShowConfirmIcon).
-    showAlert = true,
+    self.confirming = nil
+    self:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
+end
 
-    OnAccept = function(self)
-        local data = (self and self.data) or Posting.confirming
-        if not data then return end
-
-        Posting.confirming = nil
-        Posting:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
-    end,
-
-    -- "override" is the game replacing this dialog with the next one (a
-    -- second List click while it was open): not a skip, and clearing the
-    -- listing here left the new dialog's Yes with nothing to list.
-    OnCancel = function(self, _, reason)
-        if reason == "override" then return end
-        local data = (self and self.data) or Posting.confirming
-        Posting.confirming = nil
-        if data then Posting:PassOver(data.itemID) end
-        ns.Print(L["skipped."])
-    end,
-
-    -- The game lends this popup frame to other dialogs later, so the icon
-    -- goes with this one.
-    OnHide = function(self)
-        Posting:HideConfirmIcon(self)
-    end,
-}
-
+--- Skip in the confirmation (or Escape, or its close gem).
+function Posting:SkipConfirm(data)
+    data = data or self.confirming
+    self.confirming = nil
+    if data then self:PassOver(data.itemID) end
+    ns.Print(L["skipped."])
 end
 
 --- Show the confirmation for a listing whose price is already settled.
@@ -2125,76 +2105,19 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     return text .. "\n\n" .. L["List it at this price, or skip it."]
 end
 
--- The item's icon in the confirmation, one texture per popup frame it has
--- been shown in. Kept here rather than written onto the game's frames.
-local confirmIcons = setmetatable({}, { __mode = "k" })
-
--- The question mark icon, for an item whose icon the game has not got yet.
-local UNKNOWN_ICON = 134400
-
--- Narrower than this, the popup did not make room beside its text, and an
--- icon would sit on top of the words.
-local WIDE_POPUP = 400
-
---- Put the item's icon beside the confirmation's text. It is not a line of
---- its own: the four lines stay exactly as they were.
-function Posting:ShowConfirmIcon(dialog, itemID)
-    if type(dialog) ~= "table" or type(dialog.CreateTexture) ~= "function" then return false end
-
-    local ok, shown = pcall(function()
-        local width = dialog:GetWidth()
-        if not width or width < WIDE_POPUP then return false end
-
-        local icon = confirmIcons[dialog]
-        if not icon then
-            icon = dialog:CreateTexture(nil, "OVERLAY", nil, 7)
-            confirmIcons[dialog] = icon
-        end
-
-        -- Over the alert sign when there is one, so the sign never shows
-        -- through; otherwise where it would have been.
-        local name = dialog.GetName and dialog:GetName()
-        local alert = dialog.AlertIcon or (name and _G[name .. "AlertIcon"])
-
-        icon:ClearAllPoints()
-        if type(alert) == "table" and alert.IsShown and alert:IsShown() then
-            icon:SetAllPoints(alert)
-        else
-            icon:SetSize(36, 36)
-            icon:SetPoint("LEFT", dialog, "LEFT", 24, 0)
-        end
-
-        icon:SetTexture(Util.GetItemIcon(itemID) or UNKNOWN_ICON)
-        icon:Show()
-        return true
-    end)
-
-    return ok and shown or false
-end
-
-function Posting:HideConfirmIcon(dialog)
-    local icon = dialog and confirmIcons[dialog]
-    if icon then pcall(icon.Hide, icon) end
-end
-
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text, byHand)
     local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice, byHand = byHand or nil }
     self.confirming = confirming
 
-    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
-    if dialog then
-        -- Set again after showing: replacing an open dialog cancels the old
-        -- one first, on clients that do not say it was an override.
-        self.confirming = confirming
-        dialog.data = confirming
-
-        -- Only the dialog now showing carries an icon, whichever frame an
-        -- earlier one used.
-        for frame in pairs(confirmIcons) do
-            if frame ~= dialog then self:HideConfirmIcon(frame) end
-        end
-        self:ShowConfirmIcon(dialog, itemID)
-    else
+    local ask = ns.PostConfirm
+    local shown = ask and ask:Show({
+        text = text,
+        itemID = itemID,
+        data = confirming,
+        accept = function(data) Posting:AcceptConfirm(data) end,
+        skip = function(data) Posting:SkipConfirm(data) end,
+    })
+    if not shown then
         self.confirming = nil
         ns.Warn(L["could not open the confirmation dialog; nothing was listed."])
     end
@@ -2866,10 +2789,15 @@ function Posting:VerifyPending(target)
     if not self:IsPending(target) then return end
     if GetTime() - (target.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
 
+    -- A read of your auctions that went out after this listing was made,
+    -- and is still being looked at, settles this one as it stands: no wait
+    -- for a newer listing's, and no second read.
+    local out = self:ReadOutSince(target)
+
     -- A newer listing whose own read back is moments away reads this one
     -- too (a read settles every listing made before it went out), so a run
     -- of quick listings costs one request, not one each.
-    local share = self:ShareVerify(target)
+    local share = not out and self:ShareVerify(target)
     if share then
         C_Timer.After(share, function() Posting:VerifyPending(target) end)
         return
@@ -2894,7 +2822,9 @@ function Posting:VerifyPending(target)
     -- listing was made, so it settles this one too, and no second read is
     -- spent. Out already, it is good for this one as it stands.
     local riding = self:NewerVerifying(target)
-    if riding then
+    if out then
+        target.awaiting = nil
+    elseif riding then
         target.awaiting = riding.awaiting
     else
         ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
@@ -2914,6 +2844,19 @@ function Posting:VerifyPending(target)
             Posting:ResolvePending(nil, nil, token)
         end
     end)
+end
+
+--- Did a read of your auctions go out after this listing was made, with
+--- its answers still being read (Auctions.sentAt, Auctions.READ_FOR)? Then
+--- it settles this listing too. A little short of the last reading, so one
+--- that joins late is not called missing by a reading already under way.
+function Posting:ReadOutSince(target)
+    local Auctions = ns.Auctions
+    local sentAt = Auctions and rawget(Auctions, "sentAt")
+    local span = Auctions and rawget(Auctions, "READ_FOR")
+    if type(sentAt) ~= "number" or type(span) ~= "number" then return false end
+    if sentAt <= (target.startedAt or 0) then return false end
+    return (GetTime() - sentAt) < span - 1.5
 end
 
 --- How long this listing's read back should wait for a newer listing's,
@@ -3020,9 +2963,7 @@ function Posting:ResolvePending(posted, appeared, target)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(L.Format("%s did not appear in your auctions.",
             Util.GetItemLabel(pending.itemID)))
-        if Posting:FallBackToWholeSilver(pending) then
-            -- Quietly: the next click lists it in whole silver.
-        elseif pending.many and not pending.joined then
+        if pending.many and not pending.joined then
             ns.Warn(L["listing several at once may not work here, so the next click lists one."])
         else
             ns.Warn(L["the auction house may be refusing listings; try Blizzard's own Sell tab."])
@@ -3037,17 +2978,15 @@ function Posting:ResolvePending(posted, appeared, target)
     end
 end
 
---- A gear listing with copper in its price that did not go up: list in
---- whole silver for the rest of the session, so the next click still works.
---- Forever took copper when tried (2026-11-16); this is the safety net if it
---- ever stops. True when it just switched.
+--- A gear listing with copper in its price that did not go up.
+--- Forever takes copper on gear (tried in game 2026-11-16), and the owner
+--- asked (2026-11-19) that gear always lists to the copper, so a miss never
+--- switches to whole silver: one missed listing, often only a slow or
+--- misread auctions list, had rounded every gear price after it up to a
+--- silver for the rest of the session. Always false; the caller warns as
+--- for any other miss. `Util.wholeSilverOnly` stays for the tests only.
 function Posting:FallBackToWholeSilver(pending)
-    if Util.wholeSilverOnly or not pending or pending.isCommodity then return false end
-    local price = tonumber(pending.unitPrice)
-    if not price or price % 100 == 0 then return false end
-    Util.wholeSilverOnly = true
-    Posting.changes = (Posting.changes or 0) + 1
-    return true
+    return false
 end
 
 --- Sample the auction house throttle over a few seconds.

@@ -2608,6 +2608,13 @@ function Widgets.CreateScrollList(parent, opts)
         local total = #self.data
         local height = self:GetHeight()
         if type(height) ~= "number" or height < 0 then height = 0 end
+        -- To the nearest whole point. In a scaled window (the one window
+        -- resized by its corner) the game reads a list sized for one row
+        -- back as a hair under it, and the row was left out: the Crafting
+        -- tab's only queued craft vanished while its title still said "(1)"
+        -- (a player's recording, 2026-11-19). A row may overhang by half a
+        -- point at most.
+        height = math.floor(height + 0.5)
 
         local maxOffset = MaxOffset(self, height)
         if self.offset > maxOffset then self.offset = maxOffset end

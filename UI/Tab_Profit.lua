@@ -616,9 +616,8 @@ local function ShowBreaksInto(owner, analysis)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
         GameTooltip:AddDoubleLine(
-            ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
-                outcome.counted == false and L["  (bonus)"] or ""),
+            ("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
+                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)),
             outcome.price and L.Format("%s each", Util.FormatMoney(outcome.price, { noColor = true, short = true }))
                 or L["no price"],
             1, 1, 1, 0.8, 0.8, 0.8)
@@ -1019,7 +1018,7 @@ local function BuildDetail(parent)
         local yield = detail.yield
         if not (type(yield) == "number" and yield > 1) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, true)
+        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1962,13 +1961,14 @@ local function ShowProfessionHidden(hidden)
     return true
 end
 
-local function BuildList()
+--- What the list asks the ranking for.
+local function RankOptions()
     local key = OrderKey()
     if key ~= state.orderKey then
         state.orderKey, state.heldOrder = key, nil
     end
 
-    local ranked = ns.Profit:GetRanked({
+    return {
         accountWide = state.accountWide,
         ignorePostLimit = state.ignorePostLimit,
         sortBy = state.sortBy,
@@ -1977,8 +1977,11 @@ local function BuildList()
         skillLineID = state.profession,
         method = Method(),
         keepOrder = state.heldOrder,
-    })
+    }
+end
 
+--- The ranking narrowed to the search, its order held for the next redraw.
+local function Narrow(ranked)
     if state.search ~= "" then
         local needle = state.search:lower()
         local filtered = {}
@@ -1999,10 +2002,79 @@ local function BuildList()
     return ranked
 end
 
+local function BuildList()
+    return Narrow(ns.Profit:GetRanked(RankOptions()))
+end
+
+-- Picking the tab analysed every recipe in one frame, a stall with a few
+-- hundred recipes and a long one with every character's (the owner's
+-- report, 2026-11-21, swapping tabs at the auction house). When the tab is
+-- picked the list now keeps the rows it had and the ranking runs a few
+-- recipes a frame (Profit:BeginRanked, RankOne, FinishRanked: the same
+-- steps GetRanked takes), then the list is drawn from it. Any other
+-- refresh (a click, a price, the bags) still answers at once and drops a
+-- ranking under way. The first draw is at once too, so the list never
+-- opens empty.
+local SLICE_MS = 4
+local spreadNext = false
+local ranking = nil
+-- Still on this tab's My Crafts view; set once the views are made.
+local StillShowing = function() return true end
+
+local function StopRanking()
+    local worker = ranking
+    ranking = nil
+    if worker then worker:Cancel() end
+end
+
+local Draw
+
+--- Rank across frames, then draw. False when it must be done at once.
+local function RankInSlices()
+    if not (state.drawn and Util and type(Util.NewWorker) == "function"
+        and ns.Profit.BeginRanked and ns.Profit.RankOne and ns.Profit.FinishRanked) then
+        return false
+    end
+
+    local steps = ns.Profit:BeginRanked(RankOptions())
+    local worker
+    worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(item)
+            if ranking ~= worker then return end
+            -- Another tab or view was picked, or the window shut: the next
+            -- time this one shows it ranks afresh.
+            if not StillShowing() then
+                StopRanking()
+                return
+            end
+            ns.Profit:RankOne(steps, item)
+        end,
+        onDone = function()
+            if ranking ~= worker then return end
+            ranking = nil
+            if not StillShowing() then return end
+            Draw(Narrow(ns.Profit:FinishRanked(steps)))
+        end,
+    })
+    ranking = worker
+    worker:Start(steps.items)
+    return true
+end
+
 local function Refresh()
     if not widgets.list then return end
 
-    local data = BuildList()
+    StopRanking()
+    local spread = spreadNext
+    spreadNext = false
+    if spread and RankInSlices() then return end
+
+    Draw(BuildList())
+end
+
+function Draw(data)
+    state.drawn = true
 
     -- A clicked heading's order over the ranking's.
     if widgets.sorter then data = widgets.sorter:Sort(data) end
@@ -2537,6 +2609,20 @@ local function OnShow()
     RefreshProfessionOptions()
 end
 
+StillShowing = function()
+    if UI.activeTab ~= "profit" then return false end
+    if switch and switch.view ~= "crafts" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- The tab was picked (UI:SelectTab): My Crafts ranks a few recipes a frame.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(RefreshView)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
 --- /bts recipes and the Settings button: the window, on this tab, on
 --- Recipes to learn, optionally on one profession.
 ns.ProfitTab = {
@@ -2562,5 +2648,6 @@ UI:RegisterTab({
     order = 1,
     build = Build,
     refresh = RefreshView,
+    refreshPicked = RefreshPicked,
     onShow = OnShow,
 })

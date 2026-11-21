@@ -206,8 +206,8 @@ function Prices.FlattenHistory(record)
     return true
 end
 
---- Adds a reading at the end and keeps the newest MAX_HISTORY.
-function Prices.AddReading(record, t, m, q)
+--- Adds a reading at the end and keeps the newest MAX_HISTORY (or `most`).
+function Prices.AddReading(record, t, m, q, most)
     if type(record.history) ~= "table" then record.history = {} end
     Prices.FlattenHistory(record)
     local history = record.history
@@ -215,7 +215,7 @@ function Prices.AddReading(record, t, m, q)
     history[n + 1] = Kept(t)
     history[n + 2] = Kept(m)
     history[n + 3] = Kept(q)
-    local extra = #history - MAX_HISTORY * 3
+    local extra = #history - (tonumber(most) or MAX_HISTORY) * 3
     if extra > 0 then
         local size = #history
         for i = 1, size - extra do history[i] = history[i + extra] end
@@ -849,7 +849,10 @@ end
 
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
 -- Returns the number of items recorded.
-function Prices:CommitScan(observations, scannedAt)
+-- @param partial true for a quick scan that stopped before it read every
+--   row: its counts stay out of Sold a Day (see Record), and it is not a
+--   full scan, so the full scan stamp is left alone.
+function Prices:CommitScan(observations, scannedAt, partial)
     scannedAt = scannedAt or time()
 
     local recorded = 0
@@ -860,12 +863,13 @@ function Prices:CommitScan(observations, scannedAt)
         local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
             self:Summarise(listings, self:GetScanValue(itemID, "market"))
         if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
+            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder,
+                partial == true or nil)
             recorded = recorded + 1
         end
     end
 
-    self:SetLastFullScan(scannedAt)
+    if not partial then self:SetLastFullScan(scannedAt) end
     return recorded
 end
 
@@ -983,6 +987,24 @@ function Prices:PreferredTSM(itemID, which)
     return AskOther(ns.TSMPrices, itemID, which)
 end
 
+--- Your other account's price for an item and when it saw it, when that
+--- is newer than this account's own scan (or this account never priced
+--- it), else nil. Prices:GetValue uses it, and the tooltip shows it as the
+--- auction value, since it is your own play (Logic/AccountLink.lua).
+--- `scanned` is this account's own price, when the caller has it already.
+function Prices:GetLinkedValue(itemID, which, scanned)
+    if which == "rival" then return nil end
+    local link = ns.AccountLink
+    if not (link and link.PriceFor) then return nil end
+    local shared, sharedAt = link:PriceFor(itemID, which)
+    if not shared then return nil end
+    if scanned == nil then scanned = self:GetScanValue(itemID, which) end
+    local record = self:GetTable()[itemID]
+    local seen = type(record) == "table" and tonumber(record.seen) or 0
+    if not scanned or (sharedAt or 0) > seen then return shared, sharedAt end
+    return nil
+end
+
 function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
     if which == "rival" then return scanned end
@@ -995,39 +1017,35 @@ function Prices:GetValue(itemID, which)
         scanned = preferred
     end
 
-    -- Guildmates' prices (Logic/GuildPrices.lua, off unless the player turns
-    -- it on) fill a gap: an item never priced here, or one whose price has
-    -- gone stale while theirs is newer. A fresh scan of your own always wins.
-    -- Only asked when it could be used: their answer is sorted out of every
-    -- guildmate's, and prices are read many times a redraw.
+    -- Guildmates' prices (Logic/GuildPrices.lua) fill a gap, an item never
+    -- priced here, and replace your own price whenever a guildmate saw the
+    -- item after you last did, fresh or not (the owner, 2026-11-18). Only
+    -- their prices from after your scan count, so an older one never wins.
+    -- A price 10 times away from a fresh one of yours was never kept.
     local filled = preferred and true or nil
 
     -- Your other account's newest scan (Logic/AccountLink.lua, whenever the
     -- two accounts are linked) comes first: it is your own play,
     -- so it wins whenever it saw the item after this account last did.
-    local link = ns.AccountLink
-    if not filled and link and link.PriceFor then
-        local shared, sharedAt = link:PriceFor(itemID, which)
+    if not filled then
+        local shared = self:GetLinkedValue(itemID, which, scanned)
         if shared then
-            local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and tonumber(record.seen) or 0
-            if not scanned or (sharedAt or 0) > seen then
-                scanned = shared
-                filled = true
-            end
+            scanned = shared
+            filled = true
         end
     end
 
     local guild = ns.GuildPrices
-    if not filled and guild and guild.IsOn and guild:IsOn() and (not scanned or self:IsStale(itemID)) then
-        local shared, sharedAt = guild:GetValue(itemID, which)
-        if shared then
+    if not filled and guild and guild.IsOn and guild:IsOn() then
+        local since
+        if scanned then
             local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and record.seen or 0
-            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then
-                scanned = shared
-                filled = true
-            end
+            since = type(record) == "table" and tonumber(record.seen) or 0
+        end
+        local shared = guild:GetValue(itemID, which, nil, since)
+        if shared then
+            scanned = shared
+            filled = true
         end
     end
 
@@ -1113,6 +1131,10 @@ end
 -- and the oldest seen goes first.
 Prices.SUFFIX_MOST = 40
 
+-- The readings kept for each suffix, fewer than an item's: an item can have
+-- forty suffixes, and the saved file grows with every one.
+Prices.SUFFIX_READINGS = 8
+
 -- A suffix price older than this is not used; the item's price stands in.
 Prices.SUFFIX_KEEP = 14 * 24 * 3600
 
@@ -1161,6 +1183,13 @@ function Prices:RecordSuffix(itemID, suffix, marketValue, minBuyout, rival, quan
     entry.quantity = quantity
     entry.seen = scannedAt or time()
 
+    -- Its own readings, so a suffix picked on the Prices tab draws its own
+    -- graph and Stats rather than the item's (a player's report, 2026-11-21).
+    Prices.AddReading(entry, entry.seen, entry.market, quantity, Prices.SUFFIX_READINGS)
+    if ns.PriceHistory and ns.PriceHistory.NoteSuffix then
+        ns.PriceHistory:NoteSuffix(itemID, suffix, minBuyout or rival, quantity, entry.seen)
+    end
+
     Prices:Touch(itemID)
     return entry
 end
@@ -1206,14 +1235,191 @@ function Prices:GetSuffixEntry(itemID, suffix)
     return type(entry) == "table" and entry or nil
 end
 
---- The name the client gives one suffix of an item ("Lead Band of the
---- Monkey"), or nil while it is not loaded. Read inside a pcall.
-function Prices.SuffixName(itemID, suffix)
+--------------------------------------------------------------------------------
+-- Which suffix a copy is, on Forever
+--------------------------------------------------------------------------------
+--
+-- Forever names a suffix two ways. A link carries a bonus ID
+-- (item:8211::::::::40:1490:::1:12731) and leaves the old suffix field
+-- empty; the auction house's item key carries another number (itemSuffix,
+-- 14327 and the like), which is what `record.suffixes` is keyed by. Until
+-- 2026-11-19 nothing joined the two, so a copy in the bags was never priced
+-- by its suffix, and no suffix had a name (a player's report).
+--
+-- They are joined as they are seen together, account wide in
+-- `ns.db.suffixWords` (never rename it):
+--   bonuses[bonusID] = suffix          a link's bonus and its key's suffix
+--   tails[locale][suffix] = " of the Monkey"   what the suffix adds to a name
+
+local function SuffixWords()
+    local db = ns.db
+    if type(db) ~= "table" then return nil end
+    local words = db.suffixWords
+    if type(words) ~= "table" then
+        words = {}
+        db.suffixWords = words
+    end
+    if type(words.bonuses) ~= "table" then words.bonuses = {} end
+    if type(words.tails) ~= "table" then words.tails = {} end
+    return words
+end
+
+local function Tails(words)
+    local ok, locale = pcall(function() return _G.GetLocale and _G.GetLocale() end)
+    locale = ok and type(locale) == "string" and locale or "enUS"
+    local tails = words.tails[locale]
+    if type(tails) ~= "table" then
+        tails = {}
+        words.tails[locale] = tails
+    end
+    return tails
+end
+
+-- The client's name for an item ID or an item string, or nil. In a pcall.
+local function ItemName(item)
     local api = _G.C_Item
     local info = type(api) == "table" and api.GetItemInfo or _G.GetItemInfo
     if type(info) ~= "function" then return nil end
-    local ok, name = pcall(info, ("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    local ok, name = pcall(info, item)
     if ok and type(name) == "string" and name ~= "" then return name end
+    return nil
+end
+
+-- What a suffix adds after the item's own name (" of the Monkey"), or nil
+-- when the name is the plain one, or does not begin with it.
+local function TailOf(base, full)
+    if not (base and full) or full == base then return nil end
+    if #full <= #base or full:sub(1, #base) ~= base then return nil end
+    return full:sub(#base + 1)
+end
+
+local function LinkItemID(link)
+    return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+end
+
+local function LinkName(link)
+    return type(link) == "string" and link:match("|h%[(.-)%]|h") or nil
+end
+
+--- Keep what a suffix adds to a name, from one item's full name.
+function Prices:LearnSuffixName(itemID, suffix, fullName)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and itemID and suffix and suffix ~= 0 and type(fullName) == "string") then return false end
+    local tail = TailOf(ItemName(itemID), fullName)
+    if not tail then return false end
+    Tails(words)[suffix] = tail
+    return true
+end
+
+--- A copy's link seen beside its auction house key (a search's listing, a
+--- copy in the bags): its bonus and that suffix go together from now on.
+function Prices:LearnSuffix(link, suffix)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and suffix and suffix ~= 0 and type(link) == "string") then return false end
+
+    -- Only a link with one bonus says which bonus is the suffix.
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 1 then words.bonuses[bonuses[1]] = suffix end
+
+    if Tails(words)[suffix] == nil then
+        self:LearnSuffixName(LinkItemID(link), suffix, LinkName(link))
+    end
+    return #bonuses == 1
+end
+
+local keyNameAsked, KEY_NAME_TRIES = {}, 20
+
+--- Keep a suffix's name from the auction house's own key, once the game has
+--- it. Asked only for a suffix with no name yet.
+function Prices:LearnKeyName(key)
+    local words = SuffixWords()
+    local suffix = type(key) == "table" and tonumber(key.itemSuffix) or nil
+    if not (words and suffix and suffix ~= 0 and key.itemID) then return false end
+    if Tails(words)[suffix] ~= nil then return true end
+
+    -- A name the game has not loaded is asked for a few times, not at
+    -- every row of every scan.
+    local asked = keyNameAsked[suffix] or 0
+    if asked >= KEY_NAME_TRIES then return false end
+    keyNameAsked[suffix] = asked + 1
+
+    local AH = _G.C_AuctionHouse
+    if not (type(AH) == "table" and type(AH.GetItemKeyInfo) == "function") then return false end
+    local ok, info = pcall(AH.GetItemKeyInfo, key)
+    if not (ok and type(info) == "table") then return false end
+    return self:LearnSuffixName(key.itemID, suffix, info.itemName)
+end
+
+--- The suffix a Forever link names, as the auction house keeps it, and
+--- whether it could be placed. A copy with a suffix nothing has placed yet
+--- answers a stand-in (its bonus, negative) and false; a plain copy nil.
+function Prices.ResolveSuffix(link)
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 0 then return nil end
+    local words = SuffixWords()
+    if not words then return nil end
+
+    for _, bonus in ipairs(bonuses) do
+        local suffix = words.bonuses[bonus]
+        if suffix then return suffix, true end
+    end
+
+    -- By name: the plain name with more after it is a suffix copy.
+    local itemID, full = LinkItemID(link), LinkName(link)
+    local base = itemID and ItemName(itemID)
+    if not (base and full) or full == base then return nil end
+
+    local tail = TailOf(base, full)
+    if tail then
+        local record = Prices:GetTable()[itemID]
+        local kept = type(record) == "table" and type(record.suffixes) == "table" and record.suffixes or nil
+        local match
+        for suffix, known in pairs(Tails(words)) do
+            if known == tail and (match == nil or (kept and kept[suffix])) then match = suffix end
+        end
+        if match then
+            if #bonuses == 1 then words.bonuses[bonuses[1]] = match end
+            return match, true
+        end
+    end
+    return -bonuses[1], false
+end
+
+Util.ResolveSuffix = Prices.ResolveSuffix
+
+--- The name the client gives one suffix of an item ("Lead Band of the
+--- Monkey"), or nil while it is not known. Read inside a pcall.
+function Prices.SuffixName(itemID, suffix)
+    suffix = tonumber(suffix)
+    if not (itemID and suffix) then return nil end
+    local base = ItemName(itemID)
+    local words = SuffixWords()
+
+    if words and base then
+        local tail = Tails(words)[suffix]
+        if tail then return base .. tail end
+
+        -- A bonus known to be this suffix names it in any language.
+        for bonus, known in pairs(words.bonuses) do
+            if known == suffix then
+                local name = ItemName(("item:%d::::::::::::1:%d"):format(itemID, bonus))
+                if name and name ~= base then return name end
+                break
+            end
+        end
+
+        -- The auction house's own name for it, kept for next time.
+        if Prices:LearnKeyName({ itemID = itemID, itemLevel = 0, itemSuffix = suffix, battlePetSpeciesID = 0 }) then
+            tail = Tails(words)[suffix]
+            if tail then return base .. tail end
+        end
+    end
+
+    -- Clients that keep the suffix in the link's own field.
+    local name = ItemName(("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    if name and name ~= base then return name end
     return nil
 end
 
@@ -1229,7 +1435,7 @@ function Prices:SuffixRows(itemID)
         if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
             rows[#rows + 1] = {
                 suffix = suffix, market = entry.market, min = entry.min, rival = entry.rival,
-                seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
+                quantity = entry.quantity, seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
             }
         end
     end
@@ -1238,6 +1444,28 @@ function Prices:SuffixRows(itemID)
         return (tonumber(a.suffix) or 0) < (tonumber(b.suffix) or 0)
     end)
     return rows
+end
+
+--- How many suffixes of an item have a recent price: the rows SuffixRows
+--- would give, counted without asking the client for any name.
+function Prices:SuffixCount(itemID)
+    local record = itemID and self:GetTable()[itemID]
+    local suffixes = type(record) == "table" and record.suffixes
+    if type(suffixes) ~= "table" then return 0 end
+    local oldest, count = time() - Prices.SUFFIX_KEEP, 0
+    for _, entry in pairs(suffixes) do
+        if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+--- The suffix names known in the client's language, by suffix
+--- ({ [14322] = " of the Bear" }), for searching without asking the client.
+function Prices:SuffixTails()
+    local words = SuffixWords()
+    return words and Tails(words) or {}
 end
 
 --- What one copy is worth, by its link: its suffix's own price when one is
@@ -1742,6 +1970,10 @@ function Prices:SetFavourite(itemID, on, name)
         ns.db.favouritePrices[itemID] = nil
     end
 
+    -- A list kept until the prices change (the Prices tab's) shows a
+    -- starred item with no price, so a star counts as a change.
+    self:Touch(itemID)
+
     -- A starred item keeps an hour by hour price history from the next scan.
     if ns.PriceHistory then ns.PriceHistory:Retrack() end
 end
@@ -1906,6 +2138,8 @@ function Prices:Prune()
 
     if removed > 0 then
         ns.Debug(("removed %d old price(s)"):format(removed))
+        -- No one item: lists kept until the prices change build again.
+        self:Touch()
     end
     return removed
 end
@@ -1947,6 +2181,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
+        self:Touch()
         ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, more than anyone could pay",
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end

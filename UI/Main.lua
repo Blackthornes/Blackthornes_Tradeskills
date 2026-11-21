@@ -173,6 +173,9 @@ function UI:Build()
             if not folded then UI:RefreshActiveTab() end
         end })
     end
+    -- And left of it, the swap gem: it joins every Blackthornes addon into
+    -- the one window (UI/SharedWindow.lua).
+    if ns.SharedWindow and ns.SharedWindow.AddSwap then ns.SharedWindow.AddSwap(window, "tradeskills") end
 
     window:SetScript("OnDragStart", function(self)
         -- Still rising into place: land it first, or the opening would keep
@@ -490,7 +493,19 @@ function UI:SelectTab(key)
     if ns.db and key ~= "auctionhouse" and not docked then ns.db.lastTab = key end
 
     if tab.onShow then tab.onShow() end
-    if tab.refresh then tab.refresh() end
+
+    -- A tab whose onShow is its refresh (Settings) drew itself twice here.
+    -- refreshPicked is a tab's lighter redraw for this moment (Profit ranks
+    -- across frames). And one build of the queue's costs and shopping list
+    -- for the whole redraw, as every other redraw has (Queue:Keeping).
+    local redraw = tab.refreshPicked or tab.refresh
+    if redraw and redraw ~= tab.onShow then
+        if ns.Queue and ns.Queue.Keeping then
+            ns.Queue:Keeping(redraw)
+        else
+            redraw()
+        end
+    end
 end
 
 function UI:UpdateHeader()
@@ -1890,8 +1905,9 @@ local function FitMerchantButton(button)
 end
 
 --- True while Blackthornes Butler is loaded and its window comes up at a
---- vendor ("Open at a vendor", on unless unticked there). Butler's Buy from
---- a vendor row then buys the queue's materials, so this button hides.
+--- vendor ("Open at a vendor", on unless unticked there). The Wishlist card
+--- reads it: Butler shows those recipes itself then. The Buy materials
+--- button no longer stands down for it (2026-11-21).
 function UI.ButlerBuysHere()
     local ok, yes = pcall(function()
         if type(_G.BlackthornesButler) ~= "table" then return false end
@@ -1899,6 +1915,24 @@ function UI.ButlerBuysHere()
         return not (type(db) == "table" and db.openAtVendor == false)
     end)
     return ok and yes == true
+end
+
+--- True while Blackthornes Butler is loaded. Butler's bar at a vendor has its
+--- own Sell button, so the Buy materials button hides there when nothing
+--- here is needed, rather than reading "Nothing needed here".
+function UI.ButlerLoaded()
+    local ok, yes = pcall(function() return type(_G.BlackthornesButler) == "table" end)
+    return ok and yes == true
+end
+
+--- Show or hide the vendor button. The Sell marked button hangs beside it,
+--- so it is placed again when the Buy button comes or goes.
+local function ShowMerchantButton(button, on)
+    local was = button:IsShown() and true or false
+    if on then button:Show() else button:Hide() end
+    if was ~= on and ns.SellMarked and ns.SellMarked.Update then
+        pcall(ns.SellMarked.Update, ns.SellMarked)
+    end
 end
 
 --- The gold plaque the house's buttons out on the screen wear (UI/Plaque.lua,
@@ -1959,14 +1993,11 @@ function UI:AttachToMerchant()
         return
     end
 
-    -- Blackthornes Butler has the same Buy button on its Buy from a vendor
-    -- row, and its window comes up at the vendor, so this one stands down
-    -- (the owner, 2026-10-18). Butler buys through Butler:VendorOffer and
-    -- Butler:BuyFromVendor, so nothing is lost.
-    if UI.ButlerBuysHere() then
-        if self.merchantButton then self.merchantButton:Hide() end
-        return
-    end
+    -- With Blackthornes Butler loaded this button used to stand down
+    -- (2026-10-18), trusting the Buy row in Butler's window. That row is out
+    -- of sight when the window is shut, folded or on All Characters, so
+    -- players lost Buy (2026-11-21). It stays now; with Butler loaded it only
+    -- hides when this vendor has nothing the queue needs (UpdateMerchantButton).
 
     local button = self.merchantButton
 
@@ -2008,7 +2039,6 @@ function UI:AttachToMerchant()
         button:SetPoint("TOP", UIParent, "TOP", 0, -180)
     end
 
-    button:Show()
     self:UpdateMerchantButton()
 end
 
@@ -2016,7 +2046,14 @@ function UI:UpdateMerchantButton()
     local button = self.merchantButton
     if not button then return end
 
+    -- Never over the game world once the vendor has closed, whoever asks.
+    if not (ns.Vendor and ns.Vendor.isMerchantOpen) then
+        button:Hide()
+        return
+    end
+
     if ns.Vendor:IsBuying() then
+        ShowMerchantButton(button, true)
         MerchantWords(button, L["Buying..."])
         button:SetEnabledState(false)
         button.tooltipText = L["Purchases in progress"]
@@ -2036,6 +2073,15 @@ function UI:UpdateMerchantButton()
         cheaperNote = L.Format("%d materials are cheaper at the auction house.",
             cheaperElsewhere)
     end
+
+    if #lines == 0 and UI.ButlerLoaded() then
+        -- Butler's bar sits at the vendor with its own buttons, so an inert
+        -- one here is only in the way.
+        ShowMerchantButton(button, false)
+        return
+    end
+
+    ShowMerchantButton(button, true)
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
@@ -2902,6 +2948,11 @@ end
 TSTabs.host = {
     enter = function(area) TSTabs:Enter(area) end,
     leave = function() TSTabs:Leave() end,
+    -- For the swap gem (SharedWindow.AddSwap): the tab up now, open on a
+    -- tab wherever Tradeskills now belongs, and close its own window.
+    tab = function() return TSTabs:SwapTab() end,
+    show = function(key) TSTabs:SwapShow(key) end,
+    hide = function() TSTabs:SwapHide() end,
 }
 
 --- The window is asked to open. With "One Window:" ticked and Tradeskills
@@ -2941,4 +2992,47 @@ function TSTabs:SetOneWindow(on)
         if One and One.Close then pcall(One.Close) end
     end
     if onSettings then UI:OpenSettings() end
+end
+
+--- True for the tabs that are only there while docked beside a game
+--- window (the Auction House, Crafting and Mail tabs).
+function TSTabs.DockTab(key)
+    if key == "auctionhouse" then return true end
+    for _, dock in pairs(UI.DOCK_TABS) do
+        if dock.key == key then return true end
+    end
+    return false
+end
+
+--- The tab up now, or nil when the window is shut.
+function TSTabs:SwapTab()
+    if not TSShown(UI.window) then return nil end
+    return UI.activeTab
+end
+
+--- Open on `key` (nil: the tab it would open on anyway), in the one window
+--- when it is on, else in Tradeskills' own window. A docked tab (the
+--- auction house's, the profession window's, the mailbox's) is left where
+--- it goes by itself: its drawer or pane hangs beside the game's window
+--- again, as before the one window, and the own window stays shut.
+function TSTabs:SwapShow(key)
+    UI:Build()
+    if key and TSTabs.DockTab(key) then
+        if self.area or not TSTabs.One() or not TSTabs.One().On() then return end
+        key = nil
+    end
+    if key and not UI.tabs[UI.MOVED_TABS[key] or key] then key = nil end
+    if TSTabs:Route(key) then return end
+    if key == "settings" then
+        UI:OpenSettings()
+        return
+    end
+    UI:Show()
+    if key then UI:SelectTab(key) end
+end
+
+--- Close Tradeskills' own window.
+function TSTabs:SwapHide()
+    if self.area then return end
+    if TSShown(UI.window) then UI:Hide() end
 end

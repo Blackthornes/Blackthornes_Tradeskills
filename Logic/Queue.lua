@@ -1184,10 +1184,13 @@ function Queue:RecipeFor(itemID)
     return nil
 end
 
---- One of your auctions sold: queue one more of it while there is room
---- under Keep in stock, or under what your sales taught when no number is
---- set (the owner, 2026-10-11: stock that tops itself up). Never for a craft
---- that loses money, nor while "Wait until it runs low" is waiting.
+--- One of your auctions sold: queue enough to fill the room under Keep in
+--- stock, or under what your sales taught when no number is set (the owner,
+--- 2026-10-11: stock that tops itself up). It once queued one craft a sale,
+--- so stock that had dropped by more (an expired listing, Restock When Down
+--- To letting go) stayed short (the owner asked for the full amount).
+--- Never for a craft that loses money, nor while "Wait until it runs low"
+--- is waiting.
 --- @return the recipe ID queued, or nil and why: "off", "nocraft",
 ---   "nostock" (no number to keep), "full", "waiting", "loss" or "failed"
 function Queue:RestockSold(itemID)
@@ -1203,7 +1206,8 @@ function Queue:RestockSold(itemID)
     local ok, analysis = pcall(ns.Profit.Analyse, ns.Profit, recipeID)
     if ok and analysis and analysis.profit and analysis.profit <= 0 then return nil, "loss" end
 
-    if self:Add(recipeID, 1) then return recipeID end
+    local crafts = ns.Profit.RoomInCrafts(room, ns.Recipes:GetAny(recipeID)) or 1
+    if self:Add(recipeID, math.max(1, crafts)) then return recipeID end
     return nil, "failed"
 end
 

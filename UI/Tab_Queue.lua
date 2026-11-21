@@ -231,8 +231,14 @@ local function CreateCraftRow(row)
         justify = "CENTER",
         min = 0,
         max = 9999,
+        -- Only ever the craft the box was showing: the row can be bound to
+        -- another craft by the time the box lets go of the keyboard, and a
+        -- number typed for one craft then landed on the row below it.
         onChange = function(value)
-            if row.data then ns.Queue:SetQuantity(row.data.recipeID, value) end
+            local recipeID = row.boundRecipeID
+            if recipeID and row.data and not row.data.isDependency then
+                ns.Queue:SetQuantity(recipeID, value)
+            end
         end,
     })
     row.quantity:SetPoint("RIGHT", -45, 0)
@@ -446,20 +452,23 @@ local function UpdateCraftRow(row, entry)
     row.remove:Show()
     row.remove.tooltipText = entry.isDependency and ns.Queue.NeverMakeTooltip
         and ns.Queue:NeverMakeTooltip(entry) or nil
-    row.quantity:SetShown(not entry.isDependency)
-    row.count:SetShown(entry.isDependency == true)
-    row.count:SetText(tostring(entry.quantity))
-
     -- A redraw leaves a number being typed alone, unless the row now shows
-    -- a different craft: then what was typed belonged to the old one.
+    -- a different craft or a sub-craft: then what was typed belonged to the
+    -- old one. Dropped before the box hides, since hiding it lets go of the
+    -- keyboard and would set the number on whatever the row shows now.
     local typing = row.quantity.editBox.HasFocus and row.quantity.editBox:HasFocus()
-    if typing and row.boundRecipeID ~= entry.recipeID then
+    if typing and (row.boundRecipeID ~= entry.recipeID or entry.isDependency) then
+        row.boundRecipeID = nil
         row.quantity:SetValue(entry.quantity, true)
         row.quantity.editBox:ClearFocus()
     elseif not typing then
         row.quantity:SetValue(entry.quantity, true)
     end
     row.boundRecipeID = entry.recipeID
+
+    row.quantity:SetShown(not entry.isDependency)
+    row.count:SetShown(entry.isDependency == true)
+    row.count:SetText(tostring(entry.quantity))
 
     UpdateActionButton(row, entry)
 

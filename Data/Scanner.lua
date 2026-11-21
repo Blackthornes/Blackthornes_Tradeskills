@@ -16,7 +16,10 @@ local Util = ns.Util
 -- The random suffix a link names, or nil (Util.LinkSuffix, when there).
 local function LinkSuffix(link)
     if type(link) ~= "string" or type(Util.LinkSuffix) ~= "function" then return nil end
-    return Util.LinkSuffix(link)
+    -- Only one that could be placed: a stand-in is never a price's key.
+    local suffix, sure = Util.LinkSuffix(link)
+    if sure == false then return nil end
+    return suffix
 end
 
 -- Blizzard rate-limits the bulk snapshot hard. Asking more often than this just
@@ -76,7 +79,14 @@ local function GetPlayerIdentity()
     local ok, name = pcall(UnitName, "player")
     Scanner.playerName = (ok and name) or "?"
 
-    local realmOk, realm = pcall(GetRealmName)
+    -- An empty name (Forever 1.60.1 gives one) is no realm: "" would
+    -- tell every listing of yours apart from you, and you would undercut
+    -- yourself. Tested and copied inside the pcall, as a dungeon can hand
+    -- back a name that raises when compared.
+    local realmOk, realm = pcall(function()
+        local value = GetRealmName()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
     if realmOk and realm then
         -- ownerFullName arrives as Name-Realm with spaces stripped.
         Scanner.playerRealm = realm:gsub("%s", "")
@@ -860,6 +870,7 @@ local function CombineBrowseRows(results, seen)
             -- (Prices:RecordSuffix), beside the item's.
             local suffix = tonumber(result.itemKey.itemSuffix) or 0
             if suffix ~= 0 then
+                if ns.Prices.LearnKeyName then ns.Prices:LearnKeyName(result.itemKey) end
                 item.suffixes = item.suffixes or {}
                 local own = item.suffixes[suffix]
                 if not own then
@@ -1094,6 +1105,54 @@ function Scanner:ReadReplicateResults(numItems)
         indices[i + 1] = i
     end
 
+    -- Fold what was read into the prices. Shared by a scan read to its end
+    -- and one stopped partway (closing the auction house, Cancel): the game
+    -- will not hand out another snapshot for fifteen minutes, and throwing
+    -- away the rows already read cost the player all of them. A partial
+    -- read is never a full scan and never marks anything sold out.
+    local function KeepRead(now, partial)
+        -- Market value is an average carried from scan to scan, so the
+        -- ones built from whole-row prices would take many scans to come
+        -- down. Once, the first time this reading prices it, a commodity
+        -- starts its market afresh from this scan. Its history is kept.
+        --
+        -- Marked on each price rather than once for the account: prices
+        -- are kept per realm and faction, and one account-wide mark let
+        -- only the first realm scanned start afresh. That old mark,
+        -- commodityRowPriceFixed, is left in the saved data unread.
+        local table_ = ns.Prices:GetTable()
+        for itemID in pairs(commodities) do
+            local record = table_ and table_[itemID]
+            if record and observations[itemID] and not record.rowPriceFixed then
+                record.market = nil
+            end
+        end
+
+        local recorded = ns.Prices:CommitScan(observations, now, partial)
+        -- Every item the scan priced lists on one click for a while. Not
+        -- after a stop partway: an item may have had only some of its
+        -- listings read, so posting searches it first as usual.
+        if not partial and ns.Posting and ns.Posting.NoteScanned then
+            ns.Posting:NoteScanned(observations, true)
+        end
+
+        -- Each random suffix beside its item, now the item has a price.
+        if ns.Prices.CommitSuffixes then
+            for itemID, bySuffix in pairs(suffixObservations) do
+                ns.Prices:CommitSuffixes(itemID, bySuffix, now)
+            end
+        end
+
+        -- After the commit, so a commodity priced for the first time in
+        -- this scan is marked too and never starts afresh later.
+        for itemID in pairs(commodities) do
+            local record = table_ and table_[itemID]
+            if record and observations[itemID] then record.rowPriceFixed = true end
+        end
+
+        return recorded
+    end
+
     local worker = Util.NewWorker({
         budgetMs = ns.Config:Get("scanBudgetMs") or 8,
 
@@ -1213,41 +1272,7 @@ function Scanner:ReadReplicateResults(numItems)
             local startedWall = self.scanStartedWall
             local now = time()
 
-            -- Market value is an average carried from scan to scan, so the
-            -- ones built from whole-row prices would take many scans to come
-            -- down. Once, the first time this reading prices it, a commodity
-            -- starts its market afresh from this scan. Its history is kept.
-            --
-            -- Marked on each price rather than once for the account: prices
-            -- are kept per realm and faction, and one account-wide mark let
-            -- only the first realm scanned start afresh. That old mark,
-            -- commodityRowPriceFixed, is left in the saved data unread.
-            local table_ = ns.Prices:GetTable()
-            for itemID in pairs(commodities) do
-                local record = table_ and table_[itemID]
-                if record and observations[itemID] and not record.rowPriceFixed then
-                    record.market = nil
-                end
-            end
-
-            local recorded = ns.Prices:CommitScan(observations, now)
-            -- Every item the scan priced lists on one click for a while.
-            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations, true) end
-
-            -- Each random suffix beside its item, now the item has a price.
-            if ns.Prices.CommitSuffixes then
-                for itemID, bySuffix in pairs(suffixObservations) do
-                    ns.Prices:CommitSuffixes(itemID, bySuffix, now)
-                end
-            end
-
-            -- After the commit, so a commodity priced for the first time in
-            -- this scan is marked too and never starts afresh later.
-            for itemID in pairs(commodities) do
-                local record = table_ and table_[itemID]
-                if record and observations[itemID] then record.rowPriceFixed = true end
-            end
-
+            local recorded = KeepRead(now, false)
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 
             -- The snapshot is the whole auction house, so an item it did not
@@ -1292,12 +1317,20 @@ function Scanner:ReadReplicateResults(numItems)
         end,
 
         onCancel = function()
+            -- Keep the rows read so far (see KeepRead).
+            local recorded = next(observations) and KeepRead(time(), true) or 0
+            local elapsed = GetTime() - (self.scanStartedAt or GetTime())
+
             self.isScanning = false
             self.isReading = false
-            Say(L["scan cancelled"])
+            if recorded > 0 then
+                Say(L.Format("scan stopped early: %s items updated in %.1fs", Util.Comma(recorded), elapsed))
+            else
+                Say(L["scan cancelled"])
+            end
 
             if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete()
+                ns.UI:OnScanComplete(recorded > 0 and { items = recorded, soldOut = 0 } or nil)
             end
         end,
     })
@@ -2116,7 +2149,13 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                     -- Under its random suffix too: the key's own, or the
                     -- listing's link when the search was for every suffix.
                     local suffix = tonumber(key.itemSuffix) or 0
-                    if suffix == 0 then suffix = LinkSuffix(info.itemLink) or 0 end
+                    if suffix == 0 then
+                        suffix = LinkSuffix(info.itemLink) or 0
+                    elseif ns.Prices.LearnSuffix then
+                        -- The listing's link beside its key: which bonus
+                        -- is which suffix, for the copies in the bags.
+                        ns.Prices:LearnSuffix(info.itemLink, suffix)
+                    end
                     if suffix ~= 0 then
                         bySuffix[suffix] = bySuffix[suffix] or {}
                         table.insert(bySuffix[suffix], listing)

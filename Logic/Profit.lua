@@ -428,11 +428,27 @@ function Profit:LeastProfitablePrice(itemID, minProfit)
     return price
 end
 
+--- Is this a trade good (leather, cloth, bars, herbs and the like)?
+-- Many are also a craft (Light Leather from Ruined Leather Scraps, a bolt
+-- from cloth), but most in the bags were gathered, and a material sells at
+-- the market's price. Reported 2026-11-20: with a 20s Minimum Profit, Light
+-- Leather listed at 21s 44c while the auction house sold it at 34c.
+local TRADE_GOODS = 7
+function Profit.IsTradeGood(itemID)
+    local items = rawget(_G, "C_Item")
+    local instant = type(items) == "table" and items.GetItemInfoInstant or rawget(_G, "GetItemInfoInstant")
+    if type(instant) ~= "function" or not itemID then return false end
+    local ok, _, _, _, _, _, classID = pcall(instant, itemID)
+    return ok and classID == TRADE_GOODS
+end
+
 --- When Post at Minimum Profit is on and a rival's price leaves less than
---- the Minimum Profit, the price to list at instead and why.
+--- the Minimum Profit, the price to list at instead and why. Trade goods
+--- are left at the market's price (see IsTradeGood).
 -- @return price, why  -- nil when the rival's price is fine or it is off
 function Profit:MinimumProfitPrice(itemID, price, basis)
     if not price or not Profit.RIVAL_BASES[basis] or not self:PostAtMinimumProfit() then return nil end
+    if Profit.IsTradeGood(itemID) then return nil end
     local minProfit, _, profession = self:MinimumsFor(itemID)
     minProfit = math.max(0, minProfit or 0)
     local least = self:LeastProfitablePrice(itemID, minProfit)
@@ -1049,10 +1065,15 @@ function Profit:Analyse(recipeID, characterKey, method)
             analysis.disenchantValue, analysis.disenchantPartial, breakdown =
                 ns.Disenchant:GetValue(recipe.outputItemID)
 
-            -- The material the value is read off, whose price's age is the
-            -- age of a disenchant profit.
+            -- The material a disenchant most often gives, whose price's
+            -- age is the age of a disenchant profit. Every outcome counts
+            -- toward the average now, so `counted` no longer picks one out:
+            -- read that way, the age was the rarest material's (the shard).
             for _, outcome in ipairs((breakdown and breakdown.outcomes) or {}) do
-                if outcome.counted then analysis.disenchantMaterial = outcome.itemID end
+                if outcome.likely or (outcome.likely == nil and outcome.counted) then
+                    analysis.disenchantMaterial = outcome.itemID
+                    break
+                end
             end
         end
     end
@@ -1243,7 +1264,7 @@ function Profit:Analyse(recipeID, characterKey, method)
             depositKnown = true, basis = "vendor", profit = revenue - cost.total }
     end
 
-    -- The most likely result, less the cut on selling the materials. No
+    -- The average result, less the cut on selling the materials. No
     -- deposit: the materials' is small, and nobody can say which listing
     -- they would join.
     if analysis.disenchantValue and analysis.disenchantValue > 0 then
@@ -1404,6 +1425,21 @@ end
 --               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi",
 --               method = see Analyse }
 function Profit:GetRanked(opts)
+    local ranking = self:BeginRanked(opts)
+    for _, item in ipairs(ranking.items) do
+        self:RankOne(ranking, item)
+    end
+    return self:FinishRanked(ranking)
+end
+
+-- GetRanked in three steps, so a list that need not answer at once can
+-- analyse a few recipes a frame (the smooth play rule; the Profit tab does
+-- when it is picked): BeginRanked lists the recipes, RankOne analyses one
+-- and keeps it if it belongs, FinishRanked sorts what was kept. Run straight
+-- through they are GetRanked.
+
+--- @return ranking { items = { { recipeID, recipe }, ... }, results = {} }
+function Profit:BeginRanked(opts)
     opts = opts or {}
 
     -- Numbers given by the caller hold for every craft; otherwise each
@@ -1428,52 +1464,66 @@ function Profit:GetRanked(opts)
         return fixedProfit or profit, (fixedMargin or margin) / 100
     end
 
-    local results = {}
-
     -- Account-wide pulls in every character's cached recipes, each analysed
     -- against the bags of whoever actually knows it.
     -- Crafts of a profession the character has dropped are left out.
     local source = opts.accountWide and ns.Recipes:GetAccountWide(true) or ns.Recipes:GetAll()
 
+    local items = {}
     for recipeID, recipe in pairs(source) do
-        local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
-            and ns.Recipes:IsDropped(recipe)
-        -- An ignored craft is never analysed, so it is gone everywhere this
-        -- list is used: the rows, Queue All and the empty-list message.
-        local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
-        local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
+        items[#items + 1] = { recipeID = recipeID, recipe = recipe }
+    end
 
-        if analysis then
-            local keep = true
+    return { opts = opts, items = items, results = {}, Minimums = Minimums }
+end
 
-            if not analysis.priceable then
-                keep = opts.includeUnpriceable == true
-            else
-                local minProfit, minMargin = Minimums(analysis)
-                if analysis.profit < minProfit then keep = false end
-                if keep and analysis.margin < minMargin then keep = false end
-                if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+--- Analyse one recipe of a ranking and keep it if it belongs on the list.
+function Profit:RankOne(ranking, item)
+    local opts, results, Minimums = ranking.opts, ranking.results, ranking.Minimums
+    local recipeID, recipe = item.recipeID, item.recipe
 
-                -- Already holding as many as you want listed. Not a row
-                -- already on screen, though: queueing up to the limit would
-                -- make it vanish under the cursor.
-                if keep and analysis.atPostLimit
-                   and ns.Config:Get("hideAtPostLimit") ~= false
-                   and not opts.ignorePostLimit
-                   and not (opts.keepOrder and opts.keepOrder[recipeID]) then
-                    keep = false
-                end
-            end
+    local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
+        and ns.Recipes:IsDropped(recipe)
+    -- An ignored craft is never analysed, so it is gone everywhere this
+    -- list is used: the rows, Queue All and the empty-list message.
+    local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
+    local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
 
-            if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+    if analysis then
+        local keep = true
+
+        if not analysis.priceable then
+            keep = opts.includeUnpriceable == true
+        else
+            local minProfit, minMargin = Minimums(analysis)
+            if analysis.profit < minProfit then keep = false end
+            if keep and analysis.margin < minMargin then keep = false end
+            if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+
+            -- Already holding as many as you want listed. Not a row
+            -- already on screen, though: queueing up to the limit would
+            -- make it vanish under the cursor.
+            if keep and analysis.atPostLimit
+               and ns.Config:Get("hideAtPostLimit") ~= false
+               and not opts.ignorePostLimit
+               and not (opts.keepOrder and opts.keepOrder[recipeID]) then
                 keep = false
             end
+        end
 
-            if keep then
-                results[#results + 1] = analysis
-            end
+        if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+            keep = false
+        end
+
+        if keep then
+            results[#results + 1] = analysis
         end
     end
+end
+
+--- Sort what a ranking kept. @return the list GetRanked gives
+function Profit:FinishRanked(ranking)
+    local opts, results = ranking.opts, ranking.results
 
     local sortBy = opts.sortBy or "profit"
 
@@ -1670,7 +1720,7 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
     ns.PrintRaw(L.Format("  material cost   %s", Util.FormatMoney(analysis.totalCost)))
 
     if analysis.priceBasis == "disenchant" then
-        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at its most likely result|r",
+        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at what it gives on average|r",
             ns.COLORS.profit))
         ns.PrintRaw(L.Format("  disenchants to  %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))

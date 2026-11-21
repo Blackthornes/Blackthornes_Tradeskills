@@ -53,7 +53,7 @@ local WAY_WORD = { vendor = L["vendor"], auction = L["auction house"], disenchan
 local WAY_LONG = {
     vendor = L["Vendor"],
     auction = L["Auction house, after the cut"],
-    disenchant = L["Disenchant, most likely result"],
+    disenchant = L["Disenchant, on average"],
 }
 
 local state = {

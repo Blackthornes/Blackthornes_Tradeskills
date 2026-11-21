@@ -23,6 +23,94 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.37.0
+
+- The Buy Materials button stays on the vendor window when Butler is loaded.
+- Each suffix on the Prices tab shows its own price graph and Stats.
+- Sales of stacks and other items are filed under their item, on one row.
+
+Fixes and changes:
+- Prices, Profit, Queue and Settings open with less stalling.
+- A steady run of listings keeps going, and Snipe finds hold still between searches.
+- Road to 300 uses the skill the trainer asks for.
+- Blackthornes' own channel no longer takes the /1 spot at login.
+
+## 1.36.0
+
+- Random suffix items open on the Prices tab to show a price for each suffix.
+
+Fixes and changes:
+- Crafts with a cooldown, like transmutes, are priced at what the item costs to buy.
+- Mailbox visits keep 60 days, up to 2,000.
+- Various bug fixes for Tradeskills.
+
+## 1.35.4
+
+Fixes and changes:
+- Your prices and sales are kept when the game gives a blank realm name.
+
+## 1.35.3
+
+Fixes and changes:
+- Road to 300 finds trainers for First Aid and Cooking recipes, so the road keeps going.
+
+## 1.35.2
+
+Fixes and changes:
+- Trade goods like leather post at the market price with Post at Minimum Profit.
+
+## 1.35.1
+
+Fixes and changes:
+- The trip line and stop dots now draw on the world map.
+- Longer periods count older sales past the last 400.
+- The age shown for a disenchant profit reads the material you mostly get.
+
+## 1.35.0
+
+- Every window has a gold gem on its title bar. Click it to switch between the one window and separate windows.
+- Road to 300 learns the recipes a profession trainer teaches when you open one.
+Fixes and changes:
+- Road to 300 leaves off vendor recipes that need a standing you don't have.
+- Disenchant value is the average of every result, counting each by its chance.
+- Item names on the Prices tab fill in once the game loads them.
+- The queued craft stays showing when you resize the window.
+- Snipe lists only show finds your Spending Cap can buy.
+- Crafted pieces with a suffix are priced by that suffix.
+
+## 1.34.5
+
+Fixes and changes:
+- Listing a Spellstone or other bag item no longer gets blocked. List It and Skip show in our own window.
+- Gear lists price to the copper.
+- Road to 300 counts materials you own as free when Charge for Own Materials is off, and the "Get everything before you start" row is gone.
+- A Quick Scan that stops partway keeps what it read.
+
+## 1.34.4
+
+Fixes and changes:
+- Restocking after a sale queues enough crafts to reach the amount you keep in stock.
+
+## 1.34.3
+
+Fixes and changes:
+- The cooldown timer no longer shows an error.
+- Road to 300 steps show in green.
+- In Recipes to Learn, a click on Skill sorts by skill again.
+
+## 1.34.2
+
+Fixes and changes:
+- Road to 300: Queue Step now queues only the step you click.
+
+## 1.34.0
+
+- The craft queue and Shopping List show on the Crafting tab of the one window, and only while something is queued.
+Fixes and changes:
+- An item that sold is no longer logged as cancelled, and restocking starts when your listed count hits 0.
+- Road to 300 sends each rank to the trainer who teaches it.
+- Hovering a recipe that makes more than one item in the Profit tab no longer shows an error.
+
 ## 1.33.0
 
 - Star the recipes you want to learn, and vendors and trainers tell you when they teach one.

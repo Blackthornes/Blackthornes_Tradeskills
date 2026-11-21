@@ -14,14 +14,15 @@
 --     send to it, but throttles hard: about 8 at once, and one every half
 --     second was still too fast. So a scan goes out a message every
 --     SEND_GAP seconds, at most once an hour, never in a fight, and not at
---     all when MIN_SENDERS others already shared a scan from about then.
+--     all when COVERED_BY others already shared a scan from about then.
 --   * Only item numbers and prices go out. Senders are kept by a hash of
 --     their name, never the name, in `realmPrices[realm][itemID]` (never
 --     rename it).
---   * A price is used only once MIN_SENDERS players have sent one for the
---     item, and the middle of the last SENDERS_PER_ITEM is taken, so one
---     player's silly price is outvoted. A price far from a fresh one of your
---     own is not taken at all.
+--   * One player's price is used (the owner, 2026-11-18, in place of "3
+--     players agree"). Once several have sent one, the middle of the last
+--     SENDERS_PER_ITEM is taken. A price under 5% of the one you know (your
+--     own, else your guild's) or over 10 times it is not taken at all
+--     (RealmPrices.TooFar).
 --   * It only fills gaps, after your own scans and your guild's prices
 --     (Data/Prices.lua). Used for USE_FOR, kept KEEP, as guild prices are.
 --   * When the server refuses what we send (a player's chat filled with
@@ -46,15 +47,26 @@ RealmPrices.HEARD_COVERS = 30 * 60    -- others' scans this close cover yours
 RealmPrices.KEEP = 7 * 24 * HOUR
 RealmPrices.USE_FOR = 3 * 24 * HOUR
 RealmPrices.MAX_ITEMS = 2000          -- items one share sends
-RealmPrices.MIN_SENDERS = 3           -- players needed before a price is used
+RealmPrices.MIN_SENDERS = 1           -- players needed before a price is used
+RealmPrices.COVERED_BY = 3            -- others' shares that make ours not needed
 RealmPrices.SENDERS_PER_ITEM = 5      -- the last prices kept for an item
-RealmPrices.FAR = 10
+RealmPrices.FAR = 10                  -- over 10x the price you know is refused
+RealmPrices.LOW = 20                  -- under 1/20 (5%) of it is refused
 RealmPrices.MAX_PER_SENDER_HOUR = 4000
 RealmPrices.MAX_ITEM_ID = 10000000
 RealmPrices.MAX_STORED = 20000        -- items kept for a realm
 RealmPrices.SEND_GAP = 3              -- seconds between messages to the channel
+-- Chat Notice (2026-11-18): realm prices trickle in from many players, so
+-- they are added up and said once quiet, at most once every NOTICE_EVERY.
+RealmPrices.NOTICE_QUIET = 30
+RealmPrices.NOTICE_EVERY = 10 * 60
 RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
 RealmPrices.REJOIN_DELAY = 5          -- seconds after the player leaves it by hand
+-- The game's own channels (General, Trade, LocalDefense) join as you enter
+-- the world. Ours waits for them, else it takes /1 (a player's report,
+-- 2026-11-21); with none in this long after login it joins anyway.
+RealmPrices.GAME_CHANNELS_WAIT = 120
+RealmPrices.STEP_RECHECK = 2          -- seconds before looking again after moving ours back
 RealmPrices.BACK_OFF = 15 * 60        -- seconds of quiet after the first refusal
 RealmPrices.MAX_BACK_OFF = 6 * HOUR
 RealmPrices.MAX_REFUSALS = 3          -- refusals before it stops sending this session
@@ -268,11 +280,100 @@ function RealmPrices:Filter()
     pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE_USER", RealmPrices.FilterNotice)
 end
 
-function RealmPrices:Join()
-    if not self:IsOn() then return false end
+local function InInstance()
+    if type(IsInInstance) ~= "function" then return false end
+    local ok, inside = pcall(IsInInstance)
+    return ok and inside == true
+end
+
+--- The other chat channels this character is in, as { id, name } by
+--- number, or nil when the client won't say.
+function RealmPrices:OtherChannels()
+    if type(GetChannelList) ~= "function" then return nil end
+    -- Read whole inside a pcall: a value the client hands out may raise.
+    local ok, others = pcall(function()
+        local list, found = { GetChannelList() }, {}
+        for i = 1, #list, 3 do
+            local id, name = list[i], Comm.Plain(list[i + 1])
+            if type(id) == "number" and id > 0 and name and not self:IsOurs(name) then
+                found[#found + 1] = { id = id + 0, name = name }
+            end
+        end
+        table.sort(found, function(a, b) return a.id < b.id end)
+        return found
+    end)
+    return ok and others or nil
+end
+
+--- Is this one of the game's own channels (General, Trade and the like)?
+--- When the client can't list them, every channel counts as one.
+function RealmPrices:IsGameChannel(name)
+    if type(EnumerateServerChannels) ~= "function" then return true end
+    local ok, list = pcall(function() return { EnumerateServerChannels() } end)
+    if not ok or type(list) ~= "table" or #list == 0 then return true end
+    name = tostring(name):lower()
+    for _, server in ipairs(list) do
+        server = Comm.Plain(server)
+        if type(server) == "string" and server ~= ""
+            and name:sub(1, #server) == server:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+--- Have the game's own channels had their turn? Never in a dungeon or a
+--- battleground, where General is left and its number would be free.
+function RealmPrices:GameChannelsReady(now)
+    if InInstance() then return false end
+    local others = self:OtherChannels()
+    if others == nil or #others > 0 then return true end
+    return (now or Uptime()) - (self.loginAt or 0) >= self.GAME_CHANNELS_WAIT
+end
+
+--- Ours sits in front of a game channel (it joined first, at a login
+--- before this fix, or the game remembered it): move it behind them, one
+--- place a call. With no way to move it, leave it for this session, so
+--- the game's channels keep their numbers. True when it was moved.
+function RealmPrices:StepBack()
     local name = self:ChannelName()
-    if Comm.ChannelNumber(name) > 0 then self.triedTemporary = nil return true end
+    local ours = Comm.ChannelNumber(name)
+    if ours <= 0 then return false end
+    local others = self:OtherChannels()
+    if not others then return false end
+    local behind
+    for _, other in ipairs(others) do
+        if other.id > ours and self:IsGameChannel(other.name) then behind = other.id break end
+    end
+    if not behind then return false end
+    -- The one after ours, whatever it is, so the order of the rest stays.
+    for _, other in ipairs(others) do
+        if other.id > ours then behind = other.id break end
+    end
+    local swap = type(C_ChatInfo) == "table" and C_ChatInfo.SwapChatChannelsByChannelIndex
+    if type(swap) == "function" and pcall(swap, ours, behind) then
+        if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+            C_Timer.After(self.STEP_RECHECK, function() RealmPrices:Join() end)
+        end
+        return true
+    end
+    self.stepAside = true
+    if type(LeaveChannelByName) == "function" then pcall(LeaveChannelByName, name) end
+    return true
+end
+
+function RealmPrices:Join()
+    if not self:IsOn() or self.stepAside then return false end
+    local name = self:ChannelName()
+    if Comm.ChannelNumber(name) > 0 then
+        self.triedTemporary = nil
+        self.waitingForGame = nil
+        self:StepBack()
+        return Comm.ChannelNumber(name) > 0
+    end
     if InCombat() then self.joinAfterFight = true return false end
+    if not self:GameChannelsReady() then self.waitingForGame = true return false end
+    self.waitingForGame = nil
     self:Filter()
     -- A player left it by hand (2026-11-06) and the temporary join never
     -- took again, so a try that did not land is followed by the other way in.
@@ -298,8 +399,17 @@ end
 function RealmPrices:OnNotice(notice, channelString, channelName)
     notice = Comm.Plain(notice)
     if type(notice) ~= "string" or not self:IsOn() then return false end
-    if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then return false end
+    if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then
+        -- A game channel just came in while ours waited for it: join soon.
+        if self.waitingForGame and (notice == "YOU_JOINED" or notice == "YOU_CHANGED")
+            and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+            self.waitingForGame = nil
+            C_Timer.After(self.STEP_RECHECK, function() RealmPrices:Join() end)
+        end
+        return false
+    end
     if notice ~= "YOU_LEFT" then return self:OnRefused(notice) end
+    if self.stepAside then return true end
     self.triedTemporary = nil
     if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
         C_Timer.After(self.REJOIN_DELAY, function() RealmPrices:Join() end)
@@ -392,7 +502,7 @@ function RealmPrices:WhyNotShare(now)
     local mine = self:LastSent()
     if mine and mine.scanAt and mine.scanAt >= scanAt then return "already shared" end
     if mine and mine.at and now - mine.at < self.SHARE_EVERY then return "shared within the hour" end
-    if self:Covering(scanAt) >= self.MIN_SENDERS then return "others shared one" end
+    if self:Covering(scanAt) >= self.COVERED_BY then return "others shared one" end
     if Comm.ChannelNumber(self:ChannelName()) <= 0 then return "not in the channel" end
     return nil, scanAt
 end
@@ -448,11 +558,20 @@ function RealmPrices:OnAnnounce(sender, body, channel, channelName, target)
     if not self.heard[who] or at > self.heard[who] then self.heard[who] = at end
 end
 
-local function TooFar(itemID, value)
+--- Whether a stranger's price is too far from the one you know: your own
+--- scan, even an old one, else your guild's. Under 5% of it (LOW) or over
+--- 10 times it (FAR) is refused. Nothing known, nothing refused.
+function RealmPrices.TooFar(itemID, value)
     local own = ns.Prices:GetTable()[itemID]
-    if type(own) ~= "table" or type(own.market) ~= "number" or ns.Prices:IsStale(itemID) then return false end
-    return value > own.market * RealmPrices.FAR or value * RealmPrices.FAR < own.market
+    local known = type(own) == "table" and type(own.market) == "number" and own.market > 0 and own.market or nil
+    if not known and ns.GuildPrices and ns.GuildPrices.GetValue then
+        local ok, guild = pcall(ns.GuildPrices.GetValue, ns.GuildPrices, itemID)
+        if ok and type(guild) == "number" and guild > 0 then known = guild end
+    end
+    if not known then return false end
+    return value > known * RealmPrices.FAR or value * RealmPrices.LOW < known
 end
+local TooFar = RealmPrices.TooFar
 
 function RealmPrices:OnPrices(sender, body, channel, channelName, target)
     if not FromUs(channel, channelName, target) or Comm.IsMe(sender) or not self:IsOn() then return end
@@ -472,6 +591,7 @@ function RealmPrices:OnPrices(sender, body, channel, channelName, target)
     end
 
     local taken = 0
+    local items = {}
     for idText, marketText, lowestText in list:gmatch("(%w+),(%w+),?(%w*);") do
         if tally.items >= self.MAX_PER_SENDER_HOUR then break end
         tally.items = tally.items + 1
@@ -482,10 +602,71 @@ function RealmPrices:OnPrices(sender, body, channel, channelName, target)
             and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
             and not TooFar(itemID, market) then
             self:Store(itemID, who, at, market, lowest)
+            items[itemID] = true
             taken = taken + 1
         end
     end
     if taken > 0 then ns.Prices.changes = (ns.Prices.changes or 0) + 1 end
+    if taken > 0 then self:NoteHeard(who, items, now) end
+end
+
+--------------------------------------------------------------------------------
+-- Chat Notice: one line for many players, off unless ticked
+--------------------------------------------------------------------------------
+
+function RealmPrices:NoticeOn()
+    return ns.Config and ns.Config:Get("sharedChatNotice") == true
+end
+
+--- Prices from a player on the realm were taken. Players are counted by
+--- the same hash the save keeps, never named.
+function RealmPrices:NoteHeard(who, items, now)
+    if not self:NoticeOn() then return end
+    now = now or time()
+    local batch = self.heard
+    if not batch then
+        batch = { items = {}, count = 0, players = {}, playerCount = 0 }
+        self.heard = batch
+    end
+    for itemID in pairs(items) do
+        if not batch.items[itemID] then
+            batch.items[itemID] = true
+            batch.count = batch.count + 1
+        end
+    end
+    if not batch.players[who] then
+        batch.players[who] = true
+        batch.playerCount = batch.playerCount + 1
+    end
+    batch.last = now
+    if batch.waiting then return end
+    batch.waiting = true
+    local function Check()
+        local t = time()
+        local wait = math.max(self.NOTICE_QUIET - (t - (batch.last or 0)),
+            (self.lastNotice or -math.huge) + self.NOTICE_EVERY - t)
+        if wait > 0 then
+            C_Timer.After(wait, Check)
+            return
+        end
+        self:SayHeard(t)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(self.NOTICE_QUIET, Check) end
+end
+
+--- Say what came in from the realm in one line and forget it.
+function RealmPrices:SayHeard(now)
+    local batch = self.heard
+    if not batch then return end
+    self.heard = nil
+    if batch.count > 0 and self:NoticeOn() then
+        self.lastNotice = now or time()
+        if batch.playerCount == 1 then
+            ns.Print(L.Format(L["Got prices for %d items from 1 player on your realm."], batch.count))
+        else
+            ns.Print(L.Format(L["Got prices for %d items from %d players on your realm."], batch.count, batch.playerCount))
+        end
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -498,7 +679,7 @@ function RealmPrices:Describe()
         and L["You're not in the price channel right now. Tradeskills tries again every minute."] or nil
     local count = self:Count()
     if count == 0 then
-        return away or L["Listening for prices from your realm. A price is used once 3 players agree on it."]
+        return away or L["Listening for prices from your realm. They fill in prices you don't have yet."]
     end
     local shown = ns.Util and ns.Util.Comma and ns.Util.Comma(count) or tostring(count)
     local players = self:Players()
@@ -522,6 +703,7 @@ function RealmPrices:Describe()
 end
 
 function RealmPrices:OnEnable()
+    self.loginAt = Uptime()
     self:Prune()
     self:Filter()
     Comm:On("Y", function(...) RealmPrices:OnAnnounce(...) end)

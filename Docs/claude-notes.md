@@ -35,6 +35,67 @@ rows stay by item: sales are money received, a craft can't pick its roll,
 and the game already lists searches by suffix. Tested in
 `tools/test_suffixprices.lua`.
 
+Forever names a suffix two ways, and neither is a link's old suffix field
+(found 2026-11-19 from a player's report and the owner's own save: every
+saved suffix was 14298 to 14473, and no link in any save had the field
+filled). A link carries a bonus ID (`item:15012::::::::18:1485:::1:12722`,
+"of the Bear"; several bonuses share one name), and the auction house key's
+`itemSuffix` is another number, the one `record.suffixes` is keyed by. So
+`Util.LinkSuffix` answered nil for every bag copy, and a crafted "of the
+Monkey" piece was priced, posted and judged as the plain item, while
+`Prices.SuffixName` asked the client with the key's number in the link's
+field and got no name. Now `Util.LinkSuffix(link)` answers the key's
+number through `Prices.ResolveSuffix` (set as `Util.ResolveSuffix`), with
+a second value: false means "a suffix copy, not placed yet", and the first
+is then a stand-in (the bonus, negative) that is never saved under
+(`Scanner`'s `LinkSuffix` passes it over). The two numbers are joined as
+they are seen together, account wide in `ns.db.suffixWords` (never rename
+it): `bonuses[bonusID] = suffix` from `Prices:LearnSuffix(link, suffix)`
+(a search's listing beside its key, the bag copy beside
+`GetItemKeyFromItem` in `Posting:GetSearchKey`), and
+`tails[locale][suffix] = " of the Monkey"` from `Prices:LearnKeyName(key)`
+(browse rows, `C_AuctionHouse.GetItemKeyInfo`'s `itemName`) or a link's own
+name. A link whose bonus is not known is placed by its name's tail, and
+that match is kept by its bonus. Names on the Prices tab come from the
+tail, else a known bonus, else the key's own name. Tested in
+`tools/test_foreversuffix.lua`. Not yet seen in game: that
+`GetItemKeyInfo`'s name carries the suffix, and that it answers away from
+the auction house.
+
+Suffix rows on the Prices tab (a player's report, the owner said build it
+from a mockup, 2026-11-20): an item whose suffixes have recent prices
+(`Prices:SuffixCount`, no names asked) shows "N suffixes" and a gold + or -
+after its icon; open, each suffix is a row under it (`kid = true`, its own
+Market, Cheapest, Listed and Age; Moves and Trend "--"), sorted by the same
+column and never leaving its item (`SortRows`, `AddSuffixRows` in
+`UI/Tab_Prices.lua`). Open while a search finds `AUTO_OPEN_MOST` (30) or
+fewer items, else closed; a click keeps the player's choice in
+`state.open[itemID]` (session only, nothing saved). A search also reads the
+kept suffix names (`Prices:SuffixTails`, no client calls): "of the Bear"
+finds the item showing only its Bear, and so does "chestpiece of the b".
+Picking a suffix row shows its prices in the side pane under its full name,
+leaves out Your listing (read by item), and says "Stock movement and Price
+History are for every suffix together." (since 2026-11-21 "Stock movement is
+for every suffix together.", the graph being the suffix's own) The item count at the foot counts
+items only. Tested in `tools/test_suffixrows.lua`. Not yet seen in game.
+
+Picking a suffix row shows that suffix (a player's report, 2026-11-21:
+picking "Cabalist Chestpiece of Arcane Wrath" still drew the plain item's
+graph and Stats). Each suffix entry now keeps its own readings in
+`entry.history` (the item's flat layout, newest `Prices.SUFFIX_READINGS`),
+and for kept items (crafted, used or starred) hour by hour lines in
+`suffixHistory[realm][itemID][suffix]` and `suffixListed[...]` (never
+rename them; pruned like the item's, `PriceHistory:NoteSuffix`).
+`GetPoints`, `GetListed`, `GetBestTimes` and `DescribeBestTimes` take an
+optional suffix; `PriceGraph.Series(..., suffix)` and `graph:SetItem(itemID,
+suffix)` draw it (hourly, else the suffix's own readings, never the
+item's). `PricesUI.Subject(entry)` gives a row's item and suffix to the
+graph and to `StatsUI:Pick(itemID, suffix)`; `ItemStats:Build(itemID, now,
+suffix)` and `Key(itemID, suffix)` price it by the suffix (worth, week's
+change, heat, scans, readings), while sales, stock share and demand stay
+the item's (they are read by item only). A pick from Stats' own list shows
+the plain item. Tested in `tools/test_suffixdetails.lua`.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
@@ -54,6 +115,16 @@ page (`cooldownAlerts`, on unless unticked) and `/bts cooldowns`. Butler's
 `Jobs()` gives each ready group as a `cooldown` step, and `Butler:Craft`
 makes a ready cooldown craft once, queued or not. Tested in
 `tools/test_cooldowns.lua` and `tools/test_butlerjobs.lua`.
+
+Priced to buy (a player on Discord, 2026-11-20): a craft with a cooldown
+(`Cooldowns:HasCooldown`) is never a sub-craft for the character playing
+either, as it already was not for alts (`Cost:BuildAltIndex`), so a Gold
+Bar or Arcanite Bar is priced at its buying price and the queue buys it
+rather than planning many transmutes. Set to Make on the Level Up tab
+(`alwaysSubCrafts`) it is still made. A craft first seen waiting
+invalidates Cost's index. `FindAnyRecipeForItem` still names the
+transmute, so the bar itself is priced as before. Tested in
+`tools/test_cooldowncost.lua`.
 
 
 ## Craft requests in Trade
@@ -504,6 +575,14 @@ By real cost a craft never counts for less than `RoadPlan.REAL_FLOOR`
 sold for more than it cost had a cost below 0, which looked cheaper a
 point the lower its chance fell, so the road stayed on it to grey, 144
 yellow crafts for 20 points). The step's own gold figure is unchanged.
+With Charge for Own Materials off (`valueOwnedMaterials = false`), what
+the character owns (bags, bank, alts) is free when the road picks
+(2026-11-19, a player's report: it never cured the Medium Hide in their
+bags, though Cured Medium Hide was orange and cost only salt). It is used
+up as the road walks (`Spare`, `UseUp` in `RoadPlan:Plan`), so the road
+moves on once it runs out; owned materials still count
+`RoadPlan.OWNED_SHARE` (1%) so a likelier point wins a tie. The setting is
+part of the plan's key; `opts.valueOwned` overrides it in tests.
 The drop-down lists them (the owner found only Enchanting and Tailoring,
 2026-11-08): `RoadPlan:Professions` takes a line `ClassicLine` does not
 know by its English name (`Recipes.EnglishProfessionName`, so a second
@@ -533,6 +612,19 @@ next cheapest. The footer says "1 recipe skipped." (`RoadView.FootText`,
 (`RoadView:PlaceShowAll`, `RoadPlan:ShowAllOn(line)`), for the profession
 shown only. Tested in `tools/test_roadto300.lua` and
 `tools/test_roadviewfit.lua`.
+
+Green steps (a player's report, 2026-11-18: the road called Rough
+Dynamite, yellow 30 and grey 60 on Forever, a yellow step while the
+game's window showed it green). Green starts halfway from yellow to grey
+(`RoadPlan.Edges`, `RoadPlan.Band`, as `LearnNext.Tier`); a step ends
+where yellow turns green, carries `tier` ("optimal", "medium", "easy"),
+is drawn in that colour and a green one's chip says "some crafts". `Best`
+takes a green craft only when no orange or yellow one is there, even if
+cheaper a point. A known recipe's colour the game's window showed
+(`SkillUp:GetForRecipe`, tier and skill) wins over the book: when they
+disagree `RoadPlan.Agree` moves yellow, green and grey together by as
+much as it takes, as a copy reading through to the record. Tested in
+`tools/test_roadto300.lua`.
 
 Trainers inside a dungeon (2026-11-16, the owner's screenshot: "Train Artisan
 Enchanting" named no trainer and had no Show the Way). `Data/LearnSpots.lua`
@@ -564,6 +656,74 @@ to buy (the shop row tells you how many to gather). Every crafting road
 gets this, not only Alchemy; fishing does not. Tested in
 `tools/test_roadto300.lua` and `tools/test_queuebuys.lua`.
 
+The shop row is gone (the owner, 2026-11-19: "get rid of this gather
+before you start"; each step lists what it needs and has Queue Step).
+`RoadPlan.Shopping`, `plan.shopping`, `plan.shopCost` and the `kind =
+"shop"` row were taken out, with their two locale lines; `RoadPlan.Listed`
+is `Shown`'s list. The paragraph above is kept as history.
+
+Queue Step queues only its own step (the owner, 2026-11-18: one click
+queued the whole road). The `RoadPlan.VendorAfter` part above put every
+later step's vendor materials on the list with each Queue Step, which read
+as the whole road queued; it is gone. Queue Step (with the plan) now calls
+`Queue:SetRoadBuys(line, {})`, so `forRoad` lines an older build left come
+off. Queue All is the only button for the whole road; the shop row still
+adds up every material. Tested in `tools/test_roadto300.lua`.
+
+Rank trainers by name (2026-11-18, players on Discord): a trainer's number
+in `Data/LearnSpots.lua` is the highest recipe it teaches, which also counts
+specialty trainers who teach no rank (Brumn Winterhoof, an Elemental
+Leatherworking trainer in Arathi, was offered for Expert Leatherworking and
+Cured Thick Hide; Josephine Lister, a Shadoweave trainer in Undercity, for
+Artisan Tailoring). `LearnNext.RANK_TRAINERS[line][cap]` names who teaches
+each rank, checked against Forever's trainer lists, and `TrainerFor` uses it
+first (falling back to the highest recipe when it names no one the data has).
+`LearnNext.SPECIALISTS[line][name]` (a name pattern, or false) keeps specialty
+trainers out of `Place` unless the recipe is theirs or no plain trainer of
+the side teaches that high. `LearnNext.TOWNS` names Daryl Stack and Serge
+Hinott for Tarren Mill in words (their spots stay on the Alterac Mountains
+map). Sources agree Expert is 125 (level 20) and Artisan 200 (level 35); a
+player said Expert Leatherworking needed 150, most likely because the
+Arathi trainer was the wrong one. Tested in `tools/test_learnnext.lua`.
+
+### Trainer recipes from the trainer's window (2026-11-19)
+
+A player's report: Road to 300 never offered Forever's new trainer recipes
+(First Aid's Lesser Healing Potion, Simple Poultice and the like), since the
+book had no trainer price for any recipe Forever added (`Data/ForeverRecipes.lua`
+rows carry no `t`). The owner chose "Learn from trainer visits".
+`Logic/TrainerRecipes.lua` reads a profession trainer's lines on
+`TRAINER_SHOW` (hidden ones with the filter flipped and put back, as the
+Wishlist does), matched by the tooltip's spell ID, else the one recipe with
+that name, and keeps `trainerRecipes[recipeID] = { cost, skill, at }` account
+wide (never rename it). `RecipeBook:GetAll` lays them over the book: the
+trainer's price becomes `trainerCost` and its skill `skill` (the game's own;
+Lesser Healing Potion is 55 at the trainer, 85 in the client table, which
+is its yellow). The road and Learn Next then send the player to that
+profession's trainers. The shipped `Data/ForeverTrainerRecipes.lua`
+(`tools/forever_trainer_recipes.py <save>`, part of each fold-in) fills in
+for characters who never visited; a character's own visit wins. First rows
+(six First Aid lines) came from a player's trainer screenshot. Prices are
+set by the server, so no site lists Forever's (checked 2026-11-19); the
+fold-in is the only source. RoadPlan's key carries `TrainerRecipes.version`.
+Tested in `tools/test_trainerrecipes.lua`.
+
+No recipes that need reputation (a player's report, the owner said so,
+2026-11-19): the road sent a player to a Redridge vendor for a pattern their
+standing was too low to buy, after they had bought its materials.
+`RoadPlan:Candidates` leaves off a recipe only a vendor teaches while
+`RoadPlan.NeedsStanding(itemID)` is not false: the need comes off the recipe
+item's tooltip (`ItemNeeds`, the "Requires %s - %s" line through
+`Vendor.RequiresPattern`) or a vendor's offer (`VendorPins:RecipeSellers`'
+`faction`, `standing`); the character's standing from `C_Reputation` or
+`GetFactionInfo` by name (`PlayerStanding`, `StandingRank` by the game's
+`FACTION_STANDING_LABEL` words), else the line's red colour, else off. An
+item the client hasn't loaded is asked for and left off until
+`GET_ITEM_INFO_RECEIVED`; `standingVersion` is in the plan's key and moves
+then, and on `UPDATE_FACTION` once a need was seen (no redraw on that
+one, since every kill can raise a standing). Known recipes and trainer
+steps are untouched; Learn Next still lists them. Nothing saved. Tested in
+`tools/test_roadto300.lua`.
 
 ## Welcome card
 
@@ -835,6 +995,21 @@ one that does. "Disenchant Results on Tooltips:" on the Look page, Off,
 Shift or Always, Shift unless picked (`tooltipDisenchantResults`, on;
 `tooltipDisenchantShift`, true; Shift key "disenchant"; never rename
 them). Tested in `tools/test_disenchantresults.lua`.
+
+## Disenchant value is the average
+
+A player's math (2026-11-19, the owner picked "Use the true average"):
+`Disenchant:GetValue` is each outcome's worth (price times average count)
+times its chance, summed. The chances are not scaled to add up to one, since
+your own results can have a shard turn up beside the dust. From 2026-10-03
+to then it was the most likely outcome alone, with the rest tagged
+"(bonus)"; that overstated an item whose likely result was its dearest
+(Burnside Rifle showed 4g 27s 50c, the average is 3g 40s 63c). The tag is
+gone. A rarer material with no price counts as nothing and `partial` is
+true (the tooltip says "or more"); an unpriced likely material still
+means no value. Each outcome carries `counted` (always true) and `likely`
+(the one a disenchant most often gives; Shuffle reads it). Tested in
+`tools/test_disenchant.lua`.
 
 ## Enchant costs on tooltips
 
@@ -1119,6 +1294,16 @@ _G.BlackthornesFarmer.Looted:Has(itemID)   -- true or false; its own records onl
 
 Without Farmer it stays Other sales. If Farmer changes the call, change
 `MethodProfit:Farmed` too.
+
+Older auction sales (a player's report, 2026-11-20): the mail ledger keeps
+only its newest 400 entries (`MAX_LEDGER` in `Data/Mail.lua`), which a busy
+seller fills in a day, so every period from Today to All showed the same
+numbers. A sale trimmed off the ledger now goes to
+`MethodProfit:KeepOlderSale`, kept small in `methodLog[realm].sold` (never
+rename it; `t, id, nm, n, net, dep, c, b, w`), at most `MAX_OLDER_SALES`
+(6000) and pruned at `KEEP` (400 days). `Summary` and `Sellers` read it
+before the ledger. History trimmed before this fix is gone. Tested in
+`tools/test_methodprofit.lua` and `tools/test_mail.lua`.
 
 ## What the other addons want kept (the Sell list)
 
@@ -1425,6 +1610,16 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   after this account's own record. A scan finishing (`WatchScans`) sends
   in about 5 s (`SendSoon(PRICES_KEY)`). The Sharing status adds "N prices
   from their scan AGO". Tested in `tools/test_linkprices.lua`.
+  The tooltip shows it too (2026-11-18, players on two EU accounts said
+  sharing did nothing): its Auction value and Lowest posting read only
+  this account's scans (`GetScanValue`), so an account that never scans
+  said "not scanned yet" on every item it was sent. Now
+  `Prices:GetLinkedValue(itemID, which)` (the partner's price and when,
+  only when newer than this account's own) feeds both `GetValue` and the
+  tooltip, with its age once past the stale setting. Guild and realm
+  prices still stay off the tooltip. Tested in `tools/test_itemtooltip.lua`
+  and `tools/test_linkprices.lua` (also two accounts with different
+  server names for one realm).
 
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
@@ -1555,12 +1750,17 @@ region's prices don't fit another's). When on it
 joins a hidden channel for the side (`BTSPrices` plus A, H or N), hides its
 join lines, and shares the last scan (Y announce, then Z prices, the guild's
 batches) one message every `SEND_GAP` seconds, never in a fight, at most once
-an hour, and not when `MIN_SENDERS` others covered that scan. Kept by a hash
+an hour, and not when `COVERED_BY` (3) others covered that scan. Kept by a hash
 of the sender's name, never the name, in `realmPrices[realm][itemID]` and
-`realmPricesSent` (never rename either). A price is used only once 3 players
-sent one, the middle of the last 5, and only to fill a gap after your own
-scans and your guild's (`Prices:GetValue`), before TSM and Auctionator. A
-price far from a fresh one of your own is refused. `Comm` hands handlers the
+`realmPricesSent` (never rename either). Since 2026-11-18 (the owner, in
+place of "3 players agree") one player's price is used, the middle of the
+last 5 once several sent one, and only to fill a gap after your own scans
+and your guild's (`Prices:GetValue`), before TSM and Auctionator. A price
+under 5% (`LOW` 20) or over 10 times (`FAR`) the one you know, your own
+even if old, else your guild's, is refused (`RealmPrices.TooFar`). Guild
+prices the same day: a guildmate's price scanned after your own replaces
+it, fresh or not (`GuildPrices:GetValue`'s `since`); the 10x guard against
+a fresh price of yours stays. `Comm` hands handlers the
 channel's name and target as fourth and fifth arguments. Tested in
 `tools/test_realmprices.lua`.
 Left by hand (a player's report, 2026-11-06): a `YOU_LEFT` notice for our
@@ -1568,6 +1768,16 @@ channel joins it again `REJOIN_DELAY` seconds later (`OnNotice`), a join
 that did not take is followed by `JoinChannelByName` (`triedTemporary`),
 and the Settings status says "You're not in the price channel right now."
 while it is out (`InChannel`).
+Keeps off /1 (a player's report, 2026-11-21): the join waits until the
+game's own channels are in (`GameChannelsReady`: another channel listed, or
+`GAME_CHANNELS_WAIT` 120 seconds after login with none), never joins inside
+an instance, and a game channel's `YOU_JOINED` while it waits joins two
+seconds later. When ours sits in front of a game channel (an older login,
+or a channel the game remembered), `StepBack` swaps it one place back a
+call (`C_ChatInfo.SwapChatChannelsByChannelIndex`) until it is behind them;
+with no swap it leaves for the session (`stepAside`). Only Tradeskills joins
+a channel: Farmer, Equipment, Pets and Butler share by guild and whisper.
+Tested in `tools/test_realmprices.lua`.
 
 ## A quick scan when you open the auction house
 
@@ -1701,7 +1911,7 @@ it cost to make still asks), and `Post`'s guards all still run. List all
 passes over an item still being confirmed (`GetNextPostable`'s
 `skipSettling`), so nothing goes up twice. Listings close together share
 one read back (`ShareVerify`, `NewerVerifying`), and `MAX_CONFIRMING` is
-6. Leaving the auction house forgets every check. The button says what its
+30 (6 until 2026-11-21, see "A steady run of listings" below). Leaving the auction house forgets every check. The button says what its
 next click does (the owner, 2026-10-16): "Check Prices - N to list" when
 it would only check prices (`Posting:WouldCheckAll`, the same test as
 `PostPanel:ListNext`, read again with the wait labels since a check goes
@@ -1739,6 +1949,26 @@ time for five minutes. `Posting:CheckPending(itemID)` says whether such a
 search is still queued, or sent and not yet answered within
 `CHECK_ALL_WAIT`; `BulkTried` answers true meanwhile, so the label stays
 List Next while a check is out. Tested in `tools/test_fastlisting.lua`.
+
+A steady run of listings (the owner asked for faster posting, 2026-11-21;
+the cause was traced 2026-11-14 in `Docs/handoff/scroll-to-post.md`): the
+wheel or quick clicks listed about seven items in three seconds, then every
+click said "still confirming the last listing" for three or four seconds,
+again and again. Two things made it: every listing moved the queue's last
+send (`AHQueue:NoteSend`), so the urgent read back that confirms listings
+never got its 1.2 seconds of quiet until the clicking stopped, and
+`MAX_CONFIRMING` was 6. Now a listing calls `AHQueue:NoteListing`
+(`lastListing`), which spaces only background requests; urgent ones still
+wait on the queue's own sends, the client's "ready" answer and the
+allowance. A read of your auctions that went out after a listing was made
+and is still being read (`Auctions.sentAt`, `Auctions.READ_FOR`,
+`Posting:ReadOutSince`) settles that listing with no second read and no
+wait for a newer listing's, so a steady run costs about one read every six
+seconds. Tested in `tools/test_poststeady.lua` with the real queue. Not yet
+seen in game. Still open from that handoff: List Next spends a click on a
+top line whose price is not checked while checked lines sit under it, and
+an item nobody else sells still costs a check click and a list click once
+the scan is over ten minutes old.
 
 ## The mouse wheel at the auction house
 
@@ -2239,10 +2469,27 @@ note slot. Headings sort with the house arrow (`Media/Frame/SortArrow.tga`).
 
 The owner approved the mockup and its words (2026-11-03). `Logic/Snipe.lua` and `UI/SnipeView.lua`: a Snipe view tab in the auction drawer, off unless ticked ("Snipe Tab:" on the auction page, `snipeTab`; never rename any snipe key: `snipeCap`, `snipePct`, `snipeSound`, `snipeWatch`, `snipeStripOpen`, `snipeWheel`). Start Sniping is a click, never automatic; a session ends on Stop, the auction house closing or the Spending Cap, and clears the finds. It searches a few items at a time, one search at a time, cheapest page only (`AHQueue`), held while the player sells or buys, and keeps listings at or under worth times Snipe Below (default 70). Watch is Priced Items or To Disenchant (green or better gear the character or the Mail page's disenchanter can break; buys are marked through `DisenchantBuys:Intend`). Below Vendor (`snipeWatch` "vendor", 2026-11-03, a player asked) watches against `Disenchant:GetSellPrice` with no cut, greys in, unsure charged prices out, any listing under it a find (`IsDealFor`), Snipe Below greyed, biggest profit a unit first (`Better`). Big buys ask "Confirm". "Wheel Buys:" (`snipeWheel`) makes wheel up buy the best find on that tab only (`AuctionWheel`). The bell is `Media/Sounds/snipe-bell-single.ogg`, once a batch, never in a fight. Tested in `tools/test_snipe.lua`. Handoff and words awaiting his yes: `Docs/handoff/snipe.md`.
 
+The cap filters the list (a player's report, 2026-11-19: a 1g cap listed 8g to 20g snipes). Prices are each; a find whose single unit costs more than the cap left (`Snipe.Fits`) is never listed, and `Snipe:FitCap` takes out finds a buy put out of reach. Clicking one out of reach while cap money is left says so and keeps the session going; only an empty cap stops it. Tested in `tools/test_snipecap.lua`.
+
 My Lists (the owner said build it, 2026-11-06, from a mockup whose words he saw): a fourth Watch, `snipeWatch` "lists", watches the items on the player's shopping lists. "List:" (only in that mode) picks All Lists or one list, saved account wide as `snipeList` (the list id, nil for All Lists; a gone list reads as All Lists; never rename it). Each item's limit is its own Most I'll Pay (a list item's optional `maxPay`, copper, `ShoppingLists:SetMaxPay`, `MaxPayOf`), else its list's `ListRules` maxPay, else worth times Snipe Below (`Snipe:LimitFor`); an item on two lists follows the first that holds it (`Snipe.ListItems`). The limit stands in for worth, so buying, the cap, Confirm and the bell are unchanged. An item drops out once the player has what the list wants (`Snipe.Need`, `DropMet`), and a buy takes no more than that (`UnitsFor`). Heads read Item, Price, Most I'll Pay, Deal. The Lists view gives each item on a list you can change a "Most I'll Pay:" money box on a third line (`View:ShowMaxPay`, the row grown through the name's `rowNeed`), "List rule, X" beside it when the list's rule applies, and "Got all you need" dimmed. The strip's labels share one column measured in the client's words and Watch: and List: one width (`SnipeView.LabelColumn`, `ChoiceWidth`, `LayStrip`); a cell head's sort arrow has its own room (`ARROW_ROOM`). Tested in `tools/test_snipe.lua` (15) and `tools/test_snipelayout.lua`.
 
 
 Instant buys (the owner said build it, 2026-11-12: "snipe buys must be instant", after a player found Buy stuck on Checking): the top find's price check goes ahead of searching. `Snipe:WantsReady` holds the next search (`Busy`, `Next`) while the top find has no price ready, and that check waits only when the auction requests are nearly used up (`CrowdsBuy`, `BUY_ROOM` 1 left of `AHQueue.BUDGET_MAX`), not at the searches' `HEADROOM`. A ready price that got old (`KeepFresh`, `READY_KEEP`) is asked again in place (`Snipe:Refresh`): the find stays ready, a stack's Buy reads "Checking..." only while its total is asked again (`Repricing`, `Pay` answers "checking"), and it is let go only when the new price is gone, over the cap or higher than before. A check the game gave up on backs off (`find.retryAt`, `RETRY_AFTER`) so searching goes on. Pay still only ever runs from the player's click. No new words. Tested in `tools/test_snipeinstant.lua`. If the game refuses to quote a stack's total again while one is already quoted, the find is readied again from the start.
+
+Finds hold still (the owner's report, 2026-11-21: rows left and came back
+while the auction house was searched). Each search made every find in its
+batch anew, so the readied price was let go and asked for again (the view's
+top find was no longer `pending.find`) and the list was drawn again every
+1.5 seconds. Now `OnBrowseResults` keeps a find that is still for sale as
+the same table (its `retryAt`, `left` and readied price stay), changes it in
+place when the row's price or count moved (`Snipe:PriceMoved` reads a
+readied price again in place), and calls `Moved` only when something on the
+list changed. A find whose listings held nothing to buy (a bid with no
+buyout, a row the game had not caught up on) left and came back with every
+search: `Snipe:NoteGone` remembers the price its row showed and
+`Snipe:WasGone` keeps that row from bringing it back for `GONE_FOR` (five
+minutes) unless the price moves. A buy does not mark it gone. Tested in
+`tools/test_snipesteady.lua`. Not yet seen in game.
 
 ## The Enchant strip
 
@@ -2768,6 +3015,22 @@ since it is where crafts are queued. The one window's Crafting tab and the
 craft strip are unchanged. No new setting or words. Tested in
 `tools/test_craftpane.lua`.
 
+## Queued crafts on the one window's Crafting tab (2026-11-18)
+
+The owner asked for the drawer's Queued crafts and Shopping List on the one
+window's Crafting tab, on its right, and said build it from a mockup
+(`previews/ts-crafting-tab-queue/` in the project files). Before, the
+queued crafts were hidden while the pane sat in the one window. Now
+`RefreshQueued` puts the same frame (`queuedFrame`) into the tab
+(`CraftPanel:QueuedIntoOne`: the tab's right side, `ONE_QUEUED_WIDTH` 280,
+full height, the drawer's rim and halo off) and lays the pane into the rest
+(`LayOutInOne(true)`, re-placed only when the column comes or goes). It
+shows while anything is queued and the tab is wide enough
+(`CraftPanel.QueuedFitsInOne`: the pane's 350 plus the column); else the
+pane takes the whole tab. `OutOfOne` puts it back beside the pane
+(`QueuedBeside`). Hide list, Craft, the cross and right-click work as in the
+drawer; no new setting or words. Tested in `tools/test_shoppinglist.lua`.
+
 ## Crate Shopping List (the Buy tab at the auction house)
 
 The owner asked and said build it (2026-11-16, from a mockup; design notes
@@ -2814,6 +3077,13 @@ only when `ChoosePostPrice` gets its fourth argument, `forSale`, which
 The Profit tab (`Profit:Analyse`), Queue, Level Up, Disenchanting, craft
 tooltips and the crafted-cost "Profit now" line ask without it and keep the
 market's price. Tested in `tools/test_minprofitlistonly.lua`.
+
+Trade goods are left out (2026-11-20, the owner's report): Light Leather is
+also a Leatherworking craft (three Ruined Leather Scraps), so with a 20s
+Minimum Profit it listed at 21s 44c while the auction house sold it at 34c.
+`Profit.IsTradeGood` (item class 7: leather, cloth, bars, herbs, bolts) makes
+`MinimumProfitPrice` return nil, so materials list at the market's price.
+Tested in `tools/test_minprofitpost.lua`.
 
 ## Checking a change
 
@@ -2915,6 +3185,21 @@ Settings: Tooltips page, "Used In Recipes:" Off / Shift / Always
 (`tooltipUsedIn`, on; `tooltipUsedInShift`, off; never rename), in "All
 Lines". Tested in `tools/test_usedin.lua`.
 
+## How many Mailbox visits are kept (2026-11-20)
+
+A player found Mailbox visits stopped at 100, two days back. It kept the
+last 100 per realm (`MAX_HAULS`), which a busy seller fills in two days,
+and the report's This week total and the best haul and best sale read only
+those. The owner picked "60 days, up to 2,000" (2026-11-20).
+`MailHaul:TrimHistory(history, now)` runs after each visit is saved: the
+oldest go once there are more than `MAX_HAULS` (2000) or once older than
+`KEEP_DAYS` (60), but at least `KEEP_ANYWAY` (100) stay, so a player back
+from a long break keeps what they had. The visits holding the best haul
+and best sale (counted ones, as `Records` reads them) are never trimmed.
+Saved visits stay small (`KEEP_SALES` 10, `KEEP_ITEMS` 8). The list is a
+scroll list that draws only the rows on screen. Tested in
+`tools/test_mailhaul.lua`.
+
 ## Leave Out of Report (2026-11-17)
 
 The owner said build it from a mockup (2026-11-17). On the Sales tab's
@@ -3012,6 +3297,116 @@ vendor or trainer; `UI/Wishlist.lua` has the star, the menu line, the
 - Tested in `tools/test_wishlist.lua` and
   `tools/test_recipebookview.lua`.
 
+## Chat Notice for shared prices
+
+Trent said build it (2026-11-18, from a mockup with the words): "Chat Notice:"
+on the SHARING page under Realm Prices, saved `sharedChatNotice` (off unless
+ticked; never rename it). `GuildPrices:NoteHeard` says one line per
+guildmate's batch once they go quiet (`NOTICE_QUIET`), naming them in full;
+`RealmPrices:NoteHeard` adds up every player's prices into one line, counted
+by the save's hash and never named, at most once every `NOTICE_EVERY`.
+Farmer has the same switch for guild drops. Sharing is never announced in
+release notes. Tested in `tools/test_sharednotice.lua`.
+
+## The List It question in its own window
+
+Trent's Spellstone from the bags was blocked (2026-11-19): "Blackthornes_TS
+has been blocked from an action only available to the Blizzard UI". The
+"List It / Skip" question before a listing was shown in the game's own pop-up
+(`StaticPopup_Show`), which marks the box as ours; the game lends that box to
+its own questions later (replace a weapon's enchant), and their protected step
+was blocked. The question is now `UI/PostConfirm.lua` (`ns.PostConfirm`:
+`Show({ text, itemID, data, accept, skip })`, `IsShown`, `Close`, `Accept`,
+`Skip`), same words, icon and buttons, titled "Auction House"; Escape and the
+close gem skip, a newer question replaces an open one without listing or
+skipping it, and the auction house closing takes it down. `Posting:AcceptConfirm`
+and `Posting:SkipConfirm` do what the old popup's OnAccept and OnCancel did.
+Never call `StaticPopup_Show`, `StaticPopup_Hide` or add to `StaticPopupDialogs`
+from any file: `tools/test_gamepopup.lua` fails if a loaded file does. The
+window is checked in `tools/test_postconfirm.lua`.
+
+## The swap gem (One Window toggle, 2026-11-19)
+
+The owner asked for a toggle on each window to swap between the one window
+and each addon's own windows, and said build it from the mockup
+(2026-11-19). A gold gem sits left of the fold gem on every real
+Blackthornes window, so the gems run swap, fold, close. On the one window it
+shows two panes and splits ("Split Into Own Windows"); on an own window it
+shows one pane with a rail line and joins ("Join Into One Window"). Floating
+arrows, bars, trackers, the Zone Board and similar pieces get none.
+
+- `UI/SharedWindow.lua` (FILE_VERSION 14, the same in all five):
+  `SharedWindow.AddSwap(frame, key)` puts the gem on a dressed window's
+  trim (so it hides with the trim inside the one window); `key` nil is the
+  one window. `SharedWindow.Swap(key, join)` is its click. Split: the
+  addon showing is asked its tab, `SetOn(false)` closes the one window,
+  then the addon opens on its own on that tab. Join: every addon closes its
+  own windows, `SetOn(true)`, then the clicked addon opens in the one
+  window on the same tab. In a fight nothing moves; it runs at
+  PLAYER_REGEN_ENABLED (`hub.swapAfterFight`).
+- Same `oneWindow` / `oneWindowAt` keys, no new setting or key. The "One
+  Window:" box reads `On()` as Settings refreshes, so it follows.
+- Each host gives three optional calls beside `enter` and `leave`:
+  `tab()`, `show(tab)` (opens in the one window or its own as the choice
+  now stands, through its Route) and `hide()`. Without them a split falls
+  back to `open` and a join to `SharedWindow.Open(key)`, so an older
+  copy still works.
+- Here: the main window (`TSTabs` in `UI/Main.lua`; a docked tab, the Auction House, Crafting or Mail, is left to go back beside the game's window on a split, and the own window stays shut) carry the join gem.
+- Words: the six tooltip strings in every locale (deDE from the mockup).
+- Tested in `tools/test_swapgem.lua` (the same in all five) and
+  `tools/test_swapwindows.lua` (this addon's windows in the fake game).
+  Not yet seen in game.
+
+## An empty realm name (Forever 1.60.1)
+
+Forever 1.60.1 (a hotfix, announced 2026-11-20) makes GetRealmName, GetRealmID and the C_BattleNet realm fields hand back "" or 0, and scrambles the realm, server and spawn parts of Creature, Vehicle, Pet and GameObject GUIDs (player GUIDs are not named). Every reader of a mob, vendor or trainer ID from a GUID takes any text in parts 2 to 5 (`[^%-]+`), never `%d+`; a new one must too. Prices, price history, sales, the gold log, guild and realm prices and posted auctions are all filed under `Config:GetRealmKey()`, so a blank realm would have opened an empty "UnknownRealm" bucket. When the client gives no realm, `SafeRealmName` uses the one remembered: the character's own file (`BlackthornesTSCharDB.realmName`, written each time the client names it; never rename it), then its record's `realm`, then the realm most of this account's own characters are on (linked accounts' copies never count). `Config:RealmName()` gives that name for others (a new record, Gold Goal, the Characters tab). Nothing saved is moved or renamed. The scanner takes a blank realm as no realm, so your own listings stay yours. Tested in `tools/test_realmblank.lua`.
+
+The bucket 1.35.3 left behind (2026-11-20, after players saw prices and price history gone). Players who played on 1.35.3 after the hotfix had a few hours of scans, sales and gold filed under "UnknownRealm-<side>". `Config:FoldBlankRealm()` runs at the end of `Config:Bootstrap`, before any module reads, and copies each such bucket into the realm all of this account's own characters on that side are on (`Config:BlankRealmHome`; two realms or none and nothing is guessed, it waits). It only adds: a record the realm already has is kept whole, price history (`priceHistory`, `priceListed`) gains the hours it lacks, the mail ledger gains entries it lacks (the same character, kind, item and money within 31 days counts as written, each matched once, then sorted by time), and the gold log adds the two stretches of an hour or day together. The stranded bucket is left as it was, and each fold is written down in `blankRealmFolded[key] = { into, at, mails }` (never rename it) so it runs once. Tested in `tools/test_realmblank.lua`.
+
+## Sales filed by name get their item
+
+A player report (2026-11-21): on the Sales tab, things you don't craft
+(Large Glimmering Shard, Silk Cloth, Tin Bar, Rage Potion) showed as plain
+white names with no icon, and By item split each into two rows, the sales
+by name and the returns by item, so sell-through was wrong on both. A
+stack's mail names it with its count ("Silk Cloth (20)") and a sale's
+invoice may not, and `Mail:ResolveItemName` looked only at crafted outputs.
+Now `ResolveItemName` and `FillItemID` compare `Mail.PlainName`, take any
+item (not only crafted ones), and fall back to the game's item cache by
+name (`C_Item.GetItemInfo(name)`, which never fetches). `Mail:NameIndex`
+files each name as written and plain, and answers a stack's name by its
+plain one. `Mail:FoldNamedSales` gives every own ledger entry with no
+`itemID` the one it can be told, at login (5 s) and after a mailbox read
+writes; it only adds `itemID`, nothing else changes. Tested in
+`tools/test_salesnames.lua`. Not yet seen in game.
+
+## Picking a tab (stalls swapping tabs, 2026-11-21)
+
+The owner's report: a short stall each time a tab was picked at the auction
+house. `UI:SelectTab` ran the tab's whole refresh in one frame. What it does
+now, tested in `tools/test_tabstall.lua`:
+
+- **Prices** keeps its sorted rows (`keptRows` in `UI/Tab_Prices.lua`) until
+  what they are built from changes: the price table and `Prices.changes`, a
+  setting (`Config.changes`), the day, the trend's days, the sort and
+  heading, the three tick boxes, and how many stars and own prices there
+  are. Kept rows get `age`, `suffixCount` and `open` read again. Never kept
+  while names are wanted (a search, a sort by name) or under Reagents Only.
+  `Prices:SetFavourite`, `Prune` and `Scrub` now call `Prices:Touch`, so
+  anything that adds or drops a row counts as a change; a new writer of the
+  price table must Touch too. About 170 ms down to 7 for 7,300 items.
+- **Profit** has `refreshPicked` on its tab: once My Crafts has drawn, a pick
+  keeps the rows up and ranks a few recipes a frame (`Util.NewWorker`, 4 ms),
+  then draws. `Profit:GetRanked` is `BeginRanked`, `RankOne` and
+  `FinishRanked` run straight through, so both give the same list. Any other
+  refresh answers at once and drops a ranking under way; so does leaving
+  the tab or the view. The first draw is at once.
+- **Every pick** runs inside `Queue:Keeping` (one build of the costs and
+  shopping list), and a tab whose `onShow` is its `refresh` (Settings) draws
+  once.
+
+A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
+stays the at-once one every event uses.
 ## Warm glass (2026-11-21)
 
 The owner said build it from the UI pass mockup (ui-pass-1-warm-glass): the

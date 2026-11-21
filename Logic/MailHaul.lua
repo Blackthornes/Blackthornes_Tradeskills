@@ -34,8 +34,15 @@ local MailHaul = ns.NewModule("MailHaul")
 
 local Util = ns.Util
 
--- Visits kept per realm. Each is small; a hundred is months of play.
-local MAX_HAULS = 100
+-- Visits kept per realm: every one from the last KEEP_DAYS, up to MAX_HAULS.
+-- A busy seller can fill a hundred in two days. Each saved visit is small
+-- (KEEP_SALES and KEEP_ITEMS below), so two thousand weigh little. A player
+-- back from a long break still keeps their last KEEP_ANYWAY, and the visits
+-- that hold the best haul and best sale are never dropped.
+local MAX_HAULS = 2000
+local KEEP_DAYS = 60
+local KEEP_ANYWAY = 100
+MailHaul.MAX_HAULS = MAX_HAULS
 
 -- How much of one haul is kept once saved. The report itself sees it all.
 local KEEP_SALES = 10
@@ -714,6 +721,37 @@ function MailHaul:Records(history)
     return bestHaul, bestSale
 end
 
+--- Drop the oldest visits once there are more than MAX_HAULS, or once they
+--- are older than KEEP_DAYS, keeping at least KEEP_ANYWAY. The visits that
+--- hold the best haul and the best sale stay, however old.
+function MailHaul:TrimHistory(history, now)
+    if #history <= KEEP_ANYWAY then return end
+
+    local bestHaul, bestSale = self:Records(history)
+    local keepHaul, keepSale
+    for _, haul in ipairs(history) do
+        if not MailHaul.IsLeftOut(haul) then
+            if not keepHaul and bestHaul > 0 and (haul.total or 0) == bestHaul then keepHaul = haul end
+            if not keepSale and bestSale > 0 and haul.best and (haul.best.amount or 0) == bestSale then
+                keepSale = haul
+            end
+        end
+    end
+
+    local cutoff = (now or time()) - KEEP_DAYS * 86400
+    local index = 1
+    while #history > KEEP_ANYWAY and index <= #history do
+        local haul = history[index]
+        -- Oldest first, so the first one young enough ends the trim.
+        if #history <= MAX_HAULS and (haul.t or 0) >= cutoff then break end
+        if haul == keepHaul or haul == keepSale then
+            index = index + 1
+        else
+            table.remove(history, index)
+        end
+    end
+end
+
 --- Gold collected since `since` (a time()), across saved visits.
 function MailHaul:TotalSince(since)
     local total = 0
@@ -829,7 +867,7 @@ function MailHaul:EndVisit()
 
     local history = self:GetHistory()
     history[#history + 1] = Trimmed(haul)
-    while #history > MAX_HAULS do table.remove(history, 1) end
+    self:TrimHistory(history, time())
 
     self.last = haul
     self:Announce(haul)

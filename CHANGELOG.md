@@ -4,6 +4,110 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.37.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Buy Materials.** The button stays on the vendor window when Butler is loaded. It hides only when the vendor has nothing the queue needs.
+- **Prices tab.** A suffix row you pick shows its own price graph, and Stats opens on that suffix.
+- **Sales tab.** Sales of stacks and items you did not craft are filed under their item, on one row.
+- **Tab switching.** Prices, Profit, Queue and Settings open with less stalling.
+- **Auction house.** A steady run of listings keeps going without waiting. Snipe finds hold still between searches.
+- **Road to 300.** Recipes use the skill the trainer asks for.
+- **Chat channels.** Blackthornes' own channel no longer takes the /1 spot at login.
+
+## 1.36.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Prices tab.** An item with random suffixes opens to show each suffix as its own row with its own price, and the search reads suffix names too.
+- **Cooldown crafts.** Crafts with a cooldown, like transmutes, are priced at what the item costs to buy, and the queue no longer plans as many as it likes. Set one to Make on the Level Up tab to plan it anyway.
+- **Mailbox visits.** The list keeps 60 days of visits, up to 2,000.
+- Various bug fixes for Tradeskills.
+
+## 1.35.4
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Prices and sales.** Your prices and sales are kept when the game gives a blank realm name.
+
+## 1.35.3
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300.** First Aid and Cooking recipes now find their trainer, so the road keeps going past the recipes you know.
+
+## 1.35.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Post at Minimum Profit.** Trade goods like leather post at the market price.
+
+## 1.35.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Trip line.** The trip line and stop dots now draw on the world map.
+- **Profit by method.** Longer periods count older sales past the last 400.
+- **Disenchant profit.** The age shown for a disenchant profit reads the material you mostly get.
+
+## 1.35.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **One Window switch.** Every Blackthornes window has a gold gem on its title bar. It swaps between the one window and each addon's own windows.
+- **Road to 300 trainers.** When you open a profession trainer, Tradeskills notes the recipes it teaches, with their price and the skill each needs. Road to 300 and Learn Next then offer them. Some trainer recipes are known ahead of your visit.
+- **Road to 300 standing.** A recipe only a vendor teaches stays off the road while you lack the standing it asks for.
+- **Disenchanting.** Disenchant value is the average of every result, counting each by its chance.
+- **Prices tab.** Item names fill in once the game loads them.
+- **Craft queue.** The queued craft stays showing when you resize the window.
+- **Snipe.** Snipe lists only show finds your Spending Cap can buy.
+- **Crafted gear.** A crafted piece with a suffix is priced by that suffix.
+
+## 1.34.5
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Listing from a bag item.** Fixed the "blocked" pop-up when you list a Spellstone or other bag item. List It and Skip now open in Tradeskills' own window.
+- **Gear prices.** Gear lists now price to the copper, even after a listing was missed.
+- **Road to 300.** Materials you already own count as free when Charge for Own Materials: is off, so hides get used first. The "Get everything before you start" row is gone.
+- **Quick Scan.** If it stops partway, it keeps the rows it already read.
+
+## 1.34.4
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Restocking.** After a sale, Tradeskills queues enough crafts to reach the amount you keep in stock.
+
+## 1.34.3
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Cooldowns.** Fixed an error in the cooldown timer.
+- **Road to 300.** Steps show in green when nothing better is known, and the game's own colours still win.
+- **Recipes to Learn.** A click on the Skill column sorts by skill again.
+
+## 1.34.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300.** Queue Step queues only the step you click.
+
+## 1.34.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Bug fixes.** Various bug fixes for Tradeskills.
+
+## 1.34.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Queue on the Crafting tab.** The craft queue and the Shopping List show on the one window's Crafting tab. They show only while something is queued.
+- **Sold items.** An item that sold is no longer logged as cancelled. Restocking happens when your listed count reaches 0.
+- **Road to 300.** Each rank sends you to the trainer who teaches it.
+- **Profit tab.** Hovering a recipe that makes more than one item no longer shows an error.
+
 ## 1.33.0
 
 For WoW: Forever (interface 16001). `/reload` is not enough: files were added, so close the game fully and start it again after updating.

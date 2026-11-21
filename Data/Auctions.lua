@@ -126,6 +126,81 @@ local function ReturnedSince(itemID, who, since)
     return returned
 end
 
+-- How long after a sale its mail goes out. A sold mail carries only when it
+-- was sent, so the sale itself was up to this long before that. Taken as the
+-- longest, so a sale made before a reading is never taken off it again.
+local SALE_MAIL_DELAY = 60 * 60
+
+--- Units of an item that sold for a character since its auctions were last
+--- read: sales heard in chat, and sold mail whose sale came after the read.
+--
+-- A reading only changes at the auction house, so a listing that sold
+-- stayed counted as listed until the next visit. With 1 kept and the 1
+-- listed sold, Keep in stock still saw 1 and the sale queued nothing.
+--
+-- A heard sale and its mail are the same sale: the mail carries `heardAt`
+-- once paired (Mail:SettleHeard), and only that time is used for it. `used`
+-- holds the sales already taken off one house's reading, so a sale is never
+-- taken off both houses.
+local function SoldSince(itemID, who, since, used)
+    if not since or not ns.Mail then return 0 end
+    local sold = 0
+
+    local function Take(sale, at, quantity)
+        if used[sale] or not at or at <= since then return end
+        if who ~= nil and sale.who ~= nil and sale.who ~= who then return end
+        used[sale] = true
+        sold = sold + math.max(1, tonumber(quantity) or 1)
+    end
+
+    local heardSales = {}
+    if ns.Mail.GetHeardList then
+        local ok, heard = pcall(ns.Mail.GetHeardList, ns.Mail)
+        if ok and type(heard) == "table" then
+            for _, sale in ipairs(heard) do
+                if sale.itemID == itemID then
+                    heardSales[#heardSales + 1] = sale
+                    Take(sale, sale.t, sale.quantity)
+                end
+            end
+        end
+    end
+
+    -- A sold mail read before its heard sale was paired with it is that
+    -- same sale, already counted above.
+    local paired = {}
+    local function HeardBefore(entry)
+        for _, sale in ipairs(heardSales) do
+            if not paired[sale] and (sale.t or 0) <= (entry.t or 0) + 5
+                and (sale.who == nil or entry.who == nil or sale.who == entry.who) then
+                paired[sale] = true
+                return true
+            end
+        end
+        return false
+    end
+
+    if ns.Mail.GetLedger then
+        local ok, ledger = pcall(ns.Mail.GetLedger, ns.Mail)
+        local entries = ok and type(ledger) == "table" and ledger.entries
+        if type(entries) == "table" then
+            for index = #entries, 1, -1 do
+                local entry = entries[index]
+                if (entry.t or 0) <= since then break end
+                if entry.kind == "sold" and entry.itemID == itemID then
+                    if entry.heardAt then
+                        Take(entry, entry.heardAt, entry.quantity)
+                    elseif entry.sent and not entry.heard and not HeardBefore(entry) then
+                        Take(entry, entry.sent - SALE_MAIL_DELAY, entry.quantity)
+                    end
+                end
+            end
+        end
+    end
+
+    return sold
+end
+
 -- The longest an auction stays up: Blizzard's own Sell tab on Forever offers
 -- 2, 8 and 24 hours (DURATIONS in Logic/Posting.lua). Everything in a reading
 -- older than that has sold or come back since.
@@ -153,31 +228,37 @@ function Auctions:GetPostedCount(itemID)
     if not itemID then return 0 end
 
     local record = self:GetTable()
-    local total = self:PostedAt(record, itemID, true)
+    local used = {}
+    local total = self:PostedAt(record, itemID, true, used)
     if type(record.neutral) == "table" then
-        total = total + self:PostedAt(record.neutral, itemID, false)
+        total = total + self:PostedAt(record.neutral, itemID, false, used)
     end
     return total
 end
 
 --- Units of an item listed at one house, from its readings.
 -- @param legacy  read a reading saved before characters were kept apart
-function Auctions:PostedAt(record, itemID, legacy)
+-- @param used    sales already taken off another house's reading
+function Auctions:PostedAt(record, itemID, legacy, used)
     local byCharacter = record.byCharacter
+    used = used or {}
 
     -- Saved before readings were kept per character: nobody knows whose it
     -- is, so it stands until a character reads its own.
     if not byCharacter or next(byCharacter) == nil then
         if not legacy or Outlived(record.updatedAt) then return 0 end
         local listed = (record.items and record.items[itemID]) or 0
-        return math.max(0, listed - ReturnedSince(itemID, nil, record.updatedAt))
+        if listed <= 0 then return 0 end
+        return math.max(0, listed - ReturnedSince(itemID, nil, record.updatedAt)
+            - SoldSince(itemID, nil, record.updatedAt, used))
     end
 
     local total = 0
     for who, reading in pairs(byCharacter) do
         local listed = (reading.items and reading.items[itemID]) or 0
         if listed > 0 and not Outlived(reading.updatedAt) then
-            total = total + math.max(0, listed - ReturnedSince(itemID, who, reading.updatedAt))
+            total = total + math.max(0, listed - ReturnedSince(itemID, who, reading.updatedAt)
+                - SoldSince(itemID, who, reading.updatedAt, used))
         end
     end
     return total
@@ -647,6 +728,10 @@ function Auctions:Refresh(opts)
     Util.WhenAuctionReady(function()
         pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
+        -- When it really went out: it settles every listing made before
+        -- now (Posting:ReadOutSince).
+        Auctions.sentAt = GetTime()
+
         -- The reply may or may not be announced, so go and read it either way.
         Auctions:ScheduleConfirm()
     end, nil, {
@@ -686,6 +771,9 @@ end
 -- several times, because the server's reply lands some unpredictable moment
 -- after the query rather than at a knowable one.
 local CONFIRM_DELAYS = { 0.6, 1.4, 2.4, 3.6, 4.8 }
+
+-- How long after a query goes out its answers are still being read.
+Auctions.READ_FOR = CONFIRM_DELAYS[#CONFIRM_DELAYS]
 
 --- Do two itemID -> quantity maps hold the same thing?
 --

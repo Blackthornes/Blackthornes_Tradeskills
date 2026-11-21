@@ -2248,7 +2248,7 @@ local function Build(outer)
 
     CreateSection(pages.sharing, 2, L["GUILD"])
     local guildRow = CreateRow(pages.sharing, 2, L["Guild Prices:"],
-        L["Swaps scans with guildmates who use Tradeskills. Your own scans always win."])
+        L["Swaps scans with guildmates who use Tradeskills. The newest scan is used, yours or theirs."])
     widgets.guildPrices = Widgets.CreateCheckbox(guildRow, L["On"], function(checked)
         Config:Set("guildPrices", checked)
         UI:RefreshActiveTab()
@@ -2282,6 +2282,14 @@ local function Build(outer)
     Place(pages.sharing, 2, widgets.realmStatus, -4)
     widgets.realmStatus:SetWidth(COLUMN_WIDTH)
     widgets.realmStatus:SetWordWrap(true)
+
+    -- Chat Notice (2026-11-18): GuildPrices:NoteHeard, RealmPrices:NoteHeard.
+    local noticeRow = CreateRow(pages.sharing, 2, L["Chat Notice:"],
+        L["Says in chat when prices come in from your guild or realm."])
+    widgets.sharedChatNotice = Widgets.CreateCheckbox(noticeRow, L["On"], function(checked)
+        Config:Set("sharedChatNotice", checked)
+    end, false)
+    widgets.sharedChatNotice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     CreateSection(pages.pricing, 2, L["OTHER PRICE ADDONS"])
     local tsmRow = CreateRow(pages.pricing, 2, L["TSM Prices:"],
@@ -3245,6 +3253,7 @@ local function Refresh()
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Status() or "")
     widgets.realmPrices:SetChecked(Config:Get("realmPrices") ~= false)
+    widgets.sharedChatNotice:SetChecked(Config:Get("sharedChatNotice") == true)
     if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     if widgets.disenchantChat then widgets.disenchantChat:SetChecked(Config:Get("disenchantChat") ~= false) end
     if widgets.craftChat then widgets.craftChat:SetChecked(Config:Get("craftChat") ~= false) end

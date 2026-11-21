@@ -11,9 +11,9 @@
 --   * After a scan, its prices go to the guild, at most once an hour, and not
 --     at all when a guildmate shared a scan from about the same time.
 --   * Guildmates' prices are kept apart from yours, in
---     `guildPrices[realm][itemID]` (never rename it), and only fill gaps:
---     an item you have never priced, or whose price has gone stale while
---     theirs is newer. Your own scans always win.
+--     `guildPrices[realm][itemID]` (never rename it). They fill gaps, and
+--     since 2026-11-18 (the owner) a guildmate's price newer than your own
+--     replaces it, even a fresh one (Prices:GetValue).
 --   * Each item keeps the last price from up to three guildmates, and the
 --     middle one is used, so one wrong price is outvoted. A price far from a
 --     fresh one of your own is not taken at all.
@@ -45,6 +45,9 @@ GuildPrices.ASK_AFTER = 45            -- seconds after login
 GuildPrices.ANSWER_SCAN_AGE = 24 * HOUR  -- a scan older than this is not sent again
 GuildPrices.ANSWER_EVERY = HOUR       -- at most one catch-up sent an hour
 GuildPrices.ANSWER_WAIT = 20          -- longest wait before answering
+-- Chat Notice (2026-11-18): one chat line per guildmate's batch, said once
+-- it has been quiet this many seconds.
+GuildPrices.NOTICE_QUIET = 30
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -121,23 +124,36 @@ end
 --- What guildmates say an item is worth: the middle of their last prices.
 -- `which` as Prices:GetValue: "market" (default), "min" or "lowest" read
 -- the cheapest listing, "rival" is never answered.
+-- With `since`, only prices scanned after it count (Prices:GetValue asks
+-- for those newer than your own scan).
 -- @return copper, and when the newest of those scans was; nil without
-function GuildPrices:GetValue(itemID, which, now)
+function GuildPrices:GetValue(itemID, which, now, since)
     if which == "rival" then return nil end
     local realm = RealmTable(false)
     local list = realm and realm[itemID]
     if type(list) ~= "table" then return nil end
 
     now = now or time()
-    local values, newest = {}, nil
+    local low = (which == "min" or which == "lowest")
+    -- Prices are read many times a redraw, and an item mostly has one
+    -- guildmate's price: that one is answered without a table.
+    local first, values, newest
     for index = 1, #list, STRIDE do
         local at = list[index + 1]
-        local value = (which == "min" or which == "lowest") and list[index + 3] or list[index + 2]
-        if type(at) == "number" and type(value) == "number" and now - at <= self.USE_FOR then
-            values[#values + 1] = value
+        local value = low and list[index + 3] or list[index + 2]
+        if type(at) == "number" and type(value) == "number" and now - at <= self.USE_FOR
+            and (not since or at > since) then
+            if not first then
+                first = value
+            else
+                values = values or { first }
+                values[#values + 1] = value
+            end
             if not newest or at > newest then newest = at end
         end
     end
+    if not first then return nil end
+    if not values then return first, newest end
     return Median(values), newest
 end
 
@@ -394,6 +410,7 @@ function GuildPrices:OnPrices(sender, body, channel)
     end
 
     local taken, refused = 0, 0
+    local items = {}
     for idText, marketText, lowestText in list:gmatch("(%w+),(%w+),?(%w*);") do
         if tally.items >= self.MAX_PER_SENDER_HOUR then break end
         tally.items = tally.items + 1
@@ -404,6 +421,7 @@ function GuildPrices:OnPrices(sender, body, channel)
             and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
             and not TooFar(itemID, market) then
             self:Store(itemID, who, at, market, lowest)
+            items[itemID] = true
             if ns.PriceHistory and ns.PriceHistory.Fill then ns.PriceHistory:Fill(itemID, lowest, at) end
             taken = taken + 1
         else
@@ -413,7 +431,61 @@ function GuildPrices:OnPrices(sender, body, channel)
 
     if taken > 0 then ns.Prices.changes = (ns.Prices.changes or 0) + 1 end
     if taken > 0 then self.lastHeard = { who = sender:match("^[^%-]+") or sender, at = now } end
+    if taken > 0 then self:NoteHeard(sender, who, items) end
     if refused > 0 then self.refused = (self.refused or 0) + refused end
+end
+
+--------------------------------------------------------------------------------
+-- Chat Notice: one line per guildmate's batch, off unless ticked
+--------------------------------------------------------------------------------
+
+function GuildPrices:NoticeOn()
+    return ns.Config and ns.Config:Get("sharedChatNotice") == true
+end
+
+--- Prices from a guildmate were taken. A scan arrives in many messages, so
+--- the items are gathered and said once the guildmate has gone quiet.
+function GuildPrices:NoteHeard(sender, who, items, now)
+    if not self:NoticeOn() then return end
+    now = now or time()
+    self.heard = self.heard or {}
+    local batch = self.heard[who]
+    if not batch then
+        batch = { name = sender:match("^[^%-]+") or sender, items = {}, count = 0 }
+        self.heard[who] = batch
+    end
+    for itemID in pairs(items) do
+        if not batch.items[itemID] then
+            batch.items[itemID] = true
+            batch.count = batch.count + 1
+        end
+    end
+    batch.last = now
+    if batch.waiting then return end
+    batch.waiting = true
+    local function Check()
+        local quiet = time() - (batch.last or 0)
+        if quiet < self.NOTICE_QUIET then
+            C_Timer.After(self.NOTICE_QUIET - quiet, Check)
+            return
+        end
+        self:SayHeard(who)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(self.NOTICE_QUIET, Check) end
+end
+
+--- Say one batch in chat and forget it.
+function GuildPrices:SayHeard(who)
+    local batch = self.heard and self.heard[who]
+    if not batch then return end
+    self.heard[who] = nil
+    if batch.count > 0 and self:NoticeOn() then
+        if batch.count == 1 then
+            ns.Print(L.Format(L["Got prices for 1 item from %s in your guild."], batch.name))
+        else
+            ns.Print(L.Format(L["Got prices for %d items from %s in your guild."], batch.count, batch.name))
+        end
+    end
 end
 
 --------------------------------------------------------------------------------

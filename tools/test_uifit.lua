@@ -70,6 +70,15 @@ local function Region(parent, frameType)
         local was = self.shown
         self.shown = false
         if was and self.scripts.OnHide then self.scripts.OnHide(self) end
+        -- As the game does: a box hidden, or inside something hidden, lets
+        -- go of the keyboard, and that runs its OnEditFocusLost.
+        if was then
+            local function Drop(frame)
+                if rawget(frame, "focus") then frame:ClearFocus() end
+                for _, child in ipairs(rawget(frame, "children") or {}) do Drop(child) end
+            end
+            Drop(self)
+        end
     end
     region.SetShown = function(self, on) if on then self:Show() else self:Hide() end end
     region.IsShown = function(self) return self.shown end
@@ -1404,6 +1413,29 @@ ownRow.quantity.editBox:SetText("55")
 craftList:SetData({ { recipeID = 703, quantity = 4 } })
 check("a row now showing another craft drops what was typed", ownRow.quantity.editBox.text, "4")
 check("without queuing it for either craft", quantities[701] == nil and quantities[703] == nil, true)
+
+-- A row that now shows a sub-craft hides its box. Hiding it let go of the
+-- keyboard first, and what was typed for the old craft was set on the
+-- sub-craft's recipe: changing one row changed the one below it (a
+-- player's report, 2026-11-20).
+craftList:SetData({ { recipeID = 703, quantity = 4 }, { recipeID = 704, quantity = 2 } })
+local typedRow = craftList.rows[1]
+typedRow.quantity.editBox:SetFocus()
+typedRow.quantity.editBox:SetText("55")
+craftList:SetData({ { recipeID = 705, quantity = 3, isDependency = true }, { recipeID = 704, quantity = 2 } })
+check("a row now showing a sub-craft drops what was typed", typedRow.quantity.editBox:HasFocus(), false)
+check("without setting it on the sub-craft or the old craft",
+    quantities[705] == nil and quantities[703] == nil and quantities[704] == nil, true)
+
+-- The box only ever sets the craft it was showing, whatever the row is
+-- bound to by the time it lets go of the keyboard.
+craftList:SetData({ { recipeID = 703, quantity = 4 } })
+typedRow.quantity.editBox:SetFocus()
+typedRow.quantity.editBox:SetText("9")
+typedRow.data = { recipeID = 706, quantity = 1 }
+typedRow.quantity.editBox.scripts.OnEnterPressed(typedRow.quantity.editBox)
+check("a number typed for one craft never lands on another", quantities[706], nil)
+check("it goes to the craft it was typed for", quantities[703], 9)
 
 -- Names in the colour of what they make (asked 2026-10-07). An item the
 -- client has not sent yet starts in the text colour and takes its colour

@@ -1121,6 +1121,43 @@ do
 end
 
 do
+  -- A player's recording (2026-11-20): the Queue tab sat over the pane, and
+  -- every x clicked there queued one more of a recipe on the pane under it.
+  -- A click the pane hears while a Tradeskills window is in front of it
+  -- under the mouse belongs to that window.
+  local function Frame(strata, level, over, parent)
+    return { GetFrameStrata = function() return strata end, GetFrameLevel = function() return level end,
+      IsVisible = function() return true end, IsMouseOver = function() return over end,
+      GetParent = function() return parent end }
+  end
+  local C = CraftPanel.CoveredAtMouse
+  local pane = Frame("HIGH", 10, true)
+  check("a window raised over the pane under the mouse covers it", C(pane, { Frame("HIGH", 20, true) }), true)
+  check("a window in a higher layer covers it", C(pane, { Frame("DIALOG", 1, true) }), true)
+  check("the pane raised over the window is not covered", C(pane, { Frame("HIGH", 5, true) }), false)
+  check("a window in a lower layer is not over it", C(pane, { Frame("MEDIUM", 50, true) }), false)
+  check("a window away from the mouse is not over it", C(pane, { Frame("HIGH", 20, false) }), false)
+  local window = Frame("HIGH", 20, true)
+  local holder = Frame("HIGH", 21, true, window)
+  check("in the one window, the window holding the pane is not over it",
+    C(Frame("HIGH", 22, true, holder), { window }), false)
+  local secret = Frame("HIGH", 20, true)
+  secret.IsMouseOver = function() error("secret") end
+  check("a window that won't answer is not over it", C(pane, { secret }), false)
+
+  local oldQueue, oldFront, oldFrame = ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame
+  local added = 0
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.frame = pane
+  CraftPanel.FrontWindows = function() return { Frame("HIGH", 20, true) } end
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "LeftButton")
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "RightButton")
+  check("a click meant for the window in front queues and removes nothing", added, 0)
+  ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame = oldQueue, oldFront, oldFrame
+end
+
+do
   -- Alt-click on a row opens the Keep in Stock box and queues nothing;
   -- a craft with nothing to hold opens nothing (2026-11-17).
   local oldAlt, oldBox, oldQueue, oldTip = rawget(_G, "IsAltKeyDown"), ns.StockBox, ns.Queue, rawget(_G, "GameTooltip")

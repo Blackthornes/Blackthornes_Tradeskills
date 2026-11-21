@@ -186,6 +186,9 @@ VP:Learn({ [THREAD] = { price = 10, numAvailable = -1 } })
 check("a vendor of neither side", ns.db.vendorSpots[555].side, "")
 check("one the data never had", Names(VP:For(1429)), "Elwynn Supplier, Forever Trader")
 check("a player's GUID is no vendor", VP.NpcID("Player-1-0000ABCD"), nil)
+-- Forever 1.60.1 scrambles the realm, server and spawn parts of a
+-- creature's GUID (2026-11-20): the vendor's ID is still read.
+check("a scrambled creature GUID still gives its ID", VP.NpcID("Creature-0-x9F3A-B7-C1D2-555-Z0Q8W1"), 555)
 npc.guid = nil
 check("no vendor targeted, nothing kept", VP:Learn(items), false)
 
