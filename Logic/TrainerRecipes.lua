@@ -102,6 +102,15 @@ local function RecordFor(index, name, byName)
     return found ~= false and found or nil
 end
 
+--- The skill a trainer's line asks for, or nil. The game gives the
+--- skill's name first, then the number, then whether it is met; reading
+--- the first as the number kept nothing (2026-11-21: Rugged Armor Kit on
+--- the road at 211 while the trainer asked 225).
+function TrainerRecipes.SkillReq(index)
+    local first, second = Call("GetTrainerServiceSkillReq", index)
+    return Number(second) or Number(first)
+end
+
 --- Read the open trainer, if it teaches a profession. Lines the trainer
 --- hides until the skill is high enough are read with its filter flipped
 --- on and then put back, as the Wishlist does.
@@ -133,7 +142,7 @@ function TrainerRecipes:Read()
                 local record = RecordFor(index, name, byName)
                 local recipeID = record and Number(record.recipeID)
                 local cost = Number((Call("GetTrainerServiceCost", index)))
-                local skill = Number((Call("GetTrainerServiceSkillReq", index)))
+                local skill = TrainerRecipes.SkillReq(index)
                 if recipeID and (cost or skill) then
                     local had = store[recipeID]
                     if type(had) ~= "table" or had.cost ~= cost or had.skill ~= skill then

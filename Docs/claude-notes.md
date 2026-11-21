@@ -75,8 +75,26 @@ kept suffix names (`Prices:SuffixTails`, no client calls): "of the Bear"
 finds the item showing only its Bear, and so does "chestpiece of the b".
 Picking a suffix row shows its prices in the side pane under its full name,
 leaves out Your listing (read by item), and says "Stock movement and Price
-History are for every suffix together." The item count at the foot counts
+History are for every suffix together." (since 2026-11-21 "Stock movement is
+for every suffix together.", the graph being the suffix's own) The item count at the foot counts
 items only. Tested in `tools/test_suffixrows.lua`. Not yet seen in game.
+
+Picking a suffix row shows that suffix (a player's report, 2026-11-21:
+picking "Cabalist Chestpiece of Arcane Wrath" still drew the plain item's
+graph and Stats). Each suffix entry now keeps its own readings in
+`entry.history` (the item's flat layout, newest `Prices.SUFFIX_READINGS`),
+and for kept items (crafted, used or starred) hour by hour lines in
+`suffixHistory[realm][itemID][suffix]` and `suffixListed[...]` (never
+rename them; pruned like the item's, `PriceHistory:NoteSuffix`).
+`GetPoints`, `GetListed`, `GetBestTimes` and `DescribeBestTimes` take an
+optional suffix; `PriceGraph.Series(..., suffix)` and `graph:SetItem(itemID,
+suffix)` draw it (hourly, else the suffix's own readings, never the
+item's). `PricesUI.Subject(entry)` gives a row's item and suffix to the
+graph and to `StatsUI:Pick(itemID, suffix)`; `ItemStats:Build(itemID, now,
+suffix)` and `Key(itemID, suffix)` price it by the suffix (worth, week's
+change, heat, scans, readings), while sales, stock share and demand stay
+the item's (they are read by item only). A pick from Stats' own list shows
+the plain item. Tested in `tools/test_suffixdetails.lua`.
 
 ## Profession cooldowns
 
@@ -1750,6 +1768,16 @@ channel joins it again `REJOIN_DELAY` seconds later (`OnNotice`), a join
 that did not take is followed by `JoinChannelByName` (`triedTemporary`),
 and the Settings status says "You're not in the price channel right now."
 while it is out (`InChannel`).
+Keeps off /1 (a player's report, 2026-11-21): the join waits until the
+game's own channels are in (`GameChannelsReady`: another channel listed, or
+`GAME_CHANNELS_WAIT` 120 seconds after login with none), never joins inside
+an instance, and a game channel's `YOU_JOINED` while it waits joins two
+seconds later. When ours sits in front of a game channel (an older login,
+or a channel the game remembered), `StepBack` swaps it one place back a
+call (`C_ChatInfo.SwapChatChannelsByChannelIndex`) until it is behind them;
+with no swap it leaves for the session (`stepAside`). Only Tradeskills joins
+a channel: Farmer, Equipment, Pets and Butler share by guild and whisper.
+Tested in `tools/test_realmprices.lua`.
 
 ## A quick scan when you open the auction house
 
@@ -3334,6 +3362,23 @@ arrows, bars, trackers, the Zone Board and similar pieces get none.
 Forever 1.60.1 (a hotfix, announced 2026-11-20) makes GetRealmName, GetRealmID and the C_BattleNet realm fields hand back "" or 0, and scrambles the realm, server and spawn parts of Creature, Vehicle, Pet and GameObject GUIDs (player GUIDs are not named). Every reader of a mob, vendor or trainer ID from a GUID takes any text in parts 2 to 5 (`[^%-]+`), never `%d+`; a new one must too. Prices, price history, sales, the gold log, guild and realm prices and posted auctions are all filed under `Config:GetRealmKey()`, so a blank realm would have opened an empty "UnknownRealm" bucket. When the client gives no realm, `SafeRealmName` uses the one remembered: the character's own file (`BlackthornesTSCharDB.realmName`, written each time the client names it; never rename it), then its record's `realm`, then the realm most of this account's own characters are on (linked accounts' copies never count). `Config:RealmName()` gives that name for others (a new record, Gold Goal, the Characters tab). Nothing saved is moved or renamed. The scanner takes a blank realm as no realm, so your own listings stay yours. Tested in `tools/test_realmblank.lua`.
 
 The bucket 1.35.3 left behind (2026-11-20, after players saw prices and price history gone). Players who played on 1.35.3 after the hotfix had a few hours of scans, sales and gold filed under "UnknownRealm-<side>". `Config:FoldBlankRealm()` runs at the end of `Config:Bootstrap`, before any module reads, and copies each such bucket into the realm all of this account's own characters on that side are on (`Config:BlankRealmHome`; two realms or none and nothing is guessed, it waits). It only adds: a record the realm already has is kept whole, price history (`priceHistory`, `priceListed`) gains the hours it lacks, the mail ledger gains entries it lacks (the same character, kind, item and money within 31 days counts as written, each matched once, then sorted by time), and the gold log adds the two stretches of an hour or day together. The stranded bucket is left as it was, and each fold is written down in `blankRealmFolded[key] = { into, at, mails }` (never rename it) so it runs once. Tested in `tools/test_realmblank.lua`.
+
+## Sales filed by name get their item
+
+A player report (2026-11-21): on the Sales tab, things you don't craft
+(Large Glimmering Shard, Silk Cloth, Tin Bar, Rage Potion) showed as plain
+white names with no icon, and By item split each into two rows, the sales
+by name and the returns by item, so sell-through was wrong on both. A
+stack's mail names it with its count ("Silk Cloth (20)") and a sale's
+invoice may not, and `Mail:ResolveItemName` looked only at crafted outputs.
+Now `ResolveItemName` and `FillItemID` compare `Mail.PlainName`, take any
+item (not only crafted ones), and fall back to the game's item cache by
+name (`C_Item.GetItemInfo(name)`, which never fetches). `Mail:NameIndex`
+files each name as written and plain, and answers a stack's name by its
+plain one. `Mail:FoldNamedSales` gives every own ledger entry with no
+`itemID` the one it can be told, at login (5 s) and after a mailbox read
+writes; it only adds `itemID`, nothing else changes. Tested in
+`tools/test_salesnames.lua`. Not yet seen in game.
 
 ## Picking a tab (stalls swapping tabs, 2026-11-21)
 

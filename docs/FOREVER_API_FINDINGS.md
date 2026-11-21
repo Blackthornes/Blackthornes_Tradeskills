@@ -517,6 +517,17 @@ muted, are guesses). The notice key was not read, so Logic/RealmPrices.lua
 treats any notice on our channel within a few seconds of a send as a refusal,
 hides it, and backs off.
 
+A player's report (2026-11-21): the price channel often took /1 at login,
+where General goes. The game's own channels join as you enter the world, and
+a channel joined first takes the lowest free number; a channel joined by name
+is also remembered for the next login. Logic/RealmPrices.lua now waits until
+another channel is in (`GetChannelList`), never joins inside an instance, and
+moves ours behind the game's channels (named by `EnumerateServerChannels`)
+with `C_ChatInfo.SwapChatChannelsByChannelIndex`, as the chat settings'
+channel order does. These three come from the retail client and are not yet
+seen on Forever; `/bts share channel` now prints whether each exists. With no
+swap, ours leaves for the session so General keeps its number.
+
 ## The one window's docking
 
 `UI/SharedWindow.lua` (2026-10-30) docks the one window beside the game's
