@@ -163,6 +163,104 @@ do
     Check("no last name: the first name is still you", Scanner:IsOwnAuction("Ana", "Ana-CAMWOWUS2Realm7PvE"))
 end
 
+-- 6. What 1.35.3 filed under "UnknownRealm-<side>" comes home, once, only
+--    adding, and the stranded bucket is left as it was.
+print("realm blank: the 1.35.3 bucket folds back into the realm")
+do
+    realmName = ""
+    local R, U = "Forever PvE-Alliance", "UnknownRealm-Alliance"
+    local db = {
+        characters = {
+            [playerGUID] = { name = "Ana", realm = "Forever PvE", faction = "Alliance" },
+            ["Player-6933-B"] = { name = "Bo", realm = "Forever PvE", faction = "Alliance" },
+            ["Player-6933-H"] = { name = "Ho", realm = "Forever PvP", faction = "Horde" },
+            ["Player-6929-E"] = { name = "Ed", realm = "Linked", faction = "Alliance", linkedFrom = "Ed" },
+        },
+        prices = {
+            [R] = { [2589] = { market = 50, seen = 10 } },
+            [U] = { [2589] = { market = 70, seen = 20 }, [4306] = { market = 300, seen = 20 } },
+        },
+        priceHistory = {
+            [R] = { [2589] = { 100, 50, 101, 52 } },
+            [U] = { [2589] = { 101, 99, 105, 70 }, [4306] = { 105, 300 } },
+        },
+        mailLedger = {
+            [R] = { entries = {
+                { t = 500, who = playerGUID, kind = "sold", name = "Linen Cloth", itemID = 2589, net = 400 },
+            }, seen = { a = true } },
+            [U] = { entries = {
+                { t = 900, who = playerGUID, kind = "sold", name = "Linen Cloth", itemID = 2589, net = 400 },
+                { t = 950, who = playerGUID, kind = "sold", name = "Silk Cloth", itemID = 4306, net = 900 },
+            }, seen = { a = false, b = true } },
+        },
+        goldLog = {
+            [R] = { hours = { [36] = { auction = { i = 100, o = 0 } } }, days = { [20261120] = { auction = { i = 100, o = 5 } } } },
+            [U] = { hours = { [40] = { auction = { i = 900, o = 0 } } }, days = { [20261120] = { auction = { i = 900, o = 1 }, vendor = { i = 7, o = 0 } } } },
+        },
+        postedAuctions = { [R] = { items = { [2589] = { 1 } } }, [U] = { items = { [4306] = { 2 } } } },
+        lastFullScanByRealm = { [R] = 10, [U] = 20 },
+    }
+    local strandedBefore = {}
+    for root, value in pairs(db) do
+        if type(value) == "table" and value[U] then strandedBefore[root] = Copy(value[U]) end
+    end
+    local ns = Load(db, { guid = playerGUID })
+    Check("the home is the one realm on that side", ns.Config:BlankRealmHome(U) == R, ns.Config:BlankRealmHome(U))
+    ns.Config:FoldBlankRealm()
+
+    Check("a price only the blank bucket had comes home", (db.prices[R][4306] or {}).market == 300)
+    Check("a price the realm had is kept", db.prices[R][2589].market == 50)
+    Check("the Prices tab's table now has it", (ns.Config:GetPriceTable()[4306] or {}).market == 300)
+    Check("history: missing hours added in order", Same(db.priceHistory[R][2589], { 100, 50, 101, 52, 105, 70 }),
+        table.concat(db.priceHistory[R][2589], ","))
+    Check("history: a new item comes home", Same(db.priceHistory[R][4306], { 105, 300 }))
+    local entries = db.mailLedger[R].entries
+    Check("mail: the sale written twice is kept once, the new one added", #entries == 2, #entries)
+    Check("mail: the new sale is the silk", entries[2] and entries[2].net == 900)
+    Check("mail: seen marks only added", db.mailLedger[R].seen.a == true and db.mailLedger[R].seen.b == true)
+    Check("gold: a new hour comes home", db.goldLog[R].hours[40].auction.i == 900)
+    Check("gold: the same day adds up", db.goldLog[R].days[20261120].auction.i == 1000
+        and db.goldLog[R].days[20261120].auction.o == 6)
+    Check("gold: a new source that day comes home", db.goldLog[R].days[20261120].vendor.i == 7)
+    Check("posted auctions fill in", db.postedAuctions[R].items[4306] ~= nil and db.postedAuctions[R].items[2589] ~= nil)
+    Check("a plain stamp the realm had is kept", db.lastFullScanByRealm[R] == 10)
+    local untouched = true
+    for root, copy in pairs(strandedBefore) do
+        if not Same(copy, db[root][U]) then untouched = false end
+    end
+    Check("the stranded bucket is left as it was", untouched)
+    Check("the fold is written down", db.blankRealmFolded[U] and db.blankRealmFolded[U].into == R)
+
+    local after = Copy(db)
+    ns.Config:FoldBlankRealm()
+    Check("a second login folds nothing again", Same(after, db))
+end
+
+print("realm blank: two realms on one side, nothing is guessed")
+do
+    realmName = ""
+    local U = "UnknownRealm-Alliance"
+    local db = {
+        characters = {
+            [playerGUID] = { name = "Ana", realm = "Forever PvE", faction = "Alliance" },
+            ["Player-6933-B"] = { name = "Bo", realm = "Forever PvP", faction = "Alliance" },
+        },
+        prices = { ["Forever PvE-Alliance"] = {}, [U] = { [4306] = { market = 300 } } },
+    }
+    local before = Copy(db)
+    local ns = Load(db, { guid = playerGUID })
+    Check("no home can be told", ns.Config:BlankRealmHome(U) == nil)
+    ns.Config:FoldBlankRealm()
+    Check("nothing saved changed", Same(before, db))
+end
+
+print("realm blank: the fold runs as the addon loads")
+do
+    local src = io.open(lfs_cwd .. "/Core/Config.lua"):read("*a")
+    local boot = src:match("function Config:Bootstrap%(%).-\nend\n")
+    Check("Bootstrap folds the blank realm", boot and boot:find("FoldBlankRealm", 1, true) ~= nil)
+end
+
 realmName = "Forever PvE"
 if failures > 0 then error(failures .. " realm blank check(s) failed") end
 print("all checks passed")
