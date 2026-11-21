@@ -150,6 +150,9 @@ end
 
 local function Forget(tooltip)
     shared.decorated[tooltip] = nil
+    -- The hint the block put on goes with it.
+    local shift = _G.BlackthornesTooltipShift
+    if type(shift) == "table" and type(shift.hinted) == "table" then shift.hinted[tooltip] = nil end
     local rule = shared.rules[tooltip]
     if rule then pcall(rule.Hide, rule) end
 end
@@ -289,6 +292,11 @@ TooltipBlock.TOOLTIPS = { "GameTooltip", "ItemRefTooltip", "ShoppingTooltip1", "
 --- Hook item tooltips, once for every copy. True when a hook took.
 function TooltipBlock:Install()
     if shared.installed then return true end
+    -- The named tooltips forget their block when they clear from the start.
+    for _, name in ipairs(self.TOOLTIPS) do
+        local tooltip = rawget(_G, name)
+        if type(tooltip) == "table" then HookClear(tooltip) end
+    end
     local processor = rawget(_G, "TooltipDataProcessor")
     local enum = rawget(_G, "Enum")
     local itemType = type(enum) == "table" and type(enum.TooltipDataType) == "table" and enum.TooltipDataType.Item or nil
