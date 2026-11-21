@@ -493,7 +493,19 @@ function UI:SelectTab(key)
     if ns.db and key ~= "auctionhouse" and not docked then ns.db.lastTab = key end
 
     if tab.onShow then tab.onShow() end
-    if tab.refresh then tab.refresh() end
+
+    -- A tab whose onShow is its refresh (Settings) drew itself twice here.
+    -- refreshPicked is a tab's lighter redraw for this moment (Profit ranks
+    -- across frames). And one build of the queue's costs and shopping list
+    -- for the whole redraw, as every other redraw has (Queue:Keeping).
+    local redraw = tab.refreshPicked or tab.refresh
+    if redraw and redraw ~= tab.onShow then
+        if ns.Queue and ns.Queue.Keeping then
+            ns.Queue:Keeping(redraw)
+        else
+            redraw()
+        end
+    end
 end
 
 function UI:UpdateHeader()
