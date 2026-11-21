@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.37.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Buy Materials.** The button stays on the vendor window when Butler is loaded. It hides only when the vendor has nothing the queue needs.
+- **Prices tab.** A suffix row you pick shows its own price graph, and Stats opens on that suffix.
+- **Sales tab.** Sales of stacks and items you did not craft are filed under their item, on one row.
+- **Tab switching.** Prices, Profit, Queue and Settings open with less stalling.
+- **Auction house.** A steady run of listings keeps going without waiting. Snipe finds hold still between searches.
+- **Road to 300.** Recipes use the skill the trainer asks for.
+- **Chat channels.** Blackthornes' own channel no longer takes the /1 spot at login.
+
 ## 1.36.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

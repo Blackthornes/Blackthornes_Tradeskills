@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.37.0
+
+- The Buy Materials button stays on the vendor window when Butler is loaded.
+- Each suffix on the Prices tab shows its own price graph and Stats.
+- Sales of stacks and other items are filed under their item, on one row.
+
+Fixes and changes:
+- Prices, Profit, Queue and Settings open with less stalling.
+- A steady run of listings keeps going, and Snipe finds hold still between searches.
+- Road to 300 uses the skill the trainer asks for.
+- Blackthornes' own channel no longer takes the /1 spot at login.
+
 ## 1.36.0
 
 - Random suffix items open on the Prices tab to show a price for each suffix.
