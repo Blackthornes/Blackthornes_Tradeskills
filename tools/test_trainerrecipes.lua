@@ -108,7 +108,11 @@ IsTradeskillTrainer = function() return true end
 GetNumTrainerServices = function() return #Shown() end
 GetTrainerServiceInfo = function(i) local l = Shown()[i] return l[1], nil, l[2] end
 GetTrainerServiceCost = function(i) return Shown()[i][3] end
-GetTrainerServiceSkillReq = function(i) return Shown()[i][4] end
+-- The game gives the skill's name first, then the skill asked for, then
+-- whether it is met (a player's report, 2026-11-21: Road to 300 offered
+-- Rugged Armor Kit at 211 while the trainer asked 225, since the name was
+-- read as the skill and nothing was kept).
+GetTrainerServiceSkillReq = function(i) return "Alchemy", Shown()[i][4], false end
 GetTrainerServiceTypeFilter = function() return filter == 1 end
 SetTrainerServiceTypeFilter = function(_, on) filter = on; flips[#flips + 1] = on end
 C_TooltipInfo = { GetTrainerService = function(i) local id = Shown()[i][5] return id and { id = id } or nil end }
@@ -183,6 +187,27 @@ check("the road goes on past 82", plan4.stuck, nil)
 check("and learns Wool Bandage on the way", learnsWool, true)
 local ribs = ns4.RecipeBook:Get(2546)
 check("a Cooking recipe has a trainer", ribs and ns4.LearnNext:Place(ribs) ~= nil, true)
+
+print("\nRugged Armor Kit at 211 (a player's report, 2026-11-21)")
+-- Forever's client tables say 205; the Feralas trainer asks 225. Once a
+-- trainer line was read, the road waits for 225.
+local ns5 = Fresh()
+local RUGGED = 19058
+check("the book alone says 205", ns5.RecipeBook:Get(RUGGED).skill, 205)
+check("so it gives a point at 211", ns5.RoadPlan.Chance(ns5.RecipeBook:Get(RUGGED), 211) > 0, true)
+IsTradeskillTrainer = function() return true end
+GetNumTrainerServices = function() return 1 end
+GetTrainerServiceInfo = function() return "Rugged Armor Kit", nil, "unavailable" end
+GetTrainerServiceCost = function() return 5000 end
+GetTrainerServiceSkillReq = function() return "Leatherworking", 225, false end
+GetTrainerServiceTypeFilter = function() return true end
+C_TooltipInfo = { GetTrainerService = function() return { id = RUGGED } end }
+check("the trainer line is kept", ns5.TrainerRecipes:Read(), 1)
+check("with the skill the trainer asks", ns5.db.trainerRecipes[RUGGED].skill, 225)
+local rugged = ns5.RecipeBook:Get(RUGGED)
+check("the book takes 225", rugged.skill, 225)
+check("no point from it at 211", ns5.RoadPlan.Chance(rugged, 211), 0)
+check("a point from it at 225", ns5.RoadPlan.Chance(rugged, 225) > 0, true)
 
 print("\nonly a profession trainer")
 local ns3 = Fresh()

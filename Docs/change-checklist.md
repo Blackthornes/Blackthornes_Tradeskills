@@ -193,3 +193,14 @@ Check: `local x, y = thing and Call()` keeps only the first value, so `y` is
   always nil. Declare the locals, then `if thing then x, y = Call() end`.
 Why: The trip line never drew on the world map: y was nil and the draw
   raised inside its pcall, in all five addons (2026-11-20).
+
+
+## A client call that hands back more than one value
+Lines: GetTrainerServiceSkillReq|GetTrainerServiceInfo|GetProfessionInfo|GetSkillLineInfo
+Check: Read the value you want from the place the game gives it, not the
+  first return, and make the test's fake hand back every value in the
+  game's order. `GetTrainerServiceSkillReq` gives the skill's name first,
+  then the number, then whether it is met.
+Why: The trainer's skill was read from the name, so nothing was kept and
+  Road to 300 offered Rugged Armor Kit at 211 while the trainer asked 225;
+  the test's fake gave the number first (2026-11-21).
