@@ -882,7 +882,7 @@ function RecipeValue:AddHoverLines(row, tooltip)
     local white, label = 1, 0.78
     for _, line in ipairs(ns.CraftProfit.Lines(figures)) do
         local left = line.label
-        if line.makes then left = left .. "  |cffa0a4ab" .. line.makes .. "|r" end
+        if line.makes then left = left .. "  |cffa89f88" .. line.makes .. "|r" end
         Try(Field(tooltip, "AddDoubleLine"), tooltip, left, line.value, label, label, label, white, white, white)
     end
     Try(Field(tooltip, "Show"), tooltip)

@@ -2866,6 +2866,29 @@ first.
   tables routine does.
 
 
+### Plain prose everywhere (the owner, 2026-11-21)
+
+The owner shared these six rules for writing and asked that they be kept
+from now on, in every addon's notes. They cover every piece of prose:
+player words, notes, commits, PR text, release notes, Discord drafts and
+replies to him.
+
+1. Say plainly what you mean, without stock metaphors, similes or other
+   figures of speech.
+2. Use a short word wherever a short one will do.
+3. Cut every word you can, but keep the context the reader needs.
+4. Use the active voice wherever you can: say who did what.
+5. Use an everyday English word, or the reader's own term, instead of a
+   foreign phrase, a scientific word, jargon, or a word or abbreviation
+   you made up during the work.
+6. These are defaults, not hard limits. Break any of them sooner than say
+   anything outright barbarous.
+
+Review every prose output against these rules before delivering. They sit
+beside "Writing for players" (sixth grade, warm, no em-dashes), which still
+holds for every word a player reads.
+
+
 ## Shelves, dock places and the All Addons page (2026-11-16)
 
 The owner said "build them all" for the UI cleanup ideas (2026-11-16). What
@@ -3413,3 +3436,89 @@ stays the at-once one every event uses.
 The owner said build it (2026-11-21, from the UI pass mockup), in Farmer, Tradeskills, Equipment and Butler. Every Blackthornes line on an item tooltip goes on in one block: a blank row with a thin gold line of our own on it (a texture, hidden when the tooltip clears), then each line as a yellow name ending ":" on the left and a white answer on the right, no blank rows between addons, "Hold Shift for more." last and once. `UI/TooltipBlock.lua` is the same file in the four (FILE_VERSION 1; a fix belongs in all four). `_G.BlackthornesTooltipBlock` holds the parts and the one hook (the item post call, else OnTooltipSetItem on GameTooltip, ItemRefTooltip and the shopping tooltips); the newest copy's writer wins. Each addon works out its own lines and hands them over with `TooltipBlock:Provide(part, section, order, fn)`, `fn(tooltip, data)` returning lines and whether one was held for Shift; it no longer writes item lines itself.
 
 Order: price (Tradeskills `Tradeskills:price` 1, Butler vendor prices `Butler:price` 2), source (Farmer `Farmer:source` 1 "Farm At:", Equipment `Equipment:source` 2 "Drops From:"), advice (Equipment `Equipment:advice` 1 "For <spec>:", "For <alt>:", "Best Enchant:", "Weapon Master:", the suffix name or "Random Roll:", "Crafting:"; Butler `Butler:advice` 2 "Butler Says:"), holders (Butler `Butler:holders` 1 "You Have:", "Your Characters:"). Tradeskills maps its line names to the block's at write time (`ItemTooltip.BLOCK_LABELS`), so other windows keep "Demand" and the like; the stack count is read from the tooltip owner's bag slot. Pets' taming lines, Farmer's kill lines and Tradeskills' enchant spell lines are not item tooltips and are left alone. Tested in each addon's `tools/test_tooltipblock.lua`.
+## The slim window frame and Row Size (2026-11-21)
+
+The owner said build it, Tradeskills first, from
+`ui-pass-4-slimmer-frame.html`. `Titanforged:Dress(frame, { slim = true })`
+(and `BlizzardLook.Dress`, which hands its colours to
+`Titanforged.TitleBar`) gives a small portrait (40, reaching 6 past the
+corner) and the name in one bar inside the top rim (`TITLE_TOP`,
+`TITLE_BAR`, `TITLE_LEFT`), drawn on the window's own BORDER layer so the
+window's buttons sit over it and the one window's bare mode hides it with
+the rim. The bar answers `SetTitle` like the plate. Without `slim` every
+window keeps the plate, so the shared files stay safe to copy; Farmer,
+Equipment, Pets and Butler follow only after the owner tries Tradeskills.
+
+The main window (`UI/Main.lua`): the header is that bar, the scan button in
+it just left of the gems (`UI:GemRoom`, `UI:PlaceScanButton`, at the edge
+inside the one window where the gems are put away). A footer
+(`UI:BuildFooter`) holds what the scan knows on the left (the fullest of
+three lines that fits, the whole on its hover, through `Theme.FitText`),
+why a scan can't run or how far one is, and the version on the right. Tabs
+were already as wide as their word with Settings last, and row hints were
+already on each row's hover.
+
+"Row Size:" on the Windows page (`rowSize`, `roomy` unless `compact` is
+picked, words approved by the owner): read once a session
+(`Widgets.Compact`), so it waits for /reload. `Widgets.RowHeight` shrinks
+one-line rows (up to `COMPACT_MOST`, 30) by `COMPACT_LESS` (4), never under
+16; taller rows hold two lines and keep their height. Tested in
+`tools/test_slimframe.lua`. Not yet seen in game.
+
+## In the game's Options list (2026-11-21)
+
+The owner said build it (UI pass, keys and Options line): like the other
+four, Tradeskills has a line under the game's Options, AddOns, named
+Blackthornes Tradeskills, with a button that opens the Settings tab
+(`UI:RegisterGameOptions` in `UI/Main.lua`, called from `UI:OnEnable` in a
+pcall; `Settings.RegisterCanvasLayoutCategory` with
+`InterfaceOptions_AddCategory` as the fallback). The words follow the
+others' with the addon's name. The Farmer, Equipment, Pets and Butler
+window keys copy this addon's `BLACKTHORNESTS_TOGGLE` words. Tested in
+`tools/test_gameoptions.lua`.
+## Warm glass (2026-11-21)
+
+The owner said build it from the UI pass mockup (ui-pass-1-warm-glass): the
+house palette moved from blue-black to warm brown-black in every addon's
+`UI/Theme.lua`, the same values in all five. `panel` #1A1611, `glass`
+#17130E, `glassAlt` and `well` #0F0C08, `glassHover` #201A12, `border`
+#4A3C24 (row lines at 0.6), `borderLit` #6B5A3A, `window`, `header` and
+the old `row` keys warmed to match; `glassActive` #241F14 is unchanged.
+Plain text (`text`) is white, `muted` #9B927C and `dim` #7A715E, and
+`ns.COLORS.muted` and `text` follow. A new key, `heading` (#FFD100, the
+game's yellow), colours column headings; the heading that sorts the list
+is `text` (white) with its arrow. Gold rim, buttons and gems are untouched,
+and so are the Blizzard window style (`UI/BlizzardLook.lua`) and the shared
+files' fallback palettes. New lists use these keys, never numbers.
+
+## The Profit: choice on Recipes to Learn
+
+A player saw "(Vendor)" on every Recipes to Learn row and in the craft pane
+(2026-11-21). Their AH prices were fine: the PROFIT column follows the
+Profit: drop-down (`profitBy`), and theirs left the AH out. My Crafts showed
+that drop-down; Recipes to Learn did not. The owner approved a mockup
+(`Docs/mockups/ts-recipes-to-learn-profit-choice.html` in the project files)
+and said build it. The Profit tab's copy of the view (`methodChoice = true`
+in `UI/RecipeBookView.lua`) now shows the same drop-down between the
+profession list and a narrower search box. Both read `Profit.MethodOptions()`
+and set the choice through `Profit:SetMethod`, which also redraws the craft
+pane. My Crafts picks up a change made here on its next refresh. Level Up's
+Learn Next has no drop-down. Tested in `tools/test_recipebookview.lua` and
+`tools/test_profitways.lua`.
+
+## Item rows answer the game's clicks
+
+The owner said build it (2026-11-21, from the UI pass mockup 5): every item
+row in all five addons answers the clicks the game's bags do. Here that
+grew the shift-click from 2026-10-12: `Widgets.ItemShiftClick` now puts the
+link in an open chat box first (`Widgets.ChatBoxOpen`), even with the
+auction house open, and searches the house only while no chat box is open;
+the Lists view still takes the item first while it is adding. Ctrl-click
+(`IsModifiedClick("DRESSUP")`) tries gear on (`Widgets.ItemTryOn`, through
+the game's `HandleModifiedItemClick` where it is there, else
+`DressUpItemLink`, in pcall); `Widgets.ItemClick` does both, for the icon
+hotspots and the Price History picker. `CreateScrollList` rows take both
+through `ShiftClickSearch(data, searchItem, mouseButton)`; a Ctrl-right-click
+stays the list's (the craft pane ignores a craft with it), and a Ctrl-click
+on an item that can't be worn is still the row's own click. The sisters
+have the same `Widgets.ItemClick`. Tested in `tools/test_shiftclick.lua`.

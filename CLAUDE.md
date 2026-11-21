@@ -59,6 +59,13 @@ They are the same in every addon's notes; keep them the same.
   player sees or does. No hype, no filler, no em-dashes, no questions to
   the reader. deDE changes with the English, in "du". `About.NOTE` is the
   owner's own wording.
+- **Plain prose everywhere** (the owner, 2026-11-21): notes, commits, PRs
+  and replies as well as player words. Say plainly what you mean, with no
+  stock figures of speech. Use a short word where one will do. Cut every
+  word you can, but keep the context the reader needs. Use the active
+  voice. Use everyday words or the reader's own term, not foreign phrases,
+  jargon or words made up during the work. Defaults, not hard limits.
+  Check all prose against them before handing it over.
 - **Every list is dark glass.** `glass` and `glassAlt` in turn with a 1 px
   `border` line (0.6) under each, `glassHover` and a gold edge under the
   mouse, `glassActive` and a bright gold left edge for the picked row.

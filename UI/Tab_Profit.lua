@@ -2065,6 +2065,18 @@ end
 local function Refresh()
     if not widgets.list then return end
 
+    -- Recipes to Learn can change the Profit: choice too. VIA shows only
+    -- when more than one way can win, so the headings follow.
+    local method = Method() or "best"
+    if widgets.methodDropdown and state.shownMethod ~= method then
+        widgets.methodDropdown:SetValue(method)
+        if state.shownMethod ~= nil then
+            layoutVersion = layoutVersion + 1
+            ApplyHeadingLayout()
+        end
+        state.shownMethod = method
+    end
+
     StopRanking()
     local spread = spreadNext
     spreadNext = false
@@ -2280,35 +2292,20 @@ local function BuildCrafts(container)
     -- most, or one way alone. Kept in Settings, so /bts top and /bts why
     -- rank the same way, and the Level Up tab counts what a craft gets
     -- back by it too.
-    local labels = ns.Profit.WAY_LABELS or {}
-    local methodOptions = { { text = L["Profit: Best"], value = "best" } }
-    for _, method in ipairs(ns.Profit.METHODS or {}) do
-        if labels[method] then
-            methodOptions[#methodOptions + 1] = { text = L.Format("Profit: %s", labels[method]), value = method }
-        elseif method == "vendordisenchant" then
-            -- The AH left out, for a player who finds it slow (asked 2026-11-12).
-            methodOptions[#methodOptions + 1] = { text = L["Profit: Vendor and DE"], value = method,
-                tooltip = L["Counts vendor and disenchant money. Leaves the AH out."] }
-        end
-    end
-
+    local methodOptions = ns.Profit.MethodOptions and ns.Profit.MethodOptions()
+        or { { text = L["Profit: Best"], value = "best" } }
     local method = Widgets.CreateDropdown(toolbar, methodOptions, function(value)
-        ns.Config:Set("profitBy", value)
+        if ns.Profit.SetMethod then ns.Profit:SetMethod(value) else ns.Config:Set("profitBy", value) end
 
         -- VIA shows only when more than one way can win.
         layoutVersion = layoutVersion + 1
         ApplyHeadingLayout()
 
         Refresh()
-
-        -- The pane beside the profession window counts the same way.
-        local pane = ns.CraftPanel
-        if pane and pane.RequestRefresh and pane.IsShown and pane:IsShown() then
-            pane:RequestRefresh()
-        end
     end, { width = 170 })
     method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
-    method:SetValue(Method() or "best")
+    state.shownMethod = Method() or "best"
+    method:SetValue(state.shownMethod)
     widgets.methodDropdown = method
 
     local search = Widgets.CreateSearchBox(toolbar, L["Search crafts"], function(text)

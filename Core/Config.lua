@@ -381,6 +381,12 @@ local DEFAULTS = {
         -- login, so a change waits for /reload. See UI/BlizzardLook.lua.
         windowStyle = "titanforged",
 
+        -- Row Size: "roomy" (the lists as they have always been) or
+        -- "compact" (the game's tighter rows, the owner said build it,
+        -- 2026-11-21). Read once, so a change waits for /reload. See
+        -- Widgets.RowHeight in UI/Widgets.lua.
+        rowSize = "roomy",
+
         -- Whether each setting's description sits under it on the Settings
         -- tab rather than in its tooltip (2026-10-08). The page showing
         -- there is kept too (settingsPage), but is not a setting to reset.

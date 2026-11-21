@@ -4,7 +4,9 @@
 -- pane's icon or a reagent line searches the house for that item. With it
 -- closed, the click puts the item's link in the chat box being typed in, as
 -- the bags do, and falls through to the row's own click when no chat box is
--- open. One handler, Widgets.ItemShiftClick, decides for all of them.
+-- open. One handler, Widgets.ItemShiftClick, decides for all of them. Since
+-- 2026-11-21 an open chat box takes the link even with the house open, and
+-- Ctrl-click tries gear on (Widgets.ItemClick, the same in all five addons).
 
 local ns = {}
 
@@ -169,6 +171,50 @@ iconItems[icon] = { itemID = 4306 }
 spot.scripts.OnClick(spot)
 check("with the house closed it links in chat",         linked[1], "|Hitem:4306|h[Item]|h")
 check("and searches nothing",                           #searched, 0)
+
+print("")
+print("a chat box open with the house open, and Ctrl-click (2026-11-21)")
+ChatEdit_GetActiveWindow = function() return chatOpen and {} or nil end
+ns.Scanner.isAuctionHouseOpen = true
+
+Reset(); clicks = 0; shift = true; chatOpen = true
+Click(ListWith({ itemID = 2589 }))
+check("with a chat box open the link goes in",          linked[1], "|Hitem:2589|h[Item]|h")
+check("and the house is not searched",                  #searched, 0)
+
+Reset(); chatOpen = false
+Click(ListWith({ itemID = 2589 }))
+check("with it shut the house is searched, as before",  searched[1], 2589)
+check("and nothing goes in chat",                       #linked, 0)
+
+local dressed = {}
+DressUpItemLink = function(link) dressed[#dressed + 1] = link; return true end
+local ctrl = false
+IsControlKeyDown = function() return ctrl end
+
+Reset(); clicks = 0; shift = false; ctrl = true
+Click(ListWith({ itemID = 2589 }))
+check("a Ctrl-click tries the row's item on",           dressed[1], "|Hitem:2589|h[Item]|h")
+check("and the row's own click does not run",           clicks, 0)
+
+local row = ListWith({ itemID = 2589 })
+row.scripts.OnClick(row, "RightButton")
+check("a Ctrl-right-click stays the row's",             clicks, 1)
+check("and tries nothing on",                           #dressed, 1)
+
+DressUpItemLink = function(link) dressed[#dressed + 1] = link; return false end
+Reset(); clicks = 0
+Click(ListWith({ itemID = 2589 }))
+check("an item that can't be worn: the row's click",    clicks, 1)
+
+iconItems[icon] = { itemID = 4306 }
+DressUpItemLink = function(link) dressed[#dressed + 1] = link; return true end
+spot.scripts.OnClick(spot)
+check("a Ctrl-click on an icon tries it on",            dressed[#dressed], "|Hitem:4306|h[Item]|h")
+
+ctrl = false
+ChatEdit_GetActiveWindow, DressUpItemLink, IsControlKeyDown = nil, nil, nil
+ns.Scanner.isAuctionHouseOpen = false
 
 print("")
 if failed > 0 then

@@ -41,6 +41,20 @@ local PLATE_CAP = 15       -- each pointed end of the plate, kept unstretched
 local CLOSE = 26           -- the close gem, centred near the top right corner
 local CLOSE_OUT = 8
 
+-- The slim frame (opts.slim, the owner said build it, 2026-11-21): a small
+-- portrait about the size of the game's own, sitting inside the top left
+-- corner, and the name in one slim bar inside the top rim instead of the
+-- plate across the edge, so more of the window is list.
+local SLIM_PORTRAIT = 40
+local SLIM_PORTRAIT_OUT = 6
+local SLIM_EMBLEM = 24
+local TITLE_TOP = RIM + 1  -- where the slim bar starts, inside the rim
+local TITLE_BAR = 26       -- how tall it is
+Titanforged.TITLE_TOP = TITLE_TOP
+Titanforged.TITLE_BAR = TITLE_BAR
+-- Where the name starts in the slim bar: just past the portrait.
+Titanforged.TITLE_LEFT = SLIM_PORTRAIT - SLIM_PORTRAIT_OUT + 6
+
 -- How long the glint takes to cross, and the pause before the next one.
 local GLINT_TIME = 1.6
 local GLINT_REST = 7
@@ -189,14 +203,16 @@ local function Plate(trim, title)
     return plate
 end
 
-local function Portrait(trim)
+local function Portrait(trim, slim)
+    local size = slim and SLIM_PORTRAIT or PORTRAIT
+    local out = slim and SLIM_PORTRAIT_OUT or PORTRAIT_OUT
     local portrait = CreateFrame("Frame", nil, trim)
-    portrait:SetSize(PORTRAIT, PORTRAIT)
-    portrait:SetPoint("TOPLEFT", trim, "TOPLEFT", -PORTRAIT_OUT, PORTRAIT_OUT)
+    portrait:SetSize(size, size)
+    portrait:SetPoint("TOPLEFT", trim, "TOPLEFT", -out, out)
 
     local halo = Art(portrait, "Glow", "BACKGROUND")
     halo:SetPoint("CENTER")
-    halo:SetSize(PORTRAIT * 1.6, PORTRAIT * 1.6)
+    halo:SetSize(size * 1.6, size * 1.6)
     halo:SetVertexColor(Theme.Unpack("accent"))
     halo:SetAlpha(0.45)
     Additive(halo)
@@ -205,7 +221,8 @@ local function Portrait(trim)
     ring:SetAllPoints(portrait)
 
     local emblem = Art(portrait, "Emblem", "ARTWORK", 2)
-    emblem:SetSize(EMBLEM, EMBLEM)
+    local emblemSize = slim and SLIM_EMBLEM or EMBLEM
+    emblem:SetSize(emblemSize, emblemSize)
     emblem:SetPoint("CENTER", 0, 1)
 
     local sweep = Art(portrait, "PortraitSweep", "OVERLAY")
@@ -215,6 +232,51 @@ local function Portrait(trim)
 
     portrait.halo, portrait.sweep = halo, sweep
     return portrait
+end
+
+--- The slim title bar: a dark band inside the top rim with a fine gold line
+--- under it, drawn on the window itself so the window's own buttons sit on
+--- top of it, and the name, left, just past the portrait. Answers SetTitle
+--- like the plate, so callers that rename the window work with either.
+--- opts.draw paints the band and opts.color the name; the Blizzard window
+--- style hands in its own.
+function Titanforged.TitleBar(frame, trim, title, opts)
+    opts = opts or {}
+    local band = frame:CreateTexture(nil, "BORDER", nil, -2)
+    band:SetPoint("TOPLEFT", TITLE_TOP, -TITLE_TOP)
+    band:SetPoint("TOPRIGHT", -TITLE_TOP, -TITLE_TOP)
+    band:SetHeight(TITLE_BAR)
+    local line = frame:CreateTexture(nil, "BORDER", nil, -1)
+    line:SetPoint("TOPLEFT", band, "BOTTOMLEFT")
+    line:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT")
+    line:SetHeight(1)
+    if opts.draw then
+        opts.draw(band, line)
+    else
+        Gradient(band, "VERTICAL", { 0.055, 0.050, 0.040 }, { 0.130, 0.110, 0.075 }, 0.85, 0.85)
+        Theme.SetGradientAlpha(line, "HORIZONTAL", "accent", 0.6, 0.05)
+    end
+
+    local bar = CreateFrame("Frame", nil, trim)
+    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", TITLE_TOP, -TITLE_TOP)
+    bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -TITLE_TOP, -TITLE_TOP)
+    bar:SetHeight(TITLE_BAR)
+    pcall(bar.EnableMouse, bar, false)
+    bar.band, bar.line = band, line
+
+    local label = Theme.CreateLabel(bar, "title", "accent", "LEFT")
+    label:SetPoint("LEFT", bar, "LEFT", Titanforged.TITLE_LEFT - TITLE_TOP, 0)
+    local color = opts.color or LIGHT
+    label:SetTextColor(color[1], color[2], color[3], 1)
+    pcall(label.SetShadowColor, label, 0, 0, 0, 1)
+    pcall(label.SetShadowOffset, label, 1, -1)
+    pcall(label.SetWordWrap, label, false)
+    bar.label = label
+    bar.slim = true
+
+    function bar:SetTitle(text) label:SetText(text or "") end
+    bar:SetTitle(title)
+    return bar
 end
 
 local function CloseGem(trim, onClick)
@@ -275,6 +337,8 @@ Titanforged.CloseGem = CloseGem
 --   portrait true for the round portrait with the emblem
 --   close    a function: the red close gem, which calls it
 --   level    how far above `frame` the corners and portrait sit (default 20)
+--   slim     the slim frame: a small portrait inside the corner and the
+--            name in one slim bar inside the top rim, not on a plate
 --
 -- Returns the trim: a frame over the window holding the pieces, with
 -- .plate, .portrait and .closeButton when made. The rim and the soft light
@@ -321,9 +385,12 @@ function Titanforged:Dress(frame, opts)
     glint:SetAlpha(0)
     trim.glint = glint
 
-    if opts.title then trim.plate = Plate(trim, opts.title) end
-    if opts.portrait then trim.portrait = Portrait(trim) end
+    if opts.title then
+        trim.plate = opts.slim and Titanforged.TitleBar(frame, trim, opts.title) or Plate(trim, opts.title)
+    end
+    if opts.portrait then trim.portrait = Portrait(trim, opts.slim) end
     if opts.close then trim.closeButton = CloseGem(trim, opts.close) end
+    trim.slim = opts.slim and true or nil
 
     frame.titan = trim
 
@@ -339,6 +406,10 @@ end
 --- How far out a dressed frame's pieces reach past its edges, for
 --- SetClampRectInsets: left, right, top, bottom.
 function Titanforged.Reach(trim)
+    if trim and trim.slim then
+        local reach = trim.portrait and math.max(SLIM_PORTRAIT_OUT, CORNER_OUT) or CORNER_OUT
+        return reach, CORNER_OUT + (trim.closeButton and CLOSE / 2 or 0), math.max(reach, CLOSE_OUT), CORNER_OUT
+    end
     local left = trim and trim.portrait and PORTRAIT_OUT or CORNER_OUT
     local top = trim and (trim.portrait and PORTRAIT_OUT or trim.plate and PLATE_HEIGHT / 2) or CORNER_OUT
     return left, CORNER_OUT + (trim and trim.closeButton and CLOSE / 2 or 0), top, CORNER_OUT

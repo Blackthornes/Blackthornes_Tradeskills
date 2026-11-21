@@ -3876,3 +3876,12 @@ L["Profit per Craft:"] = "Ganancia por fabricación:"
 L["Pays for Itself:"] = "Se paga solo:"
 L["Stack of %d:"] = "Montón de %d:"
 L["You Opened %d:"] = "Abriste %d:"
+-- Row Size (2026-11-21)
+L["Row Size:"] = "Tamaño de filas:"
+L["Roomy"] = "Amplio"
+L["Compact"] = "Compacto"
+L["Compact fits more rows in each list. Type /reload to see it."] = "Compacto muestra más filas en cada lista. Escribe /reload para verlo."
+
+L["Tradeskills' settings have a window of their own."] = "Los ajustes de Tradeskills tienen su propia ventana."
+L["Open Tradeskills settings"] = "Abrir ajustes de Tradeskills"
+L["Or right-click the minimap button."] = "O haz clic derecho en el botón del minimapa."

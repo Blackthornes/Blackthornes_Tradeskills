@@ -3877,3 +3877,12 @@ L["Profit per Craft:"] = "Прибыль за создание:"
 L["Pays for Itself:"] = "Окупается:"
 L["Stack of %d:"] = "Стопка из %d:"
 L["You Opened %d:"] = "Ты открыл: %d:"
+-- Row Size (2026-11-21)
+L["Row Size:"] = "Размер строк:"
+L["Roomy"] = "Просторно"
+L["Compact"] = "Компактно"
+L["Compact fits more rows in each list. Type /reload to see it."] = "Компактно помещает больше строк в каждый список. Введи /reload, чтобы увидеть."
+
+L["Tradeskills' settings have a window of their own."] = "У настроек Tradeskills есть своё окно."
+L["Open Tradeskills settings"] = "Открыть настройки Tradeskills"
+L["Or right-click the minimap button."] = "Или щёлкни правой кнопкой по значку у мини-карты."

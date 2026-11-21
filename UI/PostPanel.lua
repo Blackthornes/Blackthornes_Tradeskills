@@ -2188,7 +2188,7 @@ local function GroupParts(row)
     local function Heading(key, text, justify)
         local button = CreateFrame("Button", nil, row)
         button:SetHeight(16)
-        local label = Theme.CreateLabel(button, "tiny", "muted", justify)
+        local label = Theme.CreateLabel(button, "tiny", "heading", justify)
         label:SetAllPoints(button)
         label:SetText(text)
         button.label = label
@@ -2265,7 +2265,7 @@ function PostPanel.UpdateGroupedRow(row, line)
         ShowParts(row, parts, "heading")
         local sort = PostPanel.buySort[line.group]
         for key, button in pairs(parts.headings) do
-            button.label:SetTextColor(Theme.Unpack(sort and sort.key == key and "accent" or "muted"))
+            button.label:SetTextColor(Theme.Unpack(sort and sort.key == key and "text" or "heading"))
         end
         return true
     end
