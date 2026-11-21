@@ -2632,13 +2632,13 @@ local function NeverLine(entry)
     end
 
     if not entry.outputItemID then
-        return L.Format("%s |cff7a8089· no character knows it|r", name)
+        return L.Format("%s |cff857c68· no character knows it|r", name)
     end
     local buy = ns.Cost:GetReagentUnitCost(entry.outputItemID)
     if not buy then
-        return L.Format("%s |cff7a8089·|r |c%sno price to buy it|r", name, ns.COLORS.warn)
+        return L.Format("%s |cff857c68·|r |c%sno price to buy it|r", name, ns.COLORS.warn)
     end
-    return L.Format("%s |cff7a8089· buy %s each|r", name,
+    return L.Format("%s |cff857c68· buy %s each|r", name,
         Util.FormatMoney(buy, { noColor = true, short = true }))
 end
 
@@ -2651,7 +2651,7 @@ local function AlwaysLine(entry)
         name = ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5),
             math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
     end
-    return L.Format("%s |cff7a8089· always made|r", name)
+    return L.Format("%s |cff857c68· always made|r", name)
 end
 
 local function RefreshNeverSubCrafts()
@@ -3001,7 +3001,7 @@ local function RefreshIgnored()
     local keeps = {}
     for _, entry in ipairs(ns.KeepHere:Items()) do
         keeps[#keeps + 1] = { key = entry.itemID,
-            name = L.Format("%s  |cff7a8089Keep: %s|r", entry.name, ns.KeepHere.Shown(entry.count)) }
+            name = L.Format("%s  |cff857c68Keep: %s|r", entry.name, ns.KeepHere.Shown(entry.count)) }
     end
     FillIgnored(keeps, widgets.keepHereRows, widgets.keepHereSection, widgets.keepHereEmpty,
         function(itemID) ns.KeepHere:Set(itemID, 0) end, nil,

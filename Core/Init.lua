@@ -58,9 +58,9 @@ ns.COLORS = {
     accent = "ffc8a44d",
     profit = "ff4fd18b",
     loss   = "ffe5604f",
-    muted  = "ff7a8089",
+    muted  = "ff857c68",
     warn   = "ffe8c15a",
-    text   = "ffe6e8ec",
+    text   = "ffffffff",
 }
 
 local PREFIX = "|c" .. ns.COLORS.accent .. "BTS|r "

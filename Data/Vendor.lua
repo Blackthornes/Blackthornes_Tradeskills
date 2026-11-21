@@ -827,7 +827,7 @@ ns.RegisterCommand("vendor", L["show learned vendor prices"], function()
             ns.PrintRaw(("  %s  %s%s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(record.price),
-                record.limited and ("  |cff7a8089" .. L["(limited stock)"] .. "|r") or ""))
+                record.limited and ("  |cff857c68" .. L["(limited stock)"] .. "|r") or ""))
             shown = shown + 1
         end
     end

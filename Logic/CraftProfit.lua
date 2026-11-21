@@ -257,7 +257,7 @@ end
 
 --- "No price", greyed.
 function CraftProfit.NoPrice()
-    return "|c" .. Color("muted", "ff7a8089") .. L["No price"] .. "|r"
+    return "|c" .. Color("muted", "ff857c68") .. L["No price"] .. "|r"
 end
 
 --- A profit as the rows show it: "+5g 3s" green, "−2s" red.
@@ -277,7 +277,7 @@ function CraftProfit.RowText(figures)
     if figures.boundProfit then
         -- The part that could be priced, then a small "+" for the bound mats.
         return CraftProfit.SignedMoney(figures.boundProfit)
-            .. "|c" .. Color("muted", "ff7a8089") .. "+|r"
+            .. "|c" .. Color("muted", "ff857c68") .. "+|r"
     end
     return CraftProfit.NoPrice()
 end
