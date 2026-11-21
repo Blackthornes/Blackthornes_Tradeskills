@@ -43,6 +43,15 @@ local EDGE_PAD = 11
 local TAB_HANG = 28
 local TAB_INSET = 34
 
+-- The slim frame (the owner said build it, 2026-11-21): the name, the scan
+-- button and the gems share one slim bar across the top, and what the scan
+-- knows and the version sit in a footer along the bottom.
+local TITLE_TOP = 5
+local TITLE_BAR = 26
+local FOOTER_HEIGHT = 16
+local FOOTER_BOTTOM = 6
+local SCAN_BUTTON_HEIGHT = 20
+
 -- The strip of controls at the top of the sell list (UI/PostPanel.lua):
 -- what is ready to sell, the scan's status, Post Crafted and Scan. As wide as
 -- the inside of the sell list, which sets it in place.
@@ -150,11 +159,14 @@ function UI:Build()
         local trim = ns.Titanforged:Dress(window, {
             title = "Blackthornes Tradeskills",
             portrait = true,
+            slim = true,
             close = function() UI:Hide() end,
         })
+        TITLE_TOP = ns.Titanforged.TITLE_TOP or TITLE_TOP
+        TITLE_BAR = ns.Titanforged.TITLE_BAR or TITLE_BAR
 
-        -- Kept on the screen whole: the portrait and plate reach out past
-        -- the top left, and the tabs hang below.
+        -- Kept on the screen whole: the portrait and gems reach a little
+        -- past the top corners, and the tabs hang below.
         local left, right, top = ns.Titanforged.Reach(trim)
         if window.SetClampRectInsets then
             window:SetClampRectInsets(-left, right, top, -TAB_HANG)
@@ -200,6 +212,7 @@ function UI:Build()
     window:HookScript("OnHide", function(frame) TSTabs:Closed(frame) end)
 
     self:BuildHeader()
+    self:BuildFooter()
     self:BuildTabs()
     self:BuildSizeGrip()
 
@@ -211,84 +224,114 @@ end
 function UI:BuildHeader()
     local window = self.window
 
-    -- The window's name is on the plate across the top edge and the close
-    -- gem sits on the top right corner (UI/Titanforged.lua), so the header
-    -- holds what the scan has done and the scan button, clear of the
-    -- portrait on the left.
+    -- The slim bar across the top (UI/Titanforged.lua, opts.slim) holds the
+    -- portrait and the name on the left and the gems on the right corner;
+    -- the scan button sits in it too, just left of the gems.
     local header = CreateFrame("Frame", nil, window)
-    header:SetPoint("TOPLEFT", EDGE_PAD, -EDGE_PAD)
-    header:SetPoint("TOPRIGHT", -EDGE_PAD, -EDGE_PAD)
-    header:SetHeight(52)
-
-    -- A gold rule under it, bright at the left and fading out to the right.
-    local rule = header:CreateTexture(nil, "ARTWORK")
-    rule:SetPoint("BOTTOMLEFT")
-    rule:SetPoint("BOTTOMRIGHT")
-    rule:SetHeight(1)
-    Theme.SetGradientAlpha(rule, "HORIZONTAL", "accent", 0.6, 0.05)
-
-    -- The installed version, small and faint past the portrait, so a player
-    -- can see at a glance which one they run. The header is on every tab,
-    -- Settings included.
-    local version = Theme.CreateLabel(header, "tiny", "dim")
-    version:SetPoint("LEFT", header, "LEFT", 58, -6)
-    version:SetText(ns.VersionLabel())
-    self.versionLabel = version
-
-    -- Something for the scan button to sit beside, where the close button
-    -- used to be: the gem is on the window's corner now.
-    local close = CreateFrame("Frame", nil, header)
-    close:SetSize(1, 24)
-    close:SetPoint("TOPRIGHT", -8, -12)
+    header:SetPoint("TOPLEFT", EDGE_PAD, -TITLE_TOP)
+    header:SetPoint("TOPRIGHT", -EDGE_PAD, -TITLE_TOP)
+    header:SetHeight(TITLE_BAR)
 
     -- Scan.
     --
     -- The button stays clickable even when a scan is not currently possible:
     -- a greyed-out control that cannot say why is worse than one that tells
-    -- you to open the auction house.
+    -- you to open the auction house. Its hover says why.
     local scanButton = Widgets.CreateButton(header, L["Scan Auctions"], function()
         UI:TriggerScan()
-    end, { width = SCAN_BUTTON_WIDTH, height = 24, primary = true })
+    end, { width = SCAN_BUTTON_WIDTH, height = SCAN_BUTTON_HEIGHT, primary = true })
     FitScanButton(scanButton)
-
-    scanButton:SetPoint("TOPRIGHT", close, "TOPLEFT", -8, -1)
     self.scanButton = scanButton
-
-    -- How old the scan is, a small chip beside the scan button (the house
-    -- kit, 2026-10-29: one header row). What the addon knows, items priced
-    -- and recipes known, is on its hover.
-    local status
-    if Widgets.CreateChip then
-        status = Widgets.CreateChip(header, "", nil, { height = 20 })
-        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
-        status:HookScript("OnEnter", function(self)
-            local tip = rawget(self, "tip")
-            if not tip then return end
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        status:HookScript("OnLeave", function() GameTooltip:Hide() end)
-    else
-        status = Theme.CreateLabel(header, "small", "muted", "RIGHT")
-        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
-    end
-    self.statusLabel = status
-
-    -- Inline explanation, so the reason appears in the window rather than only
-    -- in the chat frame.
-    local hint = Theme.CreateLabel(header, "small", "warn", "RIGHT")
-    hint:SetPoint("TOPRIGHT", scanButton, "BOTTOMRIGHT", 0, -4)
-    hint:SetWidth(260)
-    self.scanHint = hint
-
     self.header = header
+    self:PlaceScanButton(false)
 
     local progress = Widgets.CreateProgressBar(window)
     progress:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     progress:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
     progress:Hide()
     self.progressBar = progress
+end
+
+--- How far in from the window's right edge the gems reach: the close gem on
+--- the corner, then the fold gem, then the swap gem, each its own width.
+function UI:GemRoom()
+    local window = self.window
+    local trim = window and rawget(window, "titan")
+    if type(trim) ~= "table" then return 0 end
+    local function Width(button)
+        if type(button) ~= "table" then return 0 end
+        local ok, width = pcall(button.GetWidth, button)
+        return ok and type(width) == "number" and width or 0
+    end
+    local close = Width(rawget(trim, "closeButton"))
+    local fold = rawget(window, "blackthornesFold")
+    local room = 8 + close / 2
+    for _, width in ipairs({ Width(type(fold) == "table" and fold.button or nil), Width(rawget(window, "blackthornesSwap")) }) do
+        if width > 0 then room = room + width + 2 end
+    end
+    return room
+end
+
+--- Put the scan button in the title bar, just left of the gems; inside the
+--- one window, where the gems are put away, at the right edge.
+function UI:PlaceScanButton(bare)
+    local button, header = self.scanButton, self.header
+    if not (button and header) then return end
+    local room = bare and EDGE_PAD or math.max(EDGE_PAD, self:GemRoom() + 8)
+    button:ClearAllPoints()
+    button:SetPoint("RIGHT", self.window, "TOPRIGHT", -room, -(TITLE_TOP + TITLE_BAR / 2))
+end
+
+--- The footer along the bottom: what the addon knows and how old the scan
+--- is on the left, why a scan can't run (or how far one is) beside the
+--- version on the right.
+function UI:BuildFooter()
+    local window = self.window
+
+    local footer = CreateFrame("Frame", nil, window)
+    footer:SetPoint("BOTTOMLEFT", EDGE_PAD + 4, FOOTER_BOTTOM)
+    footer:SetPoint("BOTTOMRIGHT", -(EDGE_PAD + 4), FOOTER_BOTTOM)
+    footer:SetHeight(FOOTER_HEIGHT)
+    self.footer = footer
+
+    -- The installed version, small and faint on the right, so a player can
+    -- see which one they run. The footer is on every tab, Settings included.
+    local version = Theme.CreateLabel(footer, "tiny", "dim", "RIGHT")
+    version:SetPoint("RIGHT", footer, "RIGHT", 0, 0)
+    version:SetText(ns.VersionLabel())
+    self.versionLabel = version
+
+    -- What the scan knows. The whole line is on its hover when it is cut
+    -- to fit.
+    local status = CreateFrame("Frame", nil, footer)
+    status:SetPoint("LEFT", footer, "LEFT", 0, 0)
+    status:SetHeight(FOOTER_HEIGHT)
+    status:SetWidth(560)
+    local text = Theme.CreateLabel(status, "small", "muted", "LEFT")
+    text:SetPoint("LEFT", status, "LEFT", 0, 0)
+    text:SetWidth(560)
+    pcall(text.SetWordWrap, text, false)
+    status.text = text
+    function status:SetText(words) text:SetText(words or "") end
+    function status:GetText() return text:GetText() end
+    status:EnableMouse(true)
+    status:SetScript("OnEnter", function(self)
+        local tip = rawget(self, "tip")
+        if not tip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    status:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    self.statusLabel = status
+
+    -- Inline explanation, so the reason appears in the window rather than only
+    -- in the chat frame, and the scan's progress while one runs.
+    local hint = Theme.CreateLabel(footer, "small", "warn", "RIGHT")
+    hint:SetPoint("RIGHT", version, "LEFT", -12, 0)
+    hint:SetWidth(380)
+    pcall(hint.SetWordWrap, hint, false)
+    self.scanHint = hint
 end
 
 --- Start or cancel a scan, explaining itself when it cannot.
@@ -338,7 +381,7 @@ function UI:BuildTabs()
 
     local content = Theme.CreatePanel(window, "panel")
     content:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)
-    content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, EDGE_PAD)
+    content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, FOOTER_BOTTOM + FOOTER_HEIGHT + 2)
     Theme.Recess(content)
     self.content = content
 
@@ -524,9 +567,17 @@ function UI:UpdateHeader()
             or L.Format("scanned %s", ago)
     end
 
-    self.statusLabel:SetText(scanText)
-    self.statusLabel.tip = L.Format("%s items priced  ·  %s recipes known  ·  %s",
+    -- The fullest line that fits, the whole of it on the hover.
+    local full = L.Format("%s items priced  ·  %s recipes known  ·  %s",
         Util.Comma(priceCount), Util.Comma(recipeCount), scanText)
+    local label = self.statusLabel
+    local texts = { full, L.Format("%s items priced%s", Util.Comma(priceCount), "  ·  " .. scanText), scanText }
+    if label.text and Theme.FitText then
+        Theme.FitText(label.text, texts)
+    else
+        label:SetText(full)
+    end
+    label.tip = full
 
     -- The scan button stays live and explains itself rather than greying out
     -- into something that looks broken.
@@ -2676,6 +2727,8 @@ local function TSBare(bare)
     if trim and trim.SetShown then trim:SetShown(not bare) end
     local grip = UI.sizeGrip
     if grip and grip.SetShown then grip:SetShown(not bare) end
+    -- The gems go with the trim, so the scan button moves up to the edge.
+    UI:PlaceScanButton(bare)
     if bare then
         if TSTabs.bareRim then return end
         local kept = {}

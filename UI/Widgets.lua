@@ -2329,10 +2329,36 @@ function Widgets.ItemHotspot(icon, cover)
     return spot
 end
 
+-- Row Size (the owner said build it, 2026-11-21): "roomy" as the lists
+-- have always been, or "compact", the game's tighter rows. Read once, at the
+-- first list made, so a change waits for /reload as Text Size does. Only
+-- one-line rows (up to COMPACT_MOST tall) shrink, by COMPACT_LESS, never
+-- under COMPACT_LEAST; taller rows hold two lines and keep their height.
+Widgets.COMPACT_LESS = 4
+Widgets.COMPACT_MOST = 30
+Widgets.COMPACT_LEAST = 16
+
+--- True when the lists are drawn compact this session.
+function Widgets.Compact()
+    if Widgets.compactRows == nil then
+        local Config = ns.Config
+        local ok, size = pcall(function() return Config and Config:Get("rowSize") end)
+        Widgets.compactRows = ok and size == "compact" or false
+    end
+    return Widgets.compactRows
+end
+
+--- A list row's height at the Row Size picked.
+function Widgets.RowHeight(height)
+    height = height or 22
+    if not Widgets.Compact() or height > Widgets.COMPACT_MOST then return height end
+    return math.max(Widgets.COMPACT_LEAST, height - Widgets.COMPACT_LESS)
+end
+
 function Widgets.CreateScrollList(parent, opts)
     local list = CreateFrame("Frame", nil, parent)
 
-    local rowHeight = opts.rowHeight or 22
+    local rowHeight = Widgets.RowHeight(opts.rowHeight or 22)
 
     list.data = {}
     list.rows = {}

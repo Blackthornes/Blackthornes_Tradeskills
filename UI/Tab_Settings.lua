@@ -1835,6 +1835,26 @@ local function Build(outer)
     end, { width = 150 })
     widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Row Size (the owner said build it, 2026-11-21): roomy rows as always,
+    -- or the game's tighter ones so more fit. Read once, so it waits for
+    -- /reload as Text Size does. See Widgets.RowHeight.
+    local rowSizeRow = CreateRow(pages.windows, 1, L["Row Size:"],
+        L["Compact fits more rows in each list. Type /reload to see it."])
+    widgets.rowSize = Widgets.CreateDropdown(rowSizeRow, {
+        { text = L["Roomy"], value = "roomy" },
+        { text = L["Compact"], value = "compact" },
+    }, function(value)
+        Config:Set("rowSize", value)
+        widgets.rowSizeReload:SetShown((value == "compact") ~= (Widgets.Compact and Widgets.Compact() or false))
+    end, { width = 110 })
+    widgets.rowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
+    widgets.rowSizeReload = Widgets.CreateButton(rowSizeRow, L["Reload"], function()
+        if ReloadUI then ReloadUI() end
+    end, { width = 90, height = 20 })
+    FitButton(widgets.rowSizeReload)
+    ReloadUnder(rowSizeRow, widgets.rowSize, widgets.rowSizeReload)
+    widgets.rowSizeReload:Hide()
+
     local effectsRow = CreateRow(pages.all, 1, L["Effects:"])
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
@@ -3185,6 +3205,11 @@ local function Refresh()
         widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
     end
     widgets.combineButtons:SetChecked(not ns.SharedMinimap or ns.SharedMinimap.Combined())
+    if widgets.rowSize then
+        local rowSize = Config:Get("rowSize") == "compact" and "compact" or "roomy"
+        widgets.rowSize:SetValue(rowSize, true)
+        widgets.rowSizeReload:SetShown((rowSize == "compact") ~= (Widgets.Compact and Widgets.Compact() or false))
+    end
     if widgets.oneWindow then
         widgets.oneWindow:SetChecked(ns.SharedWindow and ns.SharedWindow.On() or false)
     end

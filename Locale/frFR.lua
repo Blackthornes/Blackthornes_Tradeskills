@@ -3839,6 +3839,13 @@ L["Got prices for %d items from %s in your guild."] = "Prix reçus pour %d objet
 L["Got prices for %d items from %d players on your realm."] = "Prix reçus pour %d objets de %d joueurs de ton royaume."
 L["Got prices for %d items from 1 player on your realm."] = "Prix reçus pour %d objets d'un joueur de ton royaume."
 L["Got prices for 1 item from %s in your guild."] = "Prix reçu pour 1 objet de %s, de ta guilde."
+
+-- Row Size (2026-11-21)
+L["Row Size:"] = "Taille des lignes :"
+L["Roomy"] = "Aéré"
+L["Compact"] = "Compact"
+L["Compact fits more rows in each list. Type /reload to see it."] = "Compact affiche plus de lignes dans chaque liste. Tape /reload pour le voir."
+
 L["Tradeskills' settings have a window of their own."] = "Les réglages de Tradeskills ont leur propre fenêtre."
 L["Open Tradeskills settings"] = "Ouvrir les réglages de Tradeskills"
 L["Or right-click the minimap button."] = "Ou fais un clic droit sur le bouton de la minicarte."
