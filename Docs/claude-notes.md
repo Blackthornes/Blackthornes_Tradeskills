@@ -3407,3 +3407,9 @@ now, tested in `tools/test_tabstall.lua`:
 
 A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
 stays the at-once one every event uses.
+
+## The tooltip block (shared item tooltip lines)
+
+The owner said build it (2026-11-21, from the UI pass mockup), in Farmer, Tradeskills, Equipment and Butler. Every Blackthornes line on an item tooltip goes on in one block: a blank row with a thin gold line of our own on it (a texture, hidden when the tooltip clears), then each line as a yellow name ending ":" on the left and a white answer on the right, no blank rows between addons, "Hold Shift for more." last and once. `UI/TooltipBlock.lua` is the same file in the four (FILE_VERSION 1; a fix belongs in all four). `_G.BlackthornesTooltipBlock` holds the parts and the one hook (the item post call, else OnTooltipSetItem on GameTooltip, ItemRefTooltip and the shopping tooltips); the newest copy's writer wins. Each addon works out its own lines and hands them over with `TooltipBlock:Provide(part, section, order, fn)`, `fn(tooltip, data)` returning lines and whether one was held for Shift; it no longer writes item lines itself.
+
+Order: price (Tradeskills `Tradeskills:price` 1, Butler vendor prices `Butler:price` 2), source (Farmer `Farmer:source` 1 "Farm At:", Equipment `Equipment:source` 2 "Drops From:"), advice (Equipment `Equipment:advice` 1 "For <spec>:", "For <alt>:", "Best Enchant:", "Weapon Master:", the suffix name or "Random Roll:", "Crafting:"; Butler `Butler:advice` 2 "Butler Says:"), holders (Butler `Butler:holders` 1 "You Have:", "Your Characters:"). Tradeskills maps its line names to the block's at write time (`ItemTooltip.BLOCK_LABELS`), so other windows keep "Demand" and the like; the stack count is read from the tooltip owner's bag slot. Pets' taming lines, Farmer's kill lines and Tradeskills' enchant spell lines are not item tooltips and are left alone. Tested in each addon's `tools/test_tooltipblock.lua`.
