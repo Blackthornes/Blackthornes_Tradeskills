@@ -508,10 +508,17 @@ _G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why; never rais
 or its list is not read), `BuyFromVendor` the button's own click
 (`Vendor:BuyNeeded`, then `UI:UpdateMerchantButton`). Tested in
 `tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
-reads them. While Butler is loaded and its window opens at vendors (its
-`openAtVendor`, read from `BlackthornesButlerDB`), the Buy materials button
-over the vendor window hides (`UI.ButlerBuysHere`, the owner 2026-10-18):
-Butler's Buy row does the buying. Tested in `tools/test_merchantbutton.lua`.
+reads them. From 2026-10-18 the Buy materials button over the vendor
+window hid while Butler was loaded with `openAtVendor` on, trusting Butler's
+Buy row; but that row is out of sight when Butler's window is shut, folded
+or on All Characters, and players lost Buy. Since 2026-11-21 (the owner
+tapped "Build A and B") the button stays at `MerchantFrame`'s top right
+whether Butler is loaded or not; with Butler loaded (`UI.ButlerLoaded`) it
+only hides when this vendor has nothing the queue needs, instead of the
+grey "Nothing needed here". Butler's own bar shows a "Buy %d" button at
+the vendor too, through the same two calls. When the button comes or goes
+it places Sell marked again (`SellMarked:Update`). `UI.ButlerBuysHere`
+stays for the Wishlist card. Tested in `tools/test_merchantbutton.lua`.
 
 Butler's tooltip line "Vendors sell it for 25c" (a player asked, the
 owner said build it, 2026-10-22) asks what a vendor charges for one,
