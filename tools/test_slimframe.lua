@@ -10,6 +10,8 @@
 --   3. What the scan knows and the version are in a footer along the
 --      bottom; the fullest line that fits shows, the whole on its hover.
 --   4. Why a scan can't run shows in the footer and on the button's hover.
+--   5. Row Size: roomy unless compact is picked, read once a session, and
+--      only one-line rows shrink.
 
 local GLOBALS = { "CreateFrame", "UIParent", "GameTooltip", "C_Timer", "UISpecialFrames",
     "tinsert", "GetTime", "time" }
@@ -176,6 +178,25 @@ for _, style in ipairs({ "titanforged", "blizzard" }) do
     check("in the footer", UI.scanHint.parent, UI.footer)
     check("says why", UI.scanHint:GetText(), "Open the auction house first.")
     check("and on the button's hover", UI.scanButton.tooltipText, "Open the auction house first.")
+end
+
+print("")
+print("5. Row Size")
+do
+    local ns = NewNS("titanforged")
+    local W = ns.Widgets
+    W.compactRows = nil
+    check("nothing picked: roomy, rows as before", W.RowHeight(22), 22)
+    ns.db.settings.rowSize = "compact"
+    check("read once: a change waits for /reload", W.RowHeight(22), 22)
+    W.compactRows = nil
+    check("compact: one-line rows a little tighter", W.RowHeight(22), 18)
+    check("never too small", W.RowHeight(17), 16)
+    check("two-line rows keep their height", W.RowHeight(34), 34)
+    local list = W.CreateScrollList(UIParent, { rowHeight = 26 })
+    check("a list made now is compact", list ~= nil, true)
+    check("the setting's default is roomy", ns.Config.DEFAULTS.settings.rowSize == nil
+        or ns.Config.DEFAULTS.settings.rowSize == "roomy", true)
 end
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

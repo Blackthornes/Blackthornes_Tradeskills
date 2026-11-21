@@ -3407,3 +3407,32 @@ now, tested in `tools/test_tabstall.lua`:
 
 A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
 stays the at-once one every event uses.
+
+## The slim window frame and Row Size (2026-11-21)
+
+The owner said build it, Tradeskills first, from
+`ui-pass-4-slimmer-frame.html`. `Titanforged:Dress(frame, { slim = true })`
+(and `BlizzardLook.Dress`, which hands its colours to
+`Titanforged.TitleBar`) gives a small portrait (40, reaching 6 past the
+corner) and the name in one bar inside the top rim (`TITLE_TOP`,
+`TITLE_BAR`, `TITLE_LEFT`), drawn on the window's own BORDER layer so the
+window's buttons sit over it and the one window's bare mode hides it with
+the rim. The bar answers `SetTitle` like the plate. Without `slim` every
+window keeps the plate, so the shared files stay safe to copy; Farmer,
+Equipment, Pets and Butler follow only after the owner tries Tradeskills.
+
+The main window (`UI/Main.lua`): the header is that bar, the scan button in
+it just left of the gems (`UI:GemRoom`, `UI:PlaceScanButton`, at the edge
+inside the one window where the gems are put away). A footer
+(`UI:BuildFooter`) holds what the scan knows on the left (the fullest of
+three lines that fits, the whole on its hover, through `Theme.FitText`),
+why a scan can't run or how far one is, and the version on the right. Tabs
+were already as wide as their word with Settings last, and row hints were
+already on each row's hover.
+
+"Row Size:" on the Windows page (`rowSize`, `roomy` unless `compact` is
+picked, words approved by the owner): read once a session
+(`Widgets.Compact`), so it waits for /reload. `Widgets.RowHeight` shrinks
+one-line rows (up to `COMPACT_MOST`, 30) by `COMPACT_LESS` (4), never under
+16; taller rows hold two lines and keep their height. Tested in
+`tools/test_slimframe.lua`. Not yet seen in game.

@@ -3838,3 +3838,9 @@ L["Got prices for %d items from %s in your guild."] = "Preise für %d Gegenstän
 L["Got prices for %d items from %d players on your realm."] = "Preise für %d Gegenstände von %d Spielern auf deinem Realm bekommen."
 L["Got prices for %d items from 1 player on your realm."] = "Preise für %d Gegenstände von 1 Spieler auf deinem Realm bekommen."
 L["Got prices for 1 item from %s in your guild."] = "Preis für 1 Gegenstand von %s aus deiner Gilde bekommen."
+
+-- Row Size (2026-11-21)
+L["Row Size:"] = "Zeilengröße:"
+L["Roomy"] = "Geräumig"
+L["Compact"] = "Kompakt"
+L["Compact fits more rows in each list. Type /reload to see it."] = "Kompakt zeigt mehr Zeilen in jeder Liste. Gib /reload ein, um es zu sehen."
