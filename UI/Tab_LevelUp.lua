@@ -526,7 +526,7 @@ local function UpdateLearnCells(row, entry)
 
     local kind, zone = ns.LearnNext.WhereText(entry.place)
     if zone then
-        cells.where:SetText(("%s |cff7a8089%s|r"):format(kind, zone))
+        cells.where:SetText(("%s |cff857c68%s|r"):format(kind, zone))
     else
         cells.where:SetText(kind)
     end
@@ -571,7 +571,7 @@ local function UpdateRow(row, entry)
     local name = entry.name or L.Format("recipe %s", entry.recipeID)
     -- A craft only another character knows (Sub-crafts only) says who.
     if entry.knownBy and ns.Recipes.GetShortCharacterName then
-        name = ("%s |cff7a8089(%s)|r"):format(name, ns.Recipes:GetShortCharacterName(entry.knownBy))
+        name = ("%s |cff857c68(%s)|r"):format(name, ns.Recipes:GetShortCharacterName(entry.knownBy))
     end
     -- An enchant makes no item, so it shows its spell's icon, with the green
     -- arrow and where it goes when Equipment says it beats what is on your

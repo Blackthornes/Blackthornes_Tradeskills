@@ -1892,7 +1892,7 @@ function Widgets.SortableHeadings(labels, values, onChange)
         for key, button in pairs(sorter.buttons) do
             local active = sorter.key == key
             if active or not button.restColor then
-                button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+                button.label:SetTextColor(Theme.Unpack(active and "text" or "heading"))
             else
                 button.label:SetTextColor(unpack(button.restColor))
             end

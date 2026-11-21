@@ -223,7 +223,7 @@ function GoldGoalUI.LightTick(tick, lit)
     if lit then
         tick:SetVertexColor(1, 1, 1, 1)
     else
-        tick:SetVertexColor(0.42, 0.42, 0.46, 0.9)
+        tick:SetVertexColor(0.48, 0.44, 0.37, 0.9)
     end
     tick.lit = lit and true or false
 end

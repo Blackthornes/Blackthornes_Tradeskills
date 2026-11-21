@@ -161,7 +161,7 @@ function CraftProfitCard:Draw(figures)
         line.label:SetFontObject(line.label:GetFontObject())
         line.label:SetTextColor(Theme.Unpack(bold and "text" or "muted"))
         local label = row.label
-        if row.makes then label = label .. "  |c" .. ((ns.COLORS and ns.COLORS.muted) or "ff7a8089") .. row.makes .. "|r" end
+        if row.makes then label = label .. "  |c" .. ((ns.COLORS and ns.COLORS.muted) or "ff857c68") .. row.makes .. "|r" end
         line.label:SetText(label)
         line.value:SetText(row.value or "")
         line.way:SetText(row.way or "")
