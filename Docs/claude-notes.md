@@ -3334,3 +3334,31 @@ arrows, bars, trackers, the Zone Board and similar pieces get none.
 Forever 1.60.1 (a hotfix, announced 2026-11-20) makes GetRealmName, GetRealmID and the C_BattleNet realm fields hand back "" or 0, and scrambles the realm, server and spawn parts of Creature, Vehicle, Pet and GameObject GUIDs (player GUIDs are not named). Every reader of a mob, vendor or trainer ID from a GUID takes any text in parts 2 to 5 (`[^%-]+`), never `%d+`; a new one must too. Prices, price history, sales, the gold log, guild and realm prices and posted auctions are all filed under `Config:GetRealmKey()`, so a blank realm would have opened an empty "UnknownRealm" bucket. When the client gives no realm, `SafeRealmName` uses the one remembered: the character's own file (`BlackthornesTSCharDB.realmName`, written each time the client names it; never rename it), then its record's `realm`, then the realm most of this account's own characters are on (linked accounts' copies never count). `Config:RealmName()` gives that name for others (a new record, Gold Goal, the Characters tab). Nothing saved is moved or renamed. The scanner takes a blank realm as no realm, so your own listings stay yours. Tested in `tools/test_realmblank.lua`.
 
 The bucket 1.35.3 left behind (2026-11-20, after players saw prices and price history gone). Players who played on 1.35.3 after the hotfix had a few hours of scans, sales and gold filed under "UnknownRealm-<side>". `Config:FoldBlankRealm()` runs at the end of `Config:Bootstrap`, before any module reads, and copies each such bucket into the realm all of this account's own characters on that side are on (`Config:BlankRealmHome`; two realms or none and nothing is guessed, it waits). It only adds: a record the realm already has is kept whole, price history (`priceHistory`, `priceListed`) gains the hours it lacks, the mail ledger gains entries it lacks (the same character, kind, item and money within 31 days counts as written, each matched once, then sorted by time), and the gold log adds the two stretches of an hour or day together. The stranded bucket is left as it was, and each fold is written down in `blankRealmFolded[key] = { into, at, mails }` (never rename it) so it runs once. Tested in `tools/test_realmblank.lua`.
+
+## Picking a tab (stalls swapping tabs, 2026-11-21)
+
+The owner's report: a short stall each time a tab was picked at the auction
+house. `UI:SelectTab` ran the tab's whole refresh in one frame. What it does
+now, tested in `tools/test_tabstall.lua`:
+
+- **Prices** keeps its sorted rows (`keptRows` in `UI/Tab_Prices.lua`) until
+  what they are built from changes: the price table and `Prices.changes`, a
+  setting (`Config.changes`), the day, the trend's days, the sort and
+  heading, the three tick boxes, and how many stars and own prices there
+  are. Kept rows get `age`, `suffixCount` and `open` read again. Never kept
+  while names are wanted (a search, a sort by name) or under Reagents Only.
+  `Prices:SetFavourite`, `Prune` and `Scrub` now call `Prices:Touch`, so
+  anything that adds or drops a row counts as a change; a new writer of the
+  price table must Touch too. About 170 ms down to 7 for 7,300 items.
+- **Profit** has `refreshPicked` on its tab: once My Crafts has drawn, a pick
+  keeps the rows up and ranks a few recipes a frame (`Util.NewWorker`, 4 ms),
+  then draws. `Profit:GetRanked` is `BeginRanked`, `RankOne` and
+  `FinishRanked` run straight through, so both give the same list. Any other
+  refresh answers at once and drops a ranking under way; so does leaving
+  the tab or the view. The first draw is at once.
+- **Every pick** runs inside `Queue:Keeping` (one build of the costs and
+  shopping list), and a tab whose `onShow` is its `refresh` (Settings) draws
+  once.
+
+A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
+stays the at-once one every event uses.
