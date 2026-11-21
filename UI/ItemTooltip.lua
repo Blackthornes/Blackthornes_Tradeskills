@@ -1277,7 +1277,7 @@ function ItemTooltip.BlockLabel(text)
     return indent .. name
 end
 
-local function RGB(hex)
+local function ToRGB(hex)
     if type(hex) ~= "string" or #hex < 8 then return nil end
     return { Component(hex, 3), Component(hex, 5), Component(hex, 7) }
 end
@@ -1286,8 +1286,8 @@ end
 function ItemTooltip.ToBlock(line)
     local right = line[2]
     if right == "" then right = nil end
-    local rightColor = (line.color and RGB(ns.COLORS[line.color]))
-        or (line[3] and RGB(ns.COLORS[STALE_COLOR])) or nil
+    local rightColor = (line.color and ToRGB(ns.COLORS[line.color]))
+        or (line[3] and ToRGB(ns.COLORS[STALE_COLOR])) or nil
     return { ItemTooltip.BlockLabel(line[1]), right, rightColor = rightColor }
 end
 
