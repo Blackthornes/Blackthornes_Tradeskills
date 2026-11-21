@@ -11,6 +11,7 @@ local _, ns = ...
 -- [item the writ asks for] = { name, zone, mapID, x, y, fromLog }
 ns.WRIT_CUSTOMERS = {
     [4321] = { name = "Kixxle", zone = "Wetlands", mapID = 1437, x = 50.1, y = 37.8 },
+    [4383] = { name = "Grembly", zone = "Ashenvale", mapID = 1440, x = 82.1, y = 51 },
     [6048] = { name = "Kzixx", zone = "Duskwood", mapID = 1431, x = 81.7, y = 19.9 },
     [6049] = { name = "Durganon", zone = "Searing Gorge", mapID = 1427, x = 41.1, y = 58.4 },
     [6712] = { name = "Gorgrash", zone = "Hillsbrad Foothills", mapID = 1424, x = 80, y = 48.7 },
