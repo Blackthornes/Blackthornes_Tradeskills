@@ -43,7 +43,11 @@ local VERIFY_GIVE_UP = 15
 -- clicks from piling up more checks than the auction house can answer. Six
 -- since fast listing (2026-10-14): listings close together share one read
 -- back (VERIFY_SHARE), so more of them cost no more requests.
-local MAX_CONFIRMING = 6
+-- Thirty since 2026-11-21: at six, a steady run of listings (the wheel)
+-- reached the cap in about three seconds and every click after it was
+-- refused until a read back came in. A read sent after a listing settles
+-- it (VerifyPending), so thirty waiting cost no more reads than six did.
+local MAX_CONFIRMING = 30
 Posting.MAX_CONFIRMING = MAX_CONFIRMING
 
 -- A listing's read back waits for a newer listing's when that one is due
@@ -1840,8 +1844,10 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- The listing went down the auction house's throttled channel like any
-    -- other request, so our own requests space themselves out after it.
-    if ns.AHQueue.NoteSend then ns.AHQueue:NoteSend() end
+    -- other request, so our own background requests space themselves out
+    -- after it. The read back that confirms it does not wait on it.
+    local noteListing = ns.AHQueue.NoteListing or ns.AHQueue.NoteSend
+    if noteListing then noteListing(ns.AHQueue) end
 
     if not ok then
         -- The earlier copies are still up and still to be confirmed.
@@ -2783,10 +2789,15 @@ function Posting:VerifyPending(target)
     if not self:IsPending(target) then return end
     if GetTime() - (target.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
 
+    -- A read of your auctions that went out after this listing was made,
+    -- and is still being looked at, settles this one as it stands: no wait
+    -- for a newer listing's, and no second read.
+    local out = self:ReadOutSince(target)
+
     -- A newer listing whose own read back is moments away reads this one
     -- too (a read settles every listing made before it went out), so a run
     -- of quick listings costs one request, not one each.
-    local share = self:ShareVerify(target)
+    local share = not out and self:ShareVerify(target)
     if share then
         C_Timer.After(share, function() Posting:VerifyPending(target) end)
         return
@@ -2811,7 +2822,9 @@ function Posting:VerifyPending(target)
     -- listing was made, so it settles this one too, and no second read is
     -- spent. Out already, it is good for this one as it stands.
     local riding = self:NewerVerifying(target)
-    if riding then
+    if out then
+        target.awaiting = nil
+    elseif riding then
         target.awaiting = riding.awaiting
     else
         ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
@@ -2831,6 +2844,19 @@ function Posting:VerifyPending(target)
             Posting:ResolvePending(nil, nil, token)
         end
     end)
+end
+
+--- Did a read of your auctions go out after this listing was made, with
+--- its answers still being read (Auctions.sentAt, Auctions.READ_FOR)? Then
+--- it settles this listing too. A little short of the last reading, so one
+--- that joins late is not called missing by a reading already under way.
+function Posting:ReadOutSince(target)
+    local Auctions = ns.Auctions
+    local sentAt = Auctions and rawget(Auctions, "sentAt")
+    local span = Auctions and rawget(Auctions, "READ_FOR")
+    if type(sentAt) ~= "number" or type(span) ~= "number" then return false end
+    if sentAt <= (target.startedAt or 0) then return false end
+    return (GetTime() - sentAt) < span - 1.5
 end
 
 --- How long this listing's read back should wait for a newer listing's,

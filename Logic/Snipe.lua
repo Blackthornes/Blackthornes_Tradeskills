@@ -71,6 +71,9 @@ Snipe.SILLY_OVER = 10
 Snipe.SCAN_SLACK = 3600
 -- Pool building: items looked at a frame.
 Snipe.SLICE = 300
+-- How long a find whose listings held nothing to buy stays off the list
+-- while its row still shows the same price.
+Snipe.GONE_FOR = 300
 
 Snipe.SOUND = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Sounds\snipe-bell-single.ogg]]
 
@@ -480,7 +483,7 @@ function Snipe:Start()
     if not AuctionOpen() then return end
     session = session + 1
     self.running, self.spent, self.finds = true, 0, {}
-    self.dinged = {}
+    self.dinged, self.gone = {}, {}
     self.pending, self.armed, waiting = nil, nil, nil
     Moved()
     self:BuildPool(function() Snipe:Next() end)
@@ -753,7 +756,13 @@ function Snipe:OnBrowseResults()
     if full then self:Grow() else self:Shrink() end
     local pct = self:Percent()
     local kind = self:Watch()
-    local kept, fresh = {}, false
+    -- A find still for sale stays the same find (its readied price, its
+    -- wait and its place are kept), and the list is drawn again only when
+    -- something on it changed: each search used to make every find anew,
+    -- which let the readied price go and redrew the list every time.
+    local byItem = {}
+    for _, find in ipairs(self.finds) do byItem[find.itemID] = find end
+    local kept, fresh, changed = {}, false, false
     for _, find in ipairs(self.finds) do
         if not mine.batch[find.itemID] or (not full and not cheapest[find.itemID]) then
             kept[#kept + 1] = find
@@ -761,12 +770,29 @@ function Snipe:OnBrowseResults()
     end
     for id, hit in pairs(cheapest) do
         local worth = mine.batch[id]
-        if Snipe.IsDealFor(hit.price, worth, kind, pct) and Snipe.Fits(hit.price, self:Left()) then
-            kept[#kept + 1] = {
-                itemID = id, price = hit.price, qty = hit.qty, worth = worth,
-                deal = Snipe.Deal(hit.price, worth), kind = kind,
-                want = mine.wants and mine.wants[id] or nil,
-            }
+        if Snipe.IsDealFor(hit.price, worth, kind, pct) and Snipe.Fits(hit.price, self:Left())
+            and not self:WasGone(id, hit.price) then
+            local find = byItem[id]
+            local want = mine.wants and mine.wants[id] or nil
+            if find and find.kind == kind then
+                if find.price ~= hit.price then
+                    find.price, find.deal, find.retryAt = hit.price, Snipe.Deal(hit.price, worth), nil
+                    changed = true
+                    self:PriceMoved(find)
+                end
+                if find.qty ~= hit.qty or find.worth ~= worth or find.want ~= want then
+                    find.qty, find.worth, find.want = hit.qty, worth, want
+                    find.deal = Snipe.Deal(find.price, worth)
+                    changed = true
+                end
+            else
+                find = {
+                    itemID = id, price = hit.price, qty = hit.qty, worth = worth,
+                    deal = Snipe.Deal(hit.price, worth), kind = kind, want = want,
+                }
+                changed = true
+            end
+            kept[#kept + 1] = find
             -- One ding a new item, and again only when it gets cheaper.
             local rang = self.dinged and self.dinged[id]
             if not rang or hit.price < rang then
@@ -775,12 +801,44 @@ function Snipe:OnBrowseResults()
             end
         end
     end
+    if #kept ~= #self.finds then changed = true end
     self.finds = kept
-    self:FitCap()
+    if self:FitCap() then changed = true end
     table.sort(self.finds, Snipe.Better)
     if fresh then self:Chime() end
-    Moved()
+    if changed then Moved() end
     self:Later()
+end
+
+--- A find's listings held nothing to buy: remember the price its row
+--- showed, so the same row does not bring it straight back. A row can
+--- show a bid with no buyout, or one the game has not caught up on, and
+--- the find then left and came back with every search.
+function Snipe:NoteGone(find)
+    if not (find and find.itemID and find.price) then return end
+    self.gone = self.gone or {}
+    self.gone[find.itemID] = { price = find.price, at = Now() }
+end
+
+--- Was this item let go at this very price a short while ago? Another
+--- price is another listing, and after GONE_FOR it is looked at again.
+function Snipe:WasGone(itemID, price)
+    local gone = self.gone and self.gone[itemID]
+    if not gone then return false end
+    if gone.price ~= price or Now() - gone.at >= self.GONE_FOR then
+        self.gone[itemID] = nil
+        return false
+    end
+    return true
+end
+
+--- A readied find's row shows another price: read its price again in
+--- place rather than wait for it to get old. One being confirmed waits.
+function Snipe:PriceMoved(find)
+    local pending = self.pending
+    if not (pending and pending.find == find and pending.auto and pending.phase == "quoted") then return end
+    if self.armed == pending or pending.refreshing then return end
+    self:Refresh(pending)
 end
 
 function Snipe:Chime()
@@ -1163,6 +1221,7 @@ function Snipe:StackResults(itemID)
     self.pending = nil
     if units < 1 then
         if not anyDeal then
+            self:NoteGone(find)
             Drop(pending.itemID)
             Tell(pending, L["That auction is gone already."])
         else
@@ -1260,6 +1319,7 @@ function Snipe:ItemResults(itemKey)
     end
     if not best then
         if not anyDeal then
+            self:NoteGone(find)
             Drop(pending.itemID)
             Tell(pending, L["That auction is gone already."])
         else
@@ -1326,6 +1386,7 @@ function Snipe:PriceUpdated(total)
             return self:CancelBuy()
         end
     elseif not Snipe.IsDealFor(total / pending.count, pending.find.worth, pending.find.kind, self:Percent()) then
+        self:NoteGone(pending.find)
         Drop(pending.itemID)
         return self:CancelBuy()
     end

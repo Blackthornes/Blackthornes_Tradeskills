@@ -1883,7 +1883,7 @@ it cost to make still asks), and `Post`'s guards all still run. List all
 passes over an item still being confirmed (`GetNextPostable`'s
 `skipSettling`), so nothing goes up twice. Listings close together share
 one read back (`ShareVerify`, `NewerVerifying`), and `MAX_CONFIRMING` is
-6. Leaving the auction house forgets every check. The button says what its
+30 (6 until 2026-11-21, see "A steady run of listings" below). Leaving the auction house forgets every check. The button says what its
 next click does (the owner, 2026-10-16): "Check Prices - N to list" when
 it would only check prices (`Posting:WouldCheckAll`, the same test as
 `PostPanel:ListNext`, read again with the wait labels since a check goes
@@ -1921,6 +1921,26 @@ time for five minutes. `Posting:CheckPending(itemID)` says whether such a
 search is still queued, or sent and not yet answered within
 `CHECK_ALL_WAIT`; `BulkTried` answers true meanwhile, so the label stays
 List Next while a check is out. Tested in `tools/test_fastlisting.lua`.
+
+A steady run of listings (the owner asked for faster posting, 2026-11-21;
+the cause was traced 2026-11-14 in `Docs/handoff/scroll-to-post.md`): the
+wheel or quick clicks listed about seven items in three seconds, then every
+click said "still confirming the last listing" for three or four seconds,
+again and again. Two things made it: every listing moved the queue's last
+send (`AHQueue:NoteSend`), so the urgent read back that confirms listings
+never got its 1.2 seconds of quiet until the clicking stopped, and
+`MAX_CONFIRMING` was 6. Now a listing calls `AHQueue:NoteListing`
+(`lastListing`), which spaces only background requests; urgent ones still
+wait on the queue's own sends, the client's "ready" answer and the
+allowance. A read of your auctions that went out after a listing was made
+and is still being read (`Auctions.sentAt`, `Auctions.READ_FOR`,
+`Posting:ReadOutSince`) settles that listing with no second read and no
+wait for a newer listing's, so a steady run costs about one read every six
+seconds. Tested in `tools/test_poststeady.lua` with the real queue. Not yet
+seen in game. Still open from that handoff: List Next spends a click on a
+top line whose price is not checked while checked lines sit under it, and
+an item nobody else sells still costs a check click and a list click once
+the scan is over ten minutes old.
 
 ## The mouse wheel at the auction house
 
@@ -2427,6 +2447,21 @@ My Lists (the owner said build it, 2026-11-06, from a mockup whose words he saw)
 
 
 Instant buys (the owner said build it, 2026-11-12: "snipe buys must be instant", after a player found Buy stuck on Checking): the top find's price check goes ahead of searching. `Snipe:WantsReady` holds the next search (`Busy`, `Next`) while the top find has no price ready, and that check waits only when the auction requests are nearly used up (`CrowdsBuy`, `BUY_ROOM` 1 left of `AHQueue.BUDGET_MAX`), not at the searches' `HEADROOM`. A ready price that got old (`KeepFresh`, `READY_KEEP`) is asked again in place (`Snipe:Refresh`): the find stays ready, a stack's Buy reads "Checking..." only while its total is asked again (`Repricing`, `Pay` answers "checking"), and it is let go only when the new price is gone, over the cap or higher than before. A check the game gave up on backs off (`find.retryAt`, `RETRY_AFTER`) so searching goes on. Pay still only ever runs from the player's click. No new words. Tested in `tools/test_snipeinstant.lua`. If the game refuses to quote a stack's total again while one is already quoted, the find is readied again from the start.
+
+Finds hold still (the owner's report, 2026-11-21: rows left and came back
+while the auction house was searched). Each search made every find in its
+batch anew, so the readied price was let go and asked for again (the view's
+top find was no longer `pending.find`) and the list was drawn again every
+1.5 seconds. Now `OnBrowseResults` keeps a find that is still for sale as
+the same table (its `retryAt`, `left` and readied price stay), changes it in
+place when the row's price or count moved (`Snipe:PriceMoved` reads a
+readied price again in place), and calls `Moved` only when something on the
+list changed. A find whose listings held nothing to buy (a bid with no
+buyout, a row the game had not caught up on) left and came back with every
+search: `Snipe:NoteGone` remembers the price its row showed and
+`Snipe:WasGone` keeps that row from bringing it back for `GONE_FOR` (five
+minutes) unless the price moves. A buy does not mark it gone. Tested in
+`tools/test_snipesteady.lua`. Not yet seen in game.
 
 ## The Enchant strip
 
