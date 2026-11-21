@@ -126,6 +126,7 @@ Logic\PublicAPI.lua
 Logic\ItemStats.lua
 
 UI\TooltipShift.lua
+UI\TooltipBlock.lua
 UI\Theme.lua
 UI\ItemLook.lua
 UI\BlizzardLook.lua

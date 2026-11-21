@@ -489,7 +489,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     if count and count > 1 then
         lines[#lines + 1] = {
-            L.Format("Stack of %d", count),
+            L.Format("Stack of %d:", count),
             Util.FormatMoney(value * count, { short = true }),
             stack = true,
         }
@@ -521,7 +521,7 @@ function ItemTooltip:AddSealedLines(lines, itemID)
     local info = writs:SealedInfo(itemID, 5)
     if not info then return end
 
-    lines[#lines + 1] = { L.Format("You opened %d", info.opens), "" }
+    lines[#lines + 1] = { L.Format("You Opened %d:", info.opens), "" }
     for _, row in ipairs(info.rows) do
         lines[#lines + 1] = { row.writ.name, L.Format("%d of %d", row.count, info.opens) }
     end
@@ -1215,6 +1215,129 @@ function ItemTooltip:AddStackLine(tooltip, count)
     return true
 end
 
+--------------------------------------------------------------------------------
+-- The shared tooltip block (UI/TooltipBlock.lua, 2026-11-21)
+--------------------------------------------------------------------------------
+
+-- Each line's name as the block shows it: Title Case ending ":". Mapped
+-- from the text a line was built with, translated, so the lines and the
+-- other windows that reuse them (the Recipes tab says "Demand" too) keep
+-- their own words. A name not in this list (an indented material, a
+-- recipe under "Used In:") is shown as it was built.
+ItemTooltip.BLOCK_LABELS = {
+    ["My price"] = "My Price:",
+    ["Auction value"] = "Auction Value:",
+    ["Lowest posting"] = "Lowest Posting:",
+    ["Trend (7 days)"] = "Trend (7 Days):",
+    ["Trend (14 days)"] = "Trend (14 Days):",
+    ["Demand"] = "Demand:",
+    ["Sold a day"] = "Sold a Day:",
+    ["Listed now"] = "Listed Now:",
+    ["Last 7 days"] = "Last 7 Days:",
+    ["You sold"] = "You Sold:",
+    ["Disenchant value"] = "Disenchant Value:",
+    ["Made for"] = "Made For:",
+    ["Last posted"] = "Last Posted:",
+    ["Profit now"] = "Profit Now:",
+    ["Bought for"] = "Bought For:",
+    ["Average paid"] = "Average Paid:",
+    ["Used in"] = "Used In:",
+    ["For example"] = "For Example:",
+    ["On your wishlist"] = "On Your Wishlist:",
+    ["Writ inside worth about"] = "Writ Inside Worth:",
+    ["Fill It With"] = "Fill It With:",
+    ["Fills For"] = "Fills For:",
+    ["Pays Back"] = "Pays Back:",
+    ["Each Favor"] = "Each Favor:",
+    ["Crate on the AH"] = "Crate on the AH:",
+    ["You Have"] = "You Have:",
+    ["Next Best"] = "Next Best:",
+    ["Teaches"] = "Teaches:",
+    ["Known by"] = "Known By:",
+    ["Cost to make"] = "Cost to Make:",
+    ["Makes"] = "Makes:",
+    ["Sells for"] = "Sells For:",
+    ["Disenchants for"] = "Disenchants For:",
+    ["Vendors for"] = "Vendors For:",
+    ["Profit per craft"] = "Profit per Craft:",
+    ["Pays for itself"] = "Pays for Itself:",
+}
+
+local blockNames
+--- The block's name for a line built as `text` (indent kept).
+function ItemTooltip.BlockLabel(text)
+    if type(text) ~= "string" then return text end
+    if not blockNames then
+        blockNames = {}
+        for old, new in pairs(ItemTooltip.BLOCK_LABELS) do blockNames[L[old]] = L[new] end
+    end
+    local indent, rest = text:match("^(%s*)(.-)$")
+    local name = blockNames[rest]
+    if not name then return text end
+    return indent .. name
+end
+
+local function ToRGB(hex)
+    if type(hex) ~= "string" or #hex < 8 then return nil end
+    return { Component(hex, 3), Component(hex, 5), Component(hex, 7) }
+end
+
+--- One `{ label, value, muted, color = }` line as the block takes it.
+function ItemTooltip.ToBlock(line)
+    local right = line[2]
+    if right == "" then right = nil end
+    local rightColor = (line.color and ToRGB(ns.COLORS[line.color]))
+        or (line[3] and ToRGB(ns.COLORS[STALE_COLOR])) or nil
+    return { ItemTooltip.BlockLabel(line[1]), right, rightColor = rightColor }
+end
+
+--- The bag and slot a tooltip's owner is, when it is a bag slot: where
+--- the stack count is read from. Nil for anything else or unreadable.
+function ItemTooltip.OwnerSlot(tooltip)
+    local ok, bag, slot = pcall(function()
+        local owner = tooltip:GetOwner()
+        if type(owner) ~= "table" then return nil end
+        local getBag = owner.GetBagID
+        if type(getBag) ~= "function" then
+            local parent = owner.GetParent and owner:GetParent()
+            if type(parent) == "table" and type(parent.GetID) == "function" then
+                return parent:GetID(), owner:GetID()
+            end
+            return nil
+        end
+        return getBag(owner), owner:GetID()
+    end)
+    if ok and type(bag) == "number" and type(slot) == "number" then return bag, slot end
+    return nil
+end
+
+--- Tradeskills' lines for the shared block, and whether one was held back.
+function ItemTooltip:BlockLines(tooltip, data)
+    if type(tooltip) ~= "table" or not self:IsEnabled() then return nil end
+    local itemID = self:ItemForTooltip(tooltip, data)
+    if not itemID then return nil end
+
+    local bag, slot = ItemTooltip.OwnerSlot(tooltip)
+    local count = bag and ItemTooltip.StackCountIn(bag, slot) or nil
+    local lines = self:LinesFor(itemID, count, self:LinkForTooltip(tooltip, data))
+    if #lines == 0 then return nil, lines.held end
+    if not ItemTooltip.Shows("value") then return nil, true end
+
+    local out = {}
+    for i = 1, #lines do out[i] = ItemTooltip.ToBlock(lines[i]) end
+
+    self.seen = (self.seen or 0) + 1
+    local outcome = lines[1][3] and "unscanned" or "valued"
+    self.counts[outcome] = (self.counts[outcome] or 0) + 1
+    self.fired["tooltip block"] = (self.fired["tooltip block"] or 0) + 1
+
+    -- The inline bars can be measured short on the first showing.
+    decorated[tooltip] = { itemID = itemID, count = count, lines = 0 }
+    self:ResizeSoon(tooltip, itemID)
+
+    return out, lines.held
+end
+
 --- The entry point every hook funnels into, so the counting is in one place.
 function ItemTooltip:OnTooltip(tooltip, data, source, count)
     -- A backstop: whatever this tooltip holds, a value the game will not let
@@ -1345,6 +1468,18 @@ end
 
 function ItemTooltip:InstallHooks()
     local installed = {}
+
+    -- The shared block writes every Blackthornes addon's lines in one go,
+    -- in one order; Tradeskills hands it its lines instead of writing them.
+    local block = ns.TooltipBlock
+    if block then
+        block:Provide("Tradeskills:price", "price", 1, function(tooltip, data)
+            return ItemTooltip:BlockLines(tooltip, data)
+        end)
+        installed["tooltip block"] = block:Install()
+        self.installed = installed
+        return installed
+    end
 
     installed["TooltipDataProcessor"] = self:InstallDataProcessor()
     installed["OnTooltipSetItem"] = self:InstallScriptHooks()
