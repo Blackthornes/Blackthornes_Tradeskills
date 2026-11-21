@@ -62,6 +62,11 @@ RealmPrices.NOTICE_QUIET = 30
 RealmPrices.NOTICE_EVERY = 10 * 60
 RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
 RealmPrices.REJOIN_DELAY = 5          -- seconds after the player leaves it by hand
+-- The game's own channels (General, Trade, LocalDefense) join as you enter
+-- the world. Ours waits for them, else it takes /1 (a player's report,
+-- 2026-11-21); with none in this long after login it joins anyway.
+RealmPrices.GAME_CHANNELS_WAIT = 120
+RealmPrices.STEP_RECHECK = 2          -- seconds before looking again after moving ours back
 RealmPrices.BACK_OFF = 15 * 60        -- seconds of quiet after the first refusal
 RealmPrices.MAX_BACK_OFF = 6 * HOUR
 RealmPrices.MAX_REFUSALS = 3          -- refusals before it stops sending this session
@@ -275,11 +280,100 @@ function RealmPrices:Filter()
     pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE_USER", RealmPrices.FilterNotice)
 end
 
-function RealmPrices:Join()
-    if not self:IsOn() then return false end
+local function InInstance()
+    if type(IsInInstance) ~= "function" then return false end
+    local ok, inside = pcall(IsInInstance)
+    return ok and inside == true
+end
+
+--- The other chat channels this character is in, as { id, name } by
+--- number, or nil when the client won't say.
+function RealmPrices:OtherChannels()
+    if type(GetChannelList) ~= "function" then return nil end
+    -- Read whole inside a pcall: a value the client hands out may raise.
+    local ok, others = pcall(function()
+        local list, found = { GetChannelList() }, {}
+        for i = 1, #list, 3 do
+            local id, name = list[i], Comm.Plain(list[i + 1])
+            if type(id) == "number" and id > 0 and name and not self:IsOurs(name) then
+                found[#found + 1] = { id = id + 0, name = name }
+            end
+        end
+        table.sort(found, function(a, b) return a.id < b.id end)
+        return found
+    end)
+    return ok and others or nil
+end
+
+--- Is this one of the game's own channels (General, Trade and the like)?
+--- When the client can't list them, every channel counts as one.
+function RealmPrices:IsGameChannel(name)
+    if type(EnumerateServerChannels) ~= "function" then return true end
+    local ok, list = pcall(function() return { EnumerateServerChannels() } end)
+    if not ok or type(list) ~= "table" or #list == 0 then return true end
+    name = tostring(name):lower()
+    for _, server in ipairs(list) do
+        server = Comm.Plain(server)
+        if type(server) == "string" and server ~= ""
+            and name:sub(1, #server) == server:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+--- Have the game's own channels had their turn? Never in a dungeon or a
+--- battleground, where General is left and its number would be free.
+function RealmPrices:GameChannelsReady(now)
+    if InInstance() then return false end
+    local others = self:OtherChannels()
+    if others == nil or #others > 0 then return true end
+    return (now or Uptime()) - (self.loginAt or 0) >= self.GAME_CHANNELS_WAIT
+end
+
+--- Ours sits in front of a game channel (it joined first, at a login
+--- before this fix, or the game remembered it): move it behind them, one
+--- place a call. With no way to move it, leave it for this session, so
+--- the game's channels keep their numbers. True when it was moved.
+function RealmPrices:StepBack()
     local name = self:ChannelName()
-    if Comm.ChannelNumber(name) > 0 then self.triedTemporary = nil return true end
+    local ours = Comm.ChannelNumber(name)
+    if ours <= 0 then return false end
+    local others = self:OtherChannels()
+    if not others then return false end
+    local behind
+    for _, other in ipairs(others) do
+        if other.id > ours and self:IsGameChannel(other.name) then behind = other.id break end
+    end
+    if not behind then return false end
+    -- The one after ours, whatever it is, so the order of the rest stays.
+    for _, other in ipairs(others) do
+        if other.id > ours then behind = other.id break end
+    end
+    local swap = type(C_ChatInfo) == "table" and C_ChatInfo.SwapChatChannelsByChannelIndex
+    if type(swap) == "function" and pcall(swap, ours, behind) then
+        if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+            C_Timer.After(self.STEP_RECHECK, function() RealmPrices:Join() end)
+        end
+        return true
+    end
+    self.stepAside = true
+    if type(LeaveChannelByName) == "function" then pcall(LeaveChannelByName, name) end
+    return true
+end
+
+function RealmPrices:Join()
+    if not self:IsOn() or self.stepAside then return false end
+    local name = self:ChannelName()
+    if Comm.ChannelNumber(name) > 0 then
+        self.triedTemporary = nil
+        self.waitingForGame = nil
+        self:StepBack()
+        return Comm.ChannelNumber(name) > 0
+    end
     if InCombat() then self.joinAfterFight = true return false end
+    if not self:GameChannelsReady() then self.waitingForGame = true return false end
+    self.waitingForGame = nil
     self:Filter()
     -- A player left it by hand (2026-11-06) and the temporary join never
     -- took again, so a try that did not land is followed by the other way in.
@@ -305,8 +399,17 @@ end
 function RealmPrices:OnNotice(notice, channelString, channelName)
     notice = Comm.Plain(notice)
     if type(notice) ~= "string" or not self:IsOn() then return false end
-    if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then return false end
+    if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then
+        -- A game channel just came in while ours waited for it: join soon.
+        if self.waitingForGame and (notice == "YOU_JOINED" or notice == "YOU_CHANGED")
+            and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+            self.waitingForGame = nil
+            C_Timer.After(self.STEP_RECHECK, function() RealmPrices:Join() end)
+        end
+        return false
+    end
     if notice ~= "YOU_LEFT" then return self:OnRefused(notice) end
+    if self.stepAside then return true end
     self.triedTemporary = nil
     if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
         C_Timer.After(self.REJOIN_DELAY, function() RealmPrices:Join() end)
@@ -600,6 +703,7 @@ function RealmPrices:Describe()
 end
 
 function RealmPrices:OnEnable()
+    self.loginAt = Uptime()
     self:Prune()
     self:Filter()
     Comm:On("Y", function(...) RealmPrices:OnAnnounce(...) end)

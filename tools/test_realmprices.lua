@@ -16,12 +16,16 @@
 --   9. Old prices are pruned.
 --  10. When the channel refuses a send, the line is hidden, sending stops
 --      a while (for good after three), and prices still come in.
+--  11. The game's own channels keep /1, /2 and /3: ours waits for them at
+--      login, never joins in a dungeon, and moves behind them when it got
+--      in first (a player's report, 2026-11-21).
 
 local saved = {}
 for _, name in ipairs({ "time", "GetTime", "UnitName", "C_ChatInfo", "C_Timer", "InCombatLockdown",
                         "IsInGuild", "SendAddonMessage", "ERR_CHAT_PLAYER_NOT_FOUND_S", "GetChannelName",
                         "JoinTemporaryChannel", "JoinChannelByName", "LeaveChannelByName",
-                        "ChatFrame_AddMessageEventFilter", "UnitFactionGroup" }) do
+                        "ChatFrame_AddMessageEventFilter", "UnitFactionGroup", "GetChannelList",
+                        "EnumerateServerChannels", "IsInInstance" }) do
     saved[name] = _G[name]
 end
 
@@ -246,6 +250,122 @@ do
     ana.settings.realmPrices = true
     Realm:Join()
     C_Timer.After = savedAfter
+end
+
+--------------------------------------------------------------------------------
+print("\nthe game's channels keep their numbers")
+--------------------------------------------------------------------------------
+
+do
+    current = ana
+    local Realm = ana.ns.RealmPrices
+    local savedFns = { GetChannelName = GetChannelName, JoinTemporaryChannel = JoinTemporaryChannel,
+        JoinChannelByName = JoinChannelByName, LeaveChannelByName = LeaveChannelByName,
+        After = C_Timer.After, Swap = C_ChatInfo.SwapChatChannelsByChannelIndex }
+    -- The client's channel slots: a join takes the lowest free number.
+    local slots = {}
+    local function Number(name)
+        for id, joined in pairs(slots) do
+            if joined:lower() == tostring(name):lower() then return id end
+        end
+        return 0
+    end
+    local function JoinSlot(name)
+        if Number(name) > 0 then return end
+        local id = 1
+        while slots[id] do id = id + 1 end
+        slots[id] = name
+    end
+    GetChannelName = function(name) local id = Number(name) return id, id > 0 and name or nil end
+    JoinTemporaryChannel = JoinSlot
+    JoinChannelByName = JoinSlot
+    LeaveChannelByName = function(name) local id = Number(name) if id > 0 then slots[id] = nil end end
+    GetChannelList = function()
+        local out = {}
+        for id = 1, 10 do
+            if slots[id] then out[#out + 1] = id; out[#out + 1] = slots[id]; out[#out + 1] = false end
+        end
+        return (table.unpack or unpack)(out)
+    end
+    EnumerateServerChannels = function() return "General", "Trade", "LocalDefense", "LookingForGroup" end
+    local inside = false
+    IsInInstance = function() return inside, inside and "party" or "none" end
+    local later = {}
+    C_Timer.After = function(_, fn) later[#later + 1] = fn end
+    local function Login()
+        for id in pairs(slots) do slots[id] = nil end
+        later = {}
+        Realm.stepAside, Realm.waitingForGame, Realm.triedTemporary = nil, nil, nil
+        Realm.loginAt = uptime
+    end
+    local function GameJoins()
+        JoinSlot("General - Elwynn Forest")
+        JoinSlot("Trade - City")
+        JoinSlot("LocalDefense - Elwynn Forest")
+        Realm:OnNotice("YOU_JOINED", "1. General - Elwynn Forest", "General - Elwynn Forest")
+    end
+
+    -- Logging in: the timer fires before General, Trade and LocalDefense are in.
+    Login()
+    Realm:Join()
+    check("before the game's channels, ours waits", Number("BTSPricesA"), 0)
+    GameJoins()
+    check("General keeps /1", slots[1], "General - Elwynn Forest")
+    check("a game channel coming in starts a short wait", #later, 1)
+    later[1]()
+    check("then ours joins behind them", Number("BTSPricesA"), 4)
+
+    -- In a dungeon General is left; ours never takes its number.
+    Login()
+    inside = true
+    Realm:Join()
+    check("in a dungeon ours waits", Number("BTSPricesA"), 0)
+    inside = false
+    GameJoins()
+    Realm:Join()
+    check("out again, it joins behind them", Number("BTSPricesA"), 4)
+
+    -- Every game channel left by hand: ours joins after a while anyway.
+    Login()
+    Realm:Join()
+    check("nothing in yet, ours waits", Number("BTSPricesA"), 0)
+    uptime = uptime + Realm.GAME_CHANNELS_WAIT
+    Realm:Join()
+    check("after the wait it joins", Number("BTSPricesA"), 1)
+    uptime = uptime - Realm.GAME_CHANNELS_WAIT
+
+    -- A login from before this fix (or a remembered channel) left ours on /1.
+    Login()
+    slots[1] = "BTSPricesA"
+    slots[2] = "General - Elwynn Forest"
+    slots[3] = "Trade - City"
+    slots[5] = "MyFriends"
+    C_ChatInfo.SwapChatChannelsByChannelIndex = function(a, b) slots[a], slots[b] = slots[b], slots[a] end
+    for _ = 1, 5 do Realm:Join() end
+    check("General moves back to /1", slots[1], "General - Elwynn Forest")
+    check("Trade moves back to /2", slots[2], "Trade - City")
+    check("ours moves behind them", Number("BTSPricesA"), 3)
+    check("a player's own channel behind it keeps its number", slots[5], "MyFriends")
+    check("still in, sharing goes on", Realm:InChannel(), true)
+
+    -- No way to move it: ours steps out for this session and stays out.
+    Login()
+    slots[1] = "BTSPricesA"
+    slots[2] = "General - Elwynn Forest"
+    C_ChatInfo.SwapChatChannelsByChannelIndex = nil
+    Realm:Join()
+    check("with no way to move it, ours steps out", Number("BTSPricesA"), 0)
+    check("its leave does not join again", Realm:OnNotice("YOU_LEFT", "1. BTSPricesA", "BTSPricesA"), true)
+    Realm:Join()
+    check("and it stays out this session", Number("BTSPricesA"), 0)
+    check("General keeps its number", slots[2], "General - Elwynn Forest")
+
+    Login()
+    GetChannelName, JoinTemporaryChannel = savedFns.GetChannelName, savedFns.JoinTemporaryChannel
+    JoinChannelByName, LeaveChannelByName = savedFns.JoinChannelByName, savedFns.LeaveChannelByName
+    C_Timer.After, C_ChatInfo.SwapChatChannelsByChannelIndex = savedFns.After, savedFns.Swap
+    GetChannelList, EnumerateServerChannels, IsInInstance = nil, nil, nil
+    Realm:Join()
 end
 
 --------------------------------------------------------------------------------
