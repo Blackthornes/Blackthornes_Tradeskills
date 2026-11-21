@@ -47,6 +47,9 @@ local DAY = 24 * 3600
 local state = {
     search = "",
     selected = nil,
+    -- The random suffix picked on the Prices tab's Details, or nil for the
+    -- plain item (a player's report, 2026-11-21).
+    suffix = nil,
     key = nil,
     stats = nil,
 }
@@ -1036,12 +1039,22 @@ local function Draw_(animate)
 
     local itemID = stats.itemID
     Theme.SetItemIcon(panel.icon, itemID)
-    Theme.SetRowName(panel.name, Util.GetItemLabel(itemID))
+    local label = Util.GetItemLabel(itemID)
+    -- A suffix picked: its own name, in the item's colour.
+    local suffixName = stats.suffix and ns.Prices and ns.Prices.SuffixName
+        and ns.Prices.SuffixName(itemID, stats.suffix)
+    if type(suffixName) == "string" and suffixName ~= "" then
+        local color = type(label) == "string" and label:match("^|c%x%x%x%x%x%x%x%x") or ""
+        label = color .. suffixName .. (color ~= "" and "|r" or "")
+    end
+    Theme.SetRowName(panel.name, label)
 
     local bits = {}
     if stats.craft then bits[#bits + 1] = L["You craft this"] end
     if ns.Prices and ns.Prices.IsFavourite and ns.Prices:IsFavourite(itemID) then bits[#bits + 1] = L["starred"] end
     local age = ns.Prices and ns.Prices.GetAge and ns.Prices:GetAge(itemID)
+    local suffixSeen = stats.suffixRecord and tonumber(stats.suffixRecord.seen)
+    if suffixSeen then age = math.max(0, time() - suffixSeen) end
     if age then
         bits[#bits + 1] = L.Format("scanned %s", Util.FormatAgeAgo(age))
     else
@@ -1051,7 +1064,7 @@ local function Draw_(animate)
 
     FillTiles(stats)
 
-    if widgets.graph then widgets.graph:SetItem(itemID) end
+    if widgets.graph then widgets.graph:SetItem(itemID, stats.suffix) end
 
     for _, definition in ipairs(CARDS) do
         local card = widgets.cards[definition.key]
@@ -1082,15 +1095,17 @@ local function Redraw(animate)
     animate = animate or state.grow
     state.grow = nil
 
-    local key = ns.ItemStats:Key(itemID)
+    local key = ns.ItemStats:Key(itemID, state.suffix)
     if key == state.key and state.stats and not animate then return end
     state.key = key
-    state.stats = ns.ItemStats:Build(itemID)
+    state.stats = ns.ItemStats:Build(itemID, nil, state.suffix)
     Draw_(animate)
 end
 
-local function Select(itemID)
+--- Pick an item, or one random suffix of it.
+local function Select(itemID, suffix)
     state.selected = itemID
+    state.suffix = suffix
     state.key = nil
     if widgets.list then widgets.list:Refresh() end
     Redraw(true)
@@ -1270,18 +1285,26 @@ function StatsUI.Showing()
     return UI.activeTab == "stats"
 end
 
---- Pick an item for the charts, when one is given (the Details view's pick).
-function StatsUI:Pick(itemID)
-    if not itemID or itemID == state.selected then return end
+--- Pick an item for the charts, when one is given (the Details view's
+--- pick), and the suffix Details had picked, if any.
+function StatsUI:Pick(itemID, suffix)
+    suffix = tonumber(suffix)
+    if suffix == 0 then suffix = nil end
+    if not itemID or (itemID == state.selected and suffix == state.suffix) then return end
     state.selected = itemID
+    state.suffix = suffix
     state.key = nil
-    if widgets.list then Select(itemID) end
+    if widgets.list then Select(itemID, suffix) end
 end
+
+--- For the tests: the item and suffix picked.
+function UI._StatsPicked() return state.selected, state.suffix end
 
 --- Open the window on the Prices tab's Stats view, at `itemID` when given.
 function StatsUI:ShowItem(itemID)
     if itemID then
         state.selected = itemID
+        state.suffix = nil
         state.key = nil
     end
     UI:Show()

@@ -75,8 +75,26 @@ kept suffix names (`Prices:SuffixTails`, no client calls): "of the Bear"
 finds the item showing only its Bear, and so does "chestpiece of the b".
 Picking a suffix row shows its prices in the side pane under its full name,
 leaves out Your listing (read by item), and says "Stock movement and Price
-History are for every suffix together." The item count at the foot counts
+History are for every suffix together." (since 2026-11-21 "Stock movement is
+for every suffix together.", the graph being the suffix's own) The item count at the foot counts
 items only. Tested in `tools/test_suffixrows.lua`. Not yet seen in game.
+
+Picking a suffix row shows that suffix (a player's report, 2026-11-21:
+picking "Cabalist Chestpiece of Arcane Wrath" still drew the plain item's
+graph and Stats). Each suffix entry now keeps its own readings in
+`entry.history` (the item's flat layout, newest `Prices.SUFFIX_READINGS`),
+and for kept items (crafted, used or starred) hour by hour lines in
+`suffixHistory[realm][itemID][suffix]` and `suffixListed[...]` (never
+rename them; pruned like the item's, `PriceHistory:NoteSuffix`).
+`GetPoints`, `GetListed`, `GetBestTimes` and `DescribeBestTimes` take an
+optional suffix; `PriceGraph.Series(..., suffix)` and `graph:SetItem(itemID,
+suffix)` draw it (hourly, else the suffix's own readings, never the
+item's). `PricesUI.Subject(entry)` gives a row's item and suffix to the
+graph and to `StatsUI:Pick(itemID, suffix)`; `ItemStats:Build(itemID, now,
+suffix)` and `Key(itemID, suffix)` price it by the suffix (worth, week's
+change, heat, scans, readings), while sales, stock share and demand stay
+the item's (they are read by item only). A pick from Stats' own list shows
+the plain item. Tested in `tools/test_suffixdetails.lua`.
 
 ## Profession cooldowns
 

@@ -143,17 +143,47 @@ local function Trim(list, now)
     end
 end
 
---- Add one hour's value to an item's list in `root`. A second scan in the
---- same hour replaces the first, so the newest stands for the hour.
-local function Append(root, itemID, value, at)
-    local realm = RealmTable(true, root)
-    if not realm then return end
+-- A random suffix's own lines (a player's report, 2026-11-21: picking
+-- "Cabalist Chestpiece of Arcane Wrath" drew the plain item's graph). They
+-- sit in `suffixHistory[realm][itemID][suffix]` and
+-- `suffixListed[realm][itemID][suffix]`, the same hour, value pairs, apart
+-- from the item's so its lists read as they always did. Never rename them.
+local SUFFIX_ROOTS = { priceHistory = "suffixHistory", priceListed = "suffixListed" }
 
-    local list = realm[itemID]
-    if type(list) ~= "table" then
-        list = {}
-        realm[itemID] = list
+--- The list an item (or one of its suffixes) keeps in `root`, or nil.
+local function ListFor(root, itemID, suffix, create)
+    if not itemID then return nil end
+    suffix = tonumber(suffix)
+    if suffix == 0 then suffix = nil end
+    local realm = RealmTable(create, suffix and SUFFIX_ROOTS[root] or root)
+    if not realm then return nil end
+
+    local holder, key = realm, itemID
+    if suffix then
+        holder = realm[itemID]
+        if type(holder) ~= "table" then
+            if not create then return nil end
+            holder = {}
+            realm[itemID] = holder
+        end
+        key = suffix
     end
+
+    local list = holder[key]
+    if type(list) ~= "table" then
+        if not create then return nil end
+        list = {}
+        holder[key] = list
+    end
+    return list
+end
+
+--- Add one hour's value to an item's list in `root` (or one suffix's). A
+--- second scan in the same hour replaces the first, so the newest stands
+--- for the hour.
+local function Append(root, itemID, value, at, suffix)
+    local list = ListFor(root, itemID, suffix, true)
+    if not list then return end
 
     local hour = math.floor(at / 3600)
     local count = #list
@@ -187,6 +217,20 @@ function PriceHistory:NoteListed(itemID, quantity, at)
     if not itemID or type(quantity) ~= "number" or quantity < 0 or quantity ~= quantity then return end
     if not self:IsTracked(itemID) then return end
     Append("priceListed", itemID, quantity, at or time())
+end
+
+--- Note one random suffix's cheapest price and count at a scan, kept when
+--- its item is.
+function PriceHistory:NoteSuffix(itemID, suffix, price, quantity, at)
+    suffix = tonumber(suffix)
+    if not itemID or not suffix or suffix == 0 or not self:IsTracked(itemID) then return end
+    at = at or time()
+    if type(price) == "number" and price > 0 and price == price then
+        Append("priceHistory", itemID, price, at, suffix)
+    end
+    if type(quantity) == "number" and quantity >= 0 and quantity == quantity then
+        Append("priceListed", itemID, quantity, at, suffix)
+    end
 end
 
 --- A guildmate's price for an hour this account did not scan
@@ -226,10 +270,10 @@ end
 
 --- The kept prices for an item, oldest first, as { t = time(), p = copper },
 --- from `since` seconds ago until now (all fourteen days when not given).
-function PriceHistory:GetPoints(itemID, since, now)
+--- With `suffix`, that random suffix's prices instead.
+function PriceHistory:GetPoints(itemID, since, now, suffix)
     now = now or time()
-    local realm = RealmTable(false)
-    local list = realm and itemID and realm[itemID]
+    local list = ListFor("priceHistory", itemID, suffix, false)
     if type(list) ~= "table" then return {} end
 
     local from = since and (now - since) or (now - KEEP_SECONDS)
@@ -250,10 +294,9 @@ end
 
 --- How many were listed each hour a scan saw the item, oldest first, as
 --- { t = time(), q = count }, over the same span as GetPoints.
-function PriceHistory:GetListed(itemID, since, now)
+function PriceHistory:GetListed(itemID, since, now, suffix)
     now = now or time()
-    local realm = RealmTable(false, "priceListed")
-    local list = realm and itemID and realm[itemID]
+    local list = ListFor("priceListed", itemID, suffix, false)
     if type(list) ~= "table" then return {} end
 
     local from = since and (now - since) or (now - KEEP_SECONDS)
@@ -307,8 +350,8 @@ end
 --   buyHour, buyBelow     cheapest hour (0..23), and how far under its
 --                         day's average it runs (0.08 = 8%)
 --   sellHour, sellAbove   dearest hour, and how far over
-function PriceHistory:GetBestTimes(itemID, now)
-    local points = self:GetPoints(itemID, BEST_SECONDS, now)
+function PriceHistory:GetBestTimes(itemID, now, suffix)
+    local points = self:GetPoints(itemID, BEST_SECONDS, now, suffix)
 
     -- Group by the day on the player's clock.
     local byDay = {}
@@ -369,8 +412,8 @@ end
 
 --- The best times in words, longest first, for Theme.FitText; and a longer
 --- explanation for a tooltip.
-function PriceHistory:DescribeBestTimes(itemID, now)
-    local best = self:GetBestTimes(itemID, now)
+function PriceHistory:DescribeBestTimes(itemID, now, suffix)
+    local best = self:GetBestTimes(itemID, now, suffix)
 
     if not best.ready then
         local hoursLeft = math.max(0, self.NEED_HOURS - best.hours)
@@ -433,6 +476,22 @@ function PriceHistory:Prune(now)
                 end
             end
             -- Anything else is left as it is: never delete what cannot be read.
+        end
+    end
+
+    -- Each suffix's lines, and an item once none of its suffixes has any.
+    for _, root in ipairs({ "suffixHistory", "suffixListed" }) do
+        local realm = RealmTable(false, root)
+        for itemID, suffixes in pairs(realm or {}) do
+            if type(suffixes) == "table" then
+                for suffix, list in pairs(suffixes) do
+                    if type(list) == "table" then
+                        Trim(list, now)
+                        if #list == 0 then suffixes[suffix] = nil end
+                    end
+                end
+                if next(suffixes) == nil then realm[itemID] = nil end
+            end
         end
     end
     return removed

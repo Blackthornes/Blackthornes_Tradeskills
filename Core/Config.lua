@@ -779,6 +779,12 @@ local DEFAULTS = {
     -- as the volume bars under the price line.
     priceListed = {},
 
+    -- realmKey -> itemID -> suffix -> { hour, copper, ... } and { hour,
+    -- count, ... }: the same two lines for each random suffix of a kept
+    -- item, so a suffix picked on the Prices tab draws its own graph.
+    suffixHistory = {},
+    suffixListed = {},
+
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},
