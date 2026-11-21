@@ -3485,6 +3485,22 @@ game's yellow), colours column headings; the heading that sorts the list
 is `text` (white) with its arrow. Gold rim, buttons and gems are untouched,
 and so are the Blizzard window style (`UI/BlizzardLook.lua`) and the shared
 files' fallback palettes. New lists use these keys, never numbers.
+
+## The Profit: choice on Recipes to Learn
+
+A player saw "(Vendor)" on every Recipes to Learn row and in the craft pane
+(2026-11-21). Their AH prices were fine: the PROFIT column follows the
+Profit: drop-down (`profitBy`), and theirs left the AH out. My Crafts showed
+that drop-down; Recipes to Learn did not. The owner approved a mockup
+(`Docs/mockups/ts-recipes-to-learn-profit-choice.html` in the project files)
+and said build it. The Profit tab's copy of the view (`methodChoice = true`
+in `UI/RecipeBookView.lua`) now shows the same drop-down between the
+profession list and a narrower search box. Both read `Profit.MethodOptions()`
+and set the choice through `Profit:SetMethod`, which also redraws the craft
+pane. My Crafts picks up a change made here on its next refresh. Level Up's
+Learn Next has no drop-down. Tested in `tools/test_recipebookview.lua` and
+`tools/test_profitways.lua`.
+
 ## Item rows answer the game's clicks
 
 The owner said build it (2026-11-21, from the UI pass mockup 5): every item

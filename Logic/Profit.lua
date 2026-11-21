@@ -950,6 +950,34 @@ function Profit:GetMethod()
     return "best"
 end
 
+--- The Profit: drop-down's choices, in Profit.METHODS order. My Crafts and
+--- Recipes to Learn show the same drop-down (a player saw "(Vendor)" on
+--- every Recipes to Learn row and could not tell why, 2026-11-21).
+function Profit.MethodOptions()
+    local labels = Profit.WAY_LABELS or {}
+    local options = { { text = L["Profit: Best"], value = "best" } }
+    for _, method in ipairs(Profit.METHODS) do
+        if labels[method] then
+            options[#options + 1] = { text = L.Format("Profit: %s", labels[method]), value = method }
+        elseif method == "vendordisenchant" then
+            -- The AH left out, for a player who finds it slow (asked 2026-11-12).
+            options[#options + 1] = { text = L["Profit: Vendor and DE"], value = method,
+                tooltip = L["Counts vendor and disenchant money. Leaves the AH out."] }
+        end
+    end
+    return options
+end
+
+--- Set the Profit: choice, from either drop-down. The pane beside the
+--- profession window counts the same way, so it redraws too.
+function Profit:SetMethod(method)
+    ns.Config:Set("profitBy", method)
+    local pane = ns.CraftPanel
+    if pane and pane.RequestRefresh and pane.IsShown and pane:IsShown() then
+        pane:RequestRefresh()
+    end
+end
+
 --- The ways a craft can be turned into gold, for the row tooltip, the
 --- detail pane and /bts why. Empty when there is only one: the profit
 --- already says it.
