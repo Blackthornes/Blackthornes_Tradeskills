@@ -3845,3 +3845,7 @@ L["Row Size:"] = "Taille des lignes :"
 L["Roomy"] = "Aéré"
 L["Compact"] = "Compact"
 L["Compact fits more rows in each list. Type /reload to see it."] = "Compact affiche plus de lignes dans chaque liste. Tape /reload pour le voir."
+
+L["Tradeskills' settings have a window of their own."] = "Les réglages de Tradeskills ont leur propre fenêtre."
+L["Open Tradeskills settings"] = "Ouvrir les réglages de Tradeskills"
+L["Or right-click the minimap button."] = "Ou fais un clic droit sur le bouton de la minicarte."

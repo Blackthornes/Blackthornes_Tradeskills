@@ -3843,3 +3843,7 @@ L["Row Size:"] = "行高："
 L["Roomy"] = "宽松"
 L["Compact"] = "紧凑"
 L["Compact fits more rows in each list. Type /reload to see it."] = "紧凑让每个列表显示更多行。输入 /reload 即可看到。"
+
+L["Tradeskills' settings have a window of their own."] = "Tradeskills 的设置有自己的窗口。"
+L["Open Tradeskills settings"] = "打开 Tradeskills 设置"
+L["Or right-click the minimap button."] = "也可以右键点击小地图按钮。"

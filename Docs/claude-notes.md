@@ -3459,3 +3459,15 @@ picked, words approved by the owner): read once a session
 one-line rows (up to `COMPACT_MOST`, 30) by `COMPACT_LESS` (4), never under
 16; taller rows hold two lines and keep their height. Tested in
 `tools/test_slimframe.lua`. Not yet seen in game.
+
+## In the game's Options list (2026-11-21)
+
+The owner said build it (UI pass, keys and Options line): like the other
+four, Tradeskills has a line under the game's Options, AddOns, named
+Blackthornes Tradeskills, with a button that opens the Settings tab
+(`UI:RegisterGameOptions` in `UI/Main.lua`, called from `UI:OnEnable` in a
+pcall; `Settings.RegisterCanvasLayoutCategory` with
+`InterfaceOptions_AddCategory` as the fallback). The words follow the
+others' with the addon's name. The Farmer, Equipment, Pets and Butler
+window keys copy this addon's `BLACKTHORNESTS_TOGGLE` words. Tested in
+`tools/test_gameoptions.lua`.
