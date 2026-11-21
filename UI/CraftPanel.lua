@@ -687,7 +687,7 @@ local function CreateRow(row)
     -- The box is how many are queued: + and - change it by one, or type the
     -- number you want.
     row.add = Widgets.CreateButton(row, "+", function()
-        if row.data then QueueMore(row.data, 1) end
+        if row.data and not CraftPanel.ClickMeantElsewhere() then QueueMore(row.data, 1) end
     end, { width = STEP_WIDTH, height = 15, primary = true })
     row.add:SetPoint("TOPRIGHT", -8, -1)
 
@@ -706,7 +706,7 @@ local function CreateRow(row)
     row.remove = Widgets.CreateButton(row, "-", function()
         -- From the queue as it is now, not the row: a second quick click
         -- would otherwise ask for the same number again.
-        if not row.data then return end
+        if not row.data or CraftPanel.ClickMeantElsewhere() then return end
         local _, entry = ns.Queue:Find(row.data.recipeID, true)
         CraftPanel:SetQueued(row.data, (entry and entry.quantity or 0) - 1)
     end, { width = STEP_WIDTH, height = 15 })
@@ -971,12 +971,63 @@ local function ShowRowTooltip(row, line)
     GameTooltip:Show()
 end
 
+-- The order the game draws its layers in, bottom first.
+local STRATA_ORDER = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+
+local function Read(frame, method)
+    local fn = type(frame) == "table" and frame[method]
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, frame)
+    if ok then return value end
+    return nil
+end
+
+--- Is a Tradeskills window (or the one window) over the pane where the
+--- mouse is? A player's recording (2026-11-20): every x clicked on the
+--- Queue tab, sitting over the pane, queued one more of a recipe on the
+--- pane under it instead, and a craft nobody asked for turned up. A click
+--- the pane hears while one of those is in front under the mouse was meant
+--- for that window, so the pane lets it go.
+-- @param pane the pane's frame
+-- @param windows the windows that can sit over it (CraftPanel.FrontWindows)
+function CraftPanel.CoveredAtMouse(pane, windows)
+    if type(pane) ~= "table" then return false end
+    local paneStrata = STRATA_ORDER[Read(pane, "GetFrameStrata") or ""] or 0
+    local paneLevel = tonumber(Read(pane, "GetFrameLevel")) or 0
+    for _, window in ipairs(windows or {}) do
+        -- In the one window the pane sits inside it: that is not over it.
+        local inside, parent = false, pane
+        for _ = 1, 20 do
+            parent = Read(parent, "GetParent")
+            if not parent then break end
+            if parent == window then inside = true break end
+        end
+        if not inside and window ~= pane and Read(window, "IsVisible")
+            and Read(window, "IsMouseOver") then
+            local strata = STRATA_ORDER[Read(window, "GetFrameStrata") or ""] or 0
+            local level = tonumber(Read(window, "GetFrameLevel")) or 0
+            if strata > paneStrata or (strata == paneStrata and level >= paneLevel) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--- True when a click on the pane belongs to a window in front of it.
+local function ClickMeantElsewhere()
+    return CraftPanel.CoveredAtMouse(CraftPanel.frame, CraftPanel.FrontWindows())
+end
+CraftPanel.ClickMeantElsewhere = ClickMeantElsewhere
+
 --- Left-click queues, right-click takes it back off, Ctrl-right-click
 --- ignores the craft, Alt-click opens the Keep in Stock box.
 --
 -- The + button is the discoverable way in; this is for working down a list
 -- quickly, where reaching for the same small button every time is the slow part.
 local function OnRowClick(line, _, mouseButton, row)
+    if ClickMeantElsewhere() then return end
     -- Alt-click sets how many to keep (the owner said build it, 2026-11-17).
     -- Never queues: a craft with nothing to hold just does nothing.
     if IsAltKeyDown and IsAltKeyDown() then
