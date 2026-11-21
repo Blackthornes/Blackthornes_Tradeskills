@@ -68,7 +68,7 @@ end
 --- at least five days old, also a market value; else the price graph's
 --- cheapest prices from 5 to 7 days back, set against the cheapest listed now.
 -- @return before, now (copper), or nil
-local function WorthBefore(itemID, record, now)
+local function WorthBefore(itemID, record, now, suffix)
     local isRecord = type(record) == "table"
     local market = isRecord and Number(record.market) or nil
 
@@ -95,7 +95,7 @@ local function WorthBefore(itemID, record, now)
     local lowest = isRecord and ns.Prices and ns.Prices.LowestListed
         and Number(ns.Prices.LowestListed(record)) or nil
     if not lowest then return nil end
-    local points = Ask(ns.PriceHistory, "GetPoints", itemID, 2 * DAY, now - 5 * DAY) or {}
+    local points = Ask(ns.PriceHistory, "GetPoints", itemID, 2 * DAY, now - 5 * DAY, suffix) or {}
     local sum, count = 0, 0
     for _, point in ipairs(points) do
         if Number(point.p) then sum, count = sum + point.p, count + 1 end
@@ -148,8 +148,8 @@ end
 --- days: cells[wday][hour + 1] = average copper (wday 1 is Sunday, as the
 --- game's date() has it), with the lowest and highest cell and the week's
 --- average to shade them against.
-local function Heat(itemID, now)
-    local points = Ask(ns.PriceHistory, "GetPoints", itemID, WEEK, now) or {}
+local function Heat(itemID, now, suffix)
+    local points = Ask(ns.PriceHistory, "GetPoints", itemID, WEEK, now, suffix) or {}
     local sums, counts = {}, {}
     local total, n = 0, 0
 
@@ -183,7 +183,7 @@ local function Heat(itemID, now)
         end
     end
 
-    local best = Ask(ns.PriceHistory, "GetBestTimes", itemID, now)
+    local best = Ask(ns.PriceHistory, "GetBestTimes", itemID, now, suffix)
     if type(best) == "table" and best.ready and not best.steady then
         heat.buyHour, heat.sellHour = best.buyHour, best.sellHour
         heat.buyBelow, heat.sellAbove = best.buyBelow, best.sellAbove
@@ -272,14 +272,18 @@ local function Weeks(itemID, now)
 end
 
 --- Where its price comes from, each source's own answer.
-local function Sources(itemID)
+local function Sources(itemID, suffix)
     local sources = {}
     local function Add(key, value)
         value = Number(value)
         if value and value > 0 then sources[#sources + 1] = { key = key, value = value } end
     end
 
-    Add("scans", Ask(ns.Prices, "GetScanValue", itemID, "market"))
+    if suffix then
+        Add("scans", Ask(ns.Prices, "GetSuffixValue", itemID, suffix, "market"))
+    else
+        Add("scans", Ask(ns.Prices, "GetScanValue", itemID, "market"))
+    end
     Add("guild", (Ask(ns.GuildPrices, "GetValue", itemID, "market")))
     if Ask(ns.RealmPrices, "IsOn") then Add("realm", (Ask(ns.RealmPrices, "GetValue", itemID, "market"))) end
     if Ask(ns.TSMPrices, "IsOn") then Add("tsm", Ask(ns.TSMPrices, "GetValue", itemID, "market")) end
@@ -316,18 +320,41 @@ end
 -- The whole
 --------------------------------------------------------------------------------
 
---- What the tab shows for `itemID`, as of `now`.
-function ItemStats:Build(itemID, now)
+--- One random suffix's saved reading in the shape of an item's record, or nil.
+local function SuffixRecord(itemID, suffix)
+    local entry = Ask(ns.Prices, "GetSuffixEntry", itemID, suffix)
+    if type(entry) ~= "table" then return nil end
+    return { market = entry.market, min = entry.min, rivalMin = entry.rival,
+             quantity = entry.quantity, seen = entry.seen, history = entry.history }
+end
+
+--- What the tab shows for `itemID`, as of `now`. With `suffix`, the prices
+--- are that random suffix's own (a player's report, 2026-11-21): its worth,
+--- its scans, its graph and heat. Sales, stock and demand are read by item
+--- only, so they stay the item's.
+function ItemStats:Build(itemID, now, suffix)
     now = now or time()
-    local stats = { itemID = itemID, now = now }
+    suffix = tonumber(suffix)
+    if suffix == 0 then suffix = nil end
+    local stats = { itemID = itemID, now = now, suffix = suffix }
     if not itemID then return stats end
 
     local record = Ask(ns.Prices, "Get", itemID)
     stats.record = type(record) == "table" and record or nil
+    local priced = stats.record
+    if suffix then
+        priced = SuffixRecord(itemID, suffix)
+        stats.suffixRecord = priced
+    end
 
-    stats.worth = Ask(ns.Prices, "GetValue", itemID, "market")
+    if suffix then
+        stats.worth = Ask(ns.Prices, "GetSuffixValue", itemID, suffix, "market")
+            or (priced and Number(priced.market))
+    else
+        stats.worth = Ask(ns.Prices, "GetValue", itemID, "market")
+    end
     local against
-    stats.worthBefore, against = WorthBefore(itemID, stats.record, now)
+    stats.worthBefore, against = WorthBefore(itemID, priced, now, suffix)
     if against and stats.worthBefore and stats.worthBefore > 0 then
         stats.change = (against - stats.worthBefore) / stats.worthBefore
     end
@@ -337,17 +364,17 @@ function ItemStats:Build(itemID, now)
     stats.market = Market(itemID, stats.record, stats.soldPerDay)
     stats.demand = Ask(ns.Demand, "Get", itemID)
     stats.week = Ask(ns.Demand, "Week", itemID)
-    stats.heat = Heat(itemID, now)
+    stats.heat = Heat(itemID, now, suffix)
     stats.listings = Listings(itemID)
     stats.weeks = Weeks(itemID, now)
-    stats.sources = Sources(itemID)
+    stats.sources = Sources(itemID, suffix)
     stats.methods = Methods(itemID, now)
 
     -- The last twelve scans: how many were listed, and the market value. A
     -- scan with no count (a look that read only part of the book) is left
     -- out rather than drawn as none listed.
     stats.stock = {}
-    for _, t, m, q in EachReading(stats.record and stats.record.history) do
+    for _, t, m, q in EachReading(priced and priced.history) do
         if Number(t) and Number(q) then
             stats.stock[#stats.stock + 1] = { t = t, q = Number(q) or 0, m = Number(m) }
         end
@@ -374,12 +401,12 @@ end
 
 --- A key that moves whenever anything Build reads may have moved, so the
 --- tab builds again only then.
-function ItemStats:Key(itemID)
+function ItemStats:Key(itemID, suffix)
     local record = ns.Prices and Ask(ns.Prices, "Get", itemID)
     local entries = LedgerEntries()
     local last = entries[#entries]
     return table.concat({
-        tostring(itemID),
+        tostring(itemID), tostring(tonumber(suffix) or 0),
         tostring(type(record) == "table" and record.seen or 0),
         tostring(ns.PriceHistory and ns.PriceHistory.changes or 0),
         tostring(ns.StatsLog and ns.StatsLog.version or 0),

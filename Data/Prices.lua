@@ -206,8 +206,8 @@ function Prices.FlattenHistory(record)
     return true
 end
 
---- Adds a reading at the end and keeps the newest MAX_HISTORY.
-function Prices.AddReading(record, t, m, q)
+--- Adds a reading at the end and keeps the newest MAX_HISTORY (or `most`).
+function Prices.AddReading(record, t, m, q, most)
     if type(record.history) ~= "table" then record.history = {} end
     Prices.FlattenHistory(record)
     local history = record.history
@@ -215,7 +215,7 @@ function Prices.AddReading(record, t, m, q)
     history[n + 1] = Kept(t)
     history[n + 2] = Kept(m)
     history[n + 3] = Kept(q)
-    local extra = #history - MAX_HISTORY * 3
+    local extra = #history - (tonumber(most) or MAX_HISTORY) * 3
     if extra > 0 then
         local size = #history
         for i = 1, size - extra do history[i] = history[i + extra] end
@@ -1131,6 +1131,10 @@ end
 -- and the oldest seen goes first.
 Prices.SUFFIX_MOST = 40
 
+-- The readings kept for each suffix, fewer than an item's: an item can have
+-- forty suffixes, and the saved file grows with every one.
+Prices.SUFFIX_READINGS = 8
+
 -- A suffix price older than this is not used; the item's price stands in.
 Prices.SUFFIX_KEEP = 14 * 24 * 3600
 
@@ -1178,6 +1182,13 @@ function Prices:RecordSuffix(itemID, suffix, marketValue, minBuyout, rival, quan
     entry.rival = rival
     entry.quantity = quantity
     entry.seen = scannedAt or time()
+
+    -- Its own readings, so a suffix picked on the Prices tab draws its own
+    -- graph and Stats rather than the item's (a player's report, 2026-11-21).
+    Prices.AddReading(entry, entry.seen, entry.market, quantity, Prices.SUFFIX_READINGS)
+    if ns.PriceHistory and ns.PriceHistory.NoteSuffix then
+        ns.PriceHistory:NoteSuffix(itemID, suffix, minBuyout or rival, quantity, entry.seen)
+    end
 
     Prices:Touch(itemID)
     return entry

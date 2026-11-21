@@ -994,7 +994,7 @@ local function BuildDetail(parent)
     AddRow("suffixes", L["Random suffixes"])
 
     -- With a suffix row picked: what on the pane is the whole item's.
-    AddRow("suffixNote", L["Stock movement and Price History are for every suffix together."])
+    AddRow("suffixNote", L["Stock movement is for every suffix together."])
     detail.labels.suffixNote:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     detail.labels.suffixNote:SetWordWrap(true)
     detail.labels.suffixNote:SetTextColor(Theme.Unpack("dim"))
@@ -1252,7 +1252,7 @@ local function UpdateDetail(entry)
         and L["Looks up every listing of this item."]
         or L["The auction house must be open"]
 
-    if type(graph) == "table" then graph:SetItem(entry.itemID) end
+    if type(graph) == "table" then graph:SetItem(ns.PricesUI.Subject(entry)) end
 end
 
 --- The list a search would show, for the tests.
@@ -1545,6 +1545,14 @@ local function SelectedItem()
     return state.selected and state.selected.itemID
 end
 
+--- What a row stands for: its item, and its random suffix when it is a
+--- suffix row, so the graph and Stats show that suffix (a player's report,
+--- 2026-11-21: they showed the plain item).
+function PricesUI.Subject(entry)
+    if type(entry) ~= "table" then return nil end
+    return entry.itemID, entry.kid and tonumber(entry.suffix) or nil
+end
+
 --- Show Details or Stats. Stats opens on the item Details had picked.
 function PricesUI:ShowView(key, itemID)
     if key ~= "stats" or not StatsView() then key = "details" end
@@ -1555,7 +1563,13 @@ function PricesUI:ShowView(key, itemID)
     if key == "stats" then
         local stats = StatsView()
         if stats.onShow then stats.onShow() end
-        if ns.StatsUI.Pick then ns.StatsUI:Pick(itemID or SelectedItem()) end
+        if ns.StatsUI.Pick then
+            if itemID then
+                ns.StatsUI:Pick(itemID)
+            else
+                ns.StatsUI:Pick(PricesUI.Subject(state.selected))
+            end
+        end
         if stats.refresh then stats.refresh() end
     else
         Refresh()

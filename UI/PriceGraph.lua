@@ -85,14 +85,33 @@ end
 --- The points to draw for an item over a window, and what they are.
 -- @return points { t, p }, kind ("hourly", "market" or nil when there is
 --   nothing to draw), tracked
-function PriceGraph.Series(itemID, windowKey, now)
+-- With `suffix`, that random suffix's own prices: hourly when its item is
+-- kept, else its own last scans, never the item's (a player's report,
+-- 2026-11-21).
+function PriceGraph.Series(itemID, windowKey, now, suffix)
     now = now or time()
     local window = PriceGraph.WINDOWS[windowKey] or PriceGraph.WINDOWS.day
     local history = ns.PriceHistory
     local tracked = history and history:IsTracked(itemID) or false
+    suffix = tonumber(suffix)
+    if suffix == 0 then suffix = nil end
 
-    local points = history and history:GetPoints(itemID, window.seconds, now) or {}
+    local points = history and history:GetPoints(itemID, window.seconds, now, suffix) or {}
     if #points >= 2 then return points, "hourly", tracked end
+
+    if suffix then
+        local entry = ns.Prices and ns.Prices.GetSuffixEntry and ns.Prices:GetSuffixEntry(itemID, suffix)
+        if not tracked then
+            local market = {}
+            for _, t, m in EachReading(entry and entry.history) do
+                if type(t) == "number" and type(m) == "number" and t > now - window.seconds then
+                    market[#market + 1] = { t = t, p = m }
+                end
+            end
+            if #market >= 2 then return market, "market", tracked end
+        end
+        return points, nil, tracked
+    end
 
     -- An item with no hourly prices still has the price table's last few
     -- scans of its market value. Better a short line than an empty well.
@@ -461,6 +480,7 @@ local function CreatePickerIcon(graph, index)
     button:SetScript("OnClick", function(self)
         if Widgets.ItemShiftClick and Widgets.ItemShiftClick(self.itemID) then return end
         graph.selected = self.itemID
+        graph.suffix = nil
         graph:Refresh()
     end)
     button:SetScript("OnEnter", function(self)
@@ -631,10 +651,11 @@ function PriceGraph.Create(parent, opts)
     best:SetScript("OnLeave", function() GameTooltip:Hide() end)
     graph.best = best
 
-    --- Show one item's prices.
-    function graph:SetItem(itemID)
+    --- Show one item's prices, or one random suffix's of it.
+    function graph:SetItem(itemID, suffix)
         self.items = nil
         self.selected = itemID
+        self.suffix = suffix
         self:Refresh()
     end
 
@@ -642,6 +663,7 @@ function PriceGraph.Create(parent, opts)
     --- first. Keeps the one picked when it is still in the list.
     function graph:SetItems(items, selected)
         self.items = items
+        self.suffix = nil
         local keep = false
         for _, itemID in ipairs(items or {}) do
             if itemID == self.selected then keep = true end
@@ -703,7 +725,7 @@ function PriceGraph.Create(parent, opts)
             return
         end
 
-        local points, kind, tracked = PriceGraph.Series(itemID, windowKey, now)
+        local points, kind, tracked = PriceGraph.Series(itemID, windowKey, now, self.suffix)
         self.kind = kind
         self.points = kind and points or nil
 
@@ -731,7 +753,7 @@ function PriceGraph.Create(parent, opts)
             -- since the scans' fallback has no hours to put them in.
             if kind == "hourly" then
                 local listed = ns.PriceHistory.GetListed
-                    and ns.PriceHistory:GetListed(itemID, window.seconds, now) or {}
+                    and ns.PriceHistory:GetListed(itemID, window.seconds, now, self.suffix) or {}
                 self.listedAt = {}
                 for _, entry in ipairs(listed) do
                     self.listedAt[math.floor(entry.t / 3600)] = entry.q
@@ -749,7 +771,7 @@ function PriceGraph.Create(parent, opts)
         -- The best times, from the hourly prices only.
         local texts, why, best
         if tracked or kind == "hourly" then
-            texts, why, best = ns.PriceHistory:DescribeBestTimes(itemID, now)
+            texts, why, best = ns.PriceHistory:DescribeBestTimes(itemID, now, self.suffix)
         else
             texts = { L["Best times: star it to start learning"], L["Best times: star it"] }
         end
