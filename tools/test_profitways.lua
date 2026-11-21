@@ -220,6 +220,21 @@ check("the vendor", Profit.WayTag("vendor"):find("(Vendor)", 1, true) ~= nil, tr
 check("and disenchanting", Profit.WayTag("disenchant"):find("(DE)", 1, true) ~= nil, true)
 check("no way, no tag", Profit.WayTag(nil), "")
 
+-- My Crafts and Recipes to Learn show the same Profit: drop-down (2026-11-21).
+local options = Profit.MethodOptions()
+check("the drop-down starts on Best", options[1].value, "best")
+check("and offers every way", #options, #Profit.METHODS)
+local vendorDE
+for _, option in ipairs(options) do if option.value == "vendordisenchant" then vendorDE = option end end
+check("Vendor and DE keeps its hover", vendorDE and vendorDE.tooltip ~= nil, true)
+local paneAsked = 0
+ns.Config.Set = function(_, key, value) settings[key] = value end
+ns.CraftPanel = { IsShown = function() return true end, RequestRefresh = function() paneAsked = paneAsked + 1 end }
+Profit:SetMethod("vendor")
+check("picking one keeps it", Profit:GetMethod(), "vendor")
+check("and the pane beside the profession window redraws", paneAsked, 1)
+settings.profitBy, ns.CraftPanel, ns.Config.Set = nil, nil, nil
+
 print("")
 print("the choice kept in Settings")
 

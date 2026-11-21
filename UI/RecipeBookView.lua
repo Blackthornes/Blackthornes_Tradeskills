@@ -20,6 +20,10 @@ ns.RecipeBookView = RecipeBookView
 
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
+-- The Profit: drop-down and the search box beside it (2026-11-21), the
+-- drop-down as wide as on My Crafts.
+local METHOD_WIDTH = 170
+local METHOD_SEARCH_WIDTH = 120
 local ALL = "all"
 
 --- The book's (English) name for one of the character's professions. The
@@ -630,6 +634,9 @@ local function NewView(opts)
         widgets.profession:SetOptions(options)
         if state.profession == nil then state.profession = first or ALL end
         widgets.profession:SetValue(state.profession)
+        if widgets.method then
+            widgets.method:SetValue(ns.Profit.GetMethod and ns.Profit:GetMethod() or "best")
+        end
 
         state.waiting = false
 
@@ -882,12 +889,28 @@ local function NewView(opts)
         profession:SetPoint("TOPLEFT", 8, -8)
         widgets.profession = profession
 
+        -- The Profit: choice from My Crafts (2026-11-21). The PROFIT column
+        -- already counts by it; without it here a player on "Vendor" saw
+        -- "(Vendor)" on every row and could not tell why. One setting.
+        local before = profession
+        if opts.methodChoice and ns.Profit and ns.Profit.MethodOptions then
+            local method = Widgets.CreateDropdown(view, ns.Profit.MethodOptions(), function(value)
+                ns.Profit:SetMethod(value)
+                instance.Refresh()
+            end, { width = METHOD_WIDTH })
+            method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+            widgets.method = method
+            before = method
+        end
+
         local search = Widgets.CreateSearchBox(view, L["Search recipes"], function(text)
             state.search = text or ""
             instance.Refresh()
         end)
-        search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
-        search:SetWidth(Widgets.SEARCH_WIDTH)
+        search:SetPoint("LEFT", before, "RIGHT", 8, 0)
+        -- Narrower beside the Profit: choice, so the skill at the top right
+        -- keeps its room.
+        search:SetWidth(widgets.method and METHOD_SEARCH_WIDTH or Widgets.SEARCH_WIDTH)
 
         local known = Widgets.CreateCheckbox(view, L["Show learned too"], function(checked)
             state.includeKnown = checked and true or false
@@ -1056,7 +1079,7 @@ RecipeBookView.New = NewView
 -- The Profit tab's copy, which /bts recipes and the Settings button open.
 -- It shows your skill above the list too, so a recipe's SKILL reads
 -- against it on either tab.
-local main = NewView({ showSkill = true })
+local main = NewView({ showSkill = true, methodChoice = true })
 RecipeBookView.Build = main.Build
 RecipeBookView.Refresh = main.Refresh
 RecipeBookView.SetProfession = main.SetProfession

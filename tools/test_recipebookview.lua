@@ -435,5 +435,44 @@ check("Have Skill leaves out what you can't learn yet", #list.data, 1)
 check("an Enchanting recipe within 50 stays", list.data[1].recipeID, 2)
 ns.Config, ns.LearnNext = savedConfig, nil
 
+print("\nthe Profit: choice")
+-- A player saw "(Vendor)" on every row: the PROFIT column follows the
+-- Profit: choice from My Crafts, which this view did not show (2026-11-21).
+local made = {}
+ns.Widgets.CreateDropdown = function(_, options, onSelect)
+  local box = Stub({ options = options, onSelect = onSelect,
+    SetOptions = function(self, o) self.options = o end,
+    SetValue = function(self, v) self.value = v end })
+  made[#made + 1] = box
+  return box
+end
+local method, listed = "vendor", 0
+local savedProfit, savedList = ns.Profit, ns.RecipeBook.List
+ns.Profit = {
+  WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" },
+  MethodOptions = function() return { { value = "best" }, { value = "vendor" } } end,
+  GetMethod = function() return method end,
+  SetMethod = function(_, value) method = value end,
+}
+ns.RecipeBook.List = function(_, opts) listed = listed + 1 return rows end
+local learn = View.New({ showSkill = true, methodChoice = true })
+learn.Build(Frame())
+learn.Refresh()
+local picker = learn._widgets.method
+check("Recipes to Learn shows it", picker ~= nil, true)
+check("beside the profession list", picker == made[2], true)
+check("showing the choice in use", picker and picker.value, "vendor")
+listed = 0
+picker.onSelect("best")
+check("picking Best keeps it", method, "best")
+check("and the list counts again", listed, 1)
+method = "auction"
+learn.Refresh()
+check("a pick made on My Crafts shows here", picker.value, "auction")
+local learnNext = View.New({ order = "skill", showSkill = true })
+learnNext.Build(Frame())
+check("Level Up's Learn Next has none", learnNext._widgets.method, nil)
+ns.Profit, ns.RecipeBook.List = savedProfit, savedList
+
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")
