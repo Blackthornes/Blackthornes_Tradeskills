@@ -3122,6 +3122,21 @@ Settings: Tooltips page, "Used In Recipes:" Off / Shift / Always
 (`tooltipUsedIn`, on; `tooltipUsedInShift`, off; never rename), in "All
 Lines". Tested in `tools/test_usedin.lua`.
 
+## How many Mailbox visits are kept (2026-11-20)
+
+A player found Mailbox visits stopped at 100, two days back. It kept the
+last 100 per realm (`MAX_HAULS`), which a busy seller fills in two days,
+and the report's This week total and the best haul and best sale read only
+those. The owner picked "60 days, up to 2,000" (2026-11-20).
+`MailHaul:TrimHistory(history, now)` runs after each visit is saved: the
+oldest go once there are more than `MAX_HAULS` (2000) or once older than
+`KEEP_DAYS` (60), but at least `KEEP_ANYWAY` (100) stay, so a player back
+from a long break keeps what they had. The visits holding the best haul
+and best sale (counted ones, as `Records` reads them) are never trimmed.
+Saved visits stay small (`KEEP_SALES` 10, `KEEP_ITEMS` 8). The list is a
+scroll list that draws only the rows on screen. Tested in
+`tools/test_mailhaul.lua`.
+
 ## Leave Out of Report (2026-11-17)
 
 The owner said build it from a mockup (2026-11-17). On the Sales tab's
