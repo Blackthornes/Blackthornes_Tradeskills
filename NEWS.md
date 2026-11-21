@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.36.0
+
+- Random suffix items open on the Prices tab to show a price for each suffix.
+
+Fixes and changes:
+- Crafts with a cooldown, like transmutes, are priced at what the item costs to buy.
+- Mailbox visits keep 60 days, up to 2,000.
+- Various bug fixes for Tradeskills.
+
 ## 1.35.4
 
 Fixes and changes:
