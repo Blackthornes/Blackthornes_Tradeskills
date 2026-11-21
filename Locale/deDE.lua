@@ -3838,3 +3838,6 @@ L["Got prices for %d items from %s in your guild."] = "Preise für %d Gegenstän
 L["Got prices for %d items from %d players on your realm."] = "Preise für %d Gegenstände von %d Spielern auf deinem Realm bekommen."
 L["Got prices for %d items from 1 player on your realm."] = "Preise für %d Gegenstände von 1 Spieler auf deinem Realm bekommen."
 L["Got prices for 1 item from %s in your guild."] = "Preis für 1 Gegenstand von %s aus deiner Gilde bekommen."
+L["Tradeskills' settings have a window of their own."] = "Die Einstellungen von Tradeskills haben ein eigenes Fenster."
+L["Open Tradeskills settings"] = "Tradeskills-Einstellungen öffnen"
+L["Or right-click the minimap button."] = "Oder Rechtsklick auf den Minikarten-Button."

@@ -2465,10 +2465,69 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- The game's own AddOns options list
+--
+-- As in the other four addons: a small line under Options > AddOns with a
+-- button that opens this addon's Settings tab, rather than the Settings page
+-- squeezed into Blizzard's frame. Every call is guarded, because a missing
+-- options entry is no reason for the addon to fail to load.
+--------------------------------------------------------------------------------
+
+local OPTIONS_TITLE = "Blackthornes Tradeskills"
+
+function UI:RegisterGameOptions()
+    if self.optionsPanel then return end
+
+    local panel = CreateFrame("Frame")
+    panel.name = OPTIONS_TITLE
+
+    local title = Theme.CreateLabel(panel, "title", "accent")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText(OPTIONS_TITLE)
+
+    local blurb = Theme.CreateLabel(panel, "normal", "text")
+    blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+    blurb:SetText(L["Tradeskills' settings have a window of their own."])
+
+    local open = Widgets.CreateButton(panel, L["Open Tradeskills settings"], function()
+        -- The game's panel is left as it is: hiding a stock frame runs the
+        -- game's own code as this addon and taints it. The window comes up
+        -- over the panel. Already on Settings, the press leaves it open.
+        if UI.window and UI.window:IsShown() and UI.activeTab == "settings" then return end
+        UI:OpenSettings()
+    end, { width = 210, height = 24 })
+    open:SetPoint("TOPLEFT", blurb, "BOTTOMLEFT", 0, -14)
+
+    local hint = Theme.CreateLabel(panel, "small", "muted")
+    hint:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -10)
+    hint:SetText(L["Or right-click the minimap button."])
+
+    self.optionsPanel = panel
+
+    local registered = false
+
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        registered = pcall(function()
+            local category = Settings.RegisterCanvasLayoutCategory(panel, OPTIONS_TITLE)
+            Settings.RegisterAddOnCategory(category)
+            UI.optionsCategory = category
+        end)
+    end
+
+    -- The older options API, in case this client still has it instead.
+    if not registered and type(InterfaceOptions_AddCategory) == "function" then
+        registered = pcall(InterfaceOptions_AddCategory, panel)
+    end
+
+    return registered
+end
+
 function UI:OnEnable()
     self:Build()
     self:BuildMinimapButton()
     self:HookAltClickSearch()
+    pcall(self.RegisterGameOptions, self)
 
     -- The minimap's final size is not always settled at login, and other addons
     -- resize it afterwards, so re-seat the button once things have calmed down.
