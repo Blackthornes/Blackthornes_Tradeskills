@@ -308,7 +308,11 @@ local function TrainerLines(starred, found, learnable)
             local record = ServiceRecord(index, name, starred)
             local recipeID = record and Number(record.recipeID)
             if recipeID and not found[recipeID] then
-                local needs = Number(record.skill) or Number((Call("GetTrainerServiceSkillReq", index)))
+                local needs = Number(record.skill)
+                if not needs then
+                    local _, asked = Call("GetTrainerServiceSkillReq", index)
+                    needs = Number(asked)
+                end
                 local short = ShortOf(needs, record)
                 if kind == "unavailable" and not short then short = needs end
                 found[recipeID] = {
