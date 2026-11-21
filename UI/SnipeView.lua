@@ -825,7 +825,7 @@ function SnipeView:Refresh(force)
         end
         head.label:SetText(text)
         if head.cell and (SnipeView.HeadWidth(text) or 0) > CELL_WIDTH - ARROW_ROOM then tall = true end
-        head.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+        head.label:SetTextColor(Theme.Unpack(active and "text" or "heading"))
         head.arrow:SetShown(active)
         if active then
             -- The house arrow points down for biggest first, flipped otherwise.

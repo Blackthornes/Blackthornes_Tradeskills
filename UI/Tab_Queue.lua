@@ -370,7 +370,7 @@ local function UpdateCraftRow(row, entry)
     if entry.isDependency then
         local parents = ns.Queue:GetDependencyParents(entry)
 
-        label = L.Format("|cff7a8089>|r %s |cff7a8089(for %s)|r",
+        label = L.Format("|cff857c68>|r %s |cff857c68(for %s)|r",
             plain,
             #parents > 0 and table.concat(parents, ", ") or L["another craft"])
     end
@@ -381,15 +381,15 @@ local function UpdateCraftRow(row, entry)
     local who = ns.Queue.DescribeWho and ns.Queue:DescribeWho(entry) or {}
     local texts = {}
     local function Note(base, text)
-        return ("%s |cff7a8089·|r |cffc8a44d%s|r"):format(base, text)
+        return ("%s |cff857c68·|r |cffc8a44d%s|r"):format(base, text)
     end
 
     -- Kept after buying turned cheaper: said on the row ahead of who makes
     -- it, so it is not mistaken for the cheaper way.
     if entry.buyCheaper then
         local cheaper = L.Format("|c%sbuying is cheaper now|r", ns.COLORS.warn)
-        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, cheaper)
-        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, cheaper)
+        texts[#texts + 1] = ("%s |cff857c68·|r %s"):format(label, cheaper)
+        texts[#texts + 1] = ("%s |cff857c68·|r %s"):format(plain, cheaper)
     end
 
     -- A craft queued when it was worth 4g and now worth 40s should say so,
@@ -399,8 +399,8 @@ local function UpdateCraftRow(row, entry)
         and entry.snapshotProfit and entry.snapshotProfit > 0
         and analysis.profit / entry.snapshotProfit < 0.6 then
         local dropped = L.Format("|c%sworth less than when queued|r", ns.COLORS.warn)
-        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, dropped)
-        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, dropped)
+        texts[#texts + 1] = ("%s |cff857c68·|r %s"):format(label, dropped)
+        texts[#texts + 1] = ("%s |cff857c68·|r %s"):format(plain, dropped)
     end
     for _, text in ipairs(who) do texts[#texts + 1] = Note(label, text) end
     if #who > 0 then texts[#texts + 1] = Note(plain, who[#who]) end
@@ -413,19 +413,19 @@ local function UpdateCraftRow(row, entry)
     local tool = not held and ns.Crafting.ToolMissing and ns.Crafting:ToolMissing(entry.recipeID)
     local tags
     if held then
-        tags = { "|cff6fa8dc" .. L["Paused"] .. "|r |cff7a8089" .. L["Craft Next skips it."] .. "|r",
+        tags = { "|cff6fa8dc" .. L["Paused"] .. "|r |cff857c68" .. L["Craft Next skips it."] .. "|r",
             "|cff6fa8dc" .. L["Paused"] .. "|r" }
     elseif tool then
         local need = "|c" .. ns.COLORS.warn .. L.Format("Needs a %s", tool) .. "|r"
-        tags = { need .. " |cff7a8089" .. L.Format("Skipped until you're near a %s.", tool) .. "|r", need }
+        tags = { need .. " |cff857c68" .. L.Format("Skipped until you're near a %s.", tool) .. "|r", need }
     elseif widgets.nextEntry == entry then
-        tags = { "|cff7a8089" .. L["Next up."] .. "|r" }
+        tags = { "|cff857c68" .. L["Next up."] .. "|r" }
     end
     if tags then
         local tagged = {}
         for _, tag in ipairs(tags) do
             for _, text in ipairs(texts) do
-                tagged[#tagged + 1] = ("%s |cff7a8089·|r %s"):format(text, tag)
+                tagged[#tagged + 1] = ("%s |cff857c68·|r %s"):format(text, tag)
             end
         end
         for _, text in ipairs(texts) do tagged[#tagged + 1] = text end

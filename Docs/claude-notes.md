@@ -2866,6 +2866,29 @@ first.
   tables routine does.
 
 
+### Plain prose everywhere (the owner, 2026-11-21)
+
+The owner shared these six rules for writing and asked that they be kept
+from now on, in every addon's notes. They cover every piece of prose:
+player words, notes, commits, PR text, release notes, Discord drafts and
+replies to him.
+
+1. Say plainly what you mean, without stock metaphors, similes or other
+   figures of speech.
+2. Use a short word wherever a short one will do.
+3. Cut every word you can, but keep the context the reader needs.
+4. Use the active voice wherever you can: say who did what.
+5. Use an everyday English word, or the reader's own term, instead of a
+   foreign phrase, a scientific word, jargon, or a word or abbreviation
+   you made up during the work.
+6. These are defaults, not hard limits. Break any of them sooner than say
+   anything outright barbarous.
+
+Review every prose output against these rules before delivering. They sit
+beside "Writing for players" (sixth grade, warm, no em-dashes), which still
+holds for every word a player reads.
+
+
 ## Shelves, dock places and the All Addons page (2026-11-16)
 
 The owner said "build them all" for the UI cleanup ideas (2026-11-16). What
@@ -3408,6 +3431,60 @@ now, tested in `tools/test_tabstall.lua`:
 A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
 stays the at-once one every event uses.
 
+## The slim window frame and Row Size (2026-11-21)
+
+The owner said build it, Tradeskills first, from
+`ui-pass-4-slimmer-frame.html`. `Titanforged:Dress(frame, { slim = true })`
+(and `BlizzardLook.Dress`, which hands its colours to
+`Titanforged.TitleBar`) gives a small portrait (40, reaching 6 past the
+corner) and the name in one bar inside the top rim (`TITLE_TOP`,
+`TITLE_BAR`, `TITLE_LEFT`), drawn on the window's own BORDER layer so the
+window's buttons sit over it and the one window's bare mode hides it with
+the rim. The bar answers `SetTitle` like the plate. Without `slim` every
+window keeps the plate, so the shared files stay safe to copy; Farmer,
+Equipment, Pets and Butler follow only after the owner tries Tradeskills.
+
+The main window (`UI/Main.lua`): the header is that bar, the scan button in
+it just left of the gems (`UI:GemRoom`, `UI:PlaceScanButton`, at the edge
+inside the one window where the gems are put away). A footer
+(`UI:BuildFooter`) holds what the scan knows on the left (the fullest of
+three lines that fits, the whole on its hover, through `Theme.FitText`),
+why a scan can't run or how far one is, and the version on the right. Tabs
+were already as wide as their word with Settings last, and row hints were
+already on each row's hover.
+
+"Row Size:" on the Windows page (`rowSize`, `roomy` unless `compact` is
+picked, words approved by the owner): read once a session
+(`Widgets.Compact`), so it waits for /reload. `Widgets.RowHeight` shrinks
+one-line rows (up to `COMPACT_MOST`, 30) by `COMPACT_LESS` (4), never under
+16; taller rows hold two lines and keep their height. Tested in
+`tools/test_slimframe.lua`. Not yet seen in game.
+
+## In the game's Options list (2026-11-21)
+
+The owner said build it (UI pass, keys and Options line): like the other
+four, Tradeskills has a line under the game's Options, AddOns, named
+Blackthornes Tradeskills, with a button that opens the Settings tab
+(`UI:RegisterGameOptions` in `UI/Main.lua`, called from `UI:OnEnable` in a
+pcall; `Settings.RegisterCanvasLayoutCategory` with
+`InterfaceOptions_AddCategory` as the fallback). The words follow the
+others' with the addon's name. The Farmer, Equipment, Pets and Butler
+window keys copy this addon's `BLACKTHORNESTS_TOGGLE` words. Tested in
+`tools/test_gameoptions.lua`.
+## Warm glass (2026-11-21)
+
+The owner said build it from the UI pass mockup (ui-pass-1-warm-glass): the
+house palette moved from blue-black to warm brown-black in every addon's
+`UI/Theme.lua`, the same values in all five. `panel` #1A1611, `glass`
+#17130E, `glassAlt` and `well` #0F0C08, `glassHover` #201A12, `border`
+#4A3C24 (row lines at 0.6), `borderLit` #6B5A3A, `window`, `header` and
+the old `row` keys warmed to match; `glassActive` #241F14 is unchanged.
+Plain text (`text`) is white, `muted` #9B927C and `dim` #7A715E, and
+`ns.COLORS.muted` and `text` follow. A new key, `heading` (#FFD100, the
+game's yellow), colours column headings; the heading that sorts the list
+is `text` (white) with its arrow. Gold rim, buttons and gems are untouched,
+and so are the Blizzard window style (`UI/BlizzardLook.lua`) and the shared
+files' fallback palettes. New lists use these keys, never numbers.
 ## Item rows answer the game's clicks
 
 The owner said build it (2026-11-21, from the UI pass mockup 5): every item
