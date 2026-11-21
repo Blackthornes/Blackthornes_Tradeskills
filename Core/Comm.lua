@@ -566,6 +566,9 @@ function Comm:ChannelTest()
         tostring(type(JoinTemporaryChannel) == "function"), tostring(type(JoinChannelByName) == "function"),
         tostring(type(LeaveChannelByName) == "function"), tostring(type(GetChannelName) == "function"),
         tostring(type(C_ChatInfo) == "table" and type(C_ChatInfo.SendAddonMessage) == "function")))
+    ChannelLine(("  calls: C_ChatInfo.SwapChatChannelsByChannelIndex %s, EnumerateServerChannels %s, GetChannelList %s"):format(
+        tostring(type(C_ChatInfo) == "table" and type(C_ChatInfo.SwapChatChannelsByChannelIndex) == "function"),
+        tostring(type(EnumerateServerChannels) == "function"), tostring(type(GetChannelList) == "function")))
     ChannelLine("  channels you are in now: " .. tostring(ChannelCount() or "unknown"))
 
     if not self.noticeFilter and type(ChatFrame_AddMessageEventFilter) == "function" then

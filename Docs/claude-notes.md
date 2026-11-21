@@ -1750,6 +1750,16 @@ channel joins it again `REJOIN_DELAY` seconds later (`OnNotice`), a join
 that did not take is followed by `JoinChannelByName` (`triedTemporary`),
 and the Settings status says "You're not in the price channel right now."
 while it is out (`InChannel`).
+Keeps off /1 (a player's report, 2026-11-21): the join waits until the
+game's own channels are in (`GameChannelsReady`: another channel listed, or
+`GAME_CHANNELS_WAIT` 120 seconds after login with none), never joins inside
+an instance, and a game channel's `YOU_JOINED` while it waits joins two
+seconds later. When ours sits in front of a game channel (an older login,
+or a channel the game remembered), `StepBack` swaps it one place back a
+call (`C_ChatInfo.SwapChatChannelsByChannelIndex`) until it is behind them;
+with no swap it leaves for the session (`stepAside`). Only Tradeskills joins
+a channel: Farmer, Equipment, Pets and Butler share by guild and whisper.
+Tested in `tools/test_realmprices.lua`.
 
 ## A quick scan when you open the auction house
 
