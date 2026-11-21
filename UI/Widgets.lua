@@ -2186,12 +2186,73 @@ function Widgets.LinkToChat(itemID, link)
     return ok and inserted and true or false
 end
 
+--- The game's answer to IsModifiedClick(kind) (CHATLINK, DRESSUP), which
+--- follows the player's own key choice; else the plain key.
+local function ModifiedClick(kind, key)
+    local modified = _G.IsModifiedClick
+    if type(modified) == "function" then
+        local ok, on = pcall(modified, kind)
+        if ok then return on and true or false end
+    end
+    local down = _G[key]
+    if type(down) ~= "function" then return false end
+    local ok, on = pcall(down)
+    return ok and on and true or false
+end
+
+--- True while the player has a chat box open to type in.
+function Widgets.ChatBoxOpen()
+    local util = _G.ChatFrameUtil
+    local active = (type(util) == "table" and type(util.GetActiveWindow) == "function" and util.GetActiveWindow)
+        or _G.ChatEdit_GetActiveWindow
+    if type(active) ~= "function" then return false end
+    local ok, box = pcall(active)
+    return ok and box ~= nil and true or false
+end
+
+--- Ctrl-click tries gear on, as the game's bags do (the owner, 2026-11-21,
+--- the same in all five addons). The game's own click handler does it where
+--- it is there; the item's number is enough while it loads.
+-- @return true when the click was taken
+function Widgets.ItemTryOn(itemID, link)
+    if not ModifiedClick("DRESSUP", "IsControlKeyDown") then return false end
+    itemID = tonumber(itemID)
+    if type(link) ~= "string" or not link:find("item:", 1, true) then
+        link = nil
+        if itemID and ns.Util and ns.Util.HasFunction("C_Item.GetItemInfo") then
+            local ok, _, found = pcall(C_Item.GetItemInfo, itemID)
+            if ok and type(found) == "string" then link = found end
+        end
+        link = link or (itemID and ("item:" .. itemID))
+    end
+    if not link then return false end
+
+    local handle = _G.HandleModifiedItemClick
+    if type(handle) == "function" then
+        local ok, taken = pcall(handle, link)
+        if ok and taken then return true end
+    end
+    local dress = _G.DressUpItemLink or _G.DressUpLink
+    if type(dress) ~= "function" then return false end
+    local ok, taken = pcall(dress, link)
+    return ok and taken and true or false
+end
+
+--- Every click on an item the addon shows: Ctrl tries gear on, Shift does
+--- what Widgets.ItemShiftClick says. Anything else is left to the row.
+-- @return true when the click was taken
+function Widgets.ItemClick(itemID, link)
+    if Widgets.ItemTryOn(itemID, link) then return true end
+    return Widgets.ItemShiftClick(itemID, link)
+end
+
 --- One shift-click for every item the addon shows (the owner, 2026-10-12):
---- with the auction house open it searches the house for the item, else it
---- puts the item's link in the chat box being typed in, as the bags do.
+--- with a chat box open it puts the item's link in it, as the bags do
+--- (2026-11-21); else with the auction house open it searches the house
+--- for the item.
 -- @return true when the click was taken
 function Widgets.ItemShiftClick(itemID, link)
-    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+    if not ModifiedClick("CHATLINK", "IsShiftKeyDown") then return false end
     itemID = tonumber(itemID)
     if not itemID and type(link) == "string" then itemID = tonumber(link:match("item:(%d+)")) end
     if not itemID then return false end
@@ -2199,6 +2260,9 @@ function Widgets.ItemShiftClick(itemID, link)
     -- The drawer's Lists view is adding to a list: the item goes on it.
     local lists = ns.ShoppingListsView
     if lists and lists.TakeItem and lists:TakeItem(itemID, true) then return true end
+
+    -- A chat box open: the link goes in it, as a Shift-click on the bags.
+    if Widgets.ChatBoxOpen() and Widgets.LinkToChat(itemID, link) then return true end
 
     if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
@@ -2287,16 +2351,20 @@ function Widgets.OpenRowMenu(data, menu)
     return true
 end
 
---- Shift-click on a list row: search the auction house for its item, or
---- link it in chat with the house closed.
+--- Shift-click on a list row: link its item in an open chat box, else
+--- search the auction house for it. Ctrl-click with the left button tries
+--- it on (a right-click stays the list's).
 -- @return true when the click was taken
-function Widgets.ShiftClickSearch(data, searchItem)
-    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+function Widgets.ShiftClickSearch(data, searchItem, mouseButton)
+    local shift = ModifiedClick("CHATLINK", "IsShiftKeyDown")
+    local dress = mouseButton ~= "RightButton" and not shift and ModifiedClick("DRESSUP", "IsControlKeyDown")
+    if not (shift or dress) then return false end
 
     local itemID = Widgets.RowItemID(data, searchItem)
     if not itemID then return false end
 
     local link = type(data.link) == "string" and data.link or nil
+    if dress then return Widgets.ItemTryOn(itemID, link) end
     return Widgets.ItemShiftClick(itemID, link)
 end
 
@@ -2322,7 +2390,7 @@ function Widgets.ItemHotspot(icon, cover)
     end)
     spot:SetScript("OnLeave", function() GameTooltip:Hide() end)
     spot:SetScript("OnClick", function()
-        Widgets.ItemShiftClick(Theme.IconItem(icon))
+        Widgets.ItemClick(Theme.IconItem(icon))
     end)
 
     Theme.SetIconSpot(icon, spot)
@@ -2516,7 +2584,7 @@ function Widgets.CreateScrollList(parent, opts)
             -- Shift-click any item row with the auction house open and the
             -- house searches for it (2026-10-04). Right-click stays
             -- what each list already made it.
-            if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem) then return end
+            if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem, mouseButton) then return end
 
             if self.data and mouseButton == "RightButton" and opts.menu
                 and Widgets.OpenRowMenu(self.data, opts.menu) then

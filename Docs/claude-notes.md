@@ -3407,3 +3407,20 @@ now, tested in `tools/test_tabstall.lua`:
 
 A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
 stays the at-once one every event uses.
+
+## Item rows answer the game's clicks
+
+The owner said build it (2026-11-21, from the UI pass mockup 5): every item
+row in all five addons answers the clicks the game's bags do. Here that
+grew the shift-click from 2026-10-12: `Widgets.ItemShiftClick` now puts the
+link in an open chat box first (`Widgets.ChatBoxOpen`), even with the
+auction house open, and searches the house only while no chat box is open;
+the Lists view still takes the item first while it is adding. Ctrl-click
+(`IsModifiedClick("DRESSUP")`) tries gear on (`Widgets.ItemTryOn`, through
+the game's `HandleModifiedItemClick` where it is there, else
+`DressUpItemLink`, in pcall); `Widgets.ItemClick` does both, for the icon
+hotspots and the Price History picker. `CreateScrollList` rows take both
+through `ShiftClickSearch(data, searchItem, mouseButton)`; a Ctrl-right-click
+stays the list's (the craft pane ignores a craft with it), and a Ctrl-click
+on an item that can't be worn is still the row's own click. The sisters
+have the same `Widgets.ItemClick`. Tested in `tools/test_shiftclick.lua`.
