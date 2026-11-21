@@ -3407,6 +3407,18 @@ now, tested in `tools/test_tabstall.lua`:
 
 A tab may give `refreshPicked` for a lighter redraw when picked; `refresh`
 stays the at-once one every event uses.
+
+## In the game's Options list (2026-11-21)
+
+The owner said build it (UI pass, keys and Options line): like the other
+four, Tradeskills has a line under the game's Options, AddOns, named
+Blackthornes Tradeskills, with a button that opens the Settings tab
+(`UI:RegisterGameOptions` in `UI/Main.lua`, called from `UI:OnEnable` in a
+pcall; `Settings.RegisterCanvasLayoutCategory` with
+`InterfaceOptions_AddCategory` as the fallback). The words follow the
+others' with the addon's name. The Farmer, Equipment, Pets and Butler
+window keys copy this addon's `BLACKTHORNESTS_TOGGLE` words. Tested in
+`tools/test_gameoptions.lua`.
 ## Warm glass (2026-11-21)
 
 The owner said build it from the UI pass mockup (ui-pass-1-warm-glass): the

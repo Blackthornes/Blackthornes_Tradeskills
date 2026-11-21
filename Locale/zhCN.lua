@@ -3837,3 +3837,6 @@ L["Got prices for %d items from %s in your guild."] = "收到 %d 件物品的价
 L["Got prices for %d items from %d players on your realm."] = "收到 %d 件物品的价格，来自服务器上的 %d 名玩家。"
 L["Got prices for %d items from 1 player on your realm."] = "收到 %d 件物品的价格，来自服务器上的 1 名玩家。"
 L["Got prices for 1 item from %s in your guild."] = "收到 1 件物品的价格，来自公会成员 %s。"
+L["Tradeskills' settings have a window of their own."] = "Tradeskills 的设置有自己的窗口。"
+L["Open Tradeskills settings"] = "打开 Tradeskills 设置"
+L["Or right-click the minimap button."] = "也可以右键点击小地图按钮。"
