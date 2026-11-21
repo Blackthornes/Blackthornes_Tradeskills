@@ -194,7 +194,7 @@ local function Reset()
     sendDelay = 0
     Posting.pending, Posting.others = nil, nil
     Posting.manyRefused = {}
-    Auctions.confirmToken, Auctions.lastRefresh = 0, nil
+    Auctions.confirmToken, Auctions.lastRefresh, Auctions.sentAt = 0, nil, nil
     ns.db.postedAuctions = nil
     bags = { [0] = {} }
     for _, id in ipairs({ OIL, POTION, CLOTH, ORE, HERB, GEM, BOLT, VIAL }) do
@@ -301,21 +301,31 @@ print("how many may be confirmed at once")
 Reset()
 local FIRST = { OIL, POTION, CLOTH, ORE, GEM, BOLT }
 for _, id in ipairs(FIRST) do Posting:Post(id, 1, 1000) end
-check("six items are being confirmed", #Posting:AllPending(), Posting.MAX_CONFIRMING)
-check("a seventh waits", (Posting:CanPost(HERB)), false)
+check("six items are being confirmed", #Posting:AllPending(), 6)
+-- Six no longer holds the next one back (2026-11-21: a steady run of
+-- listings hit that cap in three seconds); the cap is MAX_CONFIRMING.
+check("a seventh need not wait", (Posting:CanPost(HERB)), true)
+local filled = {}
+for extra = 1, Posting.MAX_CONFIRMING - 6 do
+    local fake = { itemID = 900000 + extra, startedAt = clock }
+    Posting.others[fake.itemID] = fake
+    filled[#filled + 1] = fake
+end
+check("the cap is full", #Posting:AllPending(), Posting.MAX_CONFIRMING)
+check("one more waits", (Posting:CanPost(HERB)), false)
 check("another oil still joins its check", (Posting:CanPost(OIL)), true)
+for _, fake in ipairs(filled) do Posting.others[fake.itemID] = nil end
 for _, id in ipairs(FIRST) do Show(id) end
 RunUntil(120)
 check("all six settled", #Posting:AllPending(), 0)
-check("so the seventh may go", (Posting:CanPost(HERB)), true)
+check("so the next may go", (Posting:CanPost(HERB)), true)
 
 Posting.pending, Posting.others = nil, nil
 C_AuctionHouse, C_Timer, C_Item, C_Container, ItemLocation, maxStacks = nil, nil, nil, nil, nil, nil
 
 print("")
 if failures > 0 then
-    print(("FAIL -- %d check(s) failed"):format(failures))
-    os.exit(1)
+    error(("FAIL -- %d check(s) failed"):format(failures))
 end
 
 print("PASS -- different items go up a second apart and are confirmed on their own")

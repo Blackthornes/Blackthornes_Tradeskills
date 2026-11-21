@@ -144,8 +144,10 @@ No request or flag stays set forever. Three things eat wheel turns:
 
 - [x] Trace `ListNext` to the post call
 - [x] Root cause confirmed
-- [ ] Fix and test
-- [ ] PR
+- [x] P4 built 2026-11-21 (`AHQueue:NoteListing`, `Posting:ReadOutSince`,
+  `MAX_CONFIRMING` 30, `tools/test_poststeady.lua`). The debug trace
+  below was already taken out.
+- [ ] P1 and P3 still open; P2 is in (`CheckPending`, `BulkTried`)
 
 ## Debug trace (remove scroll debug before release)
 

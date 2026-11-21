@@ -74,6 +74,8 @@ local SELL_FRAMES = {
 AHQueue.queue = {}
 AHQueue.sendTimes = {}
 AHQueue.lastSend = 0
+-- When the player's last listing went out (NoteListing).
+AHQueue.lastListing = 0
 
 -- Read by Posting, which counts the gap after its confirming read into the
 -- wait it shows on the buttons.
@@ -164,6 +166,13 @@ function AHQueue:WhyNotReady(priority)
         return "spacing out requests to the auction house"
     end
 
+    -- Background work keeps the same distance from the player's listings.
+    -- What a click is waiting on (the read back of those listings, a price
+    -- check) does not: see NoteListing.
+    if priority > URGENT_LIMIT and (now - self.lastListing) < MIN_SPACING then
+        return "spacing out requests to the auction house"
+    end
+
     if not self:ClientReady() then
         return "the auction house is still busy"
     end
@@ -219,6 +228,9 @@ function AHQueue:SecondsUntilReady(priority)
     end
 
     Consider(MIN_SPACING - (now - self.lastSend), L["spacing out requests to the auction house"])
+    if priority > URGENT_LIMIT then
+        Consider(MIN_SPACING - (now - self.lastListing), L["spacing out requests to the auction house"])
+    end
 
     -- Pruned first, so entry one is the oldest send still inside the window and
     -- the moment it falls out is the moment a slot frees up.
@@ -247,6 +259,19 @@ end
 -- listings, and this is one of them.
 function AHQueue:NoteSend()
     self.lastSend = GetTime()
+end
+
+--- The player listed an auction from a click.
+--
+-- Background requests space themselves out after it, as after any send.
+-- Urgent ones do not wait on it: a steady run of listings (the wheel, quick
+-- clicks) moved the last send along with every listing, so the read back
+-- that confirms them never got its turn until the listing stopped, and by
+-- then the pile of listings waiting to be confirmed had refused every
+-- click for seconds (traced 2026-11-14). The client's own "ready" answer
+-- still holds every request back while the auction house is busy.
+function AHQueue:NoteListing()
+    self.lastListing = GetTime()
 end
 
 --- Stand down for a while: the player needs the channel more than we do.

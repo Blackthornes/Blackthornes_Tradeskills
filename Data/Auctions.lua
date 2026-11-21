@@ -728,6 +728,10 @@ function Auctions:Refresh(opts)
     Util.WhenAuctionReady(function()
         pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
+        -- When it really went out: it settles every listing made before
+        -- now (Posting:ReadOutSince).
+        Auctions.sentAt = GetTime()
+
         -- The reply may or may not be announced, so go and read it either way.
         Auctions:ScheduleConfirm()
     end, nil, {
@@ -767,6 +771,9 @@ end
 -- several times, because the server's reply lands some unpredictable moment
 -- after the query rather than at a knowable one.
 local CONFIRM_DELAYS = { 0.6, 1.4, 2.4, 3.6, 4.8 }
+
+-- How long after a query goes out its answers are still being read.
+Auctions.READ_FOR = CONFIRM_DELAYS[#CONFIRM_DELAYS]
 
 --- Do two itemID -> quantity maps hold the same thing?
 --
