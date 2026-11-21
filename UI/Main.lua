@@ -1905,8 +1905,9 @@ local function FitMerchantButton(button)
 end
 
 --- True while Blackthornes Butler is loaded and its window comes up at a
---- vendor ("Open at a vendor", on unless unticked there). Butler's Buy from
---- a vendor row then buys the queue's materials, so this button hides.
+--- vendor ("Open at a vendor", on unless unticked there). The Wishlist card
+--- reads it: Butler shows those recipes itself then. The Buy materials
+--- button no longer stands down for it (2026-11-21).
 function UI.ButlerBuysHere()
     local ok, yes = pcall(function()
         if type(_G.BlackthornesButler) ~= "table" then return false end
@@ -1914,6 +1915,24 @@ function UI.ButlerBuysHere()
         return not (type(db) == "table" and db.openAtVendor == false)
     end)
     return ok and yes == true
+end
+
+--- True while Blackthornes Butler is loaded. Butler's bar at a vendor has its
+--- own Sell button, so the Buy materials button hides there when nothing
+--- here is needed, rather than reading "Nothing needed here".
+function UI.ButlerLoaded()
+    local ok, yes = pcall(function() return type(_G.BlackthornesButler) == "table" end)
+    return ok and yes == true
+end
+
+--- Show or hide the vendor button. The Sell marked button hangs beside it,
+--- so it is placed again when the Buy button comes or goes.
+local function ShowMerchantButton(button, on)
+    local was = button:IsShown() and true or false
+    if on then button:Show() else button:Hide() end
+    if was ~= on and ns.SellMarked and ns.SellMarked.Update then
+        pcall(ns.SellMarked.Update, ns.SellMarked)
+    end
 end
 
 --- The gold plaque the house's buttons out on the screen wear (UI/Plaque.lua,
@@ -1974,14 +1993,11 @@ function UI:AttachToMerchant()
         return
     end
 
-    -- Blackthornes Butler has the same Buy button on its Buy from a vendor
-    -- row, and its window comes up at the vendor, so this one stands down
-    -- (the owner, 2026-10-18). Butler buys through Butler:VendorOffer and
-    -- Butler:BuyFromVendor, so nothing is lost.
-    if UI.ButlerBuysHere() then
-        if self.merchantButton then self.merchantButton:Hide() end
-        return
-    end
+    -- With Blackthornes Butler loaded this button used to stand down
+    -- (2026-10-18), trusting the Buy row in Butler's window. That row is out
+    -- of sight when the window is shut, folded or on All Characters, so
+    -- players lost Buy (2026-11-21). It stays now; with Butler loaded it only
+    -- hides when this vendor has nothing the queue needs (UpdateMerchantButton).
 
     local button = self.merchantButton
 
@@ -2023,7 +2039,6 @@ function UI:AttachToMerchant()
         button:SetPoint("TOP", UIParent, "TOP", 0, -180)
     end
 
-    button:Show()
     self:UpdateMerchantButton()
 end
 
@@ -2031,7 +2046,14 @@ function UI:UpdateMerchantButton()
     local button = self.merchantButton
     if not button then return end
 
+    -- Never over the game world once the vendor has closed, whoever asks.
+    if not (ns.Vendor and ns.Vendor.isMerchantOpen) then
+        button:Hide()
+        return
+    end
+
     if ns.Vendor:IsBuying() then
+        ShowMerchantButton(button, true)
         MerchantWords(button, L["Buying..."])
         button:SetEnabledState(false)
         button.tooltipText = L["Purchases in progress"]
@@ -2051,6 +2073,15 @@ function UI:UpdateMerchantButton()
         cheaperNote = L.Format("%d materials are cheaper at the auction house.",
             cheaperElsewhere)
     end
+
+    if #lines == 0 and UI.ButlerLoaded() then
+        -- Butler's bar sits at the vendor with its own buttons, so an inert
+        -- one here is only in the way.
+        ShowMerchantButton(button, false)
+        return
+    end
+
+    ShowMerchantButton(button, true)
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
