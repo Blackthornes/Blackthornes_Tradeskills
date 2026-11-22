@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.38.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating.
+
+- **Warm look.** Panels and rows are warm brown-black, with yellow column headings.
+- **Slim frame.** The main window has a slimmer frame. What the scan knows moves to a footer.
+- **Row Size.** Row Size on the WINDOWS page makes one-line rows Roomy or Compact. It starts on Roomy. Use /reload after a change.
+- **Options list.** Blackthornes Tradeskills has a line in the game's Options, AddOns list that opens its settings.
+- **Item rows.** Shift-click an item row to link it in an open chat box. Ctrl-click tries gear on.
+- **Recipes to Learn.** Recipes to Learn shows the Profit: choice, so a change there shows on My Crafts too.
+- **Tooltips.** Item tooltip lines sit in one tidy block.
+
 ## 1.37.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
