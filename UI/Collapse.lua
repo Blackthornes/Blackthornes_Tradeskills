@@ -284,6 +284,8 @@ end
 -- opts.body      the frame holding everything that folds away
 -- opts.onToggle  called with the new state after it changes; the panel
 --                re-measures its height and refreshes itself there
+-- opts.canFold   answers false while the panel must not fold into its round
+--                button (it is a tab in the one window, 2026-11-22)
 function Collapse.Attach(frame, opts)
     local function Toggle()
         local collapsed = not Collapse.IsCollapsed(opts.key)
@@ -301,7 +303,7 @@ function Collapse.Attach(frame, opts)
         -- Folds into a round button, and stays one each time the panel comes
         -- back with its game window, until the button is clicked.
         Collapse.round[opts.key] = true
-        FoldWindow:Join(frame, { key = opts.key, onToggle = function(folded, closing)
+        FoldWindow:Join(frame, { key = opts.key, canFold = opts.canFold, onToggle = function(folded, closing)
             if folded then return end
             if not closing then ns.Config:Set(opts.key, false) end
             if opts.onToggle then opts.onToggle(false) end
