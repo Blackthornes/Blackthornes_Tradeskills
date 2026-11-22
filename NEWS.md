@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.39.0
+
+- Windows fold into a round button with the Tradeskills badge.
+- Minimums by Profession has a Disenchanting row.
+
+Fixes and changes:
+- Folding the One Window no longer shuts it for good.
+- Road to 300 sends smiths to the trainer who teaches the recipe.
+
 ## 1.38.0
 
 - Panels and rows have a warm brown-black look.

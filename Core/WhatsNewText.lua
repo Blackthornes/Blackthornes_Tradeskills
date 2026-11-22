@@ -5,6 +5,10 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.39.0", lines = {
+        "Windows fold into a round button with the Tradeskills badge.",
+        "Minimums by Profession has a Disenchanting row.",
+    } },
     { version = "1.38.0", lines = {
         "Panels and rows have a warm brown-black look.",
         "The main window has a slimmer frame.",
@@ -17,8 +21,5 @@ ns.WHATS_NEW = {
         "The Buy Materials button stays on the vendor window when Butler is loaded.",
         "Each suffix on the Prices tab shows its own price graph and Stats.",
         "Sales of stacks and other items are filed under their item, on one row.",
-    } },
-    { version = "1.36.0", lines = {
-        "Random suffix items open on the Prices tab to show a price for each suffix.",
     } },
 }
