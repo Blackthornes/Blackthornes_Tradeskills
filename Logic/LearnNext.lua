@@ -245,9 +245,18 @@ LearnNext.RANK_TRAINERS = {
 --- specialty's recipes. A recipe goes to them only when no other trainer
 --- of the player's side teaches that high, or when its name is one of
 --- theirs (the pattern, where there is one).
+--- A specialist's own recipes are a name pattern or a set of names; false
+--- means it has none of its own. Forever's weapon and armor crafters teach
+--- only a few Truesilver recipes (2026-11-22: Mithril Coif sent players to
+--- Kelgruk Bloodaxe, who teaches four swords and maces; only Brikk Keencraft
+--- teaches it). Checked against Forever's trainer lists.
+local WEAPON_CRAFTS = Set("The Shatterer", "Phantom Blade", "Blight", "Truesilver Champion")
+local ARMOR_CRAFTS = Set("Truesilver Gauntlets", "Truesilver Breastplate")
 LearnNext.SPECIALISTS = {
-    [164] = { ["Grumnus Steelshaper"] = false, ["Okothos Ironrager"] = false,
-              ["Ironus Coldsteel"] = false, ["Borgosh Corebender"] = false },
+    [164] = { ["Grumnus Steelshaper"] = ARMOR_CRAFTS, ["Okothos Ironrager"] = ARMOR_CRAFTS,
+              ["Shayis Steelfury"] = ARMOR_CRAFTS,
+              ["Ironus Coldsteel"] = WEAPON_CRAFTS, ["Borgosh Corebender"] = WEAPON_CRAFTS,
+              ["Kelgruk Bloodaxe"] = WEAPON_CRAFTS, ["Borgus Steelhand"] = WEAPON_CRAFTS },
     [165] = { ["Brumn Winterhoof"] = false, ["Sarah Tanner"] = false,
               ["Peter Galen"] = false, ["Thorkaf Dragoneye"] = false,
               ["Caryssia Moonhunter"] = false, ["Se'Jib"] = false },
@@ -285,6 +294,13 @@ end
 --
 -- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID,
 --   mapID (only where the game saw a vendor stand) } or nil when neither teaches it on the player's side
+--- Whether a recipe is one of a specialist's own (see SPECIALISTS).
+local function OwnRecipe(pattern, name)
+    if type(name) ~= "string" then return false end
+    if type(pattern) == "table" then return pattern[name] == true end
+    return type(pattern) == "string" and name:find(pattern) ~= nil
+end
+
 function LearnNext:Place(record)
     if not record then return nil end
     local side = Side()
@@ -309,7 +325,7 @@ function LearnNext:Place(record)
                 local pattern = specialists[row[1]]
                 if pattern == nil then
                     plain[#plain + 1] = place
-                elseif pattern and type(record.name) == "string" and record.name:find(pattern) then
+                elseif OwnRecipe(pattern, record.name) then
                     own[#own + 1] = place
                 else
                     special[#special + 1] = place

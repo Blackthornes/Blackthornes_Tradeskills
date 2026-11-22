@@ -501,6 +501,25 @@ do
   check("a plain Artisan recipe goes to the Artisan trainer", (LN:Place(plain) or {}).name, "Daryl Stack")
   local elemental = { skillLineID = 165, skill = 240, trainerCost = 5000, name = "Volcanic Leggings" }
   check("a recipe only a specialist teaches still finds one", (LN:Place(elemental) or {}).name ~= nil, true)
+  -- Orgrimmar's and Stormwind's weapon and armor crafters teach only a few
+  -- Truesilver recipes on Forever (2026-11-22: Mithril Coif sent a Horde
+  -- smith to Kelgruk Bloodaxe; only Brikk Keencraft teaches it).
+  zoneHere = "Orgrimmar"
+  local coif = { skillLineID = 164, skill = 230, trainerCost = 15000, name = "Mithril Coif" }
+  check("Mithril Coif is learned from Brikk Keencraft", (LN:Place(coif) or {}).name, "Brikk Keencraft")
+  local plate = { skillLineID = 164, skill = 230, trainerCost = 15000, name = "Truesilver Breastplate" }
+  local armorer = (LN:Place(plate) or {}).name
+  check("Truesilver Breastplate stays with an Orgrimmar armor crafter",
+    armorer == "Okothos Ironrager" or armorer == "Shayis Steelfury", true)
+  local blade = { skillLineID = 164, skill = 235, trainerCost = 15000, name = "Phantom Blade" }
+  local smith = (LN:Place(blade) or {}).name
+  check("Phantom Blade stays with an Orgrimmar weapon crafter",
+    smith == "Kelgruk Bloodaxe" or smith == "Borgosh Corebender", true)
+  UnitFactionGroup = function() return "Alliance" end
+  zoneHere = "Stormwind City"
+  check("Alliance Mithril Coif is Brikk Keencraft's too", (LN:Place(coif) or {}).name, "Brikk Keencraft")
+  check("Stormwind's Phantom Blade is Borgus Steelhand's", (LN:Place(blade) or {}).name, "Borgus Steelhand")
+  UnitFactionGroup = function() return "Horde" end
 end
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Ironforge"
