@@ -270,6 +270,24 @@ check("with the stack total", tooltip.lines[2][2], ("<%d>"):format(2300 * 20))
 
 -- ...and only once, however many setters fire.
 check("a second count is refused", ItemTooltip:AddStackLine(tooltip, 20), false)
+
+-- The stack line is sized again a frame later, as the first lines are, so a
+-- long total is not cut at the right edge.
+do
+  local realTimer = C_Timer
+  local later = {}
+  C_Timer = { After = function(_, fn) later[#later + 1] = fn end }
+  local late = Tooltip(LINEN_CLOTH)
+  function late:IsShown() return true end
+  ItemTooltip:Decorate(late, nil, nil)
+  for _, fn in ipairs(later) do fn() end
+  later = {}
+  check("the stack total lands", ItemTooltip:AddStackLine(late, 20), true)
+  local before = late.shown
+  for _, fn in ipairs(later) do fn() end
+  check("and the tooltip is sized again on the next frame", late.shown, before + 1)
+  C_Timer = realTimer
+end
 check("still two lines", #tooltip.lines, 2)
 
 -- A client that hands the count over in time writes both at once, and the late

@@ -1353,7 +1353,10 @@ end
 local function Race()
     local ok, token = pcall(function()
         local fn = rawget(_G, "UnitRace")
-        local _, value = fn and fn("player")
+        if not fn then return nil end
+        -- The second answer is the token ("Dwarf", "Scourge"); the first is
+        -- the name in the player's language.
+        local _, value = fn("player")
         if type(value) == "string" then return value .. "" end
     end)
     return ok and token or nil

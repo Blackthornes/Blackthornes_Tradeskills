@@ -1205,7 +1205,7 @@ function ItemTooltip:AddStackLine(tooltip, count)
 
     WriteLine(tooltip, stackLine)
     Try(Field(tooltip, "Show"), tooltip)
-    self:ResizeSoon(tooltip, itemID)
+    self:ResizeSoon(tooltip, mark.itemID)
 
     self.writing = false
 
