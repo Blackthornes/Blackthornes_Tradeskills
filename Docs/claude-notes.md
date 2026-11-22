@@ -3609,3 +3609,25 @@ that, but no profit number counts it any more:
 Tested in `tools/test_craftedcost.lua`, `tools/test_uncontested.lua`,
 `tools/test_altpricing.lua`, `tools/test_demand.lua`,
 `tools/test_salesperday.lua`.
+
+## Upgrades Only on the profession window (2026-11-22)
+
+The owner asked for a box on Blizzard's profession window that shows only
+Equipment upgrades, and said build it from the mockup
+(`ts-upgrades-only-recipes.html`). `UI/UpgradesOnly.lua`: "Upgrades Only:"
+under the search box. Ticked, the recipe list holds only crafts whose made
+item passes `Upgrades:IsUpgrade` (the green arrow's answer, the character
+playing), under the headings that still hold one. Saved account wide as
+`upgradesOnlyRecipes` (never rename it), off until ticked. Shown only while
+Equipment is loaded and the arrows are on. Separate from the alt box
+("Show Equipment Upgrades", `showAltUpgrades`).
+
+How: a `hooksecurefunc` on the recipe scroll box's `SetDataProvider` builds a
+new tree from Blizzard's (Blizzard's entry tables, its tree never changed)
+and hands it over; unticked, Blizzard's latest tree goes back. A new tree is
+handed over only when the kept recipes differ. `Upgrades:RedrawSoon` calls
+`UpgradesOnly:Refilter`; item details arriving refilter after 0.5 s. The
+scroll box's top anchors move down `ROOM` (20) to fit the box and go back
+when the box goes. `/bts value` prints an "upgrades only box" line saying
+which list it found. The list path is a guess until seen in game. Tested in
+`tools/test_upgradesonly.lua`.
