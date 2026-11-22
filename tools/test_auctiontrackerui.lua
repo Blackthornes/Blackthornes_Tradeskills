@@ -360,6 +360,30 @@ AT:OnRead()
 UIx:Refresh()
 check("the thumb hides on a short list", UIx.thumb:IsShown(), false)
 
+-- 8. A long name wraps and its row grows to fit it, so it never runs
+-- into the next row; a link's name shows without its brackets.
+for k in pairs(live) do live[k] = nil end
+local longLink = "|cff1eff00|Hitem:9999::::::::18:1485:::1:12722|h[Gothic Plate Leggings of the Beast]|h|r"
+live[1] = { auctionID = 400, itemID = 9999, link = longLink, quantity = 1, unit = 900, ends = NOW + 3600 }
+live[2] = { auctionID = 401, itemID = 818, quantity = 1, unit = 5000, ends = NOW + 7200 }
+AT:OnRead()
+UIx.offset = 0
+UIx:Refresh(true)
+local long, short
+for _, widget in ipairs(UIx.pool) do
+    if widget:IsShown() and widget.data then
+        if widget.data.key == "a:400" then long = widget end
+        if widget.data.key == "a:401" then short = widget end
+    end
+end
+check("the long name has a width to wrap in", long and long.name.width > 0, true)
+check("the long row is taller than one line", long and long.height > UIx.ROW, true)
+check("the short row stays one line", short and short.height, UIx.ROW)
+check("the long name has no brackets", long and not long.name.text:find("[", 1, true), true)
+check("the long name keeps its suffix", long and long.name.text:find("of the Beast", 1, true) ~= nil, true)
+check("the next row starts below the long one", short and long
+    and short.points[1][5] <= long.points[1][5] - long.height, true)
+
 AT:SetOn(false)
 check("off again: hidden", UIx.frame:IsShown(), false)
 
