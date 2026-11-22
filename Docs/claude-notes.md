@@ -3297,7 +3297,7 @@ recipe's skill line (`Recipes.EnglishProfessionName`), else
 All; numbers a caller passes still hold for every craft),
 `SkillUp:IsWorthIt`, `Profit:MinimumProfitPrice` and the undercut check in
 `ChooseRivalPostPrice`; the last two name the profession in their "why"
-line. Deals, Disenchanting and Vendor Flips stay on the usual numbers.
+line. Deals and Vendor Flips stay on the usual numbers.
 Pricing page: "Minimums by Profession:" under Minimum Margin, one dark
 glass row per profession (`MinimumRow` in `UI/Tab_Settings.lua`, like
 `StockRow`), profit in silver with a g/s/c preview, margin with %, an x
@@ -3307,6 +3307,17 @@ some have their own with all shown. Export carries `M<Name>:profit:margin`
 ("-" for empty) in the limits section. Tested in
 `tools/test_professionminimums.lua`, `tools/test_uifit.lua` and
 `tools/test_disenchantbutton.lua`.
+
+The Disenchanting row (the owner asked 2026-11-22, from the
+"ts-minimums-disenchanting" mockup): `Profit.DISENCHANTING` ("Disenchanting")
+is always listed among the rows and saved under that name in
+`professionMinimums`. `Profit:DisenchantMinimums()` gives its numbers, else
+the usual; `Disenchant:AuctionContext` (the Disenchanting tab's buy to
+disenchant deals, its held back count and empty line) reads it.
+`HasProfessionMinimums` leaves it out, since it is not a craft. Import
+takes `MDisenchanting`. Butler's sell or disenchant picks for bag items
+use no minimums. Tested in `tools/test_professionminimums.lua`,
+`tools/test_disenchantdeals.lua` and `tools/test_uifit.lua`.
 
 ## The recipe wishlist (2026-11-17)
 

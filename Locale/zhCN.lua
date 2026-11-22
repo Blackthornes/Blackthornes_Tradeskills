@@ -2658,6 +2658,7 @@ L["Leave a box empty to use Minimum Profit and Minimum Margin above."] = "留空
 L["PROFESSION"] = "专业"
 L["Use the usual minimums for this profession again"] = "这个专业重新使用通常的最低要求"
 L["%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them."] = "%s：赚得少于 %s 或 %d%% 的制造会在利润标签页里隐藏，全部加入队列也会跳过它们。"
+L["Items on the auction house that make less than %s or %d%% when you buy and disenchant them are hidden on the Disenchanting tab."] = "拍卖行里买来分解后赚得少于 %s 或 %d%% 的物品，会在分解标签页里隐藏。"
 L["%d craft hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "有 %d 个制造被你在设置里的最低要求隐藏了。\n%s 要求 %s 利润和 %d%% 利润率。\n现在最好的能赚 %s。"
 L["%d crafts hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "有 %d 个制造被你在设置里的最低要求隐藏了。\n%s 要求 %s 利润和 %d%% 利润率。\n现在最好的能赚 %s。"
 L["%d craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s."] = "有 %d 个制造被你在设置里的最低要求隐藏了。\n有些专业有自己的数字。\n现在最好的能赚 %s。"

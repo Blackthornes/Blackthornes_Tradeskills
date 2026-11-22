@@ -862,6 +862,11 @@ ns.Profit.SetProfessionMinimum = function(_, name, field, value)
 end
 ns.Profit.ClearProfessionMinimums = function(_, name) ownMinimums[name] = nil end
 ns.Profit.MinimumsFor = function() return 500, 10 end
+ns.Profit.DISENCHANTING = "Disenchanting"
+ns.Profit.DisenchantMinimums = function()
+    local own = ownMinimums.Disenchanting or {}
+    return own.profit or 500, own.margin or 10, (own.profit or own.margin) ~= nil
+end
 ns.Auctions.StockProfessions = function() return { "Alchemy", "Cooking" } end
 ns.Auctions.ProfessionLabel = function(_, name) return name end
 ns.Auctions.GetProfessionLimit = function() return nil end
@@ -894,6 +899,30 @@ if alchemyProfit then
         if button:GetParent() == alchemyProfit:GetParent() then clear = button end
     end
     check("an x shows on a row with its own numbers", clear ~= nil, true)
+end
+
+-- The Disenchanting row (2026-11-22): always listed, saved under its name,
+-- and its tip talks about buying to disenchant, not crafts.
+local deBoxes = {}
+for _, box in ipairs(made.CreateNumberBox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Disenchanting" then deBoxes[#deBoxes + 1] = box end
+end
+check("Disenchanting gets a profit box and a margin box", #deBoxes, 2)
+if deBoxes[1] then
+    deBoxes[1].editBox:SetFocus()
+    deBoxes[1].editBox:SetText("3")
+    deBoxes[1].editBox.scripts.OnEnterPressed(deBoxes[1].editBox)
+    check("typing 3 saves 3 silver for Disenchanting", ownMinimums.Disenchanting
+        and ownMinimums.Disenchanting.profit, 300)
+    local deRow = deBoxes[1]:GetParent()
+    deRow.scripts.OnEnter(deRow)
+    check("its tip names the row", GameTooltip.lines[1], "Disenchanting")
+    check("and says what it hides", (GameTooltip.lines[2] or ""):find("buy and disenchant", 1, true) ~= nil
+        and (GameTooltip.lines[2] or ""):find("3s", 1, true) ~= nil, true)
+    deRow.scripts.OnLeave(deRow)
+    ownMinimums.Disenchanting = nil
+    UI.tabs.settings.refresh()
 end
 
 -- Pages (2026-10-08): the settings sit on category pages picked along the

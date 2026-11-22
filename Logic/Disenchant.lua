@@ -1110,11 +1110,19 @@ end
 function Disenchant:AuctionContext(opts)
     opts = opts or {}
     local skill, enchanter = self:GetBestEnchanter()
+    -- The Disenchanting row in Minimums by Profession (2026-11-22), else
+    -- the usual Minimum Profit and Minimum Margin.
+    local usualProfit = ns.Config and ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config and ns.Config:Get("minMarginPercent") or 0
+    if ns.Profit and ns.Profit.DisenchantMinimums then
+        local ok, p, m = pcall(ns.Profit.DisenchantMinimums, ns.Profit)
+        if ok and p then usualProfit, usualMargin = p, m or usualMargin end
+    end
     return {
         profitableOnly = opts.profitableOnly,
         cut = ns.Config and ns.Config:Get("auctionCut") or 0.05,
-        minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0,
-        minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100,
+        minProfit = opts.minProfit or usualProfit,
+        minMargin = (opts.minMargin or usualMargin) / 100,
         skill = skill,
         enchanter = enchanter,
         -- Only what the last scan (or a search since) actually saw. A listing

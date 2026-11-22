@@ -261,8 +261,15 @@ end
 --   [a profession's English name] = { profit = copper, margin = percent }
 -- Either can be missing, and a missing one uses minProfit or
 -- minMarginPercent. The Profit tab, Queue All, Level Up's "worth it" pick,
--- Post at Minimum Profit and the undercut check follow it. Deals,
--- Disenchanting and Vendor Flips stay on the usual numbers.
+-- Post at Minimum Profit and the undercut check follow it. Deals and
+-- Vendor Flips stay on the usual numbers.
+--
+-- The owner asked (2026-11-22, from a mockup): a "Disenchanting" row
+-- (Profit.DISENCHANTING, saved under that name in the same table) sets the
+-- numbers for buying gear on the auction house to disenchant (the
+-- Disenchanting tab's deals, Disenchant:AuctionContext). It is not a
+-- craft, so the crafts' checks (HasProfessionMinimums) leave it out.
+Profit.DISENCHANTING = "Disenchanting"
 
 --- A profession's name as the client shows it.
 local function ProfessionLabel(profession)
@@ -309,13 +316,26 @@ function Profit:ClearProfessionMinimums(profession)
     if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
 end
 
---- Does any profession have a number of its own?
+--- Does any profession have a number of its own? (Disenchanting is not
+--- a craft and doesn't count.)
 function Profit:HasProfessionMinimums()
     for profession in pairs(ns.db and ns.db.professionMinimums or {}) do
-        local profit, margin = self:GetProfessionMinimums(profession)
-        if profit or margin then return true end
+        if profession ~= Profit.DISENCHANTING then
+            local profit, margin = self:GetProfessionMinimums(profession)
+            if profit or margin then return true end
+        end
     end
     return false
+end
+
+--- The Minimum Profit (copper) and Minimum Margin (percent) a gear piece
+--- bought to disenchant must clear: the Disenchanting row's own, else the
+--- usual. The third value is true when one of its own was used.
+function Profit:DisenchantMinimums()
+    local profit = ns.Config:Get("minProfit") or 0
+    local margin = ns.Config:Get("minMarginPercent") or 0
+    local ownProfit, ownMargin = self:GetProfessionMinimums(Profit.DISENCHANTING)
+    return ownProfit or profit, ownMargin or margin, (ownProfit or ownMargin) ~= nil
 end
 
 --- The English name of the profession a recipe, an analysis, an item or a

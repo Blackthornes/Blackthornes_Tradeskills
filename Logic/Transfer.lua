@@ -223,7 +223,8 @@ function Transfer:Import(code)
 
                     local squashedMin, profit, margin = record:match(
                         "^M(%a+)" .. FIELD_SEP .. "([%d%-]+)" .. FIELD_SEP .. "([%d%-]+)$")
-                    local minProfession = squashedMin and ProfessionFromCode(squashedMin)
+                    local minProfession = squashedMin and (ProfessionFromCode(squashedMin)
+                        or (ns.Profit and squashedMin == ns.Profit.DISENCHANTING and squashedMin))
                     if minProfession and ns.Profit and ns.Profit.SetProfessionMinimum then
                         ns.Profit:SetProfessionMinimum(minProfession, "profit", tonumber(profit))
                         ns.Profit:SetProfessionMinimum(minProfession, "margin", tonumber(margin))

@@ -203,6 +203,29 @@ check("import brings them back", ok and ns.db.professionMinimums.Alchemy
     and ns.db.professionMinimums.Alchemy.margin == nil
     and ns.db.professionMinimums.Leatherworking.profit == 1000, true)
 
+-- The Disenchanting row (2026-11-22): buying gear to disenchant.
+ns.db.professionMinimums = {}
+local p, m, own = Profit:DisenchantMinimums()
+check("Disenchanting blank: the usual profit", p, 500)
+check("Disenchanting blank: the usual margin", m, 10)
+check("Disenchanting blank: not its own", own, false)
+Profit:SetProfessionMinimum(Profit.DISENCHANTING, "profit", 2000)
+p, m, own = Profit:DisenchantMinimums()
+check("Disenchanting's own profit wins", p, 2000)
+check("its empty margin uses the usual", m, 10)
+check("and says it is its own", own, true)
+check("saved under Disenchanting", ns.db.professionMinimums.Disenchanting.profit, 2000)
+check("crafts don't count it as a profession's own", Profit:HasProfessionMinimums(), false)
+check("crafts keep the usual numbers", (Profit:MinimumsFor(recipesByID[1])), 500)
+code = ns.Transfer:Export()
+check("the code carries Disenchanting", code:find("MDisenchanting:2000:-", 1, true) ~= nil, true)
+ns.db.professionMinimums = {}
+ok = ns.Transfer:Import(code)
+check("import brings Disenchanting back", ok and ns.db.professionMinimums.Disenchanting
+    and ns.db.professionMinimums.Disenchanting.profit == 2000, true)
+Profit:ClearProfessionMinimums(Profit.DISENCHANTING)
+check("x puts Disenchanting back to the usual", (Profit:DisenchantMinimums()), 500)
+
 if failures > 0 then
     error(string.format("%d minimums by profession check(s) failed", failures), 0)
 end

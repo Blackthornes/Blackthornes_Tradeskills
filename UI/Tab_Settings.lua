@@ -2779,6 +2779,8 @@ local function MinimumProfessions()
         for _, name in ipairs(ns.Auctions:StockProfessions()) do Add(name) end
     end
     for name in pairs(ns.db and ns.db.professionMinimums or {}) do Add(name) end
+    -- Buying gear to disenchant (2026-11-22): always offered.
+    if ns.Profit and ns.Profit.DISENCHANTING then Add(ns.Profit.DISENCHANTING) end
     table.sort(list)
     return list
 end
@@ -2793,6 +2795,13 @@ local function ShowMinimumTip(row)
     GameTooltip:ClearAllPoints()
     GameTooltip:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -2)
     GameTooltip:SetText(row.label:GetText() or row.profession, Theme.Unpack("accent"))
+    if row.profession == ns.Profit.DISENCHANTING then
+        profit, margin = ns.Profit:DisenchantMinimums()
+        GameTooltip:AddLine(L.Format("Items on the auction house that make less than %s or %d%% when you buy and disenchant them are hidden on the Disenchanting tab.",
+            Util.FormatMoney(profit or 0, { noColor = true, short = true }), margin or 0), 1, 1, 1, true)
+        GameTooltip:Show()
+        return
+    end
     GameTooltip:AddLine(L.Format("%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them.",
         row.label:GetText() or row.profession,
         Util.FormatMoney(profit or 0, { noColor = true, short = true }), margin or 0), 1, 1, 1, true)
