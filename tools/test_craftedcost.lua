@@ -60,6 +60,13 @@ ns.Profit = {
   end,
 }
 
+local marketValue = {}
+ns.Prices = {
+  GetValue = function(_, itemID, which)
+    if which == "market" then return marketValue[itemID] end
+  end,
+}
+
 ns.db = {}
 
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/CraftedCost.lua"))
@@ -122,6 +129,17 @@ check("a given price at a loss", lines[3][2], "-250c at 1000c")
 check("in loss red", lines[3].color, "loss")
 postPrice[BOLT] = { 2000, "derived" }
 check("no profit on an estimate", #CC:Lines(BOLT), 2)
+-- A player's report (2026-11-22): the only listing was their own, so the
+-- price was the materials plus the markup (8g), while what it sold for was
+-- 5g. The profit line has to use what it sold for, as Level Up does.
+postPrice[BOLT] = { 2000, "uncontested" }
+marketValue[BOLT] = 1100
+lines = CC:Lines(BOLT)
+check("only your own listing: three lines", #lines, 3)
+check("profit at what it sold for, not the markup", lines[3][2], "-155c at 1100c")
+check("a loss in red", lines[3].color, "loss")
+marketValue[BOLT] = nil
+check("no market value either: no profit line", #CC:Lines(BOLT), 2)
 
 print("\nwhat a sale made")
 -- BOLT was last made for 1200 at `now`.

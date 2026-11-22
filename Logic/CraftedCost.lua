@@ -300,9 +300,20 @@ function CraftedCost:Lines(itemID, price)
     -- profit is worked out on it.
     -- The market's price, not Post at Minimum Profit's, so this says what
     -- others pay now.
+    -- When every listing is yours ("uncontested") the price is that same
+    -- materials-plus-markup estimate, so the market value stands instead,
+    -- as on Level Up (a player's report, 2026-11-22: 8g shown, 5g paid).
     if not price and ns.Profit and ns.Profit.ChoosePostPrice then
         local ok, chosen, basis = pcall(ns.Profit.ChoosePostPrice, ns.Profit, itemID)
-        if ok and basis ~= "derived" then price = chosen end
+        if ok and basis == "uncontested" then
+            local okMarket, market = false, nil
+            if ns.Prices and ns.Prices.GetValue then
+                okMarket, market = pcall(ns.Prices.GetValue, ns.Prices, itemID, "market")
+            end
+            price = okMarket and type(market) == "number" and market > 0 and math.floor(market) or nil
+        elseif ok and basis ~= "derived" then
+            price = chosen
+        end
     end
 
     local profit = price and self:ProfitAt(itemID, price)
