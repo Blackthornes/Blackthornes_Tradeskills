@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.38.0
+
+- Panels and rows have a warm brown-black look.
+- The main window has a slimmer frame.
+- One-line rows can be Compact if you like.
+- Item rows link in chat and try on gear.
+- Recipes to Learn shows the Profit: choice.
+- Tradeskills has a line in the game's Options.
+
 ## 1.37.0
 
 - The Buy Materials button stays on the vendor window when Butler is loaded.

@@ -5,6 +5,14 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.38.0", lines = {
+        "Panels and rows have a warm brown-black look.",
+        "The main window has a slimmer frame.",
+        "One-line rows can be Compact if you like.",
+        "Item rows link in chat and try on gear.",
+        "Recipes to Learn shows the Profit: choice.",
+        "Tradeskills has a line in the game's Options.",
+    } },
     { version = "1.37.0", lines = {
         "The Buy Materials button stays on the vendor window when Butler is loaded.",
         "Each suffix on the Prices tab shows its own price graph and Stats.",
@@ -12,9 +20,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.36.0", lines = {
         "Random suffix items open on the Prices tab to show a price for each suffix.",
-    } },
-    { version = "1.35.0", lines = {
-        "Every window has a gold gem on its title bar. Click it to switch between the one window and separate windows.",
-        "Road to 300 learns the recipes a profession trainer teaches when you open one.",
     } },
 }
