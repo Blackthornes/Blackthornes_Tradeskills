@@ -1596,8 +1596,12 @@ function UpdateDetail(analysis)
             -- materials rather than anything the book says. Checked before
             -- "You hold lowest" below, which is the same situation described
             -- less usefully: what matters is where the price came from.
+            -- What the Sell tab lists at; the sale price above is now the
+            -- market value the profit is counted at.
             detail.rivalLabel:SetText(L["No competition"])
-            detail.rivalValue:SetText(L["materials + markup"])
+            detail.rivalValue:SetText(analysis.listsAt
+                and WithYield(Util.FormatMoney(analysis.listsAt), analysis.yield)
+                or L["materials + markup"])
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
         elseif analysis.youHoldLowest then
             -- Your own auction is the cheapest. Undercutting it would just walk

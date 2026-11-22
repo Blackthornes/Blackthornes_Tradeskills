@@ -32,6 +32,12 @@ local OWN_HIGH, OWN_SOME = 0.6, 0.3
 
 -- Share of the listed stock gone per day.
 local MARKET_HIGH, MARKET_SOME = 0.30, 0.10
+-- Listings gone from the auction house before the market's reading says
+-- anything. With one or two up, one going away (sold, expired or pulled)
+-- read as "100% of stock sells daily" (a player's report, 2026-11-22; the
+-- owner said build it from a mockup).
+local MARKET_MIN_GONE = 3
+Demand.MARKET_MIN_GONE = MARKET_MIN_GONE
 
 local LEVELS = {
     high = { label = L["High"], color = "profit", rank = 3 },
@@ -157,6 +163,10 @@ function Demand:Get(itemID)
 
     local ok, rate = pcall(ns.Prices.GetSalesPerDay, ns.Prices, itemID)
     if not ok or not rate then return nil end
+    if ns.Prices.GetListingsGone then
+        local okGone, gone = pcall(ns.Prices.GetListingsGone, ns.Prices, itemID)
+        if not okGone or (tonumber(gone) or 0) < MARKET_MIN_GONE then return nil end
+    end
 
     return {
         level = Demand.MarketLevel(rate, itemID),
