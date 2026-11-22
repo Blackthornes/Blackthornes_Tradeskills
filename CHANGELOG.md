@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.39.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Auction House tab.** The sell list no longer folds into its round button while it is a tab in the One Window, so the tab is never empty. The Crafting tab does the same.
+- **My Auctions.** Rows grow to fit a long item name, so names no longer run into the rows below. Gear with a random suffix shows its full name, like "of the Beast", without brackets.
+
 ## 1.39.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
