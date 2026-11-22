@@ -12,6 +12,9 @@ For WoW: Forever (interface 16001). `/reload` is enough after updating.
 - **Disenchanting.** Minimums by Profession on the Pricing page of Settings has a Disenchanting row. Its Minimum Profit and Minimum Margin set which auction house gear counts as a deal to buy and disenchant. Blank uses the usual numbers.
 - **One Window.** Folding the One Window no longer shuts it for good. It opens full from its button.
 - **Road to 300.** Blacksmithing recipes like Mithril Coif go to the trainer who teaches them.
+- **Profit Now.** When every listing is yours, the tooltip counts profit at what the item last sold for, and shows no line when there is none.
+- **Profit tab.** When nobody else is selling, the Profit tab counts the market value, not the materials plus the markup. The detail pane shows the price the Sell tab lists at. Listing is unchanged.
+- **Demand.** The market reading waits until three listings are gone from the auction house.
 
 ## 1.38.0
 

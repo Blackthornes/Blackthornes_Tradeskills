@@ -31,6 +31,8 @@ tool prints a note for a shipped line that reads like an advert.
 Fixes and changes:
 - Folding the One Window no longer shuts it for good.
 - Road to 300 sends smiths to the trainer who teaches the recipe.
+- Profit Now and the Profit tab count what an item sold for when nobody else is selling.
+- Demand waits for three listings to be gone before it reads a market.
 
 ## 1.38.0
 
