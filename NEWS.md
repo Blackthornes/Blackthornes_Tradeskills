@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.40.0
+
+- A new Upgrades Only box on the profession window lists only the crafts that are upgrades for you.
+
+Fixes and changes:
+- A quick full scan that you stop keeps its prices.
+
+
 ## 1.39.2
 
 Fixes and changes:
