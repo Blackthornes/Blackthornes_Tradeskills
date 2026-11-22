@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.39.2
+
+Fixes and changes:
+- Road to 300 Fishing sends every race to the right zones.
+- Shuffle no longer shows an error on a recipe with no top yield.
+- The bag stack total on item tooltips stays inside the tooltip.
+
 ## 1.39.1
 
 Fixes and changes:
