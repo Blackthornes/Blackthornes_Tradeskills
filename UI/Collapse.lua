@@ -2,6 +2,8 @@
 -- The header strip on the side panels, and the fold button that folds a
 -- panel down to that strip and opens it back up: the gold gem on the
 -- panel's trim, beside its close gem (2026-10-27, as on every other window).
+-- On a house frame the gem folds the panel into a round button instead
+-- (UI/FoldWindow.lua, 2026-11-22), still remembered between sessions.
 --
 -- The sell list and the craft pane both sit beside a Blizzard window and take
 -- up a lot of the screen. Closing them outright means losing them until the
@@ -42,8 +44,13 @@ function Collapse.IsCollapsed(key)
     return ns.Config ~= nil and ns.Config:Get(key) == true
 end
 
+-- Panels on a house frame fold into a round button instead
+-- (UI/FoldWindow.lua, 2026-11-22): they keep their full height.
+Collapse.round = {}
+
 --- The height a panel should take: its header strip when folded, else `full`.
 function Collapse.Height(key, full)
+    if Collapse.round[key] then return full end
     if Collapse.IsCollapsed(key) then return Collapse.HEIGHT end
     return full
 end
@@ -288,8 +295,25 @@ function Collapse.Attach(frame, opts)
     end
 
     local trim = type(frame) == "table" and rawget(frame, "titan") or nil
+    local FoldWindow = ns.FoldWindow
     local button
-    if trim and type(CreateFrame) == "function" then
+    if trim and type(CreateFrame) == "function" and FoldWindow and FoldWindow.Join then
+        -- Folds into a round button, and stays one each time the panel comes
+        -- back with its game window, until the button is clicked.
+        Collapse.round[opts.key] = true
+        FoldWindow:Join(frame, { key = opts.key, onToggle = function(folded, closing)
+            if folded then return end
+            if not closing then ns.Config:Set(opts.key, false) end
+            if opts.onToggle then opts.onToggle(false) end
+        end })
+        button = CreateGem(trim, function()
+            ns.Config:Set(opts.key, true)
+            if not FoldWindow:Fold(frame) then ns.Config:Set(opts.key, false) end
+        end)
+        if type(frame.HookScript) == "function" then
+            frame:HookScript("OnShow", function() Collapse.Apply(frame) end)
+        end
+    elseif trim and type(CreateFrame) == "function" then
         button = CreateGem(trim, Toggle)
     else
         button = ns.Widgets.CreateButton(opts.header, "-", Toggle, { width = BUTTON_SIZE, height = BUTTON_SIZE })
@@ -313,6 +337,18 @@ function Collapse.Apply(frame)
     if not state then return end
 
     local collapsed = Collapse.IsCollapsed(state.key)
+
+    if Collapse.round[state.key] then
+        UpdateButton(state.button, false)
+        local FoldWindow = ns.FoldWindow
+        if collapsed and not FoldWindow:IsFolded(frame) then
+            local function Fold()
+                if Collapse.IsCollapsed(state.key) and frame:IsShown() then FoldWindow:Fold(frame) end
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0, Fold) else Fold() end
+        end
+        return
+    end
 
     state.body:SetShown(not collapsed)
     UpdateButton(state.button, collapsed)

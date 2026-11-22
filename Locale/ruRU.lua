@@ -262,6 +262,9 @@ L["check the cast bar is kept on top while crafting"] = "проверяет, о�
 
 -- UI/Collapse.lua
 L["Expand this window"] = "Развернуть это окно"
+L["Click to open it again."] = "Нажми, чтобы открыть снова."
+L["Drag to move it."] = "Перетащи, чтобы сдвинуть."
+L["Opens to %s."] = "Откроется на вкладке %s."
 L["Split Into Own Windows"] = "Разделить на отдельные окна"
 L["Gives each addon its own window again."] = "Снова даёт каждому аддону своё окно."
 L["You can join them back with this same button."] = "Этой же кнопкой ты можешь снова их объединить."

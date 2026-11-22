@@ -381,6 +381,8 @@ function AuctionTrackerUI:Build()
     local gems = ns.HouseKit and ns.HouseKit.CreatePanelGems and ns.HouseKit.CreatePanelGems(header, {
         onFold = function(folded) AuctionTrackerUI:SetFolded(folded) end,
         onClose = function() if Logic() then Logic():SetOn(false) end end,
+        -- Folds into a round button (UI/FoldWindow.lua, 2026-11-22).
+        round = { frame = frame, key = "MyAuctions", title = L["My Auctions"] },
     })
     self.gems = gems
 
