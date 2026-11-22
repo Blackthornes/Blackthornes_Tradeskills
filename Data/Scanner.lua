@@ -39,6 +39,12 @@ local QUICK_SCAN_WAIT = 30
 -- quick scan is ready again by then.
 Scanner.AUTO_QUICK_AFTER = 15 * 60
 
+-- A quick scan cut short by leaving the auction house is read again on the
+-- way back in, when that is within this long of asking for it. The game
+-- keeps the rows it sent, and will not send new ones for fifteen minutes.
+-- Short, so the prices are still close to what is listed.
+Scanner.REREAD_WITHIN = 5 * 60
+
 -- A browse sweep that never reports itself complete would otherwise page for
 -- ever, one throttled request at a time.
 local MAX_BROWSE_PAGES = 40
@@ -1016,6 +1022,13 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     -- Only an answer to our own request: another addon can ask too.
     if not self.awaitingReplicate or self.isReading then return end
 
+    -- The answer to a scan the player walked away from, with the auction
+    -- house shut. Its rows wait for the next visit (ReadWaitingSnapshot).
+    if self.stoppedWaiting and not self.isAuctionHouseOpen then
+        self.replicateUnread = true
+        return
+    end
+
     local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
     local answered = ok and type(numItems) == "number" and numItems > 0
 
@@ -1038,6 +1051,16 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
 
     self.awaitingReplicate = false
 
+    -- The answer to a scan that was stopped while it waited (Cancel, or the
+    -- auction house shut and opened again). The game has counted the scan
+    -- and will not answer another for fifteen minutes, so the answer is
+    -- read all the same: quietly, behind the player's listing, and never
+    -- page by page. One that takes over from a new scan speaks as before.
+    if self.stoppedWaiting then
+        self.stoppedWaiting = nil
+        if not late then self.quickOnly = true end
+    end
+
     if not answered and self.quickOnly then
         self:StopQuickOnly()
         return
@@ -1055,6 +1078,44 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     self.isScanning = true
 
     self:ReadReplicateResults(numItems)
+end
+
+--- Read a quick scan's rows that were never read to the end: the auction
+--- house shut while they were being read, or before they came. Called when
+--- the auction house opens again. Quiet, like the auto scan's quick scan.
+-- @return true when a read started
+function Scanner:ReadWaitingSnapshot()
+    if not self.replicateUnread then return false end
+    if not self.isAuctionHouseOpen or self.isScanning or self.isReading
+        or self.scanQueued or self.browseQueued then
+        return false
+    end
+    self.replicateUnread = nil
+
+    local sent = ns.db and ns.db.lastReplicateRequest
+    if not sent or time() - sent > Scanner.REREAD_WITHIN then
+        -- Too old to pass off as prices read just now. Nothing is waited
+        -- for any longer either.
+        self.awaitingReplicate = false
+        self.stoppedWaiting = nil
+        return false
+    end
+
+    local ok, numItems = pcall(function() return C_AuctionHouse.GetNumReplicateItems() end)
+    if not (ok and type(numItems) == "number" and numItems > 0) then return false end
+
+    self.awaitingReplicate = false
+    self.stoppedWaiting = nil
+    self.quickOnly = true
+    self.isScanning = true
+    self.scanStartedAt = GetTime()
+    -- From when it was asked for, so a price a search wrote since then is
+    -- not taken for sold out (Prices:ClearMissing).
+    self.scanStartedWall = sent
+    ns.db.lastReplicateAnswered = ns.db.lastReplicateAnswered or time()
+
+    self:ReadReplicateResults(numItems, true)
+    return true
 end
 
 --- The auto scan's quick scan gave nothing back: stand down, saying nothing.
@@ -1080,7 +1141,9 @@ function Scanner:StopBrowse()
 end
 
 --- Walk the snapshot, accumulating per-item listings.
-function Scanner:ReadReplicateResults(numItems)
+-- @param reread true for rows read again after the auction house was shut
+--        (ReadWaitingSnapshot): the game may no longer hand them out.
+function Scanner:ReadReplicateResults(numItems, reread)
     -- An automatic quick scan reads its answer without a word in chat.
     local Say = self.quickOnly and ns.Debug or ns.Print
     self.isReading = true
@@ -1272,6 +1335,15 @@ function Scanner:ReadReplicateResults(numItems)
             local startedWall = self.scanStartedWall
             local now = time()
 
+            -- Rows the game would not hand out a second time are no scan
+            -- at all: nothing is stamped and nothing is marked sold out.
+            if reread and not next(observations) then
+                self.isScanning = false
+                self.isReading = false
+                if ns.UI and ns.UI.OnScanComplete then ns.UI:OnScanComplete() end
+                return
+            end
+
             local recorded = KeepRead(now, false)
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 
@@ -1355,7 +1427,12 @@ function Scanner:CancelScan()
     self.isBrowsing = false
     self.scanQueued = false
     self.browseQueued = false
-    self.awaitingReplicate = false
+
+    -- A quick scan already sent is still listened for. The game counted it
+    -- when it was sent and will not answer another for fifteen minutes, so
+    -- dropping the answer here left the player with no prices and the wait
+    -- (a player's report, 2026-11-22). See REPLICATE_ITEM_LIST_UPDATE.
+    if self.awaitingReplicate then self.stoppedWaiting = true end
 
     -- A cancelled sweep's last page must not stand in for the next sweep's
     -- rows, where it would be recorded as prices read just now.
@@ -2237,7 +2314,10 @@ function Scanner:AUCTION_HOUSE_SHOW()
     -- strictly needs, on purpose: the player often opens the house to post
     -- something, and a sweep starting underneath their first click is how their
     -- own listing ended up refused for going too fast.
-    C_Timer.After(3, function() Scanner:ConsiderAutoScan() end)
+    C_Timer.After(3, function()
+        -- First the rows of a quick scan the last visit cut short.
+        if not Scanner:ReadWaitingSnapshot() then Scanner:ConsiderAutoScan() end
+    end)
 end
 
 --- Scan without being asked when there is nothing useful to work from.
@@ -2299,6 +2379,9 @@ end
 function Scanner:AUCTION_HOUSE_CLOSED()
     self.isAuctionHouseOpen = false
     self.settledSearchDisplay = false
+    -- Rows still being read are kept as far as they got (CancelScan), and
+    -- read to the end on the way back in (ReadWaitingSnapshot).
+    if self.isReading then self.replicateUnread = true end
     self:CancelScan()
 end
 
