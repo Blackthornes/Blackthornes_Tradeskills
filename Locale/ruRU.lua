@@ -2662,6 +2662,7 @@ L["Leave a box empty to use Minimum Profit and Minimum Margin above."] = "Ост
 L["PROFESSION"] = "ПРОФЕССИЯ"
 L["Use the usual minimums for this profession again"] = "Снова брать обычные минимумы для этой профессии"
 L["%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them."] = "%s: создания, которые приносят меньше %s или %d%%, скрыты на вкладке «Прибыль», и «Всё в очередь» их пропускает."
+L["Items on the auction house that make less than %s or %d%% when you buy and disenchant them are hidden on the Disenchanting tab."] = "Предметы на аукционе, которые приносят меньше %s или %d%%, если их купить и распылить, скрыты на вкладке «Распыление»."
 L["%d craft hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "Создание скрыто твоими минимумами в настройках: %1$d.\n%2$s просит %3$s прибыли и %4$d%% навара.\nЛучшее сейчас приносит %5$s."
 L["%d crafts hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "Скрыто созданий твоими минимумами в настройках: %1$d.\n%2$s просит %3$s прибыли и %4$d%% навара.\nЛучшее сейчас приносит %5$s."
 L["%d craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s."] = "Создание скрыто твоими минимумами в настройках: %1$d.\nУ некоторых профессий свои.\nЛучшее сейчас приносит %2$s."

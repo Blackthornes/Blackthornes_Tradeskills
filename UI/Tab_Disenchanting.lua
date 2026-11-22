@@ -79,6 +79,17 @@ local MAX_COLUMNS = 6
 -- Any column but the item's name can be hidden, each view on its own
 -- (UI/Columns.lua).
 local LIST_IDS = { auction = "disenchant", bag = "disenchantbags", material = "disenchantmaterial" }
+--- The Minimum Profit (copper) and Minimum Margin (percent) the deals
+--- here must clear: the Disenchanting row in Minimums by Profession, else
+--- the usual ones.
+local function DisenchantMinimums()
+    if ns.Profit and ns.Profit.DisenchantMinimums then
+        local ok, profit, margin = pcall(ns.Profit.DisenchantMinimums, ns.Profit)
+        if ok and profit then return profit, margin or 0 end
+    end
+    return ns.Config:Get("minProfit") or 0, ns.Config:Get("minMarginPercent") or 0
+end
+
 ns.Columns:Register("disenchant", L["Disenchanting: auction house"], VIEWS.auction.columns)
 ns.Columns:Register("disenchantbags", L["Disenchanting: my bags"], VIEWS.bag.columns)
 ns.Columns:Register("disenchantmaterial", L["Disenchanting: find a material"], VIEWS.material.columns)
@@ -998,8 +1009,8 @@ local function BuildKey()
         -- Your own disenchants taking over from the built-in table.
         tostring(ns.DisenchantLog and ns.DisenchantLog.version or 0),
         tostring(state.dealsOnly),
-        tostring(ns.Config:Get("minProfit")),
-        tostring(ns.Config:Get("minMarginPercent")),
+        tostring((DisenchantMinimums())),
+        tostring(select(2, DisenchantMinimums())),
         tostring(ns.Config:Get("auctionCut")),
         tostring(skill),
         tostring(ns.Scanner and ns.Scanner.isAuctionHouseOpen and true or false),
@@ -1151,8 +1162,8 @@ local function EmptyText()
         if state.hidden > 0 then
             text = text .. L.Format(" %d more would make a profit, but less than your minimums in Settings (%s profit, %d%% margin).",
                 state.hidden,
-                Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
-                ns.Config:Get("minMarginPercent") or 0)
+                Util.FormatMoney((DisenchantMinimums()), { noColor = true, short = true }),
+                select(2, DisenchantMinimums()))
         end
 
         return text .. L[" Untick \"Only deals over my minimums\" to see them all."]

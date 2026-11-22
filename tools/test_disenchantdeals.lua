@@ -177,6 +177,23 @@ deals = Disenchant:GetAuctionRows({ profitableOnly = true })
 check("Minimum margin holds the 94% chest back", Find(deals, 2001) == nil)
 config.minMarginPercent = 0
 
+-- The Disenchanting row in Minimums by Profession (2026-11-22) wins over
+-- the usual numbers; a blank box uses them.
+local own = { profit = 500 }
+ns.Profit = { DisenchantMinimums = function()
+    return own.profit or config.minProfit, own.margin or config.minMarginPercent
+end }
+deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("the Disenchanting row's 500 holds the 474 chest back", Find(deals, 2001) == nil)
+check("the gloves still clear the row's number", Find(deals, 2003) ~= nil)
+check("and the held back count follows it", hidden >= 1)
+config.minProfit = 1000000
+own = { profit = 0 }
+deals = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("the row's 0 shows the chest under a big usual minimum", Find(deals, 2001) ~= nil)
+config.minProfit = 0
+ns.Profit = nil
+
 print("\nwho can disenchant it")
 
 Enchanter(10)

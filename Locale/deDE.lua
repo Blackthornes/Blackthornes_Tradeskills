@@ -2660,6 +2660,7 @@ L["Leave a box empty to use Minimum Profit and Minimum Margin above."] = "Lass e
 L["PROFESSION"] = "BERUF"
 L["Use the usual minimums for this profession again"] = "Für diesen Beruf wieder die üblichen Mindestwerte nutzen"
 L["%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them."] = "%s: Herstellungen, die weniger als %s oder %d%% bringen, werden auf dem Reiter Gewinn ausgeblendet, und Alle auf Liste lässt sie aus."
+L["Items on the auction house that make less than %s or %d%% when you buy and disenchant them are hidden on the Disenchanting tab."] = "Gegenstände im Auktionshaus, die dir beim Kaufen und Entzaubern weniger als %s oder %d%% bringen, werden auf dem Reiter Entzaubern ausgeblendet."
 L["%d craft hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "%d Herstellung durch deine Mindestwerte in den Einstellungen ausgeblendet.\n%s will %s Gewinn und %d%% Marge.\nDie beste bringt gerade %s."
 L["%d crafts hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s."] = "%d Herstellungen durch deine Mindestwerte in den Einstellungen ausgeblendet.\n%s will %s Gewinn und %d%% Marge.\nDie beste bringt gerade %s."
 L["%d craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s."] = "%d Herstellung durch deine Mindestwerte in den Einstellungen ausgeblendet.\nManche Berufe haben eigene.\nDie beste bringt gerade %s."
