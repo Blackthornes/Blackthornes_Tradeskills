@@ -180,7 +180,7 @@ function UI:Build()
     -- The fold gem beside the close gem folds the window down to its plate
     -- (UI/FoldWindow.lua, a player asked, 2026-10-24).
     if ns.FoldWindow then
-        ns.FoldWindow:Add(window, { onToggle = function(folded)
+        ns.FoldWindow:Add(window, { key = "Main", onToggle = function(folded)
             if ns.PostPanel then ns.PostPanel:Reflow() end
             if not folded then UI:RefreshActiveTab() end
         end })
@@ -3147,4 +3147,9 @@ end
 function TSTabs:SwapHide()
     if self.area then return end
     if TSShown(UI.window) then UI:Hide() end
+end
+
+-- Kept folded through a /reload, its round button opens it (UI/FoldWindow.lua).
+if ns.FoldWindow and ns.FoldWindow.Opener then
+    ns.FoldWindow:Opener("Main", { open = function() UI:Show() end })
 end

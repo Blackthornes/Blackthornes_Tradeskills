@@ -2222,6 +2222,47 @@ over a button the game guards. With the Blizzard style it is the game's
 own minimize and maximize art when the client has it. Tooltips "Collapse
 this window" and "Expand this window"; nothing is saved. Here: the main window (`UI/Main.lua`).
 
+
+The round button (the owner tapped Build it on the mockup, 2026-11-22, in
+all five): the fold gem now folds a window into a round button, the
+addon's `Media/Frame/Portrait.tga` ring with its `Emblem.tga` inside
+(`FoldWindow.SIZE` 46), on the window's top left corner
+(`FoldWindow.OUT` 8 past it). The strip and `FoldWindow.HEIGHT` are gone.
+Folded, the window stays shown but empty: every region and child hides
+(kept hidden by the same hooks as before), it takes no clicks or wheel,
+and its name leaves `UISpecialFrames` so Escape leaves it alone. A click
+on the button opens it (`Unfold`), at the same size; dragged, the window
+opens where the button is and hears its own `OnDragStop`, so it keeps that
+spot. The button stays on screen, and a newer one steps down off an older
+one it would cover (`FoldWindow.Unstack`, across all five through
+`_G.BlackthornesFoldHub`). Saved account wide as `foldedWindows[key] =
+true` and the button's spot as `windowSpots["fold:" .. key]` (screen
+pixels, like `KeepSpot`; never rename either), through
+`SharedWindow.ReadSave`/`WriteSave` (FILE_VERSION 15). Keys are the
+addon's folder name, ":" and the `key` given (else the frame's name); the
+one window's is `BlackthornesOneWindow` (shared). After a /reload a window
+up at login folds again with its button where it was left (the first show
+since login only); one not up comes back as a button `RESTORE_AFTER` (2)
+seconds after login when an opener was given with `FoldWindow:Opener(key,
+{ open })` at load time, else it opens full next time. Opened by a command
+while that button waits, it opens full and the button goes. Closing a
+folded window (a `Hide` call) opens it full next time. Panels that stay up
+(HouseKit `CreatePanelGems`) pass `round = { frame, key, title, pill,
+line, onToggle }` and fold the same way (`FoldWindow:Join`). Tooltip: the
+window's name in gold (the plate's words or `title`), its own `line`,
+"Click to open it again." and grey "Drag to move it."; `pill` is the small
+number under it, `FoldWindow:Refresh(frame)` updates both. The one window
+uses `MinimapBadge.tga` and "Opens to %s." (the addon picked last); only
+the copy that draws it brings its button back. Tested in
+`tools/test_foldwindow.lua` (the same in all five).
+
+Here, the main window (opener `Main`), My Auctions (`round` key
+`MyAuctions`) and the side panels through `UI/Collapse.lua`: on a house
+frame the gem saves its settings key as before and folds the panel into a
+round button (`Collapse.round[key]`, full height kept); each time the
+panel comes back with its game window it folds again until the button is
+clicked.
+
 ## The Blizzard window style
 
 The owner asked (2026-10-10) for a choice of the game's own look beside
@@ -3358,7 +3399,7 @@ shows two panes and splits ("Split Into Own Windows"); on an own window it
 shows one pane with a rail line and joins ("Join Into One Window"). Floating
 arrows, bars, trackers, the Zone Board and similar pieces get none.
 
-- `UI/SharedWindow.lua` (FILE_VERSION 14, the same in all five):
+- `UI/SharedWindow.lua` (FILE_VERSION 15 since the round button, the same in all five):
   `SharedWindow.AddSwap(frame, key)` puts the gem on a dressed window's
   trim (so it hides with the trim inside the one window); `key` nil is the
   one window. `SharedWindow.Swap(key, join)` is its click. Split: the

@@ -50,7 +50,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 14
+local FILE_VERSION = 15
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -193,6 +193,22 @@ local function WriteAll(key, value)
         local db = SaveOf(entry)
         if db then db[key] = value end
     end
+end
+
+-- For the round button (UI/FoldWindow.lua): foldedWindows and its spots in
+-- windowSpots, read and written as the window spots are.
+-- WriteSave answers how many saves took it.
+SharedWindow.ReadSave = Read
+function SharedWindow.WriteSave(key, value)
+    local count = 0
+    for _, entry in pairs(hub.entries) do
+        local db = SaveOf(entry)
+        if db then
+            db[key] = value
+            count = count + 1
+        end
+    end
+    return count
 end
 
 --- Whether the one window is on: the newest answer any save holds, on when
@@ -483,6 +499,26 @@ local function MakeGrip(frame)
     return grip
 end
 
+--- Folded, the one window is one round button with the house badge, and
+--- it opens to the addon picked last (UI/FoldWindow.lua). After a /reload
+--- only the copy that draws the window brings its button back.
+function SharedWindow.FoldOptions()
+    return {
+        key = "BlackthornesOneWindow", shared = true, title = PLATE,
+        emblem = ([[Interface\AddOns\%s\Media\Frame\MinimapBadge]]):format(ADDON),
+        line = function()
+            local entry = SharedWindow.Picked()
+            if entry and entry.name then return (L["Opens to %s."]):format(tostring(entry.name)) end
+            return nil
+        end,
+        open = function() SharedWindow.Open() end,
+        mine = function() return IsDrawer() end,
+    }
+end
+if ns.FoldWindow and ns.FoldWindow.Opener then
+    pcall(ns.FoldWindow.Opener, ns.FoldWindow, "BlackthornesOneWindow", SharedWindow.FoldOptions())
+end
+
 function SharedWindow.Build()
     if hub.frame then return hub.frame end
     if not IsDrawer() or not CreateFrame or not UIParent then return nil end
@@ -537,7 +573,7 @@ function SharedWindow.Build()
         Theme.Border(frame, "borderLit")
     end
     if ns.FoldWindow and ns.FoldWindow.Add and rawget(frame, "trim") then
-        pcall(ns.FoldWindow.Add, ns.FoldWindow, frame, {})
+        pcall(ns.FoldWindow.Add, ns.FoldWindow, frame, SharedWindow.FoldOptions())
     end
     -- And left of that, the swap gem: it splits the addons back into their
     -- own windows (SharedWindow.AddSwap).
