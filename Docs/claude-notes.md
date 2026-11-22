@@ -2226,8 +2226,9 @@ this window" and "Expand this window"; nothing is saved. Here: the main window (
 The round button (the owner tapped Build it on the mockup, 2026-11-22, in
 all five): the fold gem now folds a window into a round button, the
 addon's `Media/Frame/Portrait.tga` ring with its `Emblem.tga` inside
-(`FoldWindow.SIZE` 46), on the window's top left corner
-(`FoldWindow.OUT` 8 past it). The strip and `FoldWindow.HEIGHT` are gone.
+(`FoldWindow.SIZE` 46), on the window's top right corner where the
+fold gem is (`FoldWindow.OUT` 8 past it; the owner, 2026-11-22). Opened
+from a dragged button, the window's top right corner meets it. The strip and `FoldWindow.HEIGHT` are gone.
 Folded, the window stays shown but empty: every region and child hides
 (kept hidden by the same hooks as before), it takes no clicks or wheel,
 and its name leaves `UISpecialFrames` so Escape leaves it alone. A click
@@ -2238,7 +2239,7 @@ one it would cover (`FoldWindow.Unstack`, across all five through
 `_G.BlackthornesFoldHub`). Saved account wide as `foldedWindows[key] =
 true` and the button's spot as `windowSpots["fold:" .. key]` (screen
 pixels, like `KeepSpot`; never rename either), through
-`SharedWindow.ReadSave`/`WriteSave` (FILE_VERSION 15). Keys are the
+`SharedWindow.ReadSave`/`WriteSave` (FILE_VERSION 16). Keys are the
 addon's folder name, ":" and the `key` given (else the frame's name); the
 one window's is `BlackthornesOneWindow` (shared). After a /reload a window
 up at login folds again with its button where it was left (the first show
@@ -2253,7 +2254,11 @@ window's name in gold (the plate's words or `title`), its own `line`,
 "Click to open it again." and grey "Drag to move it."; `pill` is the small
 number under it, `FoldWindow:Refresh(frame)` updates both. The one window
 uses `MinimapBadge.tga` and "Opens to %s." (the addon picked last); only
-the copy that draws it brings its button back. Tested in
+the copy that draws it brings its button back. While it folds,
+`state.folding` is true and `SharedWindow.Close` does nothing: hiding the
+one window's area made each addon's page ask for a close, so the one
+window shut and never came back from its button (2026-11-22). A window
+closed anyway as it folds opens full instead. Tested in
 `tools/test_foldwindow.lua` (the same in all five).
 
 Here, the main window (opener `Main`), My Auctions (`round` key
@@ -3410,7 +3415,7 @@ shows two panes and splits ("Split Into Own Windows"); on an own window it
 shows one pane with a rail line and joins ("Join Into One Window"). Floating
 arrows, bars, trackers, the Zone Board and similar pieces get none.
 
-- `UI/SharedWindow.lua` (FILE_VERSION 15 since the round button, the same in all five):
+- `UI/SharedWindow.lua` (FILE_VERSION 16 since the round button's fixes, the same in all five):
   `SharedWindow.AddSwap(frame, key)` puts the gem on a dressed window's
   trim (so it hides with the trim inside the one window); `key` nil is the
   one window. `SharedWindow.Swap(key, join)` is its click. Split: the
