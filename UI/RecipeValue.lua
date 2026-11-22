@@ -1115,6 +1115,11 @@ function RecipeValue:PrintReport()
 
     ns.PrintRaw(("  |c%srows found|r  %s"):format(ns.COLORS.muted, report.source or "none"))
 
+    if ns.UpgradesOnly and ns.UpgradesOnly.ReportText then
+        local ok, text = pcall(ns.UpgradesOnly.ReportText, ns.UpgradesOnly)
+        ns.PrintRaw(("  |c%supgrades only box|r  %s"):format(ns.COLORS.muted, ok and text or "?"))
+    end
+
     if report.rows == 0 then
         ns.PrintRaw(("  |c%sOpen a profession window and run this again.|r"):format(
             ns.COLORS.muted))

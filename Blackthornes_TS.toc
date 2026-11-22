@@ -172,6 +172,7 @@ UI\SellMarked.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
+UI\UpgradesOnly.lua
 UI\CraftProfitCard.lua
 UI\Wishlist.lua
 UI\ItemTooltip.lua

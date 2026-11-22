@@ -196,6 +196,12 @@ local DEFAULTS = {
         -- 2026-10-17). Never rename it.
         showAltUpgrades = false,
 
+        -- "Upgrades Only:" on Blizzard's profession window: the recipe list
+        -- shows only crafts Equipment calls an upgrade for the character
+        -- playing (UI/UpgradesOnly.lua). Off unless ticked (the owner,
+        -- 2026-11-22). Never rename it.
+        upgradesOnlyRecipes = false,
+
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,
