@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.39.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Round button.** The gold gem on a window's title bar folds the window into a round button with the Tradeskills badge, on the window's top right corner. Click it to open the window. Drag it where you like. It stays a button after `/reload`.
+- **Disenchanting.** Minimums by Profession on the Pricing page of Settings has a Disenchanting row. Its Minimum Profit and Minimum Margin set which auction house gear counts as a deal to buy and disenchant. Blank uses the usual numbers.
+- **One Window.** Folding the One Window no longer shuts it for good. It opens full from its button.
+- **Road to 300.** Blacksmithing recipes like Mithril Coif go to the trainer who teaches them.
+- **Profit Now.** When every listing is yours, the tooltip counts profit at what the item last sold for, and shows no line when there is none.
+- **Profit tab.** When nobody else is selling, the Profit tab counts the market value, not the materials plus the markup. The detail pane shows the price the Sell tab lists at. Listing is unchanged.
+- **Demand.** The market reading waits until three listings are gone from the auction house.
+
 ## 1.38.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating.
