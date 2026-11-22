@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.39.1
+
+Fixes and changes:
+- The Auction House tab always shows the sell list in the One Window.
+- My Auctions rows grow to fit long item names.
+- Gear with a random suffix shows its full name in My Auctions.
+
 ## 1.39.0
 
 - Windows fold into a round button with the Tradeskills badge.
