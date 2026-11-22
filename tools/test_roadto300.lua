@@ -619,6 +619,18 @@ check("a fishing plan", fishPlan.fishing, true)
 check("Apprentice done", fishPlan.steps[1].done, true)
 check("Elwynn done", fishPlan.steps[2].done, true)
 check("Journeyman done", fishPlan.steps[3].done, true)
+-- With no race handed in, the game's own answer picks the home zones. It
+-- gives the name in the player's language first and the token second.
+local savedRace = UnitRace
+UnitRace = function() return "Zwerg", "Dwarf" end
+local dwarfPlan = Road.FishPlan({ skill = 1, max = 75, level = 5, side = "A", farmer = false, owned = {} })
+check("a Dwarf starts in Dun Morogh", dwarfPlan.steps[2].zone, "Dun Morogh")
+check("then Loch Modan", dwarfPlan.steps[4].zone, "Loch Modan")
+UnitRace = function() return "Untoter", "Scourge" end
+local undeadPlan = Road.FishPlan({ skill = 1, max = 75, level = 5, side = "H", farmer = false, owned = {} })
+check("an Undead starts in Tirisfal Glades", undeadPlan.steps[2].zone, "Tirisfal Glades")
+UnitRace = savedRace
+
 local westfall = fishPlan.steps[4]
 check("now: Westfall", westfall.zone, "Westfall")
 check("from your skill", westfall.from, 95)

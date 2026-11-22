@@ -125,7 +125,8 @@ end
 --------------------------------------------------------------------------------
 
 local function YieldOf(recipe)
-    local low, high = tonumber(recipe.quantityMin) or 1, tonumber(recipe.quantityMax) or low
+    local low = tonumber(recipe.quantityMin) or 1
+    local high = tonumber(recipe.quantityMax) or low
     local yield = (low + high) / 2
     return yield > 0 and yield or 1
 end

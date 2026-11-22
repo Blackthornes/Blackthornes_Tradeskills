@@ -248,4 +248,10 @@ check("without lists it says why", none == nil and why == "Shopping lists aren't
 
 check("disenchants counted for the odds", Shuffle.BrokenSoFar() == 9)
 
+-- A recipe saved with no top yield makes its low one, with no error.
+local fine, yield = pcall(Shuffle.YieldOf, { quantityMin = 2 })
+check("a yield with no top is the low one", fine and yield == 2)
+check("a yield with neither is one", Shuffle.YieldOf({}) == 1)
+check("a range is its middle", Shuffle.YieldOf({ quantityMin = 1, quantityMax = 3 }) == 2)
+
 print(("\n%d checks passed"):format(checks))
