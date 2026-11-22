@@ -2268,6 +2268,13 @@ round button (`Collapse.round[key]`, full height kept); each time the
 panel comes back with its game window it folds again until the button is
 clicked.
 
+As a tab in the one window (the Auction House and Crafting tabs) a panel
+never folds: `Collapse.Attach`'s `canFold` answers false while
+`PostPanel.inOne` or `CraftPanel.inOne`, and `IntoOne` opens a folded one
+as a close, so the saved fold still holds beside the game window. In
+1.39.0 the sell list folded inside its tab, and the tab showed nothing to
+post (a player's report, 2026-11-22). Tested in `tools/test_tabnofold.lua`.
+
 ## The Blizzard window style
 
 The owner asked (2026-10-10) for a choice of the game's own look beside

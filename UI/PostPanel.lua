@@ -727,6 +727,10 @@ function PostPanel:Build()
             PostPanel:ApplyHeight()
             PostPanel:Refresh()
         end,
+        -- As the one window's Auction House tab it never folds into its
+        -- round button: folded there, the tab showed nothing to post
+        -- (a player's report, 2026-11-22).
+        canFold = function() return not PostPanel.inOne end,
     })
 
     -- Lists (a player asked, 2026-10-14): the player's own named shopping
@@ -1004,6 +1008,9 @@ function PostPanel:IntoOne(container)
     self.inOne = true
     self.attached = false
     self.dockedTo, self.dockedLeft = nil, nil
+    -- Folded into its round button beside the auction house: open it here.
+    -- Taken as a close, so the player's fold still holds outside the tab.
+    if ns.FoldWindow and ns.FoldWindow:IsFolded(frame) then ns.FoldWindow:Unfold(frame, true) end
 
     frame:SetParent(container)
     frame:ClearAllPoints()

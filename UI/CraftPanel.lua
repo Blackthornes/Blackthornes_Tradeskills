@@ -1112,6 +1112,9 @@ function CraftPanel:Build()
             CraftPanel:ApplyHeight()
             CraftPanel:Refresh()
         end,
+        -- As the one window's Crafting tab it never folds into its round
+        -- button, as the sell list (2026-11-22).
+        canFold = function() return not CraftPanel.inOne end,
     })
 
     -- Profit order is the useful default -- it answers "what should I make" --
@@ -2832,6 +2835,7 @@ function CraftPanel:IntoOne(container)
     self.inOne = true
     self.squeezed = false
     self.oneContainer = container
+    if ns.FoldWindow and ns.FoldWindow:IsFolded(frame) then ns.FoldWindow:Unfold(frame, true) end
     self:WatchTabSize(container)
     frame:SetParent(container)
     self.columnInOne = nil
