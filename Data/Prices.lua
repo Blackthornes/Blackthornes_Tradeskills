@@ -1724,6 +1724,15 @@ function Prices:GetSalesPerDay(itemID)
     return Util.Clamp(drops / average / days, 0, 1)
 end
 
+--- How many listings left the auction house over the kept readings, the
+--- count GetSalesPerDay is worked out from. Demand needs a few before it
+--- says anything (Demand.MARKET_MIN_GONE).
+-- @return nil when there is not enough time or stock to go on
+function Prices:GetListingsGone(itemID)
+    local drops = StockMovement(self:GetTable()[itemID])
+    return drops
+end
+
 --- About how many leave the auction house a day, from the same readings as
 -- GetSalesPerDay. An estimate: the game never says what sold, so listings
 -- that expire or are taken down count too, and a restock hides sales.
