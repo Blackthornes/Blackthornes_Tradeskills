@@ -50,7 +50,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 15
+local FILE_VERSION = 16
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -318,6 +318,11 @@ end
 --- open before. Any other close (the player's) stays closed.
 function SharedWindow.Close(byItself)
     if not hub.frame then return end
+    -- Folding into its round button hides the pages, and a page that
+    -- hears it hide asks for a close: that is no close. Taken as one, the
+    -- window never came back from its button (2026-11-22).
+    local fold = rawget(hub.frame, "blackthornesFold")
+    if type(fold) == "table" and fold.folding then return end
     hub.byItself = byItself and true or nil
     hub.frame:Hide()
     hub.byItself = nil

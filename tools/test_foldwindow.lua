@@ -6,7 +6,8 @@
 --      "Collapse this window".
 --   2. Folding hides everything on the window, the frame too, takes no
 --      clicks and leaves Escape alone; a round button shows on its top
---      left corner, and the fold is saved with the button's spot.
+--      right corner, where the fold gem is, and the fold is saved with the
+--      button's spot.
 --   3. The window showing a piece again while folded keeps it hidden; a piece
 --      it hides itself stays hidden when the window opens.
 --   4. A click on the button opens the window, same size and place; the
@@ -19,6 +20,9 @@
 --      it was left; one not up comes back as a button its opener opens.
 --   9. A newer button steps down off an older one.
 --  10. The button's tooltip and its number.
+--  11. A page that closes the window as it hides (inside the one window)
+--      does not close it while it folds; a window closed that way anyway
+--      opens full.
 
 -- Put back afterwards, nil ones too, so later suites see the world they expect.
 local NAMES = { "CreateFrame", "UIParent", "GameTooltip", "hooksecurefunc", "InCombatLockdown", "C_Texture",
@@ -79,6 +83,7 @@ local function Object(parent, kind)
     function o:GetWidth() return self.rect[3] end
     function o:GetHeight() return self.rect[4] end
     function o:GetLeft() return self.rect[1] end
+    function o:GetRight() return self.rect[1] + self.rect[3] end
     function o:GetTop() return self.rect[2] + self.rect[4] end
     function o:GetRect() return self.rect[1], self.rect[2], self.rect[3], self.rect[4] end
     function o:SetPoint(point, rel, relPoint, x, y)
@@ -212,7 +217,7 @@ local round = FoldWindow.rounds[key]
 assert(round and round.button.shown, "the round button shows")
 assert(round.button.parent == UIParent, "on the screen, not on the window")
 local x, y = Spot(round)
-assert(x == 100 - OUT and y == 700 + OUT, "on the window's top left corner")
+assert(x == 500 + OUT - SIZE and y == 700 + OUT, "on the window's top right corner")
 assert(FoldWindow.SavedFolded(key), "the fold is saved")
 local spots = FoldWindow.memory.windowSpots
 assert(spots and spots["fold:" .. key].x == x and spots["fold:" .. key].y == y, "with the button's spot")
@@ -256,7 +261,8 @@ round2.button.scripts.OnClick(round2.button)
 assert(FoldWindow:IsFolded(frame2), "letting go after a drag is not a click")
 round2.button.scripts.OnClick(round2.button)
 assert(not FoldWindow:IsFolded(frame2), "the next click opens it")
-assert(frame2:GetLeft() == 300 + OUT and frame2:GetTop() == 500 - OUT, "it opens where the button is")
+assert(frame2:GetLeft() + frame2:GetWidth() == 300 + SIZE - OUT and frame2:GetTop() == 500 - OUT,
+    "it opens with its top right corner on the button")
 assert(frame2:GetHeight() == 300)
 assert(dropped == 1, "and hears it was dropped there")
 
@@ -312,7 +318,7 @@ assert(not FoldWindow.SavedFolded("Blackthornes_Test:Gone"), "nothing can open t
 assert(FoldWindow.SavedFolded("Other_Addon:Main"), "another addon's window is left alone")
 round6.button.scripts.OnClick(round6.button)
 assert(frame6 and frame6.shown and not FoldWindow:IsFolded(frame6), "a click opens it full")
-assert(frame6:GetLeft() == 900 + OUT and frame6:GetTop() == 300 - OUT, "where the button was")
+assert(frame6:GetLeft() + frame6:GetWidth() == 900 + SIZE - OUT and frame6:GetTop() == 300 - OUT, "where the button was")
 assert(not round6.button.shown and not FoldWindow.SavedFolded("Blackthornes_Test:Six"))
 -- Shown again later this session, a window opens full.
 FoldWindow.memory.foldedWindows = { ["Blackthornes_Test:Seven"] = true }
@@ -328,7 +334,7 @@ local frame9 = Window()
 FoldWindow:Add(frame9, { key = "Nine" })
 FoldWindow:Fold(frame8)
 local r8 = FoldWindow.rounds["Blackthornes_Test:Eight"]
-r8.button.rect = { 100 - OUT, 700 + OUT - SIZE, SIZE, SIZE }
+r8.button.rect = { 500 + OUT - SIZE, 700 + OUT - SIZE, SIZE, SIZE }
 FoldWindow:Fold(frame9)
 local _, y9 = Spot(FoldWindow.rounds["Blackthornes_Test:Nine"])
 assert(y9 == 700 + OUT - SIZE - FoldWindow.STEP, "the newer one steps down")
@@ -359,6 +365,29 @@ local state = FoldWindow:Join(panel, {})
 assert(state.key == "Blackthornes_Test:TestPanel", "a named panel is keyed by its name")
 assert(FoldWindow:Fold(panel) and FoldWindow:IsFolded(panel))
 assert(FoldWindow.rounds[state.key].button.shown)
+
+-- 11. A page that closes the window when it hides, as the addons' pages
+-- inside the one window do (it vanished for good, 2026-11-22).
+local closeFolding = true
+local frame11, parts11 = Window("TestOne")
+parts11.list.scripts.OnHide = function()
+    local state11 = frame11.blackthornesFold
+    if closeFolding and state11.folding then return end   -- SharedWindow.Close's guard
+    frame11:Hide()
+end
+FoldWindow:Add(frame11, { key = "Eleven" })
+assert(FoldWindow:Fold(frame11), "it folds")
+assert(frame11.shown, "the window is not closed by its page hiding")
+local r11 = FoldWindow.rounds["Blackthornes_Test:Eleven"]
+r11.button.scripts.OnClick(r11.button)
+assert(frame11.shown and parts11.list.shown and parts11.trim.shown, "and its button opens it again")
+-- Without the guard the window does close: then it is a close, opening full.
+closeFolding = false
+assert(not FoldWindow:Fold(frame11), "closed as it folded, it does not fold")
+assert(not FoldWindow:IsFolded(frame11) and not r11.button.shown, "no button is left behind")
+assert(not FoldWindow.SavedFolded("Blackthornes_Test:Eleven"))
+frame11:Show()
+assert(parts11.trim.shown and parts11.fill.shown, "shown again, it is full")
 
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_foldwindow: ok")

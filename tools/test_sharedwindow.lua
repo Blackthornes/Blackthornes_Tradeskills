@@ -194,6 +194,13 @@ frame.grip.scripts.OnClick(frame.grip, "RightButton")
 assert(dbA.oneWindowScale == 100, "right-click is the normal size")
 assert(SW.Clamp(10) == 50 and SW.Clamp(400) == 150 and SW.Clamp(nil) == 100, "the scale stays in range")
 
+-- Folding into the round button hides the pages; a page asking for a
+-- close as it hides is no close (it vanished for good, 2026-11-22).
+rawset(frame, "blackthornesFold", { folding = true })
+SW.Close()
+assert(frame:IsShown(), "no close while it folds")
+rawset(frame, "blackthornesFold", nil)
+
 SW.Close()
 assert(log[#log] == "leave gamma", "closing lets the pages go")
 assert(SW.Open(), "opens again")

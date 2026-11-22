@@ -1,7 +1,7 @@
 -- UI/FoldWindow.lua
 -- The fold gem: a small gold gem beside a window's close gem. A click folds
 -- the window into a round button, the addon's badge in a gold ring, on the
--- window's top left corner (a player asked for a minimize button, the owner
+-- window's top right corner (a player asked for a minimize button, the owner
 -- picked the mockup, 2026-10-24; the round button, 2026-11-22). A click on
 -- the button opens the window again, the same size, wherever the button is.
 --
@@ -33,7 +33,8 @@ local L = ns.L or setmetatable({}, { __index = function(_, key) return key end }
 local MEDIA = ([[Interface\AddOns\%s\Media\Frame\]]):format(ADDON)
 FoldWindow.MEDIA = MEDIA
 
--- The round button, how far it sits out past the window's top left corner,
+-- The round button, how far it sits out past the window's top right corner
+-- (where the fold gem is),
 -- and how far a newer one steps down off an older one it would cover.
 FoldWindow.SIZE = 46
 FoldWindow.OUT = 8
@@ -550,8 +551,13 @@ function FoldWindow:Fold(frame, opts)
         end
     end
 
-    local left, top = Number(frame, "GetLeft"), Number(frame, "GetTop")
-    if not (left and top) then return false end
+    local right, top = Number(frame, "GetRight"), Number(frame, "GetTop")
+    if not (right and top) then
+        -- A frame that can't say its right edge: its left and width.
+        local left = Number(frame, "GetLeft")
+        right = left and left + (Number(frame, "GetWidth") or 0)
+    end
+    if not (right and top) then return false end
     local round = state.key and FoldWindow.Round(state.key)
     if not round then return false end
 
@@ -559,7 +565,9 @@ function FoldWindow:Fold(frame, opts)
     local regions = { Call(frame, "GetRegions") }
     table.remove(regions, 1)
     for _, region in ipairs(regions) do HideFor(state, region, false) end
+    state.folding = true
     for _, child in ipairs(children) do HideFor(state, child, true) end
+    state.folding = false
 
     local okMouse, mouse = Call(frame, "IsMouseEnabled")
     local okWheel, wheel = Call(frame, "IsMouseWheelEnabled")
@@ -570,14 +578,23 @@ function FoldWindow:Fold(frame, opts)
     state.special = Special(frame, true)
 
     state.folded = true
+    -- Hiding what is on it closed the window itself (a page inside the
+    -- one window heard it hide and closed the one window, so it never came
+    -- back from its button, 2026-11-22): it was a close, so open it full.
+    if not Shown(frame) then
+        FoldWindow:Unfold(frame, true)
+        return false
+    end
     if GameTooltip and Field(state.button, "hovered") then GameTooltip:Hide() end
 
     local spot = opts and opts.restore and SavedSpot(state.key)
     if spot then
         ShowRound(round, spot.x, spot.y, true)
     else
+        -- On the window's top right corner, where the fold gem is.
         local scale, size = Scale(frame), Scale(round.button)
-        ShowRound(round, left * scale - FoldWindow.OUT * size, top * scale + FoldWindow.OUT * size, true)
+        ShowRound(round, right * scale + (FoldWindow.OUT - FoldWindow.SIZE) * size,
+            top * scale + FoldWindow.OUT * size, true)
     end
     round.ghost = false
     SaveFolded(state.key, true)
@@ -594,15 +611,17 @@ local function Dropped(frame)
     if ok and type(drop) == "function" then pcall(drop, frame) end
 end
 
--- Put the window's top left where the button says.
+-- Put the window's top right corner where the button says. Pinned by its
+-- top left, as the windows' own drags leave them.
 local function ToRound(frame, round)
     local x, y = RoundSpot(round)
     if not (x and y) then return false end
     if InCombat() and Protected(frame) then return false end
+    local width = Number(frame, "GetWidth") or 0
     local scale, size = Scale(frame), Scale(round.button)
     Call(frame, "ClearAllPoints")
     Call(frame, "SetPoint", "TOPLEFT", UIParent, "BOTTOMLEFT",
-        (x + FoldWindow.OUT * size) / scale, (y - FoldWindow.OUT * size) / scale)
+        (x + (FoldWindow.SIZE - FoldWindow.OUT) * size) / scale - width, (y - FoldWindow.OUT * size) / scale)
     return true
 end
 
