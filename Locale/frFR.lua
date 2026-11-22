@@ -3888,3 +3888,8 @@ L["Compact fits more rows in each list. Type /reload to see it."] = "Compact aff
 L["Tradeskills' settings have a window of their own."] = "Les réglages de Tradeskills ont leur propre fenêtre."
 L["Open Tradeskills settings"] = "Ouvrir les réglages de Tradeskills"
 L["Or right-click the minimap button."] = "Ou fais un clic droit sur le bouton de la minicarte."
+
+-- Upgrades Only on the profession window (2026-11-22).
+L["Upgrades Only:"] = "Améliorations seulement :"
+L["Shows only the gear you can make that beats what you wear now."] = "Montre seulement l'équipement que tu peux fabriquer et qui est meilleur que ce que tu portes."
+L["Nothing you can make here is an upgrade right now."] = "Rien de ce que tu peux fabriquer ici n'est une amélioration pour l'instant."

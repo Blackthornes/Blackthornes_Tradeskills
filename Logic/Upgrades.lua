@@ -241,6 +241,10 @@ function Upgrades:RedrawSoon()
         local craft, post = ns.CraftPanel, ns.PostPanel
         if craft and craft.IsShown and craft:IsShown() then pcall(craft.RequestRefresh, craft) end
         if post and post.IsShown and post:IsShown() then pcall(post.Refresh, post) end
+
+        -- "Upgrades Only:" on the profession window asks again.
+        local only = ns.UpgradesOnly
+        if only and only.Refilter then pcall(only.Refilter, only) end
     end
 
     if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
