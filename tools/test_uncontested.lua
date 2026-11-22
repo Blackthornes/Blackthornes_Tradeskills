@@ -291,7 +291,11 @@ do
 
     check("flagged as uncontested", analysis.priceUncontested, true)
     check("not flagged as never scanned", analysis.priceDerived, nil)
-    check("revenue is the marked-up price", analysis.revenue, 750)
+    -- The owner said build it (2026-11-22): nobody has paid the markup, so
+    -- profit is counted at the market value, what it last sold for. The
+    -- Sell tab still lists at the markup, kept as listsAt.
+    check("revenue is the market value, not the markup", analysis.revenue, 600)
+    check("the listing price is kept for showing", analysis.listsAt, 750)
     check("the scan behind it is still real", analysis.age ~= nil, true)
 end
 

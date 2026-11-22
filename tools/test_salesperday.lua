@@ -76,6 +76,9 @@ table_[5] = { history = { { t = 0, q = 40 }, { t = 7200, q = 0 }, { t = 14400, q
 check("is not counted as a sell-out", Prices:GetSalesPerDay(5), 0)
 
 check("no record has no answer", Prices:GetSalesPerDay(99), nil)
+check("listings gone: the 20 that left", Prices:GetListingsGone(1), 20)
+check("listings gone: nothing unchanged", Prices:GetListingsGone(4), 0)
+check("listings gone: no record, no answer", Prices:GetListingsGone(99), nil)
 
 print("")
 if failures > 0 then error(string.format("%d sales-per-day check(s) failed", failures)) end

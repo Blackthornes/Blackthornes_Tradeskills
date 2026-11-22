@@ -3579,3 +3579,26 @@ through `ShiftClickSearch(data, searchItem, mouseButton)`; a Ctrl-right-click
 stays the list's (the craft pane ignores a craft with it), and a Ctrl-click
 on an item that can't be worn is still the row's own click. The sisters
 have the same `Widgets.ItemClick`. Tested in `tools/test_shiftclick.lua`.
+
+## Profit at the real price when nobody else sells (2026-11-22)
+
+A player's report: Turtle Scale Helm ranked first on the Profit tab, with
+"Profit Now: +2g at 8g", while it sold for 5g and the only listing was the
+player's own. When nobody else is selling, `ChoosePostPrice` answers
+"uncontested", the materials plus the markup. The Sell tab still lists at
+that, but no profit number counts it any more:
+
+- Profit Now on the item tooltip (`CraftedCost:Lines`) uses the market
+  value instead, and shows no line without one (PR #1405).
+- `Profit:Analyse` counts revenue at the market value and keeps the listing
+  price as `analysis.listsAt`; the detail pane's "No competition" row and
+  `/bts why`'s "you post at" show `listsAt`. Level Up and Butler already
+  did this.
+- Demand's market reading needs `Demand.MARKET_MIN_GONE` (3) listings gone
+  over the kept readings (`Prices:GetListingsGone`) before it answers; with
+  one or two up, one going away read as "100% of stock sells daily". Your
+  own sales record (MIN_OWN) is unchanged.
+
+Tested in `tools/test_craftedcost.lua`, `tools/test_uncontested.lua`,
+`tools/test_altpricing.lua`, `tools/test_demand.lua`,
+`tools/test_salesperday.lua`.

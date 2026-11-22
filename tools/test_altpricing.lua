@@ -119,7 +119,10 @@ local function Prices(label)
     print(label)
     local bag = Profit:Analyse(BAG_RECIPE)
     local satchel = Profit:Analyse(SATCHEL_RECIPE)
-    check("the bag sells at the markup", bag.unitRevenue, 450)
+    -- Profit counts the market value when every listing is yours
+    -- (2026-11-22); the markup the Sell tab lists at is kept as listsAt.
+    check("the bag lists at the markup", bag.listsAt, 450)
+    check("its profit counts the market value", bag.unitRevenue, 200)
     check("as nothing else is listed", bag.priceBasis, "uncontested")
     check("the never-scanned satchel is priced from materials", satchel.unitRevenue, 450)
     check("as an estimate", satchel.priceBasis, "derived")

@@ -23,10 +23,13 @@ ns.Mail = {
 
 local prices = {}
 local liquidity = {}
+local gone = {}
 local priceTable = {}
 ns.Prices = {
   Get = function(_, itemID) return prices[itemID] end,
   GetSalesPerDay = function(_, itemID) return liquidity[itemID] end,
+  -- Listings gone over the readings; plenty unless a test says otherwise.
+  GetListingsGone = function(_, itemID) return gone[itemID] or 99 end,
   GetTable = function() return priceTable end,
   scanCount = 0,
 }
@@ -84,6 +87,17 @@ check("the tooltip says why", Demand:TooltipText(r), "High (35% of its stock sel
 
 liquidity[2] = 0.01
 check("barely moving is low", Demand:Get(2).level, "low")
+
+-- A player's report (2026-11-22): one helm up, one gone, read as
+-- "100% of stock sells daily". Three must have gone first.
+liquidity[2] = 1
+gone[2] = 1
+check("one listing gone is too few to say", Demand:Get(2), nil)
+gone[2] = 2
+check("two is still too few", Demand:Get(2), nil)
+gone[2] = 3
+check("three gone gives a reading", Demand:Get(2) and Demand:Get(2).level, "high")
+gone[2] = nil
 
 liquidity[2] = nil
 check("too little time to go on has no reading", Demand:Get(2), nil)

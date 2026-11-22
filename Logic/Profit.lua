@@ -1171,6 +1171,19 @@ function Profit:Analyse(recipeID, characterKey, method)
         unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID, cost)
     end
 
+    -- When nobody else is selling ("uncontested") the Sell tab lists at the
+    -- materials plus the markup, but nobody has paid that. Profit is counted
+    -- at the market value, what it last sold for, as Level Up and the
+    -- tooltip do (a player's report, 2026-11-22: a helm ranked first at 8g
+    -- that sold for 5g). The listing price is kept in listsAt for showing.
+    if basis == "uncontested" then
+        local market = ns.Prices:GetValue(recipe.outputItemID, "market")
+        if type(market) == "number" and market > 0 then
+            analysis.listsAt = unitRevenue
+            unitRevenue = math.floor(market)
+        end
+    end
+
     -- The listing on its own, kept for analysis.ways before a vendor that
     -- pays more takes its place below.
     local listPrice, listBasis, listUncertain = unitRevenue, basis, uncertain
@@ -1802,7 +1815,7 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
         ns.PrintRaw(L.Format("  |c%snobody else is listing one, so this is priced off your materials|r",
             ns.COLORS.profit))
         ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
-            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+            Util.FormatMoney(analysis.listsAt or analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
         ns.PrintRaw(L.Format("  |c%syou already have the cheapest listing, so staying at market price|r",
             ns.COLORS.profit))
