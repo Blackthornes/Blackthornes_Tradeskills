@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.40.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating.
+
+- **Upgrades Only.** A box under the search field of the profession window. Tick it to list only the crafts that are upgrades for you. It starts off, and shows when Equipment is loaded and its arrows are on.
+- **Quick scan.** A quick full scan that you stop while it waits keeps its prices. The answer is read when it arrives, or when you next open the auction house.
+
+
 ## 1.39.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

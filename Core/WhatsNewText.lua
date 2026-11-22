@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.40.0", lines = {
+        "A new Upgrades Only box on the profession window lists only the crafts that are upgrades for you.",
+    } },
     { version = "1.39.0", lines = {
         "Windows fold into a round button with the Tradeskills badge.",
         "Minimums by Profession has a Disenchanting row.",
@@ -16,10 +19,5 @@ ns.WHATS_NEW = {
         "Item rows link in chat and try on gear.",
         "Recipes to Learn shows the Profit: choice.",
         "Tradeskills has a line in the game's Options.",
-    } },
-    { version = "1.37.0", lines = {
-        "The Buy Materials button stays on the vendor window when Butler is loaded.",
-        "Each suffix on the Prices tab shows its own price graph and Stats.",
-        "Sales of stacks and other items are filed under their item, on one row.",
     } },
 }
