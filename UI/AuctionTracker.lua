@@ -87,7 +87,10 @@ function AuctionTrackerUI.LeftText(ends, rough, now)
 end
 
 local function RowName(row)
-    local name = Util.GetItemName(row.itemID, row.link)
+    -- A link names the item as it is, a random suffix too ("of the Beast"),
+    -- so its words come first, without the brackets.
+    local name = type(row.link) == "string" and row.link:match("|h%[(.-)%]|h")
+    if not name or name == "" then name = Util.GetItemName(row.itemID, row.link) end
     if type(name) ~= "string" then name = "?" end
     -- No link and the client has not sent the item yet: the name is a
     -- stand-in until it does, and the rows are drawn again then.
@@ -220,6 +223,13 @@ local function Stripe(widget, index)
     widget.background:SetColorTexture(Theme.Unpack(key))
 end
 
+--- A name wraps only inside a width it knows: two anchors alone leave it
+--- one line tall to the game, so its row did not grow and a long name ran
+--- into the rows below.
+local function NameWidth(row, width)
+    row.name:SetWidth(math.max(1, width - 4 - ICON - 6 - 4 - LEFT_W - 6 - PRICE_W - 4))
+end
+
 local function NewRow(self)
     local body = self.body
     local width = self.WIDTH - 2 * PAD
@@ -278,9 +288,9 @@ local function NewRow(self)
 
     local name = Theme.CreateLabel(row, "small", "text", "LEFT")
     name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    name:SetPoint("RIGHT", left, "LEFT", -4, 0)
     pcall(name.SetWordWrap, name, true)
     row.name = name
+    NameWidth(row, width)
 
     row:SetScript("OnEnter", function(widget)
         widget.background:SetColorTexture(Theme.Unpack("glassHover"))
@@ -592,6 +602,7 @@ function AuctionTrackerUI:Layout(now)
                 widget = NewRow(self)
                 self.pool[used] = widget
             end
+            NameWidth(widget, width)
             FillRow(widget, data, now)
             widget:SetAlpha(1)
             widget.lit:SetAlpha(0)
