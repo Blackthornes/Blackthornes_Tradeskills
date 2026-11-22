@@ -235,6 +235,8 @@ Scanner:StartFullScan()
 sendNext()
 Scanner:CancelScan()
 Scanner:REPLICATE_ITEM_LIST_UPDATE()
-check("an answer after the scan was cancelled is left alone", Prices:Get(SWORD) == nil and not Scanner.isScanning)
+-- The game counted the scan when it was sent, so its answer is kept
+-- (tools/test_quickscanwaiting.lua).
+check("an answer after the scan was cancelled is still read", Prices:Get(SWORD) ~= nil and not Scanner.isScanning)
 
 print(("\n%d check(s) passed\n"):format(checks))

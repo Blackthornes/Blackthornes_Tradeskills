@@ -1794,6 +1794,19 @@ sweep when it goes unanswered or comes back empty (`StopQuickOnly`), and
 nothing said in chat (`ReadReplicateResults` speaks through `ns.Debug`).
 Never a continuous scan. Tested in `tools/test_autoquickscan.lua`.
 
+A quick scan stopped while it waits is still read (a player's report,
+2026-11-22: it stopped, saved no prices and still used the fifteen
+minutes). The game counts a quick scan when it is sent, so
+`Scanner:CancelScan` keeps `awaitingReplicate` and sets `stoppedWaiting`;
+the answer is then read quietly (`quickOnly`), never page by page. An
+answer that comes with the auction house shut, or rows cut short by
+shutting it, set `replicateUnread`, and `Scanner:ReadWaitingSnapshot`
+reads them three seconds into the next visit, within
+`Scanner.REREAD_WITHIN` (5 minutes) of asking. Rows the game no longer
+hands out stamp no scan. Whether the game keeps the rows after the
+auction house shuts is not yet seen in game. Tested in
+`tools/test_quickscanwaiting.lua`.
+
 ## German translation
 
 The owner said yes (2026-10-12) to German in Tradeskills, after Pets'
