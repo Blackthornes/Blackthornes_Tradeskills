@@ -287,7 +287,9 @@ function SisterKeeps:Hold(itemID, held, count, price)
         answer = { self:Work(itemID, held, count, price) }
         kept[key] = answer
     end
-    return answer[1], answer[2]
+    -- The third answer says which keep it was: "craft" for Craft First,
+    -- so the Sell list knows the row can be queued.
+    return answer[1], answer[2], answer[3]
 end
 
 --- Why to craft it first, or nil: a recipe the character playing knows
@@ -322,7 +324,7 @@ function SisterKeeps:Work(itemID, held, count, price)
     if butler and butler >= count then return count, butlerWhy end
 
     local craftWhy = self:CraftReason(itemID, count, price)
-    if craftWhy then return count, craftWhy end
+    if craftWhy then return count, craftWhy, "craft" end
     if not self:IsOn() then
         if butler and butler > 0 then return butler, butlerWhy end
         return 0, nil
