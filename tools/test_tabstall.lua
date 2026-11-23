@@ -5,7 +5,8 @@
 --   1. Prices built a row for every priced item, read each one's stock
 --      history and trend, and sorted them all. Now the sorted rows are kept
 --      until the prices, a star, the filters or the sort change. Kept rows
---      read their age again, and a search is never kept.
+--      read their age again, and a search is never kept, but it builds
+--      only the rows it finds.
 --   2. Profit analysed every recipe at once. Now, once it has drawn, a pick
 --      keeps the rows it had and analyses a few recipes a frame, then draws
 --      the same list an at-once refresh gives. Any other refresh answers at
@@ -108,7 +109,14 @@ do
     before = read
     List("zzz")
     List("zzz")
-    check("a search is built each time", read, before + ITEMS * 2)
+    check("a search that matches nothing reads no item's history", read, before)
+    -- Names here are "~item N" (the game has none yet), so "item 12" finds
+    -- 12 and 120 to 129, and only those rows are built, each time.
+    List("item 12")
+    List("item 12")
+    check("a search is built each time, only the rows it finds", read, before + 11 * 2)
+    check("and finds them", #List("item 12"), 11)
+    read = before
 
     before = read
     List("")
