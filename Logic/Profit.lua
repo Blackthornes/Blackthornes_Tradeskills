@@ -89,6 +89,8 @@ local DEFAULT_MARKUP_PERCENT = 50
 function Profit:DeriveFromMaterials(itemID, knownCost)
     if not itemID then return nil end
     if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
+    -- A trade good sells at the market's price, not what it is made of.
+    if Profit.IsTradeGood(itemID) then return nil end
 
     -- Any character's recipe: an alt's craft is worth as much to sell.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
