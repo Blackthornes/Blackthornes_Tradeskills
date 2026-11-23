@@ -10,11 +10,19 @@ local _, ns = ...
 
 -- [item the writ asks for] = { name, zone, mapID, x, y, fromLog }
 ns.WRIT_CUSTOMERS = {
+    [2865] = { name = "Ziz Fizziks", zone = "Stonetalon Mountains", mapID = 1442, x = 59, y = 62.5 },
     [4321] = { name = "Kixxle", zone = "Wetlands", mapID = 1437, x = 50.1, y = 37.8 },
     [4383] = { name = "Grembly", zone = "Ashenvale", mapID = 1440, x = 82.1, y = 51 },
+    [4392] = { name = "Bibbly F'utzbuckle", zone = "Desolace", mapID = 1443, x = 62.3, y = 38.9 },
     [6048] = { name = "Kzixx", zone = "Duskwood", mapID = 1431, x = 81.7, y = 19.9 },
     [6049] = { name = "Durganon", zone = "Searing Gorge", mapID = 1427, x = 41.1, y = 58.4 },
+    [6264] = { name = "Magus Tirth", zone = "Thousand Needles", mapID = 1441, x = 78.3, y = 75.9 },
     [6712] = { name = "Gorgrash", zone = "Hillsbrad Foothills", mapID = 1424, x = 80, y = 48.7 },
+    [8218] = { name = "Nergal", zone = "Un'Goro Crater", mapID = 1449, x = 43.3, y = 7.9 },
+    [8949] = { name = "Juo", zone = "The Hinterlands", mapID = 1425, x = 80.1, y = 55.4 },
+    [10514] = { name = "Bullets Bigblast", zone = "Swamp of Sorrows", mapID = 1435, x = 70, y = 41.4 },
     [10560] = { name = "Narianna", zone = "Moonglade", mapID = 1450, x = 53.3, y = 42.8 },
+    [10592] = { name = "Scout Raroul", zone = "Feralas", mapID = 1444, x = 72.4, y = 52.4 },
+    [11590] = { name = "Rhapsody Shindigger", zone = "The Hinterlands", mapID = 1425, x = 26.9, y = 48.5 },
     [15869] = { name = "Battered Trunk", zone = "Duskwood", mapID = 1431, x = 26.2, y = 36.2 },
 }
