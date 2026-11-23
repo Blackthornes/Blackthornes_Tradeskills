@@ -1,13 +1,13 @@
 -- Blackthornes -- UI/Plaque.lua
 -- The gold plaque: the look of a button that sits out on the screen on its
 -- own (the owner picked it from a mockup, 2026-10-27, "Option B"). A gold
--- rim with a red gem at each end round dark glass, the item's own icon in a
+-- rim round dark glass (no gems on its ends), the item's own icon in a
 -- small gold frame, and two short lines: what a click does, and a second
 -- line under it (what it uses, how much it gains). It glows softly while it
 -- waits for a click.
 --
--- The same file in Pets, Equipment and Farmer (a fix to it belongs in all
--- three). Our own art only: flat colours, the house gem and the item's
+-- The same file in Farmer, Pets, Equipment and Tradeskills (a fix to it
+-- belongs in all four). Our own art only: flat colours and the item's
 -- icon from the client. Nothing of the game's frames is touched.
 --
 -- `Plaque.Create(parent, opts)` makes the button (opts: name, template for
@@ -33,7 +33,6 @@ Plaque.HEIGHT = 40
 Plaque.RIM = 2
 Plaque.ICON = 30
 Plaque.PAD = 6
-Plaque.GEM = 11
 Plaque.GLOW = 7
 Plaque.BREATHE = 1.4
 
@@ -50,7 +49,6 @@ Plaque.FIRST = { 0.97, 0.84, 0.48 }
 Plaque.FIRST_HOT = { 1, 0.95, 0.78 }
 Plaque.SECOND = { 0.80, 0.73, 0.55 }
 
-local GEM_ART = ([[Interface\AddOns\%s\Media\Frame\CloseGem.tga]]):format(ADDON)
 
 --- A vertical colour gradient, bottom to top; a flat colour when the
 --- client can't draw one.
@@ -186,15 +184,9 @@ function Plaque.Create(parent, opts)
     pcall(icon.SetTexCoord, icon, 0.08, 0.92, 0.08, 0.92)
     button.icon, button.iconFrame, button.iconWell = icon, frameTex, well
 
-    -- A red gem at each end, on the rim.
+    -- No gems on the ends (the owner, 2026-11-22: never again, in any
+    -- addon). The empty list stays for code that walks it.
     button.gems = {}
-    for _, side in ipairs({ "LEFT", "RIGHT" }) do
-        local gem = button:CreateTexture(nil, "OVERLAY", nil, 2)
-        gem:SetSize(Plaque.GEM, Plaque.GEM)
-        gem:SetTexture(GEM_ART)
-        gem:SetPoint("CENTER", button, side, 0, 0)
-        button.gems[#button.gems + 1] = gem
-    end
 
     -- The bright flash a reward lights, over everything but the words.
     local flash = button:CreateTexture(nil, "OVERLAY", nil, 1)
