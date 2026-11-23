@@ -501,6 +501,32 @@ do
   check("a row whose text changed is placed again", placed, 1)
 end
 
+-- Row 8: the count rides on the name's right edge, as Blizzard's list draws
+-- "Transmute: Mithril to Truesilver [13]". Narrowing only the name slid the
+-- "[13]" under the profit (a player's screenshot, 2026-11-22). The name has
+-- to give way by the count's width too.
+RECIPES[205] = { recipeID = 205, name = "Transmute: Mithril to Truesilver", outputItemID = 2997 }
+do
+  local row = Row("Transmute: Mithril to Truesilver", { count = "[13]" })
+  local count
+  for _, r in ipairs({ row:GetRegions() }) do if r.text == "[13]" then count = r end end
+  count.GetLeft = function()
+    local w = row.Text.width
+    if not w or w <= 0 then w = row.Text:GetStringWidth() end
+    return row.Text.left + w
+  end
+
+  local _, placement = RecipeValue:DecorateRow(row)
+  check("a long name with a count makes room", placement, "shortened")
+
+  local valueLeft = ROW_RIGHT - RecipeValue.RIGHT_INSET - #row.label.text * CHAR
+  local countRight = count:GetLeft() + count:GetStringWidth()
+  check("the count stops short of the value, not under it",
+    countRight <= valueLeft - RecipeValue.NAME_GAP + 0.5, true)
+  check("and the name still wraps", row.Text.wrap, true)
+
+end
+
 -- The measurement itself, for the justifications a client might use.
 do
   local left = Region("Copper Chain Belt", 20)

@@ -808,7 +808,18 @@ local function PositionLabel(label, row, region)
     -- and why `/bts value` counts it -- but a name with a price written
     -- across its last word is not readable either, and the whole name is
     -- still there in the recipe pane beside the list.
-    if ShortenName(region, valueLeft - NAME_GAP) then
+    --
+    -- Blizzard's list hangs the "[13]" count off the name's right edge, so
+    -- it moves with the name. Narrowing the name to the value's edge slid
+    -- the count under the value (a player's screenshot, 2026-11-22). The
+    -- name gives way by whatever reaches past its own words as well.
+    local nameRight = region and TextRight(region)
+    local trailing = 0
+    if type(nameRight) == "number" and textRight > nameRight then
+        trailing = textRight - nameRight
+    end
+
+    if ShortenName(region, valueLeft - NAME_GAP - trailing) then
         return "shortened"
     end
 
