@@ -232,6 +232,13 @@ function Posting:SecondsUntilPostable(itemID)
     return seconds, reason
 end
 
+--- The sell lists look again on the next frame (UI:SellListSoon), not at
+--- the next tick of their one-second ticker.
+local function SellListSoon()
+    local ui = ns.UI
+    if ui and ui.SellListSoon then ui:SellListSoon() end
+end
+
 --- The listing of this item still being confirmed, if any.
 --
 -- `pending` is the newest listing; older ones of other items wait in
@@ -269,6 +276,7 @@ end
 --- takes its place as `pending`, so whatever reads that still sees one.
 function Posting:DropPending(pending)
     if not pending then return end
+    SellListSoon()
     local others = rawget(self, "others")
     if type(others) == "table" and others[pending.itemID] == pending then
         others[pending.itemID] = nil
@@ -1833,6 +1841,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
+    SellListSoon()
 
     -- Joining a listing still being confirmed: measured from before the
     -- first of them, and checked once for all of them, a few seconds after

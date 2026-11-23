@@ -1685,6 +1685,45 @@ function UI.SellListKey()
     }, ":")
 end
 
+--- One look at the sell lists: built again when what they are made from
+--- changed (UI.SellListKey). True when they were.
+function UI:SellListLook()
+    if not ns.Scanner.isAuctionHouseOpen then return false end
+
+    local key = UI.SellListKey()
+    if key == UI.sellListKey then return false end
+    UI.sellListKey = key
+    UI.sellListAt = GetTime and GetTime() or nil
+
+    UI:UpdatePostButton()
+    if ns.PostPanel then ns.PostPanel:Refresh() end
+    return true
+end
+
+-- The least time between two looks asked for by SellListSoon, so a burst of
+-- changes is still one build.
+UI.SELL_LIST_GAP = 0.2
+
+--- Look at the sell lists on the next frame, not at the next tick of the
+--- one-second ticker. After a listing went up, or a buy landed in the bags,
+--- the list and its buttons stood as they were for up to a second. Called
+--- when the bags settle, a listing starts or is settled, the owned auctions
+--- are read and the auction house stops being busy. Many calls, one look.
+function UI:SellListSoon()
+    if self.sellListSoon or not ns.Scanner.isAuctionHouseOpen then return end
+    if not (C_Timer and C_Timer.After) then return end
+    self.sellListSoon = true
+
+    local wait = 0
+    local last, now = self.sellListAt, GetTime and GetTime()
+    if last and now then wait = math.max(0, self.SELL_LIST_GAP - (now - last)) end
+
+    C_Timer.After(wait, function()
+        UI.sellListSoon = nil
+        UI:SellListLook()
+    end)
+end
+
 function UI:UpdatePostButton()
     local button = self.postButton
     if not button then return end
@@ -2628,20 +2667,12 @@ function UI:OnEnable()
         UI.postTicker = C_Timer.NewTicker(1, function()
             if not ns.Scanner.isAuctionHouseOpen then return end
 
-            local key = UI.SellListKey()
-            if key == UI.sellListKey then
+            if not UI:SellListLook() then
                 -- Still each second, and cheap: the panel steps back in when
                 -- the character window closes, and follows the main window
                 -- when it is dragged, and neither has an event.
                 if ns.PostPanel and ns.PostPanel.Place then ns.PostPanel:Place() end
-                return
             end
-            UI.sellListKey = key
-
-            UI:UpdatePostButton()
-
-            if ns.PostPanel then ns.PostPanel:Refresh() end
-
         end)
 
         -- A second, faster ticker purely for the countdown. One second is too
@@ -2656,6 +2687,11 @@ function UI:OnEnable()
             UI:UpdateWaitLabels()
         end)
     end)
+
+    -- The sell lists follow the bags and the auction house at once
+    -- (UI:SellListSoon), with the ticker above as the backstop.
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function() UI:SellListSoon() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function() UI:SellListSoon() end)
 
     -- Settings: Open with the auction house and vendors.
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() UI:OpenWithShop("auction") end)
