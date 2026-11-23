@@ -219,11 +219,30 @@ local function BuildList()
         end
     end
 
+    -- A search is settled on the name before the row is built: a row reads
+    -- its item's stock history and trend, and each key typed read them for
+    -- every priced item only to drop most of the rows.
+    local needle = state.search ~= "" and state.search:lower() or nil
+    local matcher
+
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
         if materials and not materials[itemID] then return end
         if state.favouritesOnly and favourites[itemID] == nil then return end
         if state.mineOnly and not Mine(itemID) then return end
+
+        local name = wantNames and (PlainName(itemID) or stored[itemID]
+            or ("~item %d"):format(itemID)) or ""
+        local suffixCount = type(record.suffixes) == "table" and ns.Prices.SuffixCount
+            and ns.Prices:SuffixCount(itemID) or 0
+        local onlySuffixes
+        if needle and not name:lower():find(needle, 1, true) then
+            -- "of the Bear" finds the item, showing only its Bear.
+            if suffixCount <= 0 then return end
+            matcher = matcher or SuffixMatcher(needle)
+            onlySuffixes = matcher({ itemID = itemID, record = record, name = name })
+            if not onlySuffixes then return end
+        end
 
         rows[#rows + 1] = {
             itemID = itemID,
@@ -234,10 +253,9 @@ local function BuildList()
             age = ns.Prices:GetAge(itemID) or math.huge,
             liquidity = ns.Prices:GetSalesPerDay(itemID),
             trend = ns.Prices.GetTrend and (ns.Prices:GetTrend(itemID, trendDays)) or nil,
-            name = wantNames and (PlainName(itemID) or stored[itemID]
-                or ("~item %d"):format(itemID)) or "",
-            suffixCount = type(record.suffixes) == "table" and ns.Prices.SuffixCount
-                and ns.Prices:SuffixCount(itemID) or 0,
+            name = name,
+            suffixCount = suffixCount,
+            onlySuffixes = onlySuffixes,
         }
     end
 
@@ -266,27 +284,6 @@ local function BuildList()
     -- And, with Enchanting materials ticked, a material never scanned.
     for itemID in pairs(materials or {}) do
         if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
-    end
-
-    if state.search ~= "" then
-        local needle = state.search:lower()
-        local filtered = {}
-        local matcher
-
-        for _, row in ipairs(rows) do
-            if row.name:lower():find(needle, 1, true) then
-                filtered[#filtered + 1] = row
-            elseif row.suffixCount > 0 then
-                -- "of the Bear" finds the item, showing only its Bear.
-                matcher = matcher or SuffixMatcher(needle)
-                local matches = matcher(row)
-                if matches then
-                    row.onlySuffixes = matches
-                    filtered[#filtered + 1] = row
-                end
-            end
-        end
-        rows = filtered
     end
 
     rows = SortRows(rows)

@@ -2649,9 +2649,15 @@ function Widgets.CreateScrollList(parent, opts)
             end
 
             local row = AcquireRow(index)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", 0, -y)
-            row:SetPoint("TOPRIGHT", right, -y)
+            -- Placed again only when it moved. Every redraw used to take
+            -- each row off the list and pin it back where it already was,
+            -- which makes the game lay the row and all on it out again.
+            if rawget(row, "placedY") ~= y or rawget(row, "placedRight") ~= right then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -y)
+                row:SetPoint("TOPRIGHT", right, -y)
+                row.placedY, row.placedRight = y, right
+            end
             row.data = entry
             row.dataIndex = dataIndex
 
@@ -2659,16 +2665,19 @@ function Widgets.CreateScrollList(parent, opts)
             -- across, and must follow the data row, not the frame.
             row.selected = opts.isSelected and opts.isSelected(entry) or false
 
-            if row.selected then
-                row.background:SetColorTexture(Theme.Unpack("glassActive"))
-            else
-                row.background:SetColorTexture(Theme.Unpack(
-                    dataIndex % 2 == 0 and "glassAlt" or "glass"))
+            -- Painted again only when its band changed, or the look did
+            -- (the Blizzard window style puts new colours in the table).
+            local band = row.selected and "glassActive"
+                or (dataIndex % 2 == 0 and "glassAlt" or "glass")
+            local paint = type(Theme.colors) == "table" and Theme.colors[band] or band
+            if rawget(row, "bandPaint") ~= paint then
+                row.background:SetColorTexture(Theme.Unpack(band))
+                row.bandPaint = paint
             end
 
             row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
-            local band = rawget(row, "glowBand")
-            if band then band:SetShown(row.selected) end
+            local glow = rawget(row, "glowBand")
+            if glow then glow:SetShown(row.selected) end
 
             if opts.updateRow then
                 opts.updateRow(row, entry, dataIndex)

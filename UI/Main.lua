@@ -1648,12 +1648,41 @@ end
 --- has just loaded, the owned auctions read, and whether listing is open
 --- (blocked, a scan, the house busy, a listing still being confirmed). The
 --- lists are rebuilt only when it changes.
-local itemInfoSeen = 0
+--
+-- Item data is counted in two parts. Data for an item in the bags counts at
+-- once. Data for any other item (a reagent a cost reads, a shopping list's
+-- item) counts too, but while it streams in, as it does all through a scan
+-- or while the game's own list is paged, it moves the key at most once
+-- every UI.ITEM_INFO_GAP seconds: the lists were built again every second
+-- of a scan for items they do not show.
+UI.ITEM_INFO_GAP = 5
+local itemInfoSeen, itemInfoOther, itemInfoCounted, itemInfoAt = 0, 0, 0, nil
 do
     local watcher = {}
-    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function()
-        itemInfoSeen = itemInfoSeen + 1
+    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
+        local inventory = ns.Inventory
+        local carried = true
+        if itemID and inventory and inventory.GetBagCount then
+            local ok, count = pcall(inventory.GetBagCount, inventory, itemID)
+            carried = not ok or (tonumber(count) or 0) > 0
+        end
+        if carried then
+            itemInfoSeen = itemInfoSeen + 1
+        else
+            itemInfoOther = itemInfoOther + 1
+        end
     end)
+end
+
+--- Item data for items not in the bags, counted at most once a gap.
+local function OtherItemInfo()
+    if itemInfoOther ~= itemInfoCounted then
+        local now = GetTime and GetTime() or nil
+        if not (now and itemInfoAt) or now - itemInfoAt >= UI.ITEM_INFO_GAP or now < itemInfoAt then
+            itemInfoCounted, itemInfoAt = itemInfoOther, now
+        end
+    end
+    return itemInfoCounted
 end
 
 function UI.SellListKey()
@@ -1679,10 +1708,49 @@ function UI.SellListKey()
         shown, tab,
         ns.Inventory.changes or 0, ns.Prices.changes or 0,
         queued, amount,
-        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen,
+        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen, OtherItemInfo(),
         ns.Auctions.readCount or 0,
         tostring(blocked), tostring(ns.Scanner.isScanning), tostring(throttled), pending,
     }, ":")
+end
+
+--- One look at the sell lists: built again when what they are made from
+--- changed (UI.SellListKey). True when they were.
+function UI:SellListLook()
+    if not ns.Scanner.isAuctionHouseOpen then return false end
+
+    local key = UI.SellListKey()
+    if key == UI.sellListKey then return false end
+    UI.sellListKey = key
+    UI.sellListAt = GetTime and GetTime() or nil
+
+    UI:UpdatePostButton()
+    if ns.PostPanel then ns.PostPanel:Refresh() end
+    return true
+end
+
+-- The least time between two looks asked for by SellListSoon, so a burst of
+-- changes is still one build.
+UI.SELL_LIST_GAP = 0.2
+
+--- Look at the sell lists on the next frame, not at the next tick of the
+--- one-second ticker. After a listing went up, or a buy landed in the bags,
+--- the list and its buttons stood as they were for up to a second. Called
+--- when the bags settle, a listing starts or is settled, the owned auctions
+--- are read and the auction house stops being busy. Many calls, one look.
+function UI:SellListSoon()
+    if self.sellListSoon or not ns.Scanner.isAuctionHouseOpen then return end
+    if not (C_Timer and C_Timer.After) then return end
+    self.sellListSoon = true
+
+    local wait = 0
+    local last, now = self.sellListAt, GetTime and GetTime()
+    if last and now then wait = math.max(0, self.SELL_LIST_GAP - (now - last)) end
+
+    C_Timer.After(wait, function()
+        UI.sellListSoon = nil
+        UI:SellListLook()
+    end)
 end
 
 function UI:UpdatePostButton()
@@ -2628,20 +2696,12 @@ function UI:OnEnable()
         UI.postTicker = C_Timer.NewTicker(1, function()
             if not ns.Scanner.isAuctionHouseOpen then return end
 
-            local key = UI.SellListKey()
-            if key == UI.sellListKey then
+            if not UI:SellListLook() then
                 -- Still each second, and cheap: the panel steps back in when
                 -- the character window closes, and follows the main window
                 -- when it is dragged, and neither has an event.
                 if ns.PostPanel and ns.PostPanel.Place then ns.PostPanel:Place() end
-                return
             end
-            UI.sellListKey = key
-
-            UI:UpdatePostButton()
-
-            if ns.PostPanel then ns.PostPanel:Refresh() end
-
         end)
 
         -- A second, faster ticker purely for the countdown. One second is too
@@ -2656,6 +2716,11 @@ function UI:OnEnable()
             UI:UpdateWaitLabels()
         end)
     end)
+
+    -- The sell lists follow the bags and the auction house at once
+    -- (UI:SellListSoon), with the ticker above as the backstop.
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function() UI:SellListSoon() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function() UI:SellListSoon() end)
 
     -- Settings: Open with the auction house and vendors.
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() UI:OpenWithShop("auction") end)

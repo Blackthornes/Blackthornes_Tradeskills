@@ -298,6 +298,7 @@ print("crafted stock a queued craft needs")
 Reset()
 ns.Recipes.GetAccountWide = function() return { [100] = { recipeID = 100, outputItemID = LINEN } } end
 ns.Profit.Analyse = function() return nil end
+ns.Profit.UnitCostForSale = function() return nil end
 ns.Queue.GetReservedItems = function() return { [LINEN] = 3 } end
 
 do

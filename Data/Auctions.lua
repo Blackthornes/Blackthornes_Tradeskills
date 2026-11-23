@@ -1019,6 +1019,8 @@ function Auctions:ReadOwned(opts)
     -- item with nothing listed and an item never read for at all look the
     -- same in the stored table, and only one of those is a bug.
     self.readCount = (self.readCount or 0) + 1
+    -- The sell lists count what is listed: they look again on the next frame.
+    if ns.UI and ns.UI.SellListSoon then ns.UI:SellListSoon() end
 
     house.items = items
     house.prices = prices

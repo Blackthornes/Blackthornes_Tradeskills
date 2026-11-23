@@ -232,6 +232,13 @@ function Posting:SecondsUntilPostable(itemID)
     return seconds, reason
 end
 
+--- The sell lists look again on the next frame (UI:SellListSoon), not at
+--- the next tick of their one-second ticker.
+local function SellListSoon()
+    local ui = ns.UI
+    if ui and ui.SellListSoon then ui:SellListSoon() end
+end
+
 --- The listing of this item still being confirmed, if any.
 --
 -- `pending` is the newest listing; older ones of other items wait in
@@ -269,6 +276,7 @@ end
 --- takes its place as `pending`, so whatever reads that still sees one.
 function Posting:DropPending(pending)
     if not pending then return end
+    SellListSoon()
     local others = rawget(self, "others")
     if type(others) == "table" and others[pending.itemID] == pending then
         others[pending.itemID] = nil
@@ -324,6 +332,15 @@ end
 --------------------------------------------------------------------------------
 -- Finding stock
 --------------------------------------------------------------------------------
+
+--- What one of a recipe's output cost to make, for a sale: only the cost,
+--- not the whole analysis (Profit:UnitCostForSale).
+local function UnitCostOf(recipeID)
+    local profit = ns.Profit
+    if profit.UnitCostForSale then return profit:UnitCostForSale(recipeID) end
+    local analysis = profit:Analyse(recipeID)
+    return analysis and analysis.costPerUnit
+end
 
 --- Bag slot holding an item, skipping locked slots.
 -- @return bag, slot, stackCount
@@ -1332,9 +1349,7 @@ function Posting:GetPostable(opts)
 
             -- What it cost to make one, so a listing below that can be
             -- flagged rather than quietly recommended.
-            local analysis = outputs[itemID]
-                and ns.Profit:Analyse(outputs[itemID])
-            local unitCost = analysis and analysis.costPerUnit
+            local unitCost = outputs[itemID] and UnitCostOf(outputs[itemID]) or nil
 
             local lossFloor, lossReason, vendorPrice =
                 self:GetLossFloor(itemID, unitCost)
@@ -1826,6 +1841,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
+    SellListSoon()
 
     -- Joining a listing still being confirmed: measured from before the
     -- first of them, and checked once for all of them, a few seconds after
@@ -2091,8 +2107,7 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     -- character's recipe, so a bank alt listing the crafter's work is told
     -- as well.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = recipeID and UnitCostOf(recipeID) or nil
 
     if unitCost and unitPrice < unitCost then
         text = text .. "\n|cffE5604F" .. L.Format("Below the %s it cost to make.", Money(unitCost)) .. "|r"
@@ -2214,8 +2229,7 @@ function Posting:BelowCost(itemID, price)
     -- Any character's recipe, so a bank alt holds back a craft the crafter
     -- mailed it just as the crafter would.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = recipeID and UnitCostOf(recipeID) or nil
 
     if unitCost and price < unitCost then return unitCost end
     return nil
@@ -2626,8 +2640,7 @@ function Posting:CanListOnClick(itemID, price)
     if self:GetSearchKey(itemID) then return false end
 
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = recipeID and UnitCostOf(recipeID) or nil
     if unitCost and price and price < unitCost then return false end
 
     return true

@@ -477,14 +477,27 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- The windows follow the bags half a second after they settle, and no more
+-- than once every two seconds. It used to be two seconds after any change,
+-- so materials just bought or a craft just made took that long to show.
+Inventory.SNAPSHOT_SOON = 0.5
+Inventory.SNAPSHOT_GAP = 2
+
 function Inventory:OnBagUpdate()
     self:InvalidateBagCounts()
 
     -- Bag events fire in bursts while looting or moving stacks; coalesce them.
     if self.snapshotTimer then return end
 
-    self.snapshotTimer = C_Timer.NewTimer(2, function()
+    local wait = self.SNAPSHOT_SOON
+    local last, now = self.snapshotAt, GetTime and GetTime() or nil
+    if last and now and now >= last then
+        wait = math.max(wait, self.SNAPSHOT_GAP - (now - last))
+    end
+
+    self.snapshotTimer = C_Timer.NewTimer(wait, function()
         Inventory.snapshotTimer = nil
+        Inventory.snapshotAt = GetTime and GetTime() or nil
         local record = GetRecord(false)
         local before = record and record.inventory or {}
         local after = Inventory:Snapshot() or {}

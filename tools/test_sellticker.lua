@@ -19,12 +19,15 @@ end
 CreateFrame = function() return NewFrame() end
 UIParent = NewFrame()
 Minimap = nil
-GetTime = function() return 0 end
+local clock = 0
+GetTime = function() return clock end
 time = function() return 100000 end
 
 local tickers = {}
+-- What is waiting to run on a later frame, and after how long.
+local waiting = {}
 C_Timer = {
-    After = noop,
+    After = function(seconds, fn) waiting[#waiting + 1] = { seconds = seconds, fn = fn } end,
     NewTicker = function(interval, fn)
         local ticker = { interval = interval, fn = fn, Cancel = noop }
         tickers[#tickers + 1] = ticker
@@ -52,6 +55,8 @@ ns.db = {}
 local queue = {}
 ns.Queue = { GetAll = function() return queue end }
 ns.Inventory, ns.Prices, ns.Config, ns.Auctions = {}, {}, {}, {}
+-- Linen Cloth (2589) is the one item in the bags.
+ns.Inventory.GetBagCount = function(_, itemID) return itemID == 2589 and 20 or 0 end
 ns.Scanner = { isAuctionHouseOpen = true, isScanning = false }
 local throttled = false
 ns.Posting = {
@@ -78,6 +83,7 @@ UI.UpdatePostButton = function() builds = builds + 1 end
 
 UI:OnEnable()
 Fire("AUCTION_HOUSE_SHOW")
+waiting = {}
 
 local postTicker
 for _, ticker in ipairs(tickers) do
@@ -138,6 +144,78 @@ check("item data arriving does", builds, 9)
 
 Tick(5)
 check("and then quiet again", builds, 9)
+
+-- Data for items not in the bags streams in all through a scan. The lists
+-- do not show them, so they are built again at most once a gap.
+clock = 50
+Fire("GET_ITEM_INFO_RECEIVED", 7777, true)
+Tick()
+check("data for an item not carried builds them once", builds, 10)
+for second = 1, 4 do
+    clock = 50 + second
+    Fire("GET_ITEM_INFO_RECEIVED", 7777 + second, true)
+    Tick()
+end
+check("more of it in the next seconds builds nothing", builds, 10)
+clock = 50 + UI.ITEM_INFO_GAP
+Tick()
+check("until the gap is over, then once more", builds, 11)
+Tick(3)
+check("and quiet after", builds, 11)
+clock = 80
+Fire("GET_ITEM_INFO_RECEIVED", 2589, true)
+Fire("GET_ITEM_INFO_RECEIVED", 2589, true)
+Tick()
+Fire("GET_ITEM_INFO_RECEIVED", 2589, true)
+Tick()
+check("data for a carried item still counts every time", builds, 13)
+
+-- Between ticks: a change is followed on the next frame, not up to a second
+-- later. After a listing went up the list stood as it was until the tick.
+print("")
+print("between the ticks")
+
+local function RunWaiting()
+    local run = waiting
+    waiting = {}
+    for _, entry in ipairs(run) do entry.fn() end
+    return #run
+end
+
+clock = 100
+ns.Inventory.changes = 2
+Fire("BAG_UPDATE_DELAYED")
+check("the bags settling asks for one look", #waiting, 1)
+check("on the next frame", waiting[1].seconds, 0)
+check("nothing is built in the event itself", builds, 13)
+RunWaiting()
+check("the look builds them", builds, 14)
+
+Fire("BAG_UPDATE_DELAYED")
+Fire("BAG_UPDATE_DELAYED")
+UI:SellListSoon()
+check("a burst of asks is still one look", #waiting, 1)
+check("held a moment after the last build", waiting[1].seconds, UI.SELL_LIST_GAP)
+RunWaiting()
+check("and with nothing changed it builds nothing", builds, 14)
+
+clock = 200
+throttled = true
+Fire("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
+RunWaiting()
+check("the auction house's busy state changing is followed at once", builds, 15)
+throttled = false
+
+Tick()
+check("the ticker still catches what nothing asked about", builds, 16)
+Tick(3)
+check("and stays quiet after", builds, 16)
+
+ns.Scanner.isAuctionHouseOpen = false
+ns.Inventory.changes = 3
+Fire("BAG_UPDATE_DELAYED")
+check("away from the auction house nothing is asked", #waiting, 0)
+ns.Scanner.isAuctionHouseOpen = true
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
