@@ -1647,6 +1647,26 @@ function Profit:FinishRanked(ranking)
     return results
 end
 
+--- A ranking already worked out, put in order again for new options with
+--- no recipe analysed. For a list whose search changed: the search is not
+--- part of the ranking, but a changed search lets go of the rows held in
+--- place (opts.keepOrder), so a row kept only because it was on screen,
+--- past its listing limit, leaves as RankOne would leave it out.
+-- @param results  what GetRanked gave for the same options, keepOrder aside
+-- @return a new list; results is left as it was
+function Profit:RankAgain(results, opts)
+    opts = opts or {}
+    local hideAtLimit = ns.Config:Get("hideAtPostLimit") ~= false and not opts.ignorePostLimit
+    local again = {}
+    for _, analysis in ipairs(results or {}) do
+        local held = opts.keepOrder and opts.keepOrder[analysis.recipeID]
+        if not (analysis.priceable and analysis.atPostLimit and hideAtLimit and not held) then
+            again[#again + 1] = analysis
+        end
+    end
+    return self:FinishRanked({ opts = opts, results = again })
+end
+
 --------------------------------------------------------------------------------
 -- Commands
 --------------------------------------------------------------------------------

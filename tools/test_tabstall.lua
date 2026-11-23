@@ -218,6 +218,14 @@ do
     assert(loadfile(lfs_cwd .. "/UI/Widgets.lua"))("Blackthornes_TS", ns)
     assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 
+    -- The search box's own change call, to type into it.
+    local typeSearch
+    local makeSearch = ns.Widgets.CreateSearchBox
+    ns.Widgets.CreateSearchBox = function(parent, hint, onChange)
+        if hint == "Search crafts" then typeSearch = onChange end
+        return makeSearch(parent, hint, onChange)
+    end
+
     local list
     ns.Widgets.CreateScrollList = function(_, opts)
         list = NewFrame()
@@ -320,6 +328,45 @@ do
     Pick()
     Frames()
     check("coming back ranks afresh", list.data[1].recipeID, 5)
+
+    -- Typing in the search narrows the ranking already worked out.
+    analysed = 0
+    typeSearch("Craft 4")
+    check("a search analyses no recipe again (the picked row aside)", analysed <= 1, true)
+    check("and shows the crafts that match, best first", Order(list.data), "49,48,47,46,45,44,43,42,41,40,4")
+    local narrowed = Order(list.data)
+    tabs.profit.refresh()
+    check("the same list an at-once refresh gives", Order(list.data), narrowed)
+    analysed = 0
+    typeSearch("Craft 49")
+    check("a longer search analyses nothing either", analysed <= 1, true)
+    check("and narrows further", Order(list.data), "49")
+    analysed = 0
+    typeSearch("no such craft")
+    check("a search that matches nothing analyses nothing", analysed <= 1, true)
+    check("and the list is empty", #list.data, 0)
+    typeSearch("")
+    check("cleared, every craft is back", #list.data, RECIPES)
+
+    -- A price moved since: the search works it all out afresh.
+    ns.Prices.changes = 1
+    boost[5], boost[7] = nil, 100000
+    analysed = 0
+    typeSearch("Craft")
+    check("after a price change a search analyses every recipe", analysed >= RECIPES, true)
+    check("and shows what is true now", list.data[1].recipeID, 7)
+    typeSearch("")
+
+    -- A row held in place past its listing limit leaves on a new search.
+    do
+        local kept = { { recipeID = 1, name = "a", priceable = true, atPostLimit = true, profit = 5 },
+            { recipeID = 2, name = "b", priceable = true, profit = 9 } }
+        check("RankAgain drops a row past its limit that is not held",
+            Order(ns.Profit:RankAgain(kept, {})), "2")
+        check("keeps it when the list ignores the limit",
+            Order(ns.Profit:RankAgain(kept, { ignorePostLimit = true })), "2,1")
+        check("and leaves the list it was given alone", #kept, 2)
+    end
 
     -- GetRanked is its three steps run straight through.
     local opts = { includeUnpriceable = true }

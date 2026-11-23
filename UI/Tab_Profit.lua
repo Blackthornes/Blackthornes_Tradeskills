@@ -2006,8 +2006,30 @@ local function Narrow(ranked)
     return ranked
 end
 
+-- The last ranking worked out, before the search narrowed it, with what it
+-- was worked out from. Typing in the search box narrows this instead of
+-- analysing every recipe again on each key (SearchChanged).
+local kept = nil
+
+--- Everything but the search that the ranking is made from.
+local function RankedFrom()
+    return table.concat({ tostring(state.accountWide), tostring(state.ignorePostLimit),
+        tostring(state.sortBy), tostring(state.craftableOnly),
+        tostring(state.includeUnpriceable), tostring(state.profession), tostring(Method()),
+        tostring(ns.Prices and ns.Prices.changes), tostring(ns.Inventory and ns.Inventory.changes),
+        tostring(ns.Config and ns.Config.changes) }, "|")
+end
+
+local function Keep(ranked, from)
+    local copy = {}
+    for index, analysis in ipairs(ranked) do copy[index] = analysis end
+    kept = { results = copy, from = from }
+    return ranked
+end
+
 local function BuildList()
-    return Narrow(ns.Profit:GetRanked(RankOptions()))
+    local from = RankedFrom()
+    return Narrow(Keep(ns.Profit:GetRanked(RankOptions()), from))
 end
 
 -- Picking the tab analysed every recipe in one frame, a stall with a few
@@ -2041,6 +2063,7 @@ local function RankInSlices()
     end
 
     local steps = ns.Profit:BeginRanked(RankOptions())
+    local from = RankedFrom()
     local worker
     worker = Util.NewWorker({
         budgetMs = SLICE_MS,
@@ -2058,7 +2081,10 @@ local function RankInSlices()
             if ranking ~= worker then return end
             ranking = nil
             if not StillShowing() then return end
-            Draw(Narrow(ns.Profit:FinishRanked(steps)))
+            -- Kept only when nothing moved while it was worked out.
+            local ranked = ns.Profit:FinishRanked(steps)
+            if from == RankedFrom() then Keep(ranked, from) else kept = nil end
+            Draw(Narrow(ranked))
         end,
     })
     ranking = worker
@@ -2087,6 +2113,19 @@ local function Refresh()
     if spread and RankInSlices() then return end
 
     Draw(BuildList())
+end
+
+--- The search box changed: narrow the ranking already worked out. Rows
+--- held in place past the listing limit leave, as a fresh ranking would
+--- have them (Profit:RankAgain). Anything else changed too, or no ranking
+--- is kept, and it is all worked out afresh.
+local function SearchChanged()
+    local last = kept
+    if not (widgets.list and last and not ranking and ns.Profit.RankAgain
+        and last.from == RankedFrom()) then
+        return Refresh()
+    end
+    Draw(Narrow(ns.Profit:RankAgain(last.results, RankOptions())))
 end
 
 function Draw(data)
@@ -2137,7 +2176,8 @@ function Draw(data)
             -- "Nothing matches these filters" is true and useless. A threshold
             -- set once and forgotten now survives logout, so the message says
             -- which one is doing the hiding and what it would take to see them.
-            local hidden = ns.Profit:GetRanked({
+            -- Not for a search that matched nothing: its words need no ranking.
+            local hidden = state.search ~= "" and {} or ns.Profit:GetRanked({
                 accountWide = state.accountWide,
                 ignorePostLimit = state.ignorePostLimit,
                 craftableOnly = state.craftableOnly,
@@ -2314,7 +2354,7 @@ local function BuildCrafts(container)
 
     local search = Widgets.CreateSearchBox(toolbar, L["Search crafts"], function(text)
         state.search = text or ""
-        Refresh()
+        SearchChanged()
     end)
     search:SetPoint("LEFT", method, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
