@@ -12,6 +12,8 @@ local saved = {
   TradeSkillFrame = TradeSkillFrame, BlackthornesEquipment = BlackthornesEquipment,
   C_Timer = C_Timer, GameTooltip = GameTooltip, C_TradeSkillUI = C_TradeSkillUI,
   ScrollBoxConstants = ScrollBoxConstants,
+  SmartNavigation_MarkFrameIgnored = SmartNavigation_MarkFrameIgnored,
+  InCombatLockdown = InCombatLockdown,
 }
 
 local function check(label, got, want)
@@ -138,6 +140,7 @@ ns.Widgets = {
   end,
 }
 
+assert(loadfile(lfs_cwd .. "/Core/Compat.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Upgrades.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/UpgradesOnly.lua"))("Blackthornes_TS", ns)
 local Only, Upgrades = ns.UpgradesOnly, ns.Upgrades
@@ -275,6 +278,44 @@ Only:Apply()
 check("no Equipment, room given back", TopY(), -7)
 check("no Equipment, list given back", scroll.provider, reopened)
 check("report says why", Only:ReportText(), "hidden, Equipment is not loaded")
+
+-- 13. A gamepad player (a player's report, 2026-11-22): the gamepad's window
+-- cursor must never land on the box. When the cursor leaves a piece of ours,
+-- the game runs our code inside its own close-window steps, and then blocks
+-- its next step (14x "Blackthornes_TS tried to call the protected function
+-- SetPreferredGamepadInteractTarget()"). The game's own mark keeps the cursor
+-- off, set out of a fight only, once the gamepad's code is loaded.
+local ignored = {}
+local fighting = true
+InCombatLockdown = function() return fighting end
+SmartNavigation_MarkFrameIgnored = function(frame) ignored[frame] = (ignored[frame] or 0) + 1 end
+Equip()
+Only:Attach()
+check("not marked in a fight", ignored[Only.box], nil)
+fighting = false
+Only:Attach()
+check("box kept off the gamepad cursor", ignored[Only.box], 1)
+check("empty note kept off too", ignored[Only.empty], 1)
+Only:Attach()
+check("marked once", ignored[Only.box], 1)
+SmartNavigation_MarkFrameIgnored = function() error("blocked") end
+local fresh = Only:CreateBox(list)
+check("a refused mark breaks nothing", ns.Compat.KeepOffGamepad(fresh), false)
+SmartNavigation_MarkFrameIgnored = nil
+local later = Region()
+check("no gamepad code, nothing to do", ns.Compat.KeepOffGamepad(later), false)
+-- The gamepad code loads later, or the fight ends: the waiting frames get
+-- their mark then.
+SmartNavigation_MarkFrameIgnored = function(frame) ignored[frame] = (ignored[frame] or 0) + 1 end
+fighting = true
+ns.Compat.KeepWaitingOffGamepad()
+check("still waiting in a fight", ignored[later], nil)
+fighting = false
+ns.Compat.KeepWaitingOffGamepad()
+check("marked once the gamepad code is there", ignored[later], 1)
+check("refused box marked on the next try", ignored[fresh], 1)
+ns.Compat.KeepWaitingOffGamepad()
+check("nothing marked twice", ignored[later], 1)
 
 for key, value in pairs(saved) do _G[key] = value end
 print("test_upgradesonly: all checks passed")
