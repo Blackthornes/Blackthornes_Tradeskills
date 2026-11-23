@@ -1763,7 +1763,13 @@ end
 --
 -- Returns true only when the database actually changed, so callers can report
 -- what happened rather than what was attempted.
-function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder, partial)
+--
+-- `book` sums up the rest of what was seen (cheapest, count, each suffix's
+-- cheapest). A repeat is the same value AND the same book: a new listing up
+-- the book, or a cheaper copy of a dear suffix, leaves the item's cheap end
+-- and so its value alone, and was skipped as "seen" for a minute.
+function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder, partial,
+    book)
     if not itemID or not marketValue or marketValue <= 0 then return false end
 
     self.passiveSeen = self.passiveSeen or {}
@@ -1771,11 +1777,11 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
     local now = GetTime()
     local seen = self.passiveSeen[itemID]
 
-    if seen and seen.price == marketValue and (now - seen.at) < PASSIVE_REPEAT_SECONDS then
+    if seen and seen.price == marketValue and seen.book == book and (now - seen.at) < PASSIVE_REPEAT_SECONDS then
         return false
     end
 
-    self.passiveSeen[itemID] = { at = now, price = marketValue }
+    self.passiveSeen[itemID] = { at = now, price = marketValue, book = book }
 
     ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder, partial)
 
@@ -1798,6 +1804,28 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
     end
 
     return true
+end
+
+--- A short key for one look at a book: its cheapest, count, rival and own
+--- prices, and each suffix's cheapest and count. Two looks with one key saw
+--- the same thing.
+function Scanner.BookKey(minBuyout, quantity, rivalMin, ownMin, partial, bySuffix)
+    local parts = { tostring(minBuyout), tostring(quantity), tostring(rivalMin), tostring(ownMin),
+        partial and "p" or "" }
+    if type(bySuffix) == "table" then
+        local suffixes = {}
+        for suffix in pairs(bySuffix) do suffixes[#suffixes + 1] = suffix end
+        table.sort(suffixes)
+        for _, suffix in ipairs(suffixes) do
+            local cheapest, count = nil, 0
+            for _, listing in ipairs(bySuffix[suffix]) do
+                count = count + (listing.quantity or 1)
+                if not cheapest or listing.unitPrice < cheapest then cheapest = listing.unitPrice end
+            end
+            parts[#parts + 1] = ("%s=%s/%d"):format(tostring(suffix), tostring(cheapest), count)
+        end
+    end
+    return table.concat(parts, ":")
 end
 
 --- Read the shared browse results after somebody else's query filled them.
@@ -1956,7 +1984,9 @@ function Scanner.HasFullResults(path, arg)
     return ok and full == true
 end
 
-function Scanner:CapturePassiveListings(itemID, listings, partial)
+-- `bySuffix` ({ [suffix] = listings }) is the same book split by random
+-- suffix, when it has any: it counts toward whether this is a new look.
+function Scanner:CapturePassiveListings(itemID, listings, partial, bySuffix)
     if not self:PassiveCaptureEnabled() then return false end
 
     -- Empty is not recorded; see the rules above.
@@ -1971,7 +2001,7 @@ function Scanner:CapturePassiveListings(itemID, listings, partial)
     if ns.Prices.KeepBeforeLook then ns.Prices:KeepBeforeLook(itemID) end
 
     local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder,
-        partial)
+        partial, Scanner.BookKey(minBuyout, quantity, rivalMin, ownMin, partial, bySuffix))
 
     if learned and ns.Persist then ns.Persist:SaveLater() end
 
@@ -2252,7 +2282,8 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     local partial = not Scanner.HasFullResults("C_AuctionHouse.HasFullItemSearchResults", key)
 
     if not ours then
-        if self:CapturePassiveListings(itemID, listings, partial) and next(bySuffix) and ns.Prices.CommitSuffixes then
+        if self:CapturePassiveListings(itemID, listings, partial, bySuffix) and next(bySuffix)
+            and ns.Prices.CommitSuffixes then
             ns.Prices:CommitSuffixes(itemID, bySuffix, time())
         end
         return
