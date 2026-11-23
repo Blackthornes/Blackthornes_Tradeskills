@@ -509,6 +509,17 @@ spot is kept in the screen's own units (stored times the scale), so a new
 size keeps the arrow where it was. No hover. Tested in
 `tools/test_arrowsize.lua`. A fix belongs in all five.
 
+The dial rests while you stand still (the owner saw memory climb while idle
+in town, 2026-11-23). Each read of the dial makes new tables, 33 a second.
+While `IsPlayerMoving()` says no, `GetPlayerFacing()` is the same as at the
+last read and that read changed nothing on the dial (`ArrowUI:Quiet`,
+`settled`, `aimFrame` for a swing still under way), it is read only every
+`REST_STEP` (0.5 s). A client that won't say keeps up every step. In
+Farmer's `UI/Arrow.lua`, Equipment's `UI/QuestArrow.lua`, Pets'
+`UI/BeastArrow.lua` and Tradeskills' `UI/WayArrow.lua`; a fix to one
+belongs in all four. Strings cost nothing here: Lua 5.1 keeps one copy of
+each, so text that comes out the same each tick makes no garbage.
+
 ## Road to 300
 
 The owner said build it (2026-10-20, from a mockup whose words he
