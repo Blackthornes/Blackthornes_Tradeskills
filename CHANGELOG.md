@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.41.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300.** Trainers in Undercity, Thunder Bluff and Darnassus show the city name, not the zone around it.
+- **Smoother play.** Scans finish without a freeze. Typing in the Profit and Prices searches is quicker, and the windows follow your bags sooner.
+- Various bug fixes for Tradeskills.
+
 ## 1.41.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

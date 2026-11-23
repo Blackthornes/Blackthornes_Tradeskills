@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.41.1
+
+- Road to 300 names the city for Undercity, Thunder Bluff and Darnassus trainers.
+- Scans finish without a freeze, and the Profit and Prices searches are quicker.
+
+Fixes and changes:
+- Various bug fixes for Tradeskills.
+
 ## 1.41.0
 
 - A new Queue From Sell List box in Settings puts crafts that Craft First holds back into your queue. It starts off.
