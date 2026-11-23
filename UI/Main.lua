@@ -1648,12 +1648,41 @@ end
 --- has just loaded, the owned auctions read, and whether listing is open
 --- (blocked, a scan, the house busy, a listing still being confirmed). The
 --- lists are rebuilt only when it changes.
-local itemInfoSeen = 0
+--
+-- Item data is counted in two parts. Data for an item in the bags counts at
+-- once. Data for any other item (a reagent a cost reads, a shopping list's
+-- item) counts too, but while it streams in, as it does all through a scan
+-- or while the game's own list is paged, it moves the key at most once
+-- every UI.ITEM_INFO_GAP seconds: the lists were built again every second
+-- of a scan for items they do not show.
+UI.ITEM_INFO_GAP = 5
+local itemInfoSeen, itemInfoOther, itemInfoCounted, itemInfoAt = 0, 0, 0, nil
 do
     local watcher = {}
-    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function()
-        itemInfoSeen = itemInfoSeen + 1
+    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
+        local inventory = ns.Inventory
+        local carried = true
+        if itemID and inventory and inventory.GetBagCount then
+            local ok, count = pcall(inventory.GetBagCount, inventory, itemID)
+            carried = not ok or (tonumber(count) or 0) > 0
+        end
+        if carried then
+            itemInfoSeen = itemInfoSeen + 1
+        else
+            itemInfoOther = itemInfoOther + 1
+        end
     end)
+end
+
+--- Item data for items not in the bags, counted at most once a gap.
+local function OtherItemInfo()
+    if itemInfoOther ~= itemInfoCounted then
+        local now = GetTime and GetTime() or nil
+        if not (now and itemInfoAt) or now - itemInfoAt >= UI.ITEM_INFO_GAP or now < itemInfoAt then
+            itemInfoCounted, itemInfoAt = itemInfoOther, now
+        end
+    end
+    return itemInfoCounted
 end
 
 function UI.SellListKey()
@@ -1679,7 +1708,7 @@ function UI.SellListKey()
         shown, tab,
         ns.Inventory.changes or 0, ns.Prices.changes or 0,
         queued, amount,
-        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen,
+        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen, OtherItemInfo(),
         ns.Auctions.readCount or 0,
         tostring(blocked), tostring(ns.Scanner.isScanning), tostring(throttled), pending,
     }, ":")
