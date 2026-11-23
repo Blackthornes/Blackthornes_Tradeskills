@@ -3679,3 +3679,27 @@ scroll box's top anchors move down `ROOM` (20) to fit the box and go back
 when the box goes. `/bts value` prints an "upgrades only box" line saying
 which list it found. The list path is a guess until seen in game. Tested in
 `tools/test_upgradesonly.lua`.
+
+## The gamepad's window cursor (2026-11-23)
+
+A player on a gamepad got 14x "Blackthornes_TS tried to call the protected
+function SetPreferredGamepadInteractTarget()", and the gamepad stopped working
+right. Read in Forever's own UI code: pressing B clicks the window's close
+button; the window's hide tells `FrameControlsManager:FrameHidden`, which
+moves the gamepad's window cursor away (`SmartNavigation:SelectButton`). That
+runs the old button's `FocusExit` (its OnLeave) and the new one's
+`FocusEnter` with no guard around them. When that button is ours, our code
+runs inside the game's steps, and the next one (`CheckForInputBinding`, then
+`SetPreferredGamepadInteractTarget`) is blocked. The stack named no line of
+ours, so this is the likely path, not a proven one.
+
+`Compat.KeepOffGamepad(frame)` (Core/Compat.lua) puts the game's own
+`SmartNavigation_MarkFrameIgnored` mark on a frame of ours that sits inside a
+game window, so the cursor skips it and its children. The game stores the
+mark through its own secure step, so it is clean. Refused in a fight and
+missing until the gamepad code loads: a frame that can't be marked waits and
+is tried again on PLAYER_REGEN_ENABLED and ADDON_LOADED. Marked: the Upgrades
+Only box and its empty note (each time the profession window opens), and the
+line under Options > AddOns. The mouse works on them as before; a gamepad
+player reaches them with the mouse cursor mode. Tested in
+`tools/test_upgradesonly.lua`. Not seen in game yet.

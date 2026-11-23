@@ -213,3 +213,13 @@ Check: Ask `ns.Scanner:GetCommodityStatus(itemID)` (true, false or nil), never
 Why: Snipe asked with an ID, read every material as sold one at a time and
   waited on the wrong event, so Buy It sat on "Asking..." and bought
   nothing (2026-11-23).
+
+## A piece of ours inside a game window
+Lines: CreateFrame\([^)]*(ProfessionsFrame|RecipeList|SchematicForm|AuctionHouseFrame|MerchantFrame|MailFrame|CharacterFrame|SettingsPanel)|RegisterCanvasLayoutCategory
+Check: A button or box we put inside a game window gets
+  `Compat.KeepOffGamepad(frame)`, so the gamepad's window cursor skips it.
+  The mouse works on it as before.
+Why: The gamepad cursor left our Upgrades Only box as the profession window
+  closed, our code ran inside the game's close steps, and the game blocked
+  its next one 14 times ("SetPreferredGamepadInteractTarget()"); the
+  gamepad stopped working right (2026-11-22).

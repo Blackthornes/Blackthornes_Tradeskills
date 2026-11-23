@@ -2555,6 +2555,9 @@ function UI:RegisterGameOptions()
     hint:SetText(L["Or right-click the minimap button."])
 
     self.optionsPanel = panel
+    -- It sits inside the game's own Settings window: kept off the gamepad's
+    -- window cursor (see Compat.KeepOffGamepad). The mouse works as before.
+    if ns.Compat and ns.Compat.KeepOffGamepad then ns.Compat.KeepOffGamepad(panel) end
 
     local registered = false
 

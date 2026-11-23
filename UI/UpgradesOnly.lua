@@ -318,6 +318,13 @@ function UpgradesOnly:Attach()
     local current = Try(scroll.GetDataProvider, scroll)
     if current and current ~= self.mine then self.source = current end
 
+    -- Kept off the gamepad's window cursor (see Compat.KeepOffGamepad).
+    local Compat = ns.Compat
+    if Compat and Compat.KeepOffGamepad then
+        Compat.KeepOffGamepad(self.box)
+        Compat.KeepOffGamepad(self.empty)
+    end
+
     self:Apply()
     return true
 end
