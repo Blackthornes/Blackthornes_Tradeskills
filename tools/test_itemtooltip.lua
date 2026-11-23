@@ -337,9 +337,28 @@ ns.settings.showValueOnItemTooltips = false
 check("off when switched off", ItemTooltip:IsEnabled(), false)
 
 tooltip = Tooltip(LINEN_CLOTH)
-check("and nothing is written", ItemTooltip:Decorate(tooltip, nil, nil), "quiet")
+check("and no value is written", ItemTooltip:Decorate(tooltip, nil, nil), "quiet")
 check("nothing at all", #tooltip.lines, 0)
 check("not even a stack total", ItemTooltip:AddStackLine(tooltip, 20), false)
+
+-- Value off hides only the value lines (a player's report, 2026-11-22: with
+-- Value on Tooltips off and Sales Details on Always, no sales or disenchant
+-- lines showed). The other lines keep their own settings.
+do
+  local addDemand = ItemTooltip.AddDemandLines
+  ItemTooltip.AddDemandLines = function(_, lines) lines[#lines + 1] = { "Demand", "Sells well" } end
+  local valueOff = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
+  local labels = {}
+  for _, line in ipairs(valueOff) do labels[#labels + 1] = line[1] end
+  check("value off keeps the demand line", table.concat(labels, ","), "Demand")
+  local tip = Tooltip(LINEN_CLOTH)
+  ItemTooltip:Decorate(tip, nil, nil)
+  check("and writes it", #tip.lines, 1)
+  check("with no value line", tip.lines[1] and tip.lines[1][1], "Demand")
+  local block = ItemTooltip:BlockLines(Tooltip(LINEN_CLOTH), nil)
+  check("the shared block gets it too", block and #block, 1)
+  ItemTooltip.AddDemandLines = addDemand
+end
 
 ns.settings.showValueOnItemTooltips = true
 check("on when switched on", ItemTooltip:IsEnabled(), true)

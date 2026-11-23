@@ -364,7 +364,34 @@ end
 -- listing. "What is this worth" is the question a tooltip is asked; what it
 -- would cost to buy one right now is a question asked at the auction house,
 -- where the Prices tab answers it with the whole book.
+--- Lines that belong to Value on Tooltips: the price, lowest posting and
+--- stack total. Only these follow that setting; every other line keeps its
+--- own (a player's report, 2026-11-22: Value off hid the sales and
+--- disenchant lines too).
+local function ValueLine(line)
+    if line then line.value = true end
+    return line
+end
+
+--- Every line for an item, then the value lines taken out when Value on
+--- Tooltips is Off, or on Shift with Shift up (then `held` is set).
 function ItemTooltip:LinesFor(itemID, count, link)
+    local lines = self:AllLinesFor(itemID, count, link)
+    local valueOn = self:IsEnabled()
+    if valueOn and ItemTooltip.Shows("value") then return lines end
+
+    local kept = { held = lines.held }
+    for i = 1, #lines do
+        if lines[i].value then
+            if valueOn then kept.held = true end
+        else
+            kept[#kept + 1] = lines[i]
+        end
+    end
+    return kept
+end
+
+function ItemTooltip:AllLinesFor(itemID, count, link)
     local lines = {}
 
     if not itemID or not ns.Prices then return lines end
@@ -381,7 +408,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
     if poorOk and poor then return lines end
 
     local mine = self:MyPriceLine(itemID)
-    if mine then lines[#lines + 1] = mine end
+    if mine then lines[#lines + 1] = ValueLine(mine) end
 
     -- The auction house's own figure: the player's price has its own line.
     local value
@@ -417,8 +444,8 @@ function ItemTooltip:LinesFor(itemID, count, link)
         if self.IsAuctionable(itemID) then
             -- Searched and found empty is not the same as never looked at.
             local record = ns.Prices.Get and ns.Prices:Get(itemID)
-            lines[#lines + 1] = { L["Auction value"],
-                (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true }
+            lines[#lines + 1] = ValueLine({ L["Auction value"],
+                (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true })
         end
 
         self:AddDemandLines(lines, itemID)
@@ -460,7 +487,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
         end
     end
 
-    lines[#lines + 1] = { L["Auction value"], text }
+    lines[#lines + 1] = ValueLine({ L["Auction value"], text })
 
     local lowest
     if rollEntry then
@@ -476,7 +503,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
     else
         lowest = self:LowestLine(itemID)
     end
-    if lowest then lines[#lines + 1] = lowest end
+    if lowest then lines[#lines + 1] = ValueLine(lowest) end
 
     local trend = self:TrendLine(itemID)
     if trend then
@@ -491,7 +518,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
         lines[#lines + 1] = {
             L.Format("Stack of %d:", count),
             Util.FormatMoney(value * count, { short = true }),
-            stack = true,
+            stack = true, value = true,
         }
     end
 
@@ -1094,7 +1121,6 @@ end
 -- @return "valued", "unscanned", "quiet", "duplicate" or "noitem"
 function ItemTooltip:Decorate(tooltip, data, count)
     if type(tooltip) ~= "table" then return "noitem" end
-    if not self:IsEnabled() then return "quiet" end
 
     -- Adding lines makes the tooltip taller, which means showing it again; on
     -- a client where that re-enters the hook, this is what stops it.
@@ -1112,12 +1138,6 @@ function ItemTooltip:Decorate(tooltip, data, count)
     end
 
     if type(Field(tooltip, "AddDoubleLine")) ~= "function" then return "noitem" end
-
-    -- Every value line on Shift, and Shift is up: only the hint goes on.
-    if not ItemTooltip.Shows("value") then
-        self:HeldBack(tooltip)
-        return "held"
-    end
 
     self.writing = true
 
@@ -1313,7 +1333,7 @@ end
 
 --- Tradeskills' lines for the shared block, and whether one was held back.
 function ItemTooltip:BlockLines(tooltip, data)
-    if type(tooltip) ~= "table" or not self:IsEnabled() then return nil end
+    if type(tooltip) ~= "table" then return nil end
     local itemID = self:ItemForTooltip(tooltip, data)
     if not itemID then return nil end
 
@@ -1321,7 +1341,6 @@ function ItemTooltip:BlockLines(tooltip, data)
     local count = bag and ItemTooltip.StackCountIn(bag, slot) or nil
     local lines = self:LinesFor(itemID, count, self:LinkForTooltip(tooltip, data))
     if #lines == 0 then return nil, lines.held end
-    if not ItemTooltip.Shows("value") then return nil, true end
 
     local out = {}
     for i = 1, #lines do out[i] = ItemTooltip.ToBlock(lines[i]) end
@@ -1535,8 +1554,7 @@ function ItemTooltip:PrintReport(input)
     ns.Print(("|c%sAuction value on item tooltips|r"):format(ns.COLORS.accent))
 
     if not self:IsEnabled() then
-        ns.PrintRaw(("  |c%sswitched off in Settings|r"):format(ns.COLORS.muted))
-        return
+        ns.PrintRaw(("  |c%svalue lines switched off in Settings|r"):format(ns.COLORS.muted))
     end
 
     local firing = {}

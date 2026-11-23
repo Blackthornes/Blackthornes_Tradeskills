@@ -180,17 +180,18 @@ item:Redraw()
 check("Shift down: the trend comes back", Has(item, "Trend (7 days)"), true)
 check("and no hint", item.hint, 0)
 shift = false
+Shift:Apply(Shift.ALWAYS, "trend", true, SetOn("tooltipTrend"))
 
 Shift:Apply(Shift.SHIFT, "value", true, SetOn("showValueOnItemTooltips"))
 item:Redraw()
-check("every value line held back", #item.lines, 0)
+check("every value line held back", Has(item, "Auction value"), false)
+check("the trend keeps its own setting", Has(item, "Trend (7 days)"), true)
 check("just the hint", item.hint, 1)
 shift = true
 item:Redraw()
 check("Shift down: the value comes back", Has(item, "Auction value"), true)
 shift = false
 Shift:Apply(Shift.ALWAYS, "value", true, SetOn("showValueOnItemTooltips"))
-Shift:Apply(Shift.ALWAYS, "trend", true, SetOn("tooltipTrend"))
 
 -- The Shift key itself redraws the tooltip, only while a line is on Shift.
 local refreshed = 0
