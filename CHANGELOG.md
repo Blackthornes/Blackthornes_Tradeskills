@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.41.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Queue From Sell List.** A new box on the Pricing page of Settings, under Craft First. It starts off, and is grey while Craft First is off. Tick it and each row Craft First holds back gets a Queue button, and Queue All shows by List Next.
+- **Sell list.** After a quick or full scan, the Sell list lists an item as soon as you click, with no wait to search it again. This holds for fifteen minutes, even through a `/reload`.
+- **Snipe.** Snipe buys materials again. When a buy fails, it tells you why. The To Disenchant list says why it is empty.
+- **Value on Tooltips.** Setting it to Off hides only the price, the lowest posting and the stack total. Sales, disenchant and the other lines stay. Value on Shift works the same way.
+- **Suffix prices.** A random suffix item's new price shows the next time you open the auction house.
+- **Profession list.** The recipe count no longer covers a long profit number.
+- **Gamepad.** Closing windows with a gamepad no longer gives a blocked action error.
+
+
 ## 1.40.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating.

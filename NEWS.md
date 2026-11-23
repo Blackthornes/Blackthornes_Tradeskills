@@ -23,6 +23,19 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.41.0
+
+- A new Queue From Sell List box in Settings puts crafts that Craft First holds back into your queue. It starts off.
+
+Fixes and changes:
+- After a scan, the Sell list lists an item as soon as you click, with no wait. This holds for fifteen minutes.
+- Snipe buys materials again, and tells you why when a buy fails. To Disenchant says why its list is empty.
+- Value on Tooltips set to Off hides only the price lines. Sales, disenchant and the other lines stay.
+- A random suffix item's new price shows the next time you open the auction house.
+- The recipe count no longer covers a long profit number in the profession list.
+- Closing windows with a gamepad no longer gives a blocked action error.
+
+
 ## 1.40.0
 
 - A new Upgrades Only box on the profession window lists only the crafts that are upgrades for you.
