@@ -2051,6 +2051,16 @@ minutes asks nothing. Canceling by wheel was not worked on. Tested in
 `tools/test_wheelpass.lua`, `tools/test_auctionwheel.lua` and
 `tools/test_fastlisting.lua`.
 
+No search after a recent scan (the owner, 2026-11-23: rechecking after a
+quick scan "is just adding too much time and extra clunkiness to posting
+items", Sell tab only): `ScannedLately` now holds for `SCAN_FRESH_FOR`
+(900, the quick scan's own wait), apart from a single item's check. It
+also reads the saved stamp `Prices:GetLastScan()` (a full scan, or a sweep
+that ran to the page limit, for this realm and faction), so a /reload or
+relog inside the fifteen minutes still lists on the click. A stamp ahead
+of the clock is not trusted. Snipe and the other tabs are unchanged.
+Tested in `tools/test_fastlisting.lua`.
+
 Passed over (the owner, 2026-11-08: wheel up "still breaks and stops
 working"): the Sell list's next stack was picked at the price it was
 drawn with, then refused at the checked price (`RefusesEarly`: under the

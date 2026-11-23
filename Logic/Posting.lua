@@ -64,6 +64,15 @@ local VERIFY_SHARE_MOST = 3
 local FRESH_FOR = 600
 Posting.FRESH_FOR = FRESH_FOR
 
+-- A quick scan or full scan that finished this recently prices the whole
+-- Sell list: nothing on it is searched again before it lists (the owner,
+-- 2026-11-23: rechecking after a quick scan "is just adding too much time
+-- and extra clunkiness to posting items"). Fifteen minutes, the same as the
+-- wait before the game allows the next quick scan, so there is no gap
+-- between one scan going stale and the next being possible.
+local SCAN_FRESH_FOR = 900
+Posting.SCAN_FRESH_FOR = SCAN_FRESH_FOR
+
 -- One search for the whole Sell list asks about this many items at most.
 local CHECK_ALL_MOST = 50
 
@@ -2306,23 +2315,34 @@ function Posting:NoteScanned(itemIDs, whole)
     end
 end
 
---- A scan of the whole auction house just finished. For FRESH_FOR (ten
---- minutes, five until 2026-11-14) every price counts as checked, also for an item the scan did
+--- A scan of the whole auction house just finished. For SCAN_FRESH_FOR
+--- (fifteen minutes since 2026-11-23, ten until then, five until
+--- 2026-11-14) every price counts as checked, also for an item the scan did
 --- not see (nobody is selling it) and for a copy with a random suffix, so
 --- a click or wheel turn lists with no second search first (the owner,
 --- 2026-11-12: "I do not want double scans before posting if I've had a
 --- scan in the last 5 minutes"). Before, only the items the scan priced
 --- were marked, so one nobody else sold cost a search of the list, a
 --- search of its own and a "Click again". Kept through closing the auction
---- house: coming back inside ten minutes is still inside ten minutes.
+--- house: coming back inside fifteen minutes is still inside them.
 function Posting:NoteWholeScan()
     self.wholeScanAt = GetTime()
 end
 
---- Did a scan of the whole auction house finish in the last ten minutes?
+--- Did a quick scan or full scan finish in the last fifteen minutes
+--- (SCAN_FRESH_FOR)? Read from this session's own mark, and from the saved
+--- scan stamp of this realm and faction, so a /reload or a relog inside the
+--- fifteen minutes still counts (the quick scan cannot run again then). A
+--- sweep that ran to the page limit counts; one cut short does not stamp.
 function Posting:ScannedLately()
     local at = rawget(self, "wholeScanAt")
-    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+    if type(at) == "number" and (GetTime() - at) <= SCAN_FRESH_FOR then return true end
+    local prices = ns.Prices
+    if not (prices and prices.GetLastScan) then return false end
+    local ok, last = pcall(prices.GetLastScan, prices)
+    if not ok or type(last) ~= "number" then return false end
+    local age = time() - last
+    return age >= 0 and age <= SCAN_FRESH_FOR
 end
 
 --- Does a running scan hold listing back? Only one the player asked for.
