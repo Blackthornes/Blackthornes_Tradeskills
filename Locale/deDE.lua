@@ -2547,6 +2547,7 @@ L["Scan your auctions again first."] = "Lies deine Auktionen zuerst noch einmal 
 L["Already cancelling that one."] = "Diese wird schon abgebrochen."
 L["The auction house won't let you cancel that one."] = "Das Auktionshaus lässt dich diese nicht abbrechen."
 L["That auction is gone already."] = "Diese Auktion ist schon weg."
+L["That buy didn't go through. Try it again."] = "Der Kauf hat nicht geklappt. Versuch es noch einmal."
 L["The game would not cancel it."] = "Das Spiel hat sie nicht abgebrochen."
 L["None of your auctions are undercut."] = "Keine deiner Auktionen ist unterboten."
 L["Cancelled %s. It comes back to you in the mail."] = "%s abgebrochen. Es kommt per Post zu dir zurück."

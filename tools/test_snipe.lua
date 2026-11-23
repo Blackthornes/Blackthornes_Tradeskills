@@ -413,6 +413,9 @@ Snipe:CancelBuy()
 Snipe.topFn, timers, Snipe.readyQueued = nil, {}, nil
 
 -- 19. Stacks.
+-- This fake client prices a stack outside a click, as Retail does. Forever
+-- does not; that is walked in test_snipestuckask and test_snipestackkind.
+Snipe.ASK_OUTSIDE_CLICK = true
 status = 2
 stack = { { unitPrice = 100, quantity = 3 }, { unitPrice = 120, quantity = 50 } }
 local c = { itemID = 42, kind = "vendor", price = 100, worth = 500, qty = 53 }

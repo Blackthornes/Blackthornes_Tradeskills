@@ -319,8 +319,10 @@ local function UpdateRow(row, find)
     if busy then
         if Snipe().armed == pending then
             row.badge:SetText(L["Confirm"])
-        elseif pending.phase == "quoted" then
-            row.badge:SetText(L.Format("Pay %s", Money(pending.total)))
+        elseif pending.phase == "quoted" or pending.phase == "planned" then
+            -- Planned waits for the click too; "Asking..." here read as
+            -- still working, and the buy was let go unclicked.
+            row.badge:SetText(L.Format("Pay %s", Money(pending.total or pending.expected)))
         else
             row.badge:SetText(L["Asking..."])
         end

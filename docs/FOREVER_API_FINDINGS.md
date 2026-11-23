@@ -486,6 +486,17 @@ been seen to. If the call raises, or two quotes never come
 now start larger (up to 50 keys) and halve when the queue gives up; how
 many Forever takes at once is not yet measured.
 
+**Snipe and stacks (2026-11-23).** Snipe asked
+`GetItemCommodityStatus` with an item ID, which Forever refuses (it takes an
+item in the bags, see above), so every find read as sold one at a time. A
+material's listings answer on `COMMODITY_SEARCH_RESULTS_UPDATED`, which
+that path never read: Buy It showed "Asking..." for 13 seconds and let go
+without a word. Snipe now asks the scanner's memory, and for an item nobody
+knows, the event that answers says what it is (and is kept with
+`Scanner:LearnCommodity`). `StartCommoditiesPurchase` is documented as
+needing the player's own click, so a clicked buy is planned from the
+listings and the next click asks. Not yet seen in game.
+
 ## Bank slot events fire with the bank shut
 
 `PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on

@@ -79,6 +79,9 @@ C_AuctionHouse = {
 }
 settings.snipeCap, settings.snipeWatch = 1000, "lists"
 Snipe.running, Snipe.spent = false, 0
+-- This fake client prices a stack outside a click, as Retail does; one
+-- that does not is walked in test_snipestuckask and test_snipestackkind.
+Snipe.ASK_OUTSIDE_CLICK = true
 
 local herb = { itemID = 40, kind = "lists", price = 90, worth = 100, qty = 30 }
 Snipe.finds = { herb }

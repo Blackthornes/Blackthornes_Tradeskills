@@ -204,3 +204,12 @@ Check: Read the value you want from the place the game gives it, not the
 Why: The trainer's skill was read from the name, so nothing was kept and
   Road to 300 offered Rugged Armor Kit at 211 while the trainer asked 225;
   the test's fake gave the number first (2026-11-21).
+
+## Is it sold in stacks
+Check: Ask `ns.Scanner:GetCommodityStatus(itemID)` (true, false or nil), never
+  `C_AuctionHouse.GetItemCommodityStatus` with an item ID: Forever takes an
+  item in the bags there and raises on an ID. Handle nil, and make the
+  test's fake raise on an ID as the game does.
+Why: Snipe asked with an ID, read every material as sold one at a time and
+  waited on the wrong event, so Buy It sat on "Asking..." and bought
+  nothing (2026-11-23).

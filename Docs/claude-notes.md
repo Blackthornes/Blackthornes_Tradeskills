@@ -2557,6 +2557,19 @@ search: `Snipe:NoteGone` remembers the price its row showed and
 minutes) unless the price moves. A buy does not mark it gone. Tested in
 `tools/test_snipesteady.lua`. Not yet seen in game.
 
+Buying a material (2026-11-23, a player's report on 1.40.0: Buy It sat on
+"Asking..." and bought nothing). `IsStack` in `Logic/Snipe.lua` answers
+true, false or nil from `Scanner:GetCommodityStatus`; nil reads as a stack
+first and the answering event settles it (`StackResults` and `ItemResults`
+each pick up a buy asked the other way, only for an answer naming that
+item). A stack's price is asked for only inside a click
+(`Snipe.ASK_OUTSIDE_CLICK` is false), so a buy is planned from the
+listings and the next click asks. Every
+buy let go after a click says why (`Tell`, `Snipe:Refused`); a quiet ready
+stays quiet. The row's badge shows "Pay X" for a planned buy too. Tested in
+`tools/test_snipestackkind.lua`. `Logic/ListSets.lua` and
+`UI/FavorsView.lua` still ask the game with an item ID.
+
 ## The Enchant strip
 
 The owner said build it (2026-11-05) as a window beside the Enchanting

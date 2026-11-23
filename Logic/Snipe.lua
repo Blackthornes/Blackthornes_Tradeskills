@@ -58,6 +58,10 @@ Snipe.REQUOTE_BEFORE = 2
 Snipe.READY_KEEP = 30
 -- A find that could not be readied waits this long before another try.
 Snipe.RETRY_AFTER = 6
+-- May a stack's price be asked for outside the player's own click? The
+-- game's notes say StartCommoditiesPurchase needs the click, so no: Snipe
+-- never calls it from a timer or an event.
+Snipe.ASK_OUTSIDE_CLICK = false
 -- Most of a stack bought in one click.
 Snipe.MOST_UNITS = 20
 -- Searches left free in the auction house's budget for the player's own
@@ -992,17 +996,38 @@ function Snipe:Repricing()
     return p ~= nil and p.phase == "quoted" and p.refreshing ~= nil and not p.item
 end
 
+--- Is this item sold in stacks? True, false, or nil when nobody can say
+--- yet. Forever's GetItemCommodityStatus takes an item in the bags, never
+--- an item ID (asked with an ID it raises), so an ID alone used to read as
+--- "sold one at a time" for every material, and a material's listings were
+--- then waited for on the wrong event. The scanner's memory is asked first;
+--- what is still unknown is settled by the event that answers (Crossed).
 local function IsStack(itemID)
-    if not Util.HasFunction("C_AuctionHouse.GetItemCommodityStatus") then return false end
+    local scanner = ns.Scanner
+    if scanner and scanner.GetCommodityStatus then
+        local ok, known = pcall(scanner.GetCommodityStatus, scanner, itemID)
+        if ok and type(known) == "boolean" then return known end
+    end
+    if not Util.HasFunction("C_AuctionHouse.GetItemCommodityStatus") then return nil end
     local ok, status = pcall(function()
         local value = C_AuctionHouse.GetItemCommodityStatus(itemID)
         if type(value) == "number" then return value end
         local enum = rawget(_G, "Enum") and Enum.ItemCommodityStatus
         if enum and value == enum.Item then return 1 end
+        if enum and value == enum.Commodity then return 2 end
         return nil
     end)
-    -- 1 is an item sold one at a time; anything else the game says is a stack.
-    return ok and status ~= nil and status ~= 1
+    -- 1 is an item sold one at a time, 2 a stack; 0 is "not known yet".
+    if not ok then return nil end
+    if status == 1 then return false end
+    if status == 2 then return true end
+    return nil
+end
+
+--- Keep what a search's answer showed about an item, for the next buy.
+local function Learn(itemID, stack)
+    local scanner = ns.Scanner
+    if scanner and scanner.LearnCommodity then pcall(scanner.LearnCommodity, scanner, itemID, stack) end
 end
 
 --- Units to ask for: the listing, the cap and the most-at-once allow.
@@ -1050,6 +1075,10 @@ function Snipe:Buy(find, auto)
     if units < 1 then
         if auto then find.retryAt = Now() + self.READY_KEEP; return end
         if self.running and self:Left() <= 0 then return self:CapReached() end
+        if find.kind == "lists" and find.want and Snipe.Need(find.want, find.itemID) <= 0 then
+            Say(L["Got all you need"])
+            return
+        end
         -- Cap money is still left for cheaper finds: keep going without
         -- this one, rather than stopping the whole session.
         Say(L["That costs more than your Spending Cap has left."])
@@ -1059,10 +1088,14 @@ function Snipe:Buy(find, auto)
 
     if not auto then Intend(find) end
 
-    if not IsStack(find.itemID) then
+    -- Not known reads as a stack first: the answer's own event says which
+    -- it is, and the other path picks it up (StackResults, ItemResults).
+    local stack = IsStack(find.itemID)
+    if stack == false then
         return self:AskItem(find, auto)
     end
     if self:AskStack(find, auto) then return end
+    if stack == nil then return self:AskItem(find, auto) end
     -- An old client with no listings to read: ask for the units as before.
     self:StartStack(find, units, nil, auto, not auto)
 end
@@ -1183,7 +1216,12 @@ function Snipe:AskStack(find, auto)
         end,
     })
     After(self.QUOTE_WAIT + 3, function()
-        if Snipe.pending == mine and mine.phase == "listing" then Snipe:CancelBuy() end
+        -- Sent, and no answer came. An item answer turns `mine` into a
+        -- one-at-a-time buy; that one is left alone here.
+        if Snipe.pending == mine and (mine.phase == "listing" or (mine.phase == "asking" and not mine.total)) then
+            Snipe:CancelBuy()
+            Tell(mine, L["the auction house is busy, try again in a moment"])
+        end
     end)
     return true
 end
@@ -1212,10 +1250,21 @@ end
 --- A stack's listings came in: work out the units, then ask for the price.
 function Snipe:StackResults(itemID)
     local pending = self.pending
-    if not (pending and pending.stack and pending.phase == "listing" and pending.sent) then return end
+    if not (pending and pending.sent) then return end
+    -- Asked as an item sold one at a time, answered as a stack: it is a
+    -- stack. Only an answer that names this item counts; the player's own
+    -- searches fire the same event.
+    if pending.item and not pending.stack and pending.phase == "asking" and itemID == pending.itemID then
+        pending.stack, pending.phase = true, "listing"
+    end
+    if not (pending.stack and pending.phase == "listing") then return end
     if itemID and itemID ~= pending.itemID then return end
+    if itemID then Learn(pending.itemID, true) end
     local listings = StackListings(pending.itemID)
-    if not listings then return self:CancelBuy() end
+    if not listings then
+        self:CancelBuy()
+        return Tell(pending, L["That buy didn't go through. Try it again."])
+    end
     local find, pct = pending.find, self:Percent()
     local units, cost, anyDeal = Snipe.UnitsFromListings(listings, find, pct, self:Left(), self:MostFor(find))
     self.pending = nil
@@ -1233,9 +1282,10 @@ function Snipe:StackResults(itemID)
     end
     -- Deal units past this buy: the find stays on the list for them.
     local all = Snipe.UnitsFromListings(listings, find, pct, math.huge, math.huge)
-    -- This runs from the listings event, never inside a click, so a client
-    -- known to ask only on a click gets a planned buy straight away.
-    if self.noAutoStack then
+    -- This runs from the listings event, never inside a click, and the
+    -- game prices a stack only inside one (ASK_OUTSIDE_CLICK). So the buy
+    -- is planned straight away and the next click asks.
+    if self.noAutoStack or not self.ASK_OUTSIDE_CLICK then
         self:Plan(find, units, cost, not pending.auto)
     else
         self:StartStack(find, units, cost, pending.auto, false)
@@ -1279,7 +1329,10 @@ function Snipe:AskItem(find, auto)
         end,
     })
     After(self.QUOTE_WAIT + 3, function()
-        if Snipe.pending == mine and mine.phase == "asking" then Snipe:CancelBuy() end
+        if Snipe.pending == mine and (mine.phase == "asking" or mine.phase == "listing") then
+            Snipe:CancelBuy()
+            Tell(mine, L["the auction house is busy, try again in a moment"])
+        end
     end)
 end
 
@@ -1287,15 +1340,25 @@ end
 function Snipe:ItemResults(itemKey)
     local pending = self.pending
     if not (pending and pending.item and pending.sent) then return end
+    local named = type(itemKey) == "table" and itemKey.itemID or nil
+    -- Asked as a stack, answered as an item sold one at a time: it is one.
+    if pending.stack and pending.phase == "listing" and named == pending.itemID then
+        pending.stack, pending.phase = nil, "asking"
+    end
     local again = pending.phase == "quoted" and pending.refreshing ~= nil and not pending.stack
-    if not (pending.phase == "asking" or again) then return end
-    if itemKey and itemKey.itemID and itemKey.itemID ~= pending.itemID then return end
+    if pending.stack or not (pending.phase == "asking" or again) then return end
+    if named and named ~= pending.itemID then return end
+    if named then Learn(pending.itemID, false) end
     if not (Util.HasFunction("C_AuctionHouse.GetNumItemSearchResults")
         and Util.HasFunction("C_AuctionHouse.GetItemSearchResultInfo")) then
-        return self:CancelBuy()
+        self:CancelBuy()
+        return Tell(pending, L["That buy didn't go through. Try it again."])
     end
     local okN, count = pcall(C_AuctionHouse.GetNumItemSearchResults, pending.key)
-    if not (okN and type(count) == "number") then return self:CancelBuy() end
+    if not (okN and type(count) == "number") then
+        self:CancelBuy()
+        return Tell(pending, L["That buy didn't go through. Try it again."])
+    end
     local find, pct, left = pending.find, self:Percent(), self:Left()
     local best, anyDeal, deals = nil, false, 0
     for i = 1, count do
@@ -1355,6 +1418,15 @@ function Snipe:CancelBuy()
     Moved()
 end
 
+--- The game would not price a stack, or would not sell it: let the buy go
+--- and say so. A quiet ready stays quiet.
+function Snipe:Refused()
+    local pending = self.pending
+    if not pending then return end
+    self:CancelBuy()
+    Tell(pending, L["That buy didn't go through. Try it again."])
+end
+
 --- The game answered with the real total.
 function Snipe:PriceUpdated(total)
     local pending = self.pending
@@ -1370,8 +1442,11 @@ function Snipe:PriceUpdated(total)
         Moved()
         return self:KeepFresh(pending)
     end
-    if pending.phase ~= "asking" then return end
-    if type(total) ~= "number" or total <= 0 then return self:CancelBuy() end
+    if pending.phase ~= "asking" or pending.item then return end
+    if type(total) ~= "number" or total <= 0 then
+        self:CancelBuy()
+        return Tell(pending, L["That buy didn't go through. Try it again."])
+    end
     -- The real price must still be a deal; if not, let it go.
     if total > self:Left() then
         if pending.auto then pending.find.retryAt = Now() + self.READY_KEEP end
@@ -1388,6 +1463,7 @@ function Snipe:PriceUpdated(total)
     elseif not Snipe.IsDealFor(total / pending.count, pending.find.worth, pending.find.kind, self:Percent()) then
         self:NoteGone(pending.find)
         Drop(pending.itemID)
+        Tell(pending, L["That auction is gone already."])
         return self:CancelBuy()
     end
     pending.phase, pending.total = "quoted", total
@@ -1437,12 +1513,17 @@ function Snipe:Pay()
         ok = Util.HasFunction("C_AuctionHouse.ConfirmCommoditiesPurchase")
             and pcall(C_AuctionHouse.ConfirmCommoditiesPurchase, pending.itemID, pending.count)
     end
-    if not ok then self:CancelBuy(); return false end
+    if not ok then
+        self:CancelBuy()
+        Say(L["That buy didn't go through. Try it again."])
+        return false
+    end
     pending.phase, self.armed = "buying", nil
     Moved()
     After(self.BUY_WAIT, function()
         if Snipe.pending == pending and pending.phase == "buying" then
             Snipe.pending = nil
+            Say(L["That buy didn't go through. Try it again."])
             Moved()
         end
     end)
@@ -1514,9 +1595,9 @@ end
 
 function Snipe:Init()
     ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, _, total) Snipe:PriceUpdated(total) end)
-    ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() Snipe:CancelBuy() end)
+    ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() Snipe:Refused() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() Snipe:Bought() end)
-    ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() Snipe:CancelBuy() end)
+    ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() Snipe:Refused() end)
     ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) Snipe:ItemResults(itemKey) end)
     ns.RegisterEvent(self, "COMMODITY_SEARCH_RESULTS_UPDATED", function(_, _, itemID) Snipe:StackResults(itemID) end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function()

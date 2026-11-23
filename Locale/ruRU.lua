@@ -2549,6 +2549,7 @@ L["Scan your auctions again first."] = "Сначала снова прочита
 L["Already cancelling that one."] = "Этот уже снимается."
 L["The auction house won't let you cancel that one."] = "Аукцион не даёт снять этот лот."
 L["That auction is gone already."] = "Этого аукциона уже нет."
+L["That buy didn't go through. Try it again."] = "Покупка не прошла. Попробуй ещё раз."
 L["The game would not cancel it."] = "Игра не сняла его."
 L["None of your auctions are undercut."] = "Ни один из твоих аукционов не перебит."
 L["Cancelled %s. It comes back to you in the mail."] = "%s снят. Он вернётся к тебе по почте."
