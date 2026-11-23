@@ -376,6 +376,59 @@ end
 --- Every line for an item, then the value lines taken out when Value on
 --- Tooltips is Off, or on Shift with Shift up (then `held` is set).
 function ItemTooltip:LinesFor(itemID, count, link)
+    local key, now = self:LinesKey(itemID, count, link)
+    local kept = self.keptLines
+    if key and kept and kept.key == key and now - kept.at < self.KEEP_FOR then
+        -- What building them left behind for Shift's redraw (AnyShift).
+        self.crateHeld, self.boughtHeld, self.usedInHeld = kept.crateHeld, kept.boughtHeld, kept.usedInHeld
+        return kept.lines
+    end
+
+    local lines = self:BuildLinesFor(itemID, count, link)
+    if key then
+        self.keptLines = { key = key, at = now, lines = lines,
+            crateHeld = self.crateHeld, boughtHeld = self.boughtHeld, usedInHeld = self.usedInHeld }
+    end
+    return lines
+end
+
+-- The game draws a bag item's tooltip again about five times a second
+-- while the mouse rests on it, and each draw asked every module for its
+-- lines afresh: prices, sales, what uses it, what it disenchants into.
+-- The lines are now kept for this long, for the same item, stack, copy and
+-- Shift key, while no price, setting or bag has changed. Nobody writes to
+-- the lines handed back.
+ItemTooltip.KEEP_FOR = 1
+
+--- What the kept lines were built for, and the time now; nil with no clock.
+function ItemTooltip:LinesKey(itemID, count, link)
+    if not itemID or self.KEEP_FOR <= 0 or type(GetTime) ~= "function" then return nil end
+    local now = GetTime()
+    if type(now) ~= "number" then return nil end
+    local shift = ns.TooltipShift
+    local shared = shift and shift.shared
+    local down
+    if shift then
+        down = shift.ShiftDown()
+    else
+        local ok, held = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
+        down = ok and held and true or false
+    end
+    return table.concat({
+        tostring(itemID), tostring(count), tostring(link), tostring(down),
+        tostring(shared and shared.version),
+        tostring(ns.Config and ns.Config.changes),
+        tostring(ns.Prices and ns.Prices.changes),
+        tostring(ns.Inventory and ns.Inventory.changes),
+    }, "|"), now
+end
+
+--- Let the kept lines go, so the next tooltip is built afresh.
+function ItemTooltip:ForgetLines()
+    self.keptLines = nil
+end
+
+function ItemTooltip:BuildLinesFor(itemID, count, link)
     local lines = self:AllLinesFor(itemID, count, link)
     local valueOn = self:IsEnabled()
     if valueOn and ItemTooltip.Shows("value") then return lines end
