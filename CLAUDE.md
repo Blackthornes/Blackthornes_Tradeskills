@@ -71,6 +71,9 @@ They are the same in every addon's notes; keep them the same.
   mouse, `glassActive` and a bright gold left edge for the picked row.
   Never `row`/`rowAlt`. Gradients fade through `Theme.LightGradient` or
   hide, never SetAlpha alone.
+- **No red gems on a rim's ends** (the owner, 2026-11-22): never put red
+  circles on the left and right of a window, plaque or pop-up, in any
+  addon. The red close gem (the X) and the corner gems stay.
 - **Check that it's clear to post.** Nothing is published or uploaded
   without the owner's go-ahead. He tags releases himself.
 - **Changelogs come from git history** (`git log vX.Y.Z..origin/main

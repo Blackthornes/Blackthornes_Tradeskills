@@ -223,5 +223,29 @@ assert(closes == 1, "the close gem closes")
 gems:SetFolded(true)
 assert(gems.folded and #folds == 2, "SetFolded calls nothing back")
 
+-- 8. The gold plaque has no red gems on its ends (the owner, 2026-11-22:
+-- never again, in any addon).
+do
+    local paths = {}
+    local function Loose(parent)
+        local o = Object(parent)
+        function o:SetTexture(path) self.texture = path; paths[#paths + 1] = tostring(path) end
+        function o:CreateTexture() return Loose(self) end
+        function o:CreateFontString() return Loose(self) end
+        return setmetatable(o, { __index = function() return function() end end })
+    end
+    local keep, keepLabel = CreateFrame, ns.Theme.CreateLabel
+    CreateFrame = function(_, _, parent) return Loose(parent) end
+    ns.Theme.CreateLabel = function(parent) return Loose(parent) end
+    assert(loadfile(lfs_cwd .. "/UI/Plaque.lua"))("Blackthornes_One", ns)
+    local ok, plaque = pcall(ns.Plaque.Create, Loose(nil), {})
+    CreateFrame, ns.Theme.CreateLabel = keep, keepLabel
+    assert(ok and plaque, "a plaque is made: " .. tostring(plaque))
+    for _, path in ipairs(paths) do
+        assert(not path:find("Gem"), "no red gem on the plaque: " .. path)
+    end
+    assert(#(plaque.gems or {}) == 0, "the plaque keeps no end gems")
+end
+
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_housekit: ok")
