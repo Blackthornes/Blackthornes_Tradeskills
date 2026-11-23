@@ -25,17 +25,15 @@ tool prints a note for a shipped line that reads like an advert.
 
 ## 1.41.0
 
-- A new Queue From Sell List box in Settings puts crafts that Craft First holds back into your queue.
+- A new Queue From Sell List box in Settings puts crafts that Craft First holds back into your queue. It starts off.
 
 Fixes and changes:
-- The Sell list lists on your click for fifteen minutes after a scan.
-- Snipe buys materials again and says why a buy fails. To Disenchant says why its list is empty.
-- Value on Tooltips set to Off hides only the price lines.
+- After a scan, the Sell list lists an item as soon as you click, with no wait. This holds for fifteen minutes.
+- Snipe buys materials again, and tells you why when a buy fails. To Disenchant says why its list is empty.
+- Value on Tooltips set to Off hides only the price lines. Sales, disenchant and the other lines stay.
 - A random suffix item's new price shows the next time you open the auction house.
-- The recipe count no longer sits on top of a long profit.
+- The recipe count no longer covers a long profit number in the profession list.
 - Closing windows with a gamepad no longer gives a blocked action error.
-- The arrow works less while you stand still.
-- The gold plaque has no red gems on its sides.
 
 
 ## 1.40.0
