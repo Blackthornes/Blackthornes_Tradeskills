@@ -6,6 +6,8 @@
 -- the row waited on "asking" for good. What must hold:
 --   1. An ask outside a click that gets no price turns into a planned buy
 --      (the row reads "Buy N for X"), and later stacks are planned at once.
+--      The player's own click is planned at once from the start: the game
+--      prices a stack only inside a click (2026-11-23).
 --   2. The next click (Pay on a planned buy) asks from inside the click.
 --   3. An ask from a click that still gets no price lets go and says so.
 
@@ -56,12 +58,14 @@ C_AuctionHouse = {
     ConfirmCommoditiesPurchase = function() end,
 }
 Snipe.running, Snipe.spent, Snipe.noAutoStack = false, 0, nil
+-- A client that lets the ask be made outside a click but never answers it.
+Snipe.ASK_OUTSIDE_CLICK = true
 
 local herb = { itemID = 40, kind = "lists", price = 90, worth = 100, qty = 30 }
 Snipe.finds = { herb }
 
--- 1. The click reads the listings; the price is asked from their event.
-Snipe:Buy(herb)
+-- 1. A quiet ready reads the listings; the price is asked from their event.
+Snipe:Buy(herb, true)
 requests["snipe-buy"].send()
 handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, 40)
 assert(Snipe.pending.phase == "asking" and #started == 1)
@@ -69,7 +73,6 @@ assert(Snipe.pending.phase == "asking" and #started == 1)
 RunTimers()
 assert(Snipe.pending and Snipe.pending.phase == "planned", "no price outside a click: planned")
 assert(Snipe.pending.count == 3 and Snipe.pending.expected == 270)
-assert(not Snipe.pending.auto, "the player's own buy keeps its words")
 assert(Snipe.noAutoStack == true and cancels == 1)
 
 -- 2. The next click asks from inside it, and the price comes.
@@ -79,12 +82,15 @@ handlers.COMMODITY_PRICE_UPDATED(nil, nil, 40, 270)
 assert(Snipe.pending.phase == "quoted", "the click got its price")
 Snipe:CancelBuy()
 
--- Later stacks are planned straight away, no wait on "asking".
+-- The player's own buy is planned straight away, no wait on "asking",
+-- also on a client not yet known to ask only on a click.
 timers = {}
+Snipe.noAutoStack, Snipe.ASK_OUTSIDE_CLICK = nil, false
 Snipe:Buy(herb)
 requests["snipe-buy"].send()
 handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, 40)
 assert(Snipe.pending.phase == "planned" and #started == 2, "planned at once")
+assert(not Snipe.pending.auto, "the player's own buy keeps its words")
 
 -- 3. A click's ask with no price lets go and says why.
 assert(Snipe:Pay() == "checking")

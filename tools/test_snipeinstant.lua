@@ -120,6 +120,9 @@ assert(Snipe:WantsReady(), "then it is tried again")
 timers, Snipe.readyQueued, requests = {}, nil, {}
 
 -- 4. A stack priced again.
+-- This fake client prices a stack outside a click, as Retail does. Forever
+-- does not; that is walked in test_snipestuckask and test_snipestackkind.
+Snipe.ASK_OUTSIDE_CLICK = true
 stackIDs[50] = true
 settings.snipeWatch = "lists"
 local herb = { itemID = 50, kind = "lists", price = 90, worth = 100, qty = 30 }

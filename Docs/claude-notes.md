@@ -2557,6 +2557,30 @@ search: `Snipe:NoteGone` remembers the price its row showed and
 minutes) unless the price moves. A buy does not mark it gone. Tested in
 `tools/test_snipesteady.lua`. Not yet seen in game.
 
+Buying a material (2026-11-23, a player's report on 1.40.0: Buy It sat on
+"Asking..." and bought nothing). `IsStack` in `Logic/Snipe.lua` answers
+true, false or nil from `Scanner:GetCommodityStatus`; nil reads as a stack
+first and the answering event settles it (`StackResults` and `ItemResults`
+each pick up a buy asked the other way, only for an answer naming that
+item). A stack's price is asked for only inside a click
+(`Snipe.ASK_OUTSIDE_CLICK` is false), so a buy is planned from the
+listings and the next click asks. Every
+buy let go after a click says why (`Tell`, `Snipe:Refused`); a quiet ready
+stays quiet. The row's badge shows "Pay X" for a planned buy too. Tested in
+`tools/test_snipestackkind.lua`. `Logic/ListSets.lua` and
+`UI/FavorsView.lua` still ask the game with an item ID.
+
+To Disenchant with an empty pool (2026-11-23, a player's report: "Nothing
+to snipe yet. Scan the auction house first." after a scan). Disenchant
+reads no new item while the auction house is open, and Snipe only runs
+there, so scanned gear with no saved facts was never watched.
+`Disenchant:ReadHeld(itemID)` reads an item the client already holds and
+asks the client for nothing; `BuildPool` calls it for green or better
+gear, at most `Snipe.READS_A_FRAME` (20) a frame. Gear the client does not
+hold is still left out. `Snipe.emptyWhy` now also says when nobody can
+disenchant and when the scan held no gear worth breaking, and the empty
+list shows it. Tested in `tools/test_snipedisenchant.lua`.
+
 ## The Enchant strip
 
 The owner said build it (2026-11-05) as a window beside the Enchanting

@@ -295,6 +295,20 @@ local function NeedsTooltip(known)
     return known.vt ~= TOOLTIP_READ and known.c == CLASS_CONSUMABLE
 end
 
+--- Read an item the client already holds, also with the auction house
+--- open. It never asks the client for anything, so it takes no room from
+--- Ready to sell. Snipe needs it: it only runs at the auction house, where
+--- nothing else here reads a new item, so gear a scan found was never
+--- watched To Disenchant until it had been read with the house shut.
+-- @return true when the item was read just now
+function Disenchant:ReadHeld(itemID)
+    if not itemID or Store()[itemID] then return false end
+    if not Util.HasFunction("C_Item.IsItemDataCachedByID") then return false end
+    local ok, held = pcall(C_Item.IsItemDataCachedByID, itemID)
+    if not (ok and held == true) then return false end
+    return Remember(itemID) ~= nil
+end
+
 --- Did this addon ask the client for this item, and is it on its way or
 --- just arrived? The tabs redraw only for those. Not for items read long
 --- ago: Ready to sell reloads bag items all the time at the auction house,
