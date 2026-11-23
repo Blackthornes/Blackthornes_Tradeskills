@@ -890,7 +890,11 @@ end
 
 --- What an empty list says while stopped.
 function SnipeView:EmptyText()
-    if not Listing() then return L["Nothing to snipe yet. Scan the auction house first."] end
+    if not Listing() then
+        -- To Disenchant with nobody to disenchant, or no gear in the scan.
+        local why = Snipe():Watch() == "disenchant" and Snipe().emptyWhy
+        return why or L["Nothing to snipe yet. Scan the auction house first."]
+    end
     local items, order = Snipe().ListItems(Snipe():ListChoice())
     if #order == 0 then return L["Put items on a list first."] end
     for _, id in ipairs(order) do

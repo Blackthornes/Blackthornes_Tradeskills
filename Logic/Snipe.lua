@@ -75,6 +75,8 @@ Snipe.SILLY_OVER = 10
 Snipe.SCAN_SLACK = 3600
 -- Pool building: items looked at a frame.
 Snipe.SLICE = 300
+-- To Disenchant reads at most this many items new to it in one frame.
+Snipe.READS_A_FRAME = 20
 -- How long a find whose listings held nothing to buy stays off the list
 -- while its row still shows the same price.
 Snipe.GONE_FOR = 300
@@ -282,6 +284,21 @@ local function CanBreak()
     return false
 end
 
+--- To Disenchant: read green or better gear the client already holds, so
+--- it can be watched. Disenchant reads nothing new by itself while the
+--- auction house is open, and Snipe only runs there.
+-- @return true when an item was read just now
+local function ReadGear(itemID)
+    local d = ns.Disenchant
+    if not (d and d.ReadHeld) then return false end
+    local class = ItemClass(itemID)
+    if class ~= 2 and class ~= 4 then return false end
+    local quality = Quality(itemID)
+    if not quality or quality < 2 then return false end
+    local ok, fresh = pcall(d.ReadHeld, d, itemID)
+    return ok and fresh == true
+end
+
 local function AfterCut(copper)
     if ns.Profit and ns.Profit.NetFromListing then
         local ok, net = pcall(ns.Profit.NetFromListing, ns.Profit, 0, copper)
@@ -431,6 +448,7 @@ function Snipe:BuildPool(done)
     pool, cursor, building = {}, 1, true
     if mode == "disenchant" and not CanBreak() then
         building = false
+        self.emptyWhy = L["You need an enchanter for this. Learn Enchanting, or name yours in Settings."]
         return done()
     end
     local lastScan = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
@@ -439,16 +457,24 @@ function Snipe:BuildPool(done)
     local function Step()
         if mine ~= session or not self.running then return end
         local last = math.min(#ids, at + self.SLICE - 1)
+        local reads = 0
         for i = at, last do
+            -- Gear nobody has read yet: read it now when the client holds
+            -- it, a few a frame.
+            if mode == "disenchant" and ReadGear(ids[i]) then reads = reads + 1 end
             local worth = self:WorthOf(ids[i], mode)
             if worth then
                 pool[#pool + 1] = { id = ids[i], worth = worth, listed = Snipe.InLastScan(ids[i], since) }
             end
+            if reads >= self.READS_A_FRAME then last = i; break end
         end
         at = last + 1
         if at > #ids then
             building = false
             Snipe.OrderPool(pool)
+            if #pool == 0 and #ids > 0 and mode == "disenchant" then
+                self.emptyWhy = L["No gear worth disenchanting in your last scan."]
+            end
             return done()
         end
         After(0, Step)

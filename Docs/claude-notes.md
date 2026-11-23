@@ -2570,6 +2570,17 @@ stays quiet. The row's badge shows "Pay X" for a planned buy too. Tested in
 `tools/test_snipestackkind.lua`. `Logic/ListSets.lua` and
 `UI/FavorsView.lua` still ask the game with an item ID.
 
+To Disenchant with an empty pool (2026-11-23, a player's report: "Nothing
+to snipe yet. Scan the auction house first." after a scan). Disenchant
+reads no new item while the auction house is open, and Snipe only runs
+there, so scanned gear with no saved facts was never watched.
+`Disenchant:ReadHeld(itemID)` reads an item the client already holds and
+asks the client for nothing; `BuildPool` calls it for green or better
+gear, at most `Snipe.READS_A_FRAME` (20) a frame. Gear the client does not
+hold is still left out. `Snipe.emptyWhy` now also says when nobody can
+disenchant and when the scan held no gear worth breaking, and the empty
+list shows it. Tested in `tools/test_snipedisenchant.lua`.
+
 ## The Enchant strip
 
 The owner said build it (2026-11-05) as a window beside the Enchanting
