@@ -3741,3 +3741,43 @@ Only box and its empty note (each time the profession window opens), and the
 line under Options > AddOns. The mouse works on them as before; a gamepad
 player reaches them with the mouse cursor mode. Tested in
 `tools/test_upgradesonly.lua`. Not seen in game yet.
+
+## Ten speed rounds (2026-11-23)
+
+The owner asked for ten rounds on how fast posting, buying and selling
+feel. Each found one stall or wait and removed it. Prices, results and
+saved data are the same as before. What each leans on:
+
+1. `Profit:UnitCostForSale(recipeID)` gives the Sell list a craft's cost
+   without the full `Profit:Analyse`. Posting asks it through `UnitCostOf`.
+   A test that swaps `Profit.Analyse` must swap this too.
+2. `ItemTooltip.LinesFor` keeps its lines for `ItemTooltip.KEEP_FOR` (1
+   second) while the item, Shift, prices, bags and settings stand.
+   `ForgetLines()` drops them.
+3. The scroll list places a row only when its spot moved and paints its
+   band only when the band's colour table changed (`UI/Widgets.lua`).
+4. A finished quick scan records its prices through a second pass of the
+   frame worker (`Prices:CommitOne`, `Scanner.committing`). The scan counts
+   as reading until the last item. Stopped partway, the rest is written at
+   once.
+5. `UI:SellListSoon()` asks for a look at the Sell list `UI.SELL_LIST_GAP`
+   (0.2 s) after the last build: the bags settling, a post sent or dropped,
+   the auctions read, the house coming free. The one second ticker stays.
+6. A finished page-by-page scan of more than `Scanner.COMMIT_AT_ONCE` (100)
+   items records them through the frame worker, as round 4 does.
+7. Typing in the Profit search narrows the last ranking
+   (`Profit:RankAgain`) while prices, bags, settings and filters stand. It
+   drops rows that were only held in place past their listing limit.
+8. Item data for an item not in the bags moves `UI.SellListKey` at most
+   once every `UI.ITEM_INFO_GAP` (5 s). For a carried item it counts at
+   once.
+9. The Prices search checks an item's name before it builds the row, so a
+   key typed reads stock history and trend only for the rows it finds.
+10. `Inventory:OnBagUpdate` takes its look `SNAPSHOT_SOON` (0.5 s) after
+    the bags settle and at most once every `SNAPSHOT_GAP` (2 s). It was 2 s
+    after any change.
+
+Tested in `tools/test_salecost.lua`, `test_tooltipkept.lua`,
+`test_listplace.lua`, `test_scancommit.lua`, `test_sellticker.lua`,
+`test_pagecommit.lua`, `test_tabstall.lua` and `test_bagsfollow.lua`. None
+of it has been timed in game yet: `/bts perf` shows the big pieces.
