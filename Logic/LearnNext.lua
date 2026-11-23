@@ -285,9 +285,12 @@ LearnNext.TOWNS = {
 }
 
 --- Where a trainer place is, in words: the dungeon for one inside, the
---- town players know it by, else the zone.
+--- town players know it by, the city whose box the spot is in (Undercity's
+--- trainers sit on Silverpine's map, Thunder Bluff's on Mulgore's,
+--- Darnassus' on Teldrassil's; 2026-11-23), else the zone.
 function LearnNext.ZoneName(place)
-    return place and (place.inside or LearnNext.TOWNS[place.name or ""] or place.zone) or nil
+    if not place then return nil end
+    return place.inside or LearnNext.TOWNS[place.name or ""] or (place.zone and CityOf(place)) or nil
 end
 
 --- Where a recipe is learned: the trainer or vendor to go to.

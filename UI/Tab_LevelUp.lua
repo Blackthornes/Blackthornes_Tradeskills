@@ -692,8 +692,15 @@ local function LearnLines(entry)
         -- Inside a dungeon: the dungeon's name, not its door's spot.
         lines[#lines + 1] = { L["Where"], place.inside }
     elseif place.zone then
-        lines[#lines + 1] = { L["Where"], place.x and ("%s (%s, %s)"):format(place.zone, place.x, place.y)
-            or place.zone }
+        -- A city trainer kept on the zone map around it is named by the
+        -- city; its spot is on that zone's map, so it is left off.
+        local city = place.kind == "trainer" and ns.LearnNext.ZoneName and ns.LearnNext.ZoneName(place)
+        if city and city ~= place.zone then
+            lines[#lines + 1] = { L["Where"], city }
+        else
+            lines[#lines + 1] = { L["Where"], place.x and ("%s (%s, %s)"):format(place.zone, place.x, place.y)
+                or place.zone }
+        end
     end
     local profession = nameBySkillLine[entry.skillLineID] or (entry.record and entry.record.profession) or ""
     lines[#lines + 1] = { L["Needs"], ("%s %d"):format(profession, entry.needs or 0) }
