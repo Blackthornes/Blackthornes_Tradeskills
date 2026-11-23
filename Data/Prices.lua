@@ -857,20 +857,28 @@ function Prices:CommitScan(observations, scannedAt, partial)
 
     local recorded = 0
     for itemID, listings in pairs(observations) do
-        -- How many sell it, for the Stats tab; the names go no further.
-        if ns.StatsLog then pcall(ns.StatsLog.NoteSellers, ns.StatsLog, itemID, listings, scannedAt) end
-
-        local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
-            self:Summarise(listings, self:GetScanValue(itemID, "market"))
-        if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder,
-                partial == true or nil)
-            recorded = recorded + 1
-        end
+        if self:CommitOne(itemID, listings, scannedAt, partial) then recorded = recorded + 1 end
     end
 
     if not partial then self:SetLastFullScan(scannedAt) end
     return recorded
+end
+
+--- One item of a scan: its listings summed up and recorded. True when a
+--- price was recorded. CommitScan does every item at once; a scan read to
+--- its end does them a few a frame (Scanner:ReadReplicateResults), since
+--- thousands in one frame froze the game as the scan finished.
+function Prices:CommitOne(itemID, listings, scannedAt, partial)
+    -- How many sell it, for the Stats tab; the names go no further.
+    if ns.StatsLog then pcall(ns.StatsLog.NoteSellers, ns.StatsLog, itemID, listings, scannedAt) end
+
+    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
+        self:Summarise(listings, self:GetScanValue(itemID, "market"))
+    if not marketValue then return false end
+
+    self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder,
+        partial == true or nil)
+    return true
 end
 
 --------------------------------------------------------------------------------
