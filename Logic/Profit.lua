@@ -1056,6 +1056,30 @@ function Profit:PerDay(analysis, itemID)
     return analysis.profitPerUnit * sells, sells, capped
 end
 
+--- What one of a recipe's output cost to make, as Analyse gives it in
+--- `costPerUnit` for the sale the Sell tab would make (method nil), and
+--- nothing else. The Sell list and a List click ask only this, for every
+--- crafted stack in the bags, and the whole analysis (stock, skill-ups,
+--- disenchanting, craft time, sales) was worked out each time to get it.
+--- nil wherever Analyse leaves costPerUnit unset: no recipe or output, a
+--- craft that binds on pickup, an output nothing prices, a reagent with no
+--- price. Checked against Analyse in tools/test_salecost.lua.
+function Profit:UnitCostForSale(recipeID)
+    local recipe = ns.Recipes:GetAny(recipeID)
+    if not recipe or not recipe.outputItemID then return nil end
+
+    local itemID = recipe.outputItemID
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(itemID) == true then return nil end
+
+    local cost = ns.Cost:GetCraftCost(recipeID)
+    if not cost or not cost.priceable then return nil end
+
+    -- Priced by a vendor or by a listing; either is enough for Analyse.
+    if not Util.GetVendorSellPrice(itemID) and not self:ChoosePostPrice(itemID, cost) then return nil end
+
+    return cost.perUnit
+end
+
 function Profit:Analyse(recipeID, characterKey, method)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end

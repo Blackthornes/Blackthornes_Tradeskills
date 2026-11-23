@@ -144,6 +144,10 @@ local Posting = ns.Posting
 ns.Profit.Analyse = function(_, recipeID)
     return recipeID and { costPerUnit = 1 } or nil
 end
+-- The Sell list asks for the cost alone (Profit:UnitCostForSale).
+ns.Profit.UnitCostForSale = function(_, recipeID)
+    return recipeID and 1 or nil
+end
 
 --------------------------------------------------------------------------------
 
