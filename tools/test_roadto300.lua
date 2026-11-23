@@ -220,6 +220,31 @@ do
   ns.LearnNext.TrainerFor = saved
 end
 
+-- A city trainer the data keeps on the zone map around it is named by the
+-- city (2026-11-23: Undercity's Apothecarium trainers read "in Silverpine
+-- Forest"; Thunder Bluff's and Darnassus' read Mulgore and Teldrassil).
+do
+  local saved = ns.LearnNext.TrainerFor
+  local doctor = { kind = "trainer", name = "Doctor Marsh", zone = "Silverpine Forest", x = 73.0, y = 9.5 }
+  ns.LearnNext.TrainerFor = function() return doctor end
+  local journey = { kind = "trainer", rank = { 50, 10, 450, 150 }, at = 50, cap = 150, level = 10 }
+  check("an Undercity trainer is named by the city",
+    Road.Texts(journey, "Alchemy", 15, 171).lines[1], "Alchemy trainer in Undercity")
+  check("and Show the Way still has the zone map", Road:PlaceFor(journey, 171).zone, "Silverpine Forest")
+  local craft = { kind = "craft", crafts = 1, from = 80, to = 90, name = "Oil", needs = {}, learn = doctor }
+  check("a recipe step names the city too", Road.Texts(craft, "Alchemy", 15, 171).lines[1],
+    "Learn it from the Alchemy trainer in Undercity.")
+  local brill = { kind = "trainer", name = "Carolai Anise", zone = "Tirisfal Glades", x = 59.4, y = 52.2 }
+  ns.LearnNext.TrainerFor = function() return brill end
+  check("a trainer out in a zone keeps the zone",
+    Road.Texts(journey, "Alchemy", 15, 171).lines[1], "Alchemy trainer in Tirisfal Glades")
+  check("Thunder Bluff from Mulgore's map", ns.LearnNext.ZoneName(
+    { name = "x", zone = "Mulgore", x = 47.5, y = 33.0 }), "Thunder Bluff")
+  check("Darnassus from Teldrassil's map", ns.LearnNext.ZoneName(
+    { name = "x", zone = "Teldrassil", x = 30.0, y = 50.0 }), "Darnassus")
+  ns.LearnNext.TrainerFor = saved
+end
+
 -- The grinding stone is known and cheaper a point, but green at 62 (green
 -- from 55): the belt, orange, wins (a player's report, 2026-11-18).
 local grinding = Find(function(s) return s.kind == "craft" and s.recipeID == 2 and not s.done end)

@@ -1536,7 +1536,9 @@ function RoadPlan.FishTexts(step, professionName, level, current)
 
     if index <= 2 then
         local place = not step.locked and RoadPlan:PlaceFor(step, RoadPlan.FISHING)
-        if place and place.zone then texts.lines[1] = L.Format("%s trainer in %s", professionName, place.zone) end
+        if place and place.zone then
+            texts.lines[1] = L.Format("%s trainer in %s", professionName, ns.LearnNext.ZoneName(place))
+        end
     elseif index == 3 then
         local seller = step.how.sellers[Side() or "A"] or step.how.sellers.A
         texts.lines[1] = L.Format("%s sells it in %s. Read it to learn Expert %s.",
@@ -1668,7 +1670,7 @@ function RoadPlan.Texts(step, professionName, level, line)
         if step.learn.kind == "trainer" then
             -- Where the trainer stands, as the row's Show the Way aims (the
             -- owner, 2026-10-23: a lone "Trainer" said nothing).
-            local zone = step.learn.inside or step.learn.zone
+            local zone = ns.LearnNext.ZoneName(step.learn)
             texts.lines[#texts.lines + 1] = zone
                 and L.Format("Learn it from the %s trainer in %s.", professionName, zone)
                 or L.Format("Learn it from the %s trainer.", professionName)
