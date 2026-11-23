@@ -455,7 +455,6 @@ Reset()
 settings.askBeforeListing = nil
 settings.fastListing = true
 check("fifteen minutes it is", Posting.SCAN_FRESH_FOR, 900)
-check("a single item's check still holds ten", Posting.FRESH_FOR, 600)
 recorded[POTION] = 290
 check("before a scan the list would be checked", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
 Posting:NoteScanned({ [POTION] = { 290 } }, true)

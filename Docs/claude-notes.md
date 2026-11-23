@@ -2054,7 +2054,7 @@ minutes asks nothing. Canceling by wheel was not worked on. Tested in
 No search after a recent scan (the owner, 2026-11-23: rechecking after a
 quick scan "is just adding too much time and extra clunkiness to posting
 items", Sell tab only): `ScannedLately` now holds for `SCAN_FRESH_FOR`
-(900, the quick scan's own wait), apart from a single item's check. It
+(900, the quick scan's own wait). It
 also reads the saved stamp `Prices:GetLastScan()` (a full scan, or a sweep
 that ran to the page limit, for this realm and faction), so a /reload or
 relog inside the fifteen minutes still lists on the click. A stamp ahead
