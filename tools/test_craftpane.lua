@@ -1158,6 +1158,44 @@ do
 end
 
 do
+  -- A player's second recording (2026-11-23): on the one window's Queue tab,
+  -- docked beside the profession window, the mouse on a queue x showed the
+  -- Crafting list's tooltip and the click queued a recipe nobody could see.
+  -- The window in front holds the pane, so the strata test let it through.
+  local function Pane(visible, alpha)
+    return { GetFrameStrata = function() return "MEDIUM" end, GetFrameLevel = function() return 5 end,
+      IsVisible = function() return visible end, GetEffectiveAlpha = function() return alpha end,
+      IsMouseOver = function() return true end, GetParent = function() return nil end }
+  end
+  local O = CraftPanel.OutOfSight
+  check("the Crafting tab on show takes clicks", O and O(Pane(true, 1), true, "crafting", true), false)
+  check("in the one window on the Queue tab, the pane takes no clicks", O and O(Pane(true, 1), true, "queue", true), true)
+  check("a hidden pane takes no clicks", O and O(Pane(false, 1), false, nil, false), true)
+  check("a see-through pane takes no clicks", O and O(Pane(true, 0), false, nil, false), true)
+  check("beside the window while the one window holds Crafting, it takes no clicks",
+    O and O(Pane(true, 1), false, nil, true), true)
+  check("beside the window on its own, it takes clicks", O and O(Pane(true, 1), false, nil, false), false)
+
+  local oldQueue, oldFront, oldFrame, oldInOne = ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame, CraftPanel.inOne
+  local oldUI, oldTabs = ns.UI, ns.TSTabs
+  local added = 0
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.frame = Pane(true, 1)
+  CraftPanel.inOne = true
+  ns.UI = setmetatable({ activeTab = "queue" }, { __index = oldUI })
+  ns.TSTabs = setmetatable({ atDock = "profession" }, { __index = oldTabs })
+  -- The one window holding the pane is the only window in front.
+  CraftPanel.FrontWindows = function() return {} end
+  local line = { recipeID = 102, outputItemID = 5002, name = "Coarse Dynamite" }
+  CraftPanel.OnRowClick(line, nil, "LeftButton")
+  CraftPanel.OnRowClick(line, nil, "RightButton")
+  check("a click on the Queue tab queues nothing from the Crafting list behind it", added, 0)
+  ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame, CraftPanel.inOne = oldQueue, oldFront, oldFrame, oldInOne
+  ns.UI, ns.TSTabs = oldUI, oldTabs
+end
+
+do
   -- Alt-click on a row opens the Keep in Stock box and queues nothing;
   -- a craft with nothing to hold opens nothing (2026-11-17).
   local oldAlt, oldBox, oldQueue, oldTip = rawget(_G, "IsAltKeyDown"), ns.StockBox, ns.Queue, rawget(_G, "GameTooltip")
