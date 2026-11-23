@@ -715,7 +715,7 @@ local function CreateRow(row)
     -- Only on rows with something queued, so the names on the rest keep
     -- their room.
     row.craft = Widgets.CreateButton(row, L["Craft"], function()
-        if row.data then CraftPanel:CraftRow(row.data) end
+        if row.data and not CraftPanel.ClickMeantElsewhere() then CraftPanel:CraftRow(row.data) end
     end, { width = CRAFT_WIDTH, height = 15, primary = true })
     row.craft:SetPoint("RIGHT", row.remove, "LEFT", -CRAFT_GAP, 0)
     row.craft:Hide()
@@ -904,6 +904,8 @@ end
 CraftPanel._UpdateRow = UpdateRow
 
 local function ShowRowTooltip(row, line)
+    -- Out of sight, its tooltip would name a recipe the player can't see.
+    if CraftPanel.ClickMeantElsewhere and CraftPanel.ClickMeantElsewhere() then return end
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.outputItemID, line.name)
     GameTooltip:AddLine(" ")
 
@@ -1015,8 +1017,37 @@ function CraftPanel.CoveredAtMouse(pane, windows)
     return false
 end
 
---- True when a click on the pane belongs to a window in front of it.
+--- Is the pane out of the player's sight, so nothing on it should answer
+--- the mouse? A player's second recording (2026-11-23): on the one window's
+--- Queue tab, docked beside the profession window, the mouse on a queue x
+--- showed the Crafting list's tooltip for a recipe the player could not
+--- see, and the click queued it. The window in front is the one the pane
+--- lives in, so CoveredAtMouse lets it through.
+-- @param pane the pane's frame
+-- @param inOne true while the pane is the one window's Crafting tab
+-- @param activeTab the tab the one window shows (UI.activeTab)
+-- @param docked true while the one window holds the profession window's
+--   Crafting tab, so the pane has no place beside it
+function CraftPanel.OutOfSight(pane, inOne, activeTab, docked)
+    if type(pane) ~= "table" then return false end
+    if Read(pane, "IsVisible") == false then return true end
+    local alpha = tonumber(Read(pane, "GetEffectiveAlpha"))
+    if alpha and alpha < 0.05 then return true end
+    if inOne then return activeTab ~= nil and activeTab ~= "crafting" end
+    return docked == true
+end
+
+local function PaneOutOfSight()
+    local tabs = ns.TSTabs
+    return CraftPanel.OutOfSight(CraftPanel.frame, CraftPanel.inOne == true,
+        ns.UI and ns.UI.activeTab, tabs ~= nil and tabs.atDock == "profession")
+end
+CraftPanel.PaneOutOfSight = PaneOutOfSight
+
+--- True when a click on the pane belongs to a window in front of it, or
+--- the pane can't be seen at all.
 local function ClickMeantElsewhere()
+    if PaneOutOfSight() then return true end
     return CraftPanel.CoveredAtMouse(CraftPanel.frame, CraftPanel.FrontWindows())
 end
 CraftPanel.ClickMeantElsewhere = ClickMeantElsewhere
