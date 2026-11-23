@@ -1370,6 +1370,23 @@ shows dimmed, "Worth more as <item>: <money> each", and its own List button
 still lists it; List all and List Next skip it. Works without Butler and
 without Keep What Other Addons Need. Tested in `tools/test_sisterkeeps.lua`.
 
+### Queue From Sell List
+
+The owner said build it (2026-11-23, from a mockup). "Queue From Sell
+List:" sits under Craft First, saved as `sellQueueFromList` (off unless
+ticked, never rename it), greyed while Craft First is off. `SisterKeeps:Hold`
+gives a third answer, "craft", when Craft First kept the row, and Posting
+marks the line `craftHeld`. On such a row the drawer shows a gold Queue
+button where the amount box sits (`PostPanel:CraftToQueue`, the count from
+`Butler:CraftFor(itemID, count).crafts`), "Queued" with a check once
+`Queue:Find` holds that many. Queue All (%d) shows left of List Next only
+while some row can still be queued; a recipe two rows share is asked once,
+for the most either makes, through `Butler:QueueCraft` (`Queue:Ensure`
+tops up, never doubles), as Butler's own Queue button does. Queued rows
+stay held. The row button's word is the key `Queue##sell`, since "Queue"
+already names the Queue tab (a noun in German). Tested in
+`tools/test_sellqueue.lua`.
+
 
 ## Keep on this character
 

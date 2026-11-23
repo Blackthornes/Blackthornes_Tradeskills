@@ -78,6 +78,15 @@ local DEFAULT_PAGE = "pricing"
 -- Pages that were folded into others, and where their rows went.
 local FORMER_PAGES = { look = "tooltips", general = "windows" }
 
+-- "Queue From Sell List:" only means something while Craft First is on,
+-- so it is greyed and takes no clicks while that is off.
+local function GreyQueueFromSell(widgets, on)
+    local box, row = widgets.queueFromSell, widgets.queueFromSellRow
+    if not box then return end
+    if row then row:SetAlpha(on and 1 or 0.4) else box:SetAlpha(on and 1 or 0.4) end
+    box:EnableMouse(on and true or false)
+end
+
 -- "Prefer TSM Prices:" only means something while TSM Prices is on, so it
 -- is greyed and takes no clicks while that is off.
 local function GreyPreferTSM(widgets, tsmOn)
@@ -1164,10 +1173,24 @@ local function Build(outer)
     widgets.craftFirst = Widgets.CreateCheckbox(craftFirstRow, L["On"], function(checked)
         Config:Set("sellHoldsCraftFirst", checked)
         if ns.SisterKeeps then ns.SisterKeeps:Forget() end
+        GreyQueueFromSell(widgets, checked)
         UI:RefreshActiveTab()
         if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
     end, false)
     widgets.craftFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Off unless ticked (the owner said build it, 2026-11-23): a row Craft
+    -- First keeps back gets a Queue button, and Queue All shows by List
+    -- Next. Greyed while Craft First is off, since nothing is kept to queue.
+    local queueFromSellRow = CreateRow(pages.pricing, 1, L["Queue From Sell List:"],
+        L["Adds a Queue button to items worth more crafted, and a Queue All button above the list."])
+    widgets.queueFromSellRow = queueFromSellRow
+
+    widgets.queueFromSell = Widgets.CreateCheckbox(queueFromSellRow, L["On"], function(checked)
+        Config:Set("sellQueueFromList", checked)
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.queueFromSell:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The old "Confirm before each listing" switch (confirmBeforePosting)
     -- never did anything and its saved value is left where it is. The Yes/No
@@ -3141,6 +3164,8 @@ local function Refresh()
     widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
     widgets.craftFirst:SetChecked(Config:Get("sellHoldsCraftFirst") == true)
+    widgets.queueFromSell:SetChecked(Config:Get("sellQueueFromList") == true)
+    GreyQueueFromSell(widgets, Config:Get("sellHoldsCraftFirst") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.askBeforeListing:SetChecked(Config:Get("askBeforeListing") == true)

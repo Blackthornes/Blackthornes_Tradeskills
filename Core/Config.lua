@@ -190,6 +190,11 @@ local DEFAULTS = {
         -- (SisterKeeps:CraftReason). Never rename it.
         sellHoldsCraftFirst = false,
 
+        -- "Queue From Sell List" (2026-11-23, off unless ticked): a row
+        -- Craft First keeps back gets a Queue button on the Sell list, and
+        -- Queue All shows by List Next (UI/PostPanel.lua). Never rename it.
+        sellQueueFromList = false,
+
         -- "Show Equipment Upgrades" on Profit, Level Up and the Queue: a
         -- craft that is an upgrade for another character says so after its
         -- name (Upgrades:AltText). Off unless ticked (the owner,

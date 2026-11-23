@@ -1250,24 +1250,27 @@ function Posting:GetPostable(opts)
             -- row still shows dimmed with why when the caller asks
             -- (showHeld), so the player can list it by hand, but List all
             -- and Post Crafted never pick it (GetNextPostable).
-            local heldAll, kept, keptWhy
+            local heldAll, kept, keptWhy, craftHeld
             -- The list the item is on (Logic/ListRules.lua): its Keep in
             -- Bags is one more keep, the bigger one wins.
             local listRule = ns.ListRules and ns.ListRules:For(itemID)
             if count and count > 0 and not anyway then
-                local hold, why = 0, nil
+                local hold, why, kind = 0, nil, nil
                 if ns.SisterKeeps then
-                    local ok, sister, sisterWhy = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
+                    local ok, sister, sisterWhy, sisterKind = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
                     sister = ok and tonumber(sister) or 0
-                    if sister > 0 and type(sisterWhy) == "string" then hold, why = sister, sisterWhy end
+                    if sister > 0 and type(sisterWhy) == "string" then hold, why, kind = sister, sisterWhy, sisterKind end
                 end
                 local bags = listRule and listRule.rules.bags
                 if bags and bags > hold then
-                    hold, why = bags, L.Format("Following your %s list.", listRule.name)
+                    hold, why, kind = bags, L.Format("Following your %s list.", listRule.name), nil
                 end
                 if hold > 0 and why then
                     if hold >= count then
                         heldAll = why
+                        -- Kept by Craft First: the row can be queued
+                        -- (Queue From Sell List, UI/PostPanel.lua).
+                        craftHeld = kind == "craft" or nil
                     else
                         count, kept, keptWhy = count - hold, hold, why
                     end
@@ -1422,6 +1425,7 @@ function Posting:GetPostable(opts)
                     -- Why another addon wants it all kept, or how many it
                     -- kept back and why (SisterKeeps).
                     held = heldAll,
+                    craftHeld = craftHeld,
                     -- Left out of List all for the Sell tab's own reasons
                     -- (opts.showNoted), not another addon's keep.
                     noted = noted or nil,

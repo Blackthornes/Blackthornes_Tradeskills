@@ -267,6 +267,7 @@ do
     check("the upgrade shows", LineFor(lines, UPGRADE) and LineFor(lines, UPGRADE).held, "An upgrade for you, +6%")
     check("the alt's, by full name", LineFor(lines, ALTGEAR).held, "An upgrade for Ana Stormwood, +9%")
     check("pet food", LineFor(lines, FOOD).held, "Your pet eats this")
+    check("another addon's keep is not a craft to queue", LineFor(lines, FOOD).craftHeld, nil)
     check("Always keep", LineFor(lines, KEEP).held, "On your Always keep list")
     check("the set", LineFor(lines, SET).held, "In your Tank equipment set")
     check("the quest", LineFor(lines, QUEST).held, "Spider's Silk needs 4 more")
@@ -455,11 +456,16 @@ do
     check("ticked, the ore is held whole", line and line.held ~= nil, true)
     check("and says what it is worth as", line and line.held and line.held:find("Worth more as item6037: ", 1, true) == 1, true)
     check("it keeps its count for its own List button", line and line.count, 7)
+    check("the row knows Craft First kept it, so it can be queued", line and line.craftHeld, true)
     check("List all never picks it", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
 end
 Reset()
 craftFirstOn, sisterKeepsOn = true, false
 check("held without Keep What Other Addons Need", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
+do
+    local line = LineFor(Posting:GetPostable({ includeAll = true, showHeld = true }), PLAIN)
+    check("Craft First's mark comes with it", line and line.craftHeld, true)
+end
 Reset()
 craftFirstOn, barWorth = true, 900
 check("worth less made than listed after the cut, it sells",

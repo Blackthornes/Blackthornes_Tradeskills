@@ -91,6 +91,36 @@ local IGNORE_WIDTH = 20
 -- Right margin, ignore, gap, button, gap, quantity box, gap before the text.
 local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + POST_WIDTH + 6 + QUANTITY_WIDTH + 10
 
+-- Queue From Sell List (the owner said build it, 2026-11-23): a row Craft
+-- First keeps back shows a gold Queue button where the amount box sits (it
+-- lists the whole stack anyway), "Queued" with a check once the queue has
+-- the crafts. "Queue" alone already names the Queue tab, a noun in other
+-- languages, so the button's word has a key of its own.
+local CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t"
+local QUEUE_WORD = L["Queue##sell"]
+if QUEUE_WORD == "Queue##sell" then QUEUE_WORD = "Queue" end
+local QUEUED_WORD = CHECK .. " " .. L["Queued"]
+local QUEUE_WIDTH = QUANTITY_WIDTH
+do
+    local measure = Theme and Theme.MeasureText
+    for _, word in ipairs({ QUEUE_WORD, L["Queued"] }) do
+        local width
+        if type(measure) == "function" then
+            local ok, measured = pcall(measure, "small", word)
+            if ok and type(measured) == "number" then width = measured end
+        end
+        if not width and type(word) == "string" then
+            local letters = select(2, word:gsub("[^\128-\191]", ""))
+            width = letters * 8
+        end
+        -- The check before "Queued" takes 12 more and a space.
+        if width then QUEUE_WIDTH = math.max(QUEUE_WIDTH, width + 14 + 16) end
+    end
+end
+-- The text gives way by what the Queue button needs past the amount box.
+local QUEUE_INSET = TEXT_INSET + math.max(0, QUEUE_WIDTH - QUANTITY_WIDTH)
+PostPanel.QUEUE_WIDTH = QUEUE_WIDTH
+
 -- Clear of the auction window's bevelled edge without opening a gap you could
 -- see the world through.
 local PANEL_GAP = 6
@@ -252,6 +282,16 @@ local function CreateRow(row)
     })
     row.quantity:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
 
+    -- Queue From Sell List: in the amount box's place on a row Craft First
+    -- keeps back. Hidden on every other row.
+    row.queue = Widgets.CreateButton(row, QUEUE_WORD, function()
+        CommitTyping(PostPanel.list)
+        if row.data then PostPanel:QueueRow(row.data) end
+    end, { width = QUEUE_WIDTH, height = 18, primary = true })
+    row.queue:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
+    row.queue.tooltipFunc = PostPanel.QueueTooltip
+    row.queue:Hide()
+
     -- Takes the item off this list for good, on every character
     -- (2026-10-04). Settings lists what is ignored, with a Restore button for
     -- each, so a misclick is never for good.
@@ -314,7 +354,8 @@ local function DetailTooWide(row)
     if type(room) ~= "number" or room <= 0 then
         -- Not laid out yet: the room its anchors will give it.
         local rowWidth = row:GetWidth()
-        room = type(rowWidth) == "number" and (rowWidth - 8 - TEXT_INSET) or nil
+        local inset = rawget(row, "textInset") or TEXT_INSET
+        room = type(rowWidth) == "number" and (rowWidth - 8 - inset) or nil
     end
 
     return room ~= nil and room > 0 and width > room
@@ -339,8 +380,9 @@ end
 --- both. `need` is how tall the wrapped name stands, nil on one line.
 local function PlaceDetail(row, need)
     local y = need and -(4 + need + 2) or -18
+    local inset = rawget(row, "textInset") or TEXT_INSET
     row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 8, y)
-    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, y)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -inset, y)
     if need then
         -- The price line under it, and a little room below.
         row.name.rowNeed = need + 16
@@ -380,6 +422,36 @@ PostPanel._DepositText = DepositText
 PostPanel._DepositOverSale = DepositOverSale
 
 function UpdateRow(row, line)
+    -- Queue From Sell List: the Queue button stands in the amount box's
+    -- place, and the text gives way by what it needs past the box.
+    local craft = PostPanel:CraftToQueue(line)
+    local inset = craft and QUEUE_INSET or TEXT_INSET
+    local queue = rawget(row, "queue")
+    if queue then
+        if craft then
+            local queued = PostPanel.IsQueued(craft)
+            queue.craft, queue.line = craft, line
+            if queue.SetText then queue:SetText(queued and QUEUED_WORD or QUEUE_WORD) end
+            queue:SetEnabledState(not queued)
+            queue:Show()
+            row.quantity:Hide()
+        else
+            queue.craft, queue.line = nil, nil
+            queue:Hide()
+            row.quantity:Show()
+        end
+    end
+    if rawget(row, "textInset") ~= inset then
+        row.textInset = inset
+        row.name:ClearAllPoints()
+        row.name:SetPoint("TOPLEFT", 25, -4)
+        row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -inset, -4)
+        if rawget(row, "chip") then
+            row.chip:ClearAllPoints()
+            row.chip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -inset, -4)
+        end
+    end
+
     -- The tag first, so the name knows how much room it has.
     local chip = rawget(row, "chip")
     if chip then
@@ -390,7 +462,7 @@ function UpdateRow(row, line)
         if text then
             row.name:SetPoint("TOPRIGHT", chip, "TOPLEFT", -4, 0)
         else
-            row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
+            row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -inset, -4)
         end
     end
 
@@ -523,6 +595,8 @@ function UpdateRow(row, line)
             line.postQuantity, maxQuantity,
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
 end
+
+PostPanel._UpdateRow = UpdateRow
 
 --- The crafted cost lines (Logic/CraftedCost.lua) on the row's tooltip.
 local function AddCraftedLines(line)
@@ -943,6 +1017,16 @@ function PostPanel:Build()
     listAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
     self.listAll = listAll
 
+    -- Queue From Sell List: Queue All, left of List Next, only while some
+    -- row Craft First keeps back can still be queued.
+    local queueAll = Widgets.CreateButton(body, L.Format("Queue All (%d)", 0), function()
+        PostPanel:QueueAll()
+    end, { width = 110, height = 22, primary = true,
+           tooltip = L["Queues the crafts for every item here that's worth more crafted."] })
+    queueAll:SetPoint("RIGHT", listAll, "LEFT", -6, 0)
+    queueAll:Hide()
+    self.queueAll = queueAll
+
     -- Search all (asked 2026-10-14): on Buy, the same place holds one
     -- button that looks up everything the auction house can sell you at
     -- once, as the Lists view's Search does. Shown only on Buy.
@@ -1207,6 +1291,159 @@ function PostPanel:UpdateListAll(lines)
     button.tooltipText = count > 0
         and L["Lists the most valuable stack. Click again for the next one."]
         or L["Nothing on the list can be listed right now."]
+end
+
+--------------------------------------------------------------------------------
+-- Queue From Sell List
+--------------------------------------------------------------------------------
+
+--- On while "Queue From Sell List" and Craft First are both ticked (off
+--- unless ticked, the owner said build it 2026-11-23). Never rename
+--- `sellQueueFromList`.
+function PostPanel:QueueFromSell()
+    local config = ns.Config
+    if not (config and config.Get and config:Get("sellQueueFromList") == true) then return false end
+    local keeps = ns.SisterKeeps
+    return keeps ~= nil and keeps.CraftFirst ~= nil and keeps:CraftFirst() == true
+end
+
+--- The craft a row's Queue button asks for, or nil: only a row Craft First
+--- keeps back, and the same answer Craft First and Butler's Queue button
+--- read (Butler:CraftFor, `crafts` for what the bags make).
+function PostPanel:CraftToQueue(line)
+    if type(line) ~= "table" or not line.craftHeld or not line.itemID then return nil end
+    if not self:QueueFromSell() then return nil end
+    local butler = ns.Butler
+    if not (butler and butler.CraftFor) then return nil end
+    local ok, craft = pcall(butler.CraftFor, butler, line.itemID, line.count)
+    if not ok or type(craft) ~= "table" then return nil end
+    local recipeID, crafts = tonumber(craft.recipeID), tonumber(craft.crafts)
+    if not recipeID or not crafts or crafts < 1 then return nil end
+    return craft
+end
+
+--- True when the queue already has at least that many of the craft, the
+--- same entry Queue:Ensure tops up.
+function PostPanel.IsQueued(craft)
+    local queue = ns.Queue
+    if type(craft) ~= "table" or not (queue and queue.Find) then return false end
+    local ok, _, entry = pcall(queue.Find, queue, tonumber(craft.recipeID), true)
+    return ok and type(entry) == "table" and (tonumber(entry.quantity) or 0) >= (tonumber(craft.crafts) or 1)
+end
+
+local function CraftName(craft)
+    local name = craft.itemID and Util.GetItemName and Util.GetItemName(craft.itemID, craft.name) or craft.name
+    return type(name) == "string" and name or ""
+end
+
+local function ItemName(line)
+    local name = Util.GetItemName and Util.GetItemName(line.itemID) or nil
+    if type(name) ~= "string" or name == "" then name = line.label end
+    return type(name) == "string" and name or ""
+end
+
+--- Ask the queue for `crafts` of a recipe, through the call Butler's Queue
+--- button uses, so the queue only tops up and never doubles.
+local function Ensure(recipeID, crafts)
+    local butler = ns.Butler
+    if not (butler and butler.QueueCraft) then return false end
+    local ok, done, why = pcall(butler.QueueCraft, butler, recipeID, crafts)
+    if ok and done == true then return true end
+    return false, ok and type(why) == "string" and why or nil
+end
+
+--- One row's Queue button.
+function PostPanel:QueueRow(line)
+    local craft = self:CraftToQueue(line)
+    if not craft or PostPanel.IsQueued(craft) then return false end
+    local done, why = Ensure(tonumber(craft.recipeID), tonumber(craft.crafts))
+    if done then
+        ns.Print(L.Format("Added %d %s to your queue.", tonumber(craft.crafts), CraftName(craft)))
+    elseif why then
+        ns.Print(why)
+    end
+    self:Refresh()
+    return done
+end
+
+--- The rows shown that can still be queued, with their crafts.
+function PostPanel:QueueableRows(lines)
+    local rows = {}
+    if not self:QueueFromSell() then return rows end
+    for _, line in ipairs(lines or self.shownLines or {}) do
+        local craft = self:CraftToQueue(line)
+        if craft and not PostPanel.IsQueued(craft) then rows[#rows + 1] = { line = line, craft = craft } end
+    end
+    return rows
+end
+
+--- Queue All: every row that can be queued. A recipe two rows share is
+--- asked once, for the most either makes, the way Butler's Queue does.
+function PostPanel:QueueAll()
+    local rows = self:QueueableRows()
+    local most, order = {}, {}
+    for _, entry in ipairs(rows) do
+        local recipeID = tonumber(entry.craft.recipeID)
+        if not most[recipeID] then order[#order + 1] = recipeID end
+        most[recipeID] = math.max(most[recipeID] or 0, tonumber(entry.craft.crafts))
+    end
+    local queued = {}
+    for _, recipeID in ipairs(order) do queued[recipeID] = Ensure(recipeID, most[recipeID]) end
+    local count = 0
+    for _, entry in ipairs(rows) do
+        if queued[tonumber(entry.craft.recipeID)] then count = count + 1 end
+    end
+    if count == 1 then
+        ns.Print(L["Added 1 craft to your queue."])
+    elseif count > 1 then
+        ns.Print(L.Format("Added %d crafts to your queue.", count))
+    end
+    self:Refresh()
+    return count
+end
+
+--- The foot's note runs up to Queue All while it shows, else List Next.
+function PostPanel:AnchorFootNote()
+    local note, queueAll = self.footNote, self.queueAll
+    if not (note and self.listAll) or self.view ~= "sell" then return end
+    local beside = queueAll and queueAll:IsShown() and queueAll or self.listAll
+    note:ClearAllPoints()
+    if self.duration then note:SetPoint("LEFT", self.duration, "RIGHT", 8, 0) end
+    note:SetPoint("RIGHT", beside, "LEFT", -8, 0)
+end
+
+--- Queue All shows only while some row can still be queued.
+function PostPanel:UpdateQueueAll(lines)
+    local button = self.queueAll
+    if not button then return end
+    local count = #self:QueueableRows(lines)
+    if count > 0 then
+        button:SetText(L.Format("Queue All (%d)", count))
+        local width = Theme.TextWidth and Theme.TextWidth(button.label)
+        button:SetWidth(math.max(90, math.ceil((width or 80) + 20)))
+    end
+    button:SetShown(count > 0)
+    self:AnchorFootNote()
+end
+
+--- The Queue button's hover: what it queues, from what, and what each is
+--- worth. Returns true when drawn.
+function PostPanel.QueueTooltip(button, tooltip)
+    local craft, line = rawget(button, "craft"), rawget(button, "line")
+    if type(craft) ~= "table" or type(line) ~= "table" then return false end
+    tooltip:SetText(L.Format("Queues %d %s.", tonumber(craft.crafts) or 0, CraftName(craft)), 1, 1, 1, 1, true)
+    tooltip:AddLine(L.Format("Uses the %d %s in your bags.", tonumber(line.count) or 0, ItemName(line)),
+        0.9, 0.9, 0.9, true)
+    if tonumber(craft.perItem) then
+        tooltip:AddDoubleLine(L["Each one sells for:"], Util.FormatMoney(math.floor(craft.perItem + 0.5)),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if tonumber(line.unitPrice) then
+        tooltip:AddDoubleLine(L.Format("A %s sells for:", ItemName(line)), Util.FormatMoney(line.unitPrice),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    tooltip:AddLine(L["Anything else it needs goes on your shopping list."], 0.5, 0.5, 0.5, true)
+    return true
 end
 
 --- "Check Prices" when the next click only checks prices, else "List Next".
@@ -2528,6 +2765,7 @@ function PostPanel:Refresh()
 
     if self.view == "snipe" then
         if self.listAll then self.listAll:Hide() end
+        if self.queueAll then self.queueAll:Hide() end
         self.list:Hide()
         self.shoppingList:Hide()
         self.empty:Hide()
@@ -2541,6 +2779,7 @@ function PostPanel:Refresh()
 
     if self.view == "favors" then
         if self.listAll then self.listAll:Hide() end
+        if self.queueAll then self.queueAll:Hide() end
         self.list:Hide()
         self.shoppingList:Hide()
         self.empty:Hide()
@@ -2554,6 +2793,7 @@ function PostPanel:Refresh()
 
     if self.view == "auctions" then
         if self.listAll then self.listAll:Hide() end
+        if self.queueAll then self.queueAll:Hide() end
         self.list:Hide()
         self.shoppingList:Hide()
         self.empty:Hide()
@@ -2567,6 +2807,7 @@ function PostPanel:Refresh()
 
     if self.view == "lists" then
         if self.listAll then self.listAll:Hide() end
+        if self.queueAll then self.queueAll:Hide() end
         self.list:Hide()
         self.shoppingList:Hide()
         self.empty:Hide()
@@ -2580,6 +2821,7 @@ function PostPanel:Refresh()
 
     if self.view == "buy" then
         if self.listAll then self.listAll:Hide() end
+        if self.queueAll then self.queueAll:Hide() end
         if self.footNote then self.footNote:SetText(L["Click a row to search the auction house for it."]) end
         self:RefreshShopping()
         self:UpdateSearchAll()
@@ -2597,6 +2839,7 @@ function PostPanel:Refresh()
     self:UpdateWaitStrip()
     self.shownLines = lines
     self:UpdateListAll(lines)
+    self:UpdateQueueAll(lines)
 
     self.list:SetData(lines)
     self.empty:SetShown(#lines == 0)
