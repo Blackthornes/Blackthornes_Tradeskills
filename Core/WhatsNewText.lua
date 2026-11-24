@@ -5,6 +5,10 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.44.0", lines = {
+        "The Craft queue has an Upgrades Only box that lists only crafts that make an upgrade for you.",
+        "Your Way There is now a small see-through box with only your current step and a dial that points the way.",
+    } },
     { version = "1.43.0", lines = {
         "Buy One on the Disenchanting tab buys the cheapest listing on each click, with no pop-up. You can bind a key to it.",
         "Each random suffix on the Prices tab has its own My Price, and item cards and Sales show the suffix name.",
@@ -13,9 +17,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.42.0", lines = {
         "The All Addons page in Settings has a Set Default button. Click Confirm and this addon's settings go back to how they started.",
-    } },
-    { version = "1.41.1", lines = {
-        "Road to 300 names the city for Undercity, Thunder Bluff and Darnassus trainers.",
-        "Scans finish without a freeze, and the Profit and Prices searches are quicker.",
     } },
 }

@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.44.0
+
+- The Craft queue has an Upgrades Only box that lists only crafts that make an upgrade for you.
+- Your Way There is now a small see-through box with only your current step and a dial that points the way.
+
+Fixes and changes:
+- The Salvager notice goes away when the Boosted Disenchanting buff ends.
+- Scroll bars move the way you drag them.
+
 ## 1.43.0
 
 - Buy One on the Disenchanting tab buys the cheapest listing on each click, with no pop-up. You can bind a key to it.
