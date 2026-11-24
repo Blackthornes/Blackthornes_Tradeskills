@@ -281,22 +281,21 @@ check("a link is read as its name", heard[3], "Woolen Bag")
 SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION("x", 3, "Woolen Bag")
 check("an outbid notice is not a sale", #heard, 3)
 
-print("\nhiding the line the notice prints")
+print("\nthe chat windows are never changed")
+-- Swapping a chat window's AddMessage for our own tainted every chat line
+-- in battlegrounds (taint.log 2026-11-24: "Execution tainted by
+-- Blackthornes_TS while reading field AddMessage"). The sold line is kept
+-- out by the chat filter alone.
 local printed = {}
-ChatFrame1 = { AddMessage = function(_, text) printed[#printed + 1] = text end }
+local function Add(_, text) printed[#printed + 1] = text end
+ChatFrame1 = { AddMessage = Add }
 NUM_CHAT_WINDOWS = 1
-settings.hideSaleChat = nil
-check("nothing is wrapped while hiding is off", SaleAlarm:InstallChatHider(), false)
 settings.hideSaleChat = true
-check("wrapped once hiding is on", SaleAlarm:InstallChatHider(), true)
-ChatFrame1:AddMessage("A buyer has been found for your auction of Woolen Bag.", 1, 1, 0)
-ChatFrame1:AddMessage("|cffffff00A buyer has been found for your auction of Woolen Bag.|r")
-check("the sold line, coloured or not, is kept out", #printed, 0)
-ChatFrame1:AddMessage("[2. Trade] anyone selling bags?")
-check("everything else still prints", #printed, 1)
+SaleAlarm:InstallChatHider()
+check("hiding on leaves AddMessage as the game made it", ChatFrame1.AddMessage == Add, true)
 settings.hideSaleChat = nil
-ChatFrame1:AddMessage("A buyer has been found for your auction of Woolen Bag.")
-check("turned off, the line prints again", #printed, 2)
+SaleAlarm:InstallChatHider()
+check("hiding off leaves AddMessage as the game made it", ChatFrame1.AddMessage == Add, true)
 ChatFrame1, NUM_CHAT_WINDOWS = nil, nil
 ChatFrame_AddMessageEventFilter, ns.Mail = nil, nil
 

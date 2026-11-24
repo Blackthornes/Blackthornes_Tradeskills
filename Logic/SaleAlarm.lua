@@ -323,32 +323,15 @@ function SaleAlarm.ChatFilter(_, _, text)
     return SaleAlarm:IsSoldText(text)
 end
 
---- The line this client prints from the notice never passes through a chat
---- filter, so it is stopped where the chat windows add it. Installed only
---- once the player turns hiding on, and it lets everything else through.
+--- Kept so older calls still work; it changes nothing now.
+-- It used to swap each chat window's AddMessage for our own, to stop the
+-- line the auction notice prints. Writing that field tainted every chat
+-- line, and in battlegrounds the game then refused each one (taint.log
+-- 2026-11-24, "Execution tainted by Blackthornes_TS while reading field
+-- AddMessage"). The chat filter above still keeps the sold line out of
+-- chat; the notice's own copy shows, which is safer than breaking chat.
 function SaleAlarm:InstallChatHider()
-    if ns.Config:Get("hideSaleChat") ~= true then return false end
-
-    self.wrapped = self.wrapped or {}
-    local count = tonumber(_G.NUM_CHAT_WINDOWS) or 10
-
-    for index = 1, count do
-        local frame = _G["ChatFrame" .. index]
-        if type(frame) == "table" and not self.wrapped[frame]
-            and type(frame.AddMessage) == "function" then
-            local original = frame.AddMessage
-            frame.AddMessage = function(chat, text, ...)
-                if ns.Config:Get("hideSaleChat") == true and SaleAlarm:IsSoldText(text) then
-                    SaleAlarm.hidden = (SaleAlarm.hidden or 0) + 1
-                    return
-                end
-                return original(chat, text, ...)
-            end
-            self.wrapped[frame] = true
-        end
-    end
-
-    return next(self.wrapped) ~= nil
+    return false
 end
 
 --- Every notice the auction house sends, sold or not.
