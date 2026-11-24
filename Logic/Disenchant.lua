@@ -137,14 +137,10 @@ local EPIC = {
     { upTo = math.huge, outcomes = { { NEXUS_CRYSTAL, 1.0, 1, 2 } } },
 }
 
--- The Enchanting skill needed, by item level. Roughly: the published figures
--- vary a little between sources.
-local SKILL = {
-    { upTo = 20, skill = 1 },   { upTo = 25, skill = 25 },  { upTo = 30, skill = 50 },
-    { upTo = 35, skill = 75 },  { upTo = 40, skill = 100 }, { upTo = 45, skill = 125 },
-    { upTo = 50, skill = 150 }, { upTo = 55, skill = 175 }, { upTo = 60, skill = 200 },
-    { upTo = math.huge, skill = 225 },
-}
+-- No skill table: on Forever any enchanter breaks any item, from Enchanting
+-- 1 (a player with Enchanting 4 saw only low level deals, 2026-11-24).
+-- Classic's 25 for item level 21 and up, and so on, does not hold here, so
+-- facts.skill stays nil and every check below reads nil as "any skill".
 
 -- Item classes that can be disenchanted.
 local CLASS_WEAPON, CLASS_ARMOR = 2, 4
@@ -613,7 +609,6 @@ function Disenchant:GetOutcomes(itemID)
         }
     end
 
-    facts.skill = Band(SKILL, level).skill
     facts.key = BandKey(facts, band)
     facts.source = "table"
     facts.casts = 0
@@ -1100,10 +1095,11 @@ end
 
 Disenchant._BuyPrice = BuyPrice
 
---- Can your best enchanter break this? nil when no character has Enchanting.
-local function CanDisenchant(skill, needs)
+--- Can one of your characters break this? On Forever any Enchanting skill
+--- breaks any item. nil when no character has Enchanting.
+local function CanDisenchant(skill)
     if skill == nil then return nil end
-    return needs == nil or skill >= needs
+    return true
 end
 
 --- Every disenchantable item someone else has on the auction house, with
@@ -1180,11 +1176,10 @@ function Disenchant:AuctionRow(itemID, record, ctx)
         gain = gain,
         margin = gain / buy,
         beatsSale = gain > 0,
-        needs = facts.skill,
         enchanter = ctx.enchanter,
         enchanterSkill = ctx.skill,
         -- nil when no character has Enchanting at all.
-        canDisenchant = CanDisenchant(ctx.skill, facts.skill),
+        canDisenchant = CanDisenchant(ctx.skill),
         age = ns.Prices:GetAge(itemID),
         stale = ns.Prices:IsStale(itemID),
     }
@@ -1291,10 +1286,9 @@ function Disenchant:AnnounceDeals()
     local ok, all = pcall(self.GetAuctionRows, self, { profitableOnly = true })
     if not ok or type(all) ~= "table" then return 0 end
 
-    -- Only deals one of your characters can break at their Enchanting skill
-    -- today. The tab still lists the rest, marked; the message is what says
-    -- "go and buy", so it leaves them out. With no enchanter known at all,
-    -- canDisenchant is nil and every deal counts, as before.
+    -- Only deals one of your characters can break. On Forever any enchanter
+    -- breaks any item, so this leaves out nothing today. With no enchanter
+    -- known at all, canDisenchant is nil and every deal counts, as before.
     local rows = {}
     for _, row in ipairs(all) do
         if row.canDisenchant ~= false then rows[#rows + 1] = row end
@@ -1345,10 +1339,9 @@ local function Report(input)
     local value, partial, breakdown = Disenchant:GetValue(itemID)
     local facts = breakdown and breakdown.facts or {}
 
-    ns.Print(L.Format(facts.isWeapon and L["%s: item level %d, %s weapon, needs Enchanting about %d"]
-            or L["%s: item level %d, %s armor, needs Enchanting about %d"],
-        Util.GetItemLabel(itemID), facts.itemLevel or 0, QUALITY_WORDS[facts.qualityName] or facts.qualityName or "?",
-        facts.skill or 0))
+    ns.Print(L.Format(facts.isWeapon and L["%s: item level %d, %s weapon"]
+            or L["%s: item level %d, %s armor"],
+        Util.GetItemLabel(itemID), facts.itemLevel or 0, QUALITY_WORDS[facts.qualityName] or facts.qualityName or "?"))
 
     if facts.source == "yours" then
         ns.Print(L.Format("  from %s", Disenchant:YoursPhrase(facts)))

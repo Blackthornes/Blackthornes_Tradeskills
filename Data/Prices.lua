@@ -1436,6 +1436,18 @@ function Prices.SuffixName(itemID, suffix)
     return nil
 end
 
+--- A link for one suffix of an item, from the bonus known to be that
+--- suffix, so the game can draw that copy's card. Nil while no bonus is.
+function Prices.SuffixLink(itemID, suffix)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (itemID and suffix and words) then return nil end
+    for bonus, known in pairs(words.bonuses) do
+        if known == suffix then return ("item:%d::::::::::::1:%d"):format(itemID, bonus) end
+    end
+    return nil
+end
+
 --- Every suffix of an item with a recent price, dearest first:
 --- { { suffix, market, min, rival, seen, name } }.
 function Prices:SuffixRows(itemID)

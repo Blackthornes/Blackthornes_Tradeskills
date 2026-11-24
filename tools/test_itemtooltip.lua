@@ -360,6 +360,23 @@ do
   ItemTooltip.AddDemandLines = addDemand
 end
 
+-- The Disenchant Value line is a price, so it follows Value on Tooltips
+-- (a player's report, 2026-11-24: every tooltip setting off, and the
+-- disenchant value still showed).
+do
+  local disenchant = ns.Disenchant
+  ns.Disenchant = { GetValue = function() return 900 end }
+  local labels = {}
+  for _, l in ipairs(ItemTooltip:LinesFor(LINEN_CLOTH, nil)) do labels[#labels + 1] = l[1] end
+  check("value off hides the disenchant value", table.concat(labels, ","), "")
+  ns.settings.showValueOnItemTooltips = true
+  labels = {}
+  for _, l in ipairs(ItemTooltip:LinesFor(LINEN_CLOTH, nil)) do labels[#labels + 1] = l[1] end
+  check("value on shows it", table.concat(labels, ","):find("Disenchant value", 1, true) ~= nil, true)
+  ns.settings.showValueOnItemTooltips = false
+  ns.Disenchant = disenchant
+end
+
 ns.settings.showValueOnItemTooltips = true
 check("on when switched on", ItemTooltip:IsEnabled(), true)
 

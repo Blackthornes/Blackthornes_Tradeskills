@@ -111,6 +111,9 @@ local awaitingItemData = false
 -- name, or failing that the name itself. A sale of something the addon has no
 -- recipe for is still a sale, so the name is shown rather than the row dropped.
 local function ItemLabel(itemID, name)
+    -- A random suffix copy keeps the name its mail gave it.
+    local suffixName = ns.Mail and ns.Mail.SuffixName and ns.Mail.SuffixName(itemID, name)
+    if suffixName then return Util.ColorItemName(itemID, suffixName) end
     if itemID then return Util.GetItemLabel(itemID) end
     return name or L["unknown item"]
 end
@@ -1020,9 +1023,9 @@ end
 -- id another entry gave that name. Keyed by "?name" here instead, clicking
 -- one selected nothing, and the item's sales were never lit.
 local function SelectionKey(data)
-    return data.key or data.itemID
-        or (data.name and state.names and state.names[data.name])
-        or ("?" .. tostring(data.name or "unknown"))
+    if data.key then return data.key end
+    local itemID = data.itemID or (data.name and state.names and state.names[data.name])
+    return ns.Mail.ItemKey(itemID, data.name)
 end
 
 --------------------------------------------------------------------------------

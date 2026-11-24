@@ -49,7 +49,6 @@ local VIEWS = {
             { key = "margin", label = L["MARGIN"],     width = 50, justify = "CENTER" },
             { key = "value",  label = L["DISENCHANT"], width = 70, money = true },
             { key = "buy",    label = L["BUY"],        width = 66, money = true },
-            { key = "skill",  label = L["SKILL"],      width = 40, justify = "CENTER" },
             { key = "age",    label = L["AGE"],        width = 44, justify = "CENTER" },
         },
         hint = L["Right-click for more."],
@@ -428,10 +427,6 @@ local function FillCell(cell, key, entry)
         text = tostring(entry.count or 0)
     elseif key == "buy" then
         text = Money(entry.buy)
-    elseif key == "skill" then
-        text = entry.needs and tostring(entry.needs) or ""
-        -- Red when none of your characters can break it yet.
-        color = entry.canDisenchant == false and "loss" or "dim"
     elseif key == "age" then
         -- Read now, as the list itself can be kept for a while.
         local age = ns.Prices:GetAge(entry.itemID) or entry.age
@@ -579,10 +574,7 @@ local function ShowRowTooltip(row, entry)
             Util.FormatMoney(-entry.gain, { noColor = true })), 0.85, 0.35, 0.35, true)
     end
 
-    if entry.canDisenchant == false then
-        GameTooltip:AddLine(L.Format("Needs Enchanting %d. Your best is %d (%s).",
-            entry.needs or 0, entry.enchanterSkill or 0, entry.enchanter or "?"), 0.85, 0.35, 0.35, true)
-    elseif entry.canDisenchant == nil then
+    if entry.canDisenchant == nil then
         GameTooltip:AddLine(L["None of your characters has Enchanting."], 0.85, 0.35, 0.35, true)
     end
 
@@ -835,9 +827,9 @@ local function UpdateBagDetail(entry)
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
 
-    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d."]
-            or L["Item level %d %s armor. Needs Enchanting about %d."],
-        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0))
+    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon."]
+            or L["Item level %d %s armor."],
+        facts.itemLevel or 0, QualityWord(facts.qualityName)))
     detail.subtitle:SetTextColor(Theme.Unpack("muted"))
 
     DrawOutcomes(detail, breakdown)
@@ -1028,16 +1020,15 @@ local function UpdateDetail(entry)
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
 
-    local who
     if entry.canDisenchant == nil then
-        who = L["None of your characters has Enchanting."]
+        detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. %s"]
+                or L["Item level %d %s armor. %s"],
+            facts.itemLevel or 0, QualityWord(facts.qualityName), L["None of your characters has Enchanting."]))
     else
-        who = L.Format("Your best is %d (%s).", entry.enchanterSkill or 0, entry.enchanter or "?")
+        detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon."]
+                or L["Item level %d %s armor."],
+            facts.itemLevel or 0, QualityWord(facts.qualityName)))
     end
-
-    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d. %s"]
-            or L["Item level %d %s armor. Needs Enchanting about %d. %s"],
-        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0, who))
     detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
 
     DrawOutcomes(detail, breakdown)
@@ -1572,7 +1563,6 @@ local function Build(container)
     -- each one reads whatever column the view puts there.
     local FIELDS = {
         difference = function(row) return row.value and row.sells and (row.value - row.sells) or nil end,
-        skill = function(row) return row.needs end,
     }
     local sortLabels, values = { name = nameHeading }, {
         name = function(row) return row.name end,

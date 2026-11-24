@@ -364,8 +364,8 @@ end
 -- listing. "What is this worth" is the question a tooltip is asked; what it
 -- would cost to buy one right now is a question asked at the auction house,
 -- where the Prices tab answers it with the whole book.
---- Lines that belong to Value on Tooltips: the price, lowest posting and
---- stack total. Only these follow that setting; every other line keeps its
+--- Lines that belong to Value on Tooltips: the price, lowest posting,
+--- stack total and disenchant value. Only these follow that setting; every other line keeps its
 --- own (a player's report, 2026-11-22: Value off hid the sales and
 --- disenchant lines too).
 local function ValueLine(line)
@@ -1014,7 +1014,9 @@ function ItemTooltip:DisenchantLine(itemID)
     local text = Util.FormatMoney(value, { short = true })
     if partial then text = L.Format("%s or more", text) end
 
-    return { L["Disenchant value"], text }
+    -- A price, so it follows Value on Tooltips (a player's report,
+    -- 2026-11-24: no setting hid it).
+    return ValueLine({ L["Disenchant value"], text })
 end
 
 --- Does the character playing disenchant? The client's spell checks first;

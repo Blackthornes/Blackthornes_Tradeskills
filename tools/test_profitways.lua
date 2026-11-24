@@ -167,8 +167,9 @@ check("the disenchant line says why", Profit:DescribeWays(a)[3].note, "no enchan
 
 enchanterSkill = 20
 a = Profit:Analyse(RECIPE, nil, "best")
-check("an enchanter below the skill it needs does not count either", a.via, "vendor")
-check("and the line says so", Profit:DescribeWays(a)[3].note, "skill too low")
+-- On Forever any Enchanting skill breaks any item (2026-11-24).
+check("an enchanter at 20 counts for an item Classic gates at 50", a.via, "disenchant")
+check("and the line has no note", Profit:DescribeWays(a)[3].note, nil)
 
 print("")
 print("one way alone")

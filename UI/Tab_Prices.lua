@@ -24,6 +24,12 @@ local ROW_GAP = 6
 -- A search opens items to show their suffixes when it finds this many or fewer.
 local AUTO_OPEN_MOST = 30
 local FOLDED_ROWS = { quantity = true, scans = true, confidence = true }
+-- The price graph's plot never gets less than this. In a short window a
+-- "Never below" price (with its Highest and When Cheaper rows) left it one
+-- line tall (a player's report, 2026-11-23), so while it would be shorter
+-- these rows go under the Market value row's hover too, in this order.
+local GRAPH_MIN = 60
+local SQUEEZE_ORDER = { "bags", "liquidity", "rival", "own" }
 
 -- Right to left. Money sits to the right, so its coins line up; the rest is
 -- centred under its heading. `width` is the least each gets:
@@ -1074,7 +1080,7 @@ local function BuildDetail(parent)
         GameTooltip:AddDoubleLine(detail.labels.market:GetText(), detail.values.market:GetText(),
             1, 1, 1, 1, 1, 1)
         for _, key in ipairs(detail.rowOrder) do
-            if FOLDED_ROWS[key] then
+            if FOLDED_ROWS[key] or (detail.squeezed and detail.squeezed[key]) then
                 GameTooltip:AddDoubleLine(detail.labels[key]:GetText(), detail.values[key]:GetText(),
                     0.7, 0.7, 0.7, 1, 1, 1)
             end
@@ -1143,6 +1149,45 @@ local function LayoutRows(detail)
         heading:ClearAllPoints()
         heading:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -14)
     end
+end
+
+--- Which rows to fold so the plot gets GRAPH_MIN, given its height now, the
+--- rows shown and how much room each frees. Least needed first.
+local function Squeeze(plotHeight, shown, step)
+    local fold = {}
+    plotHeight = tonumber(plotHeight) or 0
+    for _, key in ipairs(SQUEEZE_ORDER) do
+        if plotHeight >= GRAPH_MIN then break end
+        if shown[key] then
+            fold[#fold + 1] = key
+            plotHeight = plotHeight + step
+        end
+    end
+    return fold, plotHeight
+end
+
+--- Fold rows while the price graph is squeezed. Only once the pane has a
+--- size: before that every plot measures nothing.
+local function FitGraph(detail)
+    detail.squeezed = {}
+    local graph = rawget(detail, "graph")
+    if type(graph) ~= "table" or type(graph.plot) ~= "table" then return end
+    local paneHeight = tonumber(detail:GetHeight()) or 0
+    local plotHeight = tonumber(graph.plot:GetHeight())
+    if paneHeight < 1 or not plotHeight then return end
+
+    local shown = {}
+    for _, key in ipairs(SQUEEZE_ORDER) do shown[key] = detail.labels[key]:IsShown() end
+    local rowHeight = tonumber(detail.labels.market:GetHeight()) or 0
+    if rowHeight < 1 then rowHeight = 12 end
+    local fold = Squeeze(plotHeight, shown, rowHeight + ROW_GAP)
+    if #fold == 0 then return end
+    for _, key in ipairs(fold) do
+        detail.squeezed[key] = true
+        detail.labels[key]:Hide()
+        detail.values[key]:Hide()
+    end
+    LayoutRows(detail)
 end
 
 local function UpdateDetail(entry)
@@ -1289,6 +1334,7 @@ local function UpdateDetail(entry)
     detail.labels.suffixNote:SetShown(entry.kid == true)
     detail.values.suffixNote:SetShown(entry.kid == true)
     LayoutRows(detail)
+    FitGraph(detail)
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
@@ -1401,6 +1447,24 @@ end
 
 --- For the tests: the tab's widgets and state.
 function UI._PricesWidgets() return widgets, state, UpdateRow end
+
+--- The hover on a row: the item's own card. A suffix row shows that suffix
+--- (its link when its bonus is known, else its full name on top); the
+--- item's own row stays the plain item.
+function UI._PricesRowTooltip(row, entry)
+    if not (entry and entry.itemID) then return end
+    local link, name = nil, entry.label
+    if entry.kid then
+        local suffixLink = ns.Prices and ns.Prices.SuffixLink
+        if suffixLink then
+            local ok, found = pcall(suffixLink, entry.itemID, entry.suffix)
+            link = ok and found or nil
+        end
+        name = entry.fullName
+    end
+    Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, name, link)
+    GameTooltip:Show()
+end
 
 --------------------------------------------------------------------------------
 -- Build
@@ -1526,7 +1590,7 @@ local function BuildDetails(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, entry) Widgets.ShowItemOnly(row, entry.itemID, entry.label) end,
+        onEnter = function(row, entry) UI._PricesRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
@@ -1557,6 +1621,15 @@ local function BuildDetails(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+    -- A pane resized (the window dragged taller or shorter) fits again.
+    detail:SetScript("OnSizeChanged", function()
+        if detail.fitSoon then return end
+        detail.fitSoon = true
+        C_Timer.After(0, function()
+            detail.fitSoon = nil
+            if state.selected then UpdateDetail(state.selected) end
+        end)
+    end)
 
     UpdateDetail(nil)
 
@@ -1575,6 +1648,7 @@ end
 
 local PricesUI = {}
 ns.PricesUI = PricesUI
+PricesUI.Squeeze = Squeeze
 PricesUI.view = "details"
 
 local VIEW_TOP = 32
