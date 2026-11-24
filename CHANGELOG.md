@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.41.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Gathered goods.** Light Leather and other goods you gather now list at the auction price. Before, they were held back as if you crafted them.
+- **Buy Sets and Merchant's Favor.** They no longer stick on "auction house is busy" when gear sells one piece at a time.
+- **Disenchanting.** Buy For moves to the next price after you buy. The row leaves when none are left.
+
 ## 1.41.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
