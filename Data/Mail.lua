@@ -34,10 +34,16 @@ local Util = ns.Util
 -- bag had in Data/Inventory.lua.
 local MAX_ATTACHMENTS = tonumber(_G.ATTACHMENTS_MAX_RECEIVE) or 16
 
--- How many ledger entries to keep per realm. Long enough to see a pattern,
--- short enough not to bloat saved variables, which on this client are already
--- fragile -- see Core/Persist.lua.
-local MAX_LEDGER = 400
+-- Ledger entries kept per realm: every one from the last LEDGER_KEEP_DAYS, up
+-- to MAX_LEDGER. A busy seller filled the old 400 in a day or three. Each
+-- entry is small, so two thousand weigh little. A player back from a long
+-- break still keeps their last LEDGER_KEEP_ANYWAY.
+local MAX_LEDGER = 2000
+local LEDGER_KEEP_DAYS = 60
+local LEDGER_KEEP_ANYWAY = 400
+Mail.MAX_LEDGER = MAX_LEDGER
+Mail.LEDGER_KEEP_DAYS = LEDGER_KEEP_DAYS
+Mail.LEDGER_KEEP_ANYWAY = LEDGER_KEEP_ANYWAY
 
 --------------------------------------------------------------------------------
 -- Storage
@@ -925,6 +931,32 @@ end
 
 Mail._ShrunkFrom = ShrunkFrom
 
+--- Drop the oldest entries once there are more than MAX_LEDGER, or once they
+--- are older than LEDGER_KEEP_DAYS, keeping at least LEDGER_KEEP_ANYWAY. Each
+--- one dropped is handed to Profit by method, which keeps it small.
+function Mail:TrimLedger(ledger, now)
+    local entries = ledger and ledger.entries
+    if type(entries) ~= "table" or #entries <= LEDGER_KEEP_ANYWAY then return end
+    local cutoff = (tonumber(now) or time()) - LEDGER_KEEP_DAYS * 86400
+    local drop = 0
+    local count = #entries
+    while count - drop > LEDGER_KEEP_ANYWAY do
+        local oldest = entries[drop + 1]
+        -- Oldest first, so the first one young enough ends the trim.
+        if count - drop <= MAX_LEDGER and (tonumber(oldest and oldest.t) or 0) >= cutoff then break end
+        drop = drop + 1
+    end
+    if drop == 0 then return end
+    local keep = ns.MethodProfit and ns.MethodProfit.KeepOlderSale
+    for i = 1, drop do
+        if keep then pcall(keep, ns.MethodProfit, entries[i]) end
+    end
+    -- One shift, not a table.remove per entry.
+    for i = 1, count - drop do entries[i] = entries[i + drop] end
+    for i = count, count - drop + 1, -1 do entries[i] = nil end
+end
+
+
 function Mail:Reconcile(mails, complete)
     local ledger = self:GetLedger()
     local who = ns.Config:GetCharacterKey()
@@ -1094,12 +1126,7 @@ function Mail:Reconcile(mails, complete)
 
     -- A sale trimmed off here is kept, small, for Profit by method's longer
     -- periods (Logic/MethodProfit.lua), so they don't all show one day.
-    while #ledger.entries > MAX_LEDGER do
-        local gone = table.remove(ledger.entries, 1)
-        if ns.MethodProfit and ns.MethodProfit.KeepOlderSale then
-            pcall(ns.MethodProfit.KeepOlderSale, ns.MethodProfit, gone)
-        end
-    end
+    self:TrimLedger(ledger, time())
 
     -- A new sale filed by name may match an item another entry knows, and a
     -- new return may name the item for older sales.

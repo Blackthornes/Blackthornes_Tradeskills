@@ -3387,6 +3387,19 @@ Saved visits stay small (`KEEP_SALES` 10, `KEEP_ITEMS` 8). The list is a
 scroll list that draws only the rows on screen. Tested in
 `tools/test_mailhaul.lua`.
 
+## How many sales are kept (2026-11-24)
+
+A player asked to keep sales longer than about 3 days. The mail ledger
+(`mailLedger[realm].entries`, `Data/Mail.lua`) kept only the newest 400,
+which a busy seller fills in a day or three, and Recent Sales and By Item
+read only those. The owner said do it like Mailbox visits (2026-11-24).
+`Mail:TrimLedger(ledger, now)` runs after each mailbox read: the oldest go
+once there are more than `MAX_LEDGER` (2000) or once older than
+`LEDGER_KEEP_DAYS` (60), but at least `LEDGER_KEEP_ANYWAY` (400) stay.
+Each one dropped still goes to `MethodProfit:KeepOlderSale`. Sales sent to
+the other account stay at `AccountLink.MAX_SALES` (200). Tested in
+`tools/test_mail.lua`.
+
 ## Leave Out of Report (2026-11-17)
 
 The owner said build it from a mockup (2026-11-17). On the Sales tab's
