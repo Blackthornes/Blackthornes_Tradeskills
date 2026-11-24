@@ -900,6 +900,22 @@ DisenchantLog._Report = Report
 
 ns.RegisterCommand("delog", L["your recorded disenchants; /bts delog reset clears them"], Report)
 
+-- Start or stop Salvager mode by hand, for a Salvager the addon did not
+-- see placed (one already up after a /reload, or a cast it missed).
+ns.RegisterCommand("salvager", L["turn Salvager mode on or off by hand: /bts salvager on|off"], function(args)
+    local word = tostring(args or ""):lower():match("^(%S*)")
+    if not DisenchantLog:SalvagerApart() then
+        ns.Print(L["Tick Keep Salvager Results Apart in Settings first."])
+        return
+    end
+    if word == "on" then
+        DisenchantLog:StartSalvager("cast")
+    elseif word == "off" then
+        DisenchantLog:StopSalvager()
+    end
+    ns.Print((DisenchantLog:SalvagerUp()) and L["Salvager mode is on."] or L["Salvager mode is off."])
+end)
+
 ns.RegisterCommand("dechat", L["show what each disenchant gave in chat: /bts dechat on|off"], function(args)
     local word = tostring(args or ""):lower():match("^(%S*)")
     if word == "on" or word == "off" then DisenchantLog:SetChat(word == "on") end
