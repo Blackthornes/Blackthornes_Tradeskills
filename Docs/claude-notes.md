@@ -2224,6 +2224,16 @@ closing ends the run. Nothing is saved; the limit lasts the session.
 Events go in from `OnEnable`. Tested in `tools/test_listsets.lua`. Not
 yet seen in game.
 
+An item sold one at a time on the list (2026-11-24, found reading the
+code): Buy Sets asked `GetItemCommodityStatus` with an item ID, which
+Forever refuses, so gear read as sold in stacks. Its search answered on
+`ITEM_SEARCH_RESULTS_UPDATED`, which nothing read, and the run stopped
+with "the auction house is busy" every time. `IsStack` now asks
+`Scanner:GetCommodityStatus` first, and `ListSets:SingleResults` takes the
+single item answer for an item nobody knows yet: no listings, so no sets
+fit, as for any item that can't be bought by the unit. Merchant's Favor
+(`FavorsView.Kind`) asks the scanner first as well.
+
 ## Price limits
 
 The owner said yes (2026-10-28) to three limits on a price the player
@@ -2606,7 +2616,8 @@ listings and the next click asks. Every
 buy let go after a click says why (`Tell`, `Snipe:Refused`); a quiet ready
 stays quiet. The row's badge shows "Pay X" for a planned buy too. Tested in
 `tools/test_snipestackkind.lua`. `Logic/ListSets.lua` and
-`UI/FavorsView.lua` still ask the game with an item ID.
+`UI/FavorsView.lua` ask the scanner's memory first too (2026-11-24, see
+"Buy Sets").
 
 To Disenchant with an empty pool (2026-11-23, a player's report: "Nothing
 to snipe yet. Scan the auction house first." after a scan). Disenchant
