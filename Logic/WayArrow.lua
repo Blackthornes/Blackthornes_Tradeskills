@@ -413,5 +413,7 @@ ns.TravelHost = {
     Changed = function() WayArrow:Changed() end,
     Refresh = function() if ns.WayArrowUI and ns.WayArrowUI.Refresh then ns.WayArrowUI:Refresh() end end,
     State = function() return ns.WayArrowUI and ns.WayArrowUI.state end,
+    -- The step box (UI/TravelCard.lua) hangs under the dial.
+    Dial = function() return ns.WayArrowUI end,
     Print = function(text) ns.Print(text) end,
 }

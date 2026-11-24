@@ -3935,3 +3935,26 @@ holds, both for the Sell list only:
 
 Only listing an item or it leaving the bags (or its x) takes a row away.
 Tested in `tools/test_sellhold.lua` and `tools/test_bagstock.lua`.
+
+## The step box (Your Way There, 2026-11-24)
+
+The owner said build it, from the mockup `Docs/mockups/way-there-step-box.html`
+(project files). `UI/TravelCard.lua` (the same file in all five) is no longer
+a window of every step: it is one small row with the step you are on, its
+small line with how far (the arrow's `state.note`), and "Step 2 of 4 · About
+10 minutes". A small dial at the row's end uses the arrow's own art
+(`Media/Arrow/Blade`, frame by `state.turn`); with no way to point (mode
+`trip`: a Hearthstone or a ride) it shows a still gold dot. Stop and Show on
+Map show while the mouse is on it.
+
+It hangs under `Travel.Host.Hang()` when that frame shows (Equipment's small
+panel, as wide as it, no gem of its own), else under `Travel.Host.Dial()`'s
+`dial` (the arrow module: `frame` and `dial`), else where it was dragged
+(`travelCardX`/`travelCardY`, never rename) or on the right shelf; the red
+close gem sits in its corner whenever it is not under a panel (the owner
+asked). The gem hides it for this place only. Always see-through (the owner
+asked): glass at `GLASS_CLEAR`, solid on the mouse, every word outlined and
+shadowed. While it shows, each arrow's `ArrowUI.Words` asks
+`TravelCard:Words(state)` and keeps only its name. `travelCardScale` is no
+longer read (left in saves). Tested in `tools/test_stepbox.lua` (the same in
+all five). Not yet seen in game.
