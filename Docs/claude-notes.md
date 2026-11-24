@@ -3807,3 +3807,24 @@ five), small windows' spots, the disenchanter picked and the link names. It
 also clears `UI.RESET_ALSO` (settings with no default). Chat says "Every
 Tradeskills setting is back to how it started." Tested in
 `tools/test_uifit.lua`.
+
+## Buy One on the Disenchanting tab
+
+The owner said build it (2026-11-24, from a mockup). After "Search the
+auction house" in the Disenchanting side pane, the same button reads "Buy
+One for %s" and each click places one bid on the cheapest listing
+(`Logic/DisenchantQuickBuy.lua`, `C_AuctionHouse.PlaceBid`, no Accept
+pop-up), marks it to disenchant (`DisenchantBuys:Intend`) and readies the
+next. It stops at the highest price that still meets the Disenchanting
+minimums (`DisenchantQuickBuy.MostToPay`, the same test as
+`Disenchant:AuctionRow`), skips your own listings, and a buy at or over
+Double Check Over (`snipeConfirmOver`, Snipe's setting) asks for Confirm.
+Under it: "%d more at %s or less"; when done the button reads "No more
+deals for this item" (disabled) over "Bought %d for %s". Key binding
+"Disenchanting: Buy Next" (`BLACKTHORNESTS_DEBUYNEXT` in Bindings.xml).
+One item search per Search click and none after; the list is read again
+only on the game's own `ITEM_SEARCH_RESULTS_UPDATED`. Never a loop or
+timer that buys. Picking another deal lets the last one go, so the key
+never buys what the pane doesn't show. Tested in
+`tools/test_disenchantquickbuy.lua` and the Buy One part of
+`tools/test_disenchantdeals.lua`. Not yet seen in game.

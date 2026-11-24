@@ -3915,3 +3915,10 @@ L["Nothing you can make here is an upgrade right now."] = "Nichts, was du hier h
 L["Tradeskills Settings:"] = "Tradeskills-Einstellungen:"
 L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."] = "Setzt jede Tradeskills-Einstellung auf den Anfang zurück. Deine Preise, Warteschlange, Verkäufe und Rezepte bleiben. Auch deine Fensterpositionen und die Einstellungen auf dieser Seite bleiben."
 L["Every Tradeskills setting is back to how it started."] = "Alle Tradeskills-Einstellungen sind wieder wie am Anfang."
+
+-- Disenchanting tab: Buy One (2026-11-24)
+L["Buy One for %s"] = "Kauf eins für %s"
+L["%d more at %s or less"] = "%d weitere für %s oder weniger"
+L["No more deals for this item"] = "Keine Angebote mehr für diesen Gegenstand"
+L["Bought %d for %s"] = "%d gekauft für %s"
+L["Disenchanting: Buy Next"] = "Entzaubern: Nächstes kaufen"

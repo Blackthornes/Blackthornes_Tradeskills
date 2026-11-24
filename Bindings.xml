@@ -9,4 +9,7 @@
     <Binding name="BLACKTHORNESTS_SNIPEBUY" category="ADDONS">
         if BlackthornesTS.Snipe then BlackthornesTS.Snipe:BuyNext() end
     </Binding>
+    <Binding name="BLACKTHORNESTS_DEBUYNEXT" category="ADDONS">
+        if BlackthornesTS.DisenchantQuickBuy then BlackthornesTS.DisenchantQuickBuy:BuyNext() end
+    </Binding>
 </Bindings>
