@@ -1311,6 +1311,48 @@ sorter.buttons.name.scripts.OnClick(sorter.buttons.name)
 check("and a new sort", pricesList.offset, 0)
 check("by the heading clicked", sorter.key, "name")
 
+-- A "Never below" price adds Highest and When Cheaper under My price. In a
+-- short window the price graph was left one line tall (a player's report,
+-- 2026-11-23). The fake game lays nothing out, so the plot's height is worked
+-- out here the way the pane stacks: what is left after the shown rows.
+do
+    local widgets, state = UI._PricesWidgets()
+    local detail = widgets.detail
+    local floorItem = 1001
+    ns.Prices.GetMine = function(_, itemID) if itemID == floorItem then return 20000, "floor" end end
+    ns.Prices.GetMyLimits = function() return nil, nil end
+    detail.height = 440
+    detail.labels.market.height = 12
+    local function PlotHeight()
+        local used = 42 + 46 + 59 + 81
+        for _, label in pairs(detail.labels) do
+            if label:IsShown() then used = used + 18 end
+        end
+        if detail.myPrice.limits[1]:IsShown() then used = used + 78 end
+        return 440 - used
+    end
+    detail.graph.plot.GetHeight = PlotHeight
+
+    state.selected = { itemID = floorItem, record = records[floorItem] }
+    UI.tabs.prices.refresh()
+    check("Never below shows Highest and When Cheaper", detail.myPrice.limits[1]:IsShown(), true)
+    check("the price graph keeps room to read", PlotHeight() >= 60, true)
+    check("a row folded for it", detail.labels.bags:IsShown(), false)
+    check("the Market value row stays", detail.labels.market:IsShown(), true)
+    GameTooltip.AddDoubleLine = function(self, left) self.lines[#self.lines + 1] = left end
+    detail.marketHover.scripts.OnEnter(detail.marketHover)
+    local listed = table.concat(GameTooltip.lines, "|")
+    check("and its hover lists the folded row", listed:find("In your bags", 1, true) ~= nil, true)
+    GameTooltip:Hide()
+
+    ns.Prices.GetMine = function() return nil end
+    UI.tabs.prices.refresh()
+    check("cleared, every row is back", detail.labels.bags:IsShown(), true)
+    check("and the limits go", detail.myPrice.limits[1]:IsShown(), false)
+    ns.Prices.GetMine, ns.Prices.GetMyLimits = nil, nil
+    state.selected = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("Characters")
