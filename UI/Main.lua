@@ -2703,6 +2703,9 @@ function UI:OnEnable()
                 -- the character window closes, and follows the main window
                 -- when it is dragged, and neither has an event.
                 if ns.PostPanel and ns.PostPanel.Place then ns.PostPanel:Place() end
+                -- The Sell list held its order under the mouse; sorted
+                -- again once the mouse has left it.
+                if ns.PostPanel and ns.PostPanel.LetGoOfOrder then ns.PostPanel:LetGoOfOrder() end
             end
         end)
 
