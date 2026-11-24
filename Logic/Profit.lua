@@ -180,9 +180,11 @@ function Profit:ChoosePostPrice(itemID, knownCost, link, forSale)
     -- A price the player set on the Prices tab (2026-10-06): "use"
     -- lists at it, "floor" undercuts as usual but never goes below it.
     -- A "floor" may also carry Highest and When Cheaper (2026-10-28).
+    -- A random suffix's own price, when the link names one that has it.
+    local suffix = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link) or nil
     local mine, mode, high, wait
-    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
-    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID) end
+    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID, suffix) end
+    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID, suffix) end
 
     -- Else its list's Lowest Price (Logic/ListRules.lua, 2026-10-19):
     -- undercuts as usual, never below it; and its Highest Price and When

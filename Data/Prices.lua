@@ -1516,11 +1516,19 @@ function Prices:GetLinkValue(link, which)
             return nil, false
         end
     elseif suffix then
+        -- The suffix's own price the player set, else the item's.
+        local mine, mode, ownMine = self:GetMine(itemID, suffix)
         local own = self:GetSuffixValue(itemID, suffix, which)
         if own then
-            local mine, mode = self:GetMine(itemID)
             if mine and (mode == "use" or own < mine) then return mine, false end
             return own, true
+        end
+        if ownMine then
+            -- No recent price for this suffix: the scans' price for the
+            -- item, under this suffix's own price, not the item's.
+            local scanned = self.GetScanValue and self:GetScanValue(itemID, which) or nil
+            if mode == "use" or not scanned or scanned < mine then return mine, false end
+            return scanned, false
         end
     end
 
@@ -2027,7 +2035,7 @@ end
 --   "floor"  the auction price, but never below this: a craft worth more
 --            to you than the auction house is paying right now.
 -- Kept per realm, like the price table, in `myPrices[realm][itemID] =
--- { price, mode, name, high, under }`. Never rename it. Apart from the price table, so
+-- { price, mode, name, high, under, suffixes }`. Never rename it. Apart from the price table, so
 -- pruning old prices never takes a player's own price with it.
 
 local MY_MODES = { use = true, floor = true }
@@ -2050,28 +2058,97 @@ local function MyPrices(create)
     return realm
 end
 
---- The price the player set on an item, and its kind ("use" or "floor").
---- nil when none is set. A saved entry this cannot read is left alone.
-function Prices:GetMine(itemID)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return nil end
+-- One suffix ("of the Monkey") can have a price of its own (a player's
+-- report, the owner chose it, 2026-11-24: one floor on "of Magic" was every
+-- suffix's, though they sold from 1g to 11g). Kept on the item's entry as
+-- `suffixes[suffix] = { price, mode, high, under }` (never rename it). A
+-- suffix with none of its own takes the item's. The item's entry may then
+-- hold suffix prices and no price of its own.
 
+local function ReadPrice(entry)
+    if type(entry) ~= "table" then return nil end
     local price = tonumber(entry.price)
     if not price or price < 1 or not MY_MODES[entry.mode] then return nil end
     return math.floor(price), entry.mode
 end
 
---- Set the player's price on an item. A price of nil or 0 clears it.
+local function SuffixKey(suffix)
+    suffix = tonumber(suffix)
+    if suffix and suffix ~= 0 then return suffix end
+    return nil
+end
+
+--- The saved table that answers for an item or one of its suffixes: the
+--- suffix's own when it has a price, else the item's. Second: true when the
+--- suffix's own answered.
+local function MyEntry(itemID, suffix)
+    local realm = itemID and MyPrices(false)
+    local entry = realm and realm[itemID]
+    if type(entry) ~= "table" then return nil end
+    suffix = SuffixKey(suffix)
+    local own = suffix and type(entry.suffixes) == "table" and entry.suffixes[suffix]
+    if ReadPrice(own) then return own, true end
+    return entry, false
+end
+
+--- The price the player set on an item, and its kind ("use" or "floor").
+--- With a suffix: that suffix's own price, else the item's; third return
+--- is true when it was the suffix's own. nil when none is set. A saved
+--- entry this cannot read is left alone.
+function Prices:GetMine(itemID, suffix)
+    local entry, own = MyEntry(itemID, suffix)
+    local price, mode = ReadPrice(entry)
+    if not price then return nil end
+    return price, mode, own or nil
+end
+
+--- True when the item, or any of its suffixes, has a price the player set.
+function Prices:HasMine(itemID)
+    if self:GetMine(itemID) then return true end
+    local realm = itemID and MyPrices(false)
+    local entry = realm and realm[itemID]
+    if type(entry) ~= "table" or type(entry.suffixes) ~= "table" then return false end
+    for _, own in pairs(entry.suffixes) do
+        if ReadPrice(own) then return true end
+    end
+    return false
+end
+
+--- Drop an item's entry once it holds no price and no suffix price.
+local function DropIfEmpty(realm, itemID)
+    local entry = realm[itemID]
+    if type(entry) ~= "table" then return end
+    if ReadPrice(entry) then return end
+    if type(entry.suffixes) == "table" and next(entry.suffixes) ~= nil then return end
+    realm[itemID] = nil
+end
+
+--- Set the player's price on an item, or with `suffix` on that suffix
+--- alone. A price of nil or 0 clears it.
 -- @return true when saved or cleared, false when the price was refused
-function Prices:SetMine(itemID, price, mode, name)
+function Prices:SetMine(itemID, price, mode, name, suffix)
     if not itemID then return false end
     price = tonumber(price)
+    suffix = SuffixKey(suffix)
 
     if not price or price < 1 then
         local realm = MyPrices(false)
-        if realm and realm[itemID] ~= nil then
-            realm[itemID] = nil
+        local entry = realm and realm[itemID]
+        if type(entry) ~= "table" then
+            if realm and entry ~= nil then realm[itemID] = nil; Prices:Touch(itemID) end
+            return true
+        end
+        if suffix then
+            if type(entry.suffixes) == "table" and entry.suffixes[suffix] ~= nil then
+                entry.suffixes[suffix] = nil
+                if next(entry.suffixes) == nil then entry.suffixes = nil end
+                DropIfEmpty(realm, itemID)
+                Prices:Touch(itemID)
+            end
+        elseif entry.price ~= nil or entry.mode ~= nil then
+            -- The item's own price goes; its suffixes keep theirs.
+            entry.price, entry.mode, entry.high, entry.under = nil, nil, nil, nil
+            DropIfEmpty(realm, itemID)
             Prices:Touch(itemID)
         end
         return true
@@ -2084,14 +2161,29 @@ function Prices:SetMine(itemID, price, mode, name)
     if not realm then return false end
 
     local old = realm[itemID]
+    if type(old) ~= "table" then old = nil end
     if type(name) ~= "string" or name == "" then
-        name = type(old) == "table" and type(old.name) == "string" and old.name or nil
+        name = old and type(old.name) == "string" and old.name or nil
+    end
+
+    if suffix then
+        local entry = old or {}
+        entry.name = name
+        if type(entry.suffixes) ~= "table" then entry.suffixes = {} end
+        local was = entry.suffixes[suffix]
+        was = type(was) == "table" and was or {}
+        entry.suffixes[suffix] = { price = math.floor(price), mode = mode, high = was.high, under = was.under }
+        realm[itemID] = entry
+        Prices:Touch(itemID)
+        return true
     end
 
     -- Highest and When Cheaper (below) stay with the price when it changes.
-    local high = type(old) == "table" and old.high or nil
-    local under = type(old) == "table" and old.under or nil
-    realm[itemID] = { price = math.floor(price), mode = mode, name = name, high = high, under = under }
+    local high = old and old.high or nil
+    local under = old and old.under or nil
+    local suffixes = old and old.suffixes or nil
+    realm[itemID] = { price = math.floor(price), mode = mode, name = name, high = high, under = under,
+        suffixes = suffixes }
     Prices:Touch(itemID)
     return true
 end
@@ -2104,22 +2196,31 @@ end
 -- Read only while the entry is a "floor" price; a "use" price is used as it is.
 
 --- The limits on a "floor" price: highest (copper or nil) and whether to
---- wait while the auction house is cheaper (true or nil).
-function Prices:GetMyLimits(itemID)
-    local _, mode = self:GetMine(itemID)
+--- wait while the auction house is cheaper (true or nil). With a suffix,
+--- the limits of whichever price GetMine answers with.
+function Prices:GetMyLimits(itemID, suffix)
+    local _, mode = self:GetMine(itemID, suffix)
     if mode ~= "floor" then return nil, nil end
-    local entry = MyPrices(false)[itemID]
+    local entry = MyEntry(itemID, suffix)
     local high = tonumber(entry.high)
     high = high and high >= 1 and math.floor(high) or nil
     return high, entry.under == "wait" or nil
 end
 
---- Set Highest on an item with a price of its own. nil or 0 takes it off.
--- @return true when saved or cleared, false when the item has no price set
-function Prices:SetMyHigh(itemID, high)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return false end
+--- The saved table with a price of its own for exactly this item or suffix.
+local function OwnEntry(itemID, suffix)
+    local entry, own = MyEntry(itemID, suffix)
+    if SuffixKey(suffix) and not own then return nil end
+    if not ReadPrice(entry) then return nil end
+    return entry
+end
+
+--- Set Highest on an item (or one suffix) with a price of its own. nil or
+--- 0 takes it off.
+-- @return true when saved or cleared, false when it has no price set
+function Prices:SetMyHigh(itemID, high, suffix)
+    local entry = OwnEntry(itemID, suffix)
+    if not entry then return false end
     high = tonumber(high)
     if high and high >= 1 then
         if not Prices.IsCredible(high) then return false end
@@ -2134,12 +2235,11 @@ function Prices:SetMyHigh(itemID, high)
     return true
 end
 
---- Set When Cheaper on an item with a price of its own: true waits, false
---- or nil lists at the floor.
-function Prices:SetMyWait(itemID, wait)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return false end
+--- Set When Cheaper on an item (or one suffix) with a price of its own:
+--- true waits, false or nil lists at the floor.
+function Prices:SetMyWait(itemID, wait, suffix)
+    local entry = OwnEntry(itemID, suffix)
+    if not entry then return false end
     local under = wait and "wait" or nil
     if entry.under ~= under then
         entry.under = under

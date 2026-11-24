@@ -96,6 +96,20 @@ change, heat, scans, readings), while sales, stock share and demand stay
 the item's (they are read by item only). A pick from Stats' own list shows
 the plain item. Tested in `tools/test_suffixdetails.lua`.
 
+My price per suffix (a player's report, the owner chose it 2026-11-24): a
+"Never below" set on "of Magic" was every suffix's. A suffix row on the
+Prices tab now sets that suffix's own price, kept on the item's entry as
+`myPrices[realm][itemID].suffixes[suffix] = { price, mode, high, under }`
+(never rename it). `Prices:GetMine(itemID, suffix)` answers with the
+suffix's own, else the item's (third return true when its own);
+`GetMyLimits`, `SetMine`, `SetMyHigh` and `SetMyWait` take the suffix last.
+`HasMine(itemID)` counts suffix prices too (My prices only, the list's
+"my price" tag). Clearing the item's price keeps its suffixes'. Posting
+(`Profit:ChoosePostPrice` by link), `GetLinkValue` and the tooltip read
+the copy's suffix. A suffix row with none of its own shows empty boxes and
+"Not set, the item's price is used". Tested in `tools/test_myprices.lua`
+and `tools/test_uifit.lua`.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every

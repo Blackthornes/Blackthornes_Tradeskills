@@ -460,7 +460,7 @@ function ItemTooltip:AllLinesFor(itemID, count, link)
     end)
     if poorOk and poor then return lines end
 
-    local mine = self:MyPriceLine(itemID)
+    local mine = self:MyPriceLine(itemID, link)
     if mine then lines[#lines + 1] = ValueLine(mine) end
 
     -- The auction house's own figure: the player's price has its own line.
@@ -685,10 +685,12 @@ end
 
 --- The price the player set on the Prices tab, in gold so it stands out
 --- from the auction figures, saying how it is used. nil when none is set.
-function ItemTooltip:MyPriceLine(itemID)
+function ItemTooltip:MyPriceLine(itemID, link)
     if type(ns.Prices.GetMine) ~= "function" then return nil end
 
-    local mine, mode = ns.Prices:GetMine(itemID)
+    -- A copy with a random suffix shows that suffix's own price, if it has one.
+    local suffix = type(link) == "string" and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link) or nil
+    local mine, mode = ns.Prices:GetMine(itemID, suffix)
     if not mine then return nil end
 
     return { L["My price"], L.Format("%s  (%s)", Util.FormatMoney(mine, { short = true }),
