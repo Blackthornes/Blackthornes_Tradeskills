@@ -1353,6 +1353,39 @@ do
     state.selected = nil
 end
 
+-- A suffix row's My price is that suffix's own (the owner chose it,
+-- 2026-11-24). One with none of its own says it takes the item's.
+do
+    local widgets, state = UI._PricesWidgets()
+    local my = widgets.detail.myPrice
+    local MAGIC, saved = 14327, nil
+    ns.Prices.GetMine = function(_, itemID, suffix)
+        if itemID ~= 1002 then return nil end
+        return 20000, "floor", nil
+    end
+    ns.Prices.SetMine = function(_, itemID, price, mode, name, suffix)
+        saved = { itemID = itemID, price = price, mode = mode, suffix = suffix }
+        return true
+    end
+    state.selected = { itemID = 1002, kid = true, suffix = MAGIC, name = "of Magic",
+        record = { market = 500 } }
+    UI.tabs.prices.refresh()
+    check("a suffix row shows no price taken from its item", my.gold:GetValue(), 0)
+    check("and says the item's is used", my.status.text, "Not set, the item's price is used")
+    check("no Highest or When Cheaper for it", my.limits[1]:IsShown(), false)
+    my.gold:SetValue(3)
+    check("a price typed there saves to that suffix", saved and saved.suffix, MAGIC)
+    check("for its item", saved and saved.itemID, 1002)
+
+    state.selected = { itemID = 1002, record = records[1002] }
+    UI.tabs.prices.refresh()
+    check("the item row shows the item's price", my.gold:GetValue(), 2)
+    my.gold:SetValue(4)
+    check("and saves to the whole item", saved and saved.suffix, nil)
+    ns.Prices.GetMine, ns.Prices.SetMine = nil, nil
+    state.selected = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("Characters")

@@ -145,10 +145,17 @@ local function IsFavourite(itemID)
     return ns.Prices.IsFavourite ~= nil and ns.Prices:IsFavourite(itemID)
 end
 
---- The price the player set on an item, and its kind, or nil.
-local function Mine(itemID)
+--- The price the player set on an item (or one suffix of it), its kind,
+--- and true when it was the suffix's own; or nil.
+local function Mine(itemID, suffix)
     if not ns.Prices.GetMine then return nil end
-    return ns.Prices:GetMine(itemID)
+    return ns.Prices:GetMine(itemID, suffix)
+end
+
+--- The item or any of its suffixes has a price the player set.
+local function AnyMine(itemID)
+    if ns.Prices.HasMine then return ns.Prices:HasMine(itemID) end
+    return Mine(itemID) ~= nil
 end
 
 local SortRows, SuffixMatcher, AddSuffixRows
@@ -235,7 +242,7 @@ local function BuildList()
         if reagents and not reagents[itemID] then return end
         if materials and not materials[itemID] then return end
         if state.favouritesOnly and favourites[itemID] == nil then return end
-        if state.mineOnly and not Mine(itemID) then return end
+        if state.mineOnly and not AnyMine(itemID) then return end
 
         local name = wantNames and (PlainName(itemID) or stored[itemID]
             or ("~item %d"):format(itemID)) or ""
@@ -281,7 +288,7 @@ local function BuildList()
 
     -- So does an item given its own price.
     for itemID in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
-        if type(itemID) == "number" and not prices[itemID] and not added[itemID] and Mine(itemID) then
+        if type(itemID) == "number" and not prices[itemID] and not added[itemID] and AnyMine(itemID) then
             Add(itemID, {})
             added[itemID] = true
         end
@@ -627,7 +634,12 @@ local function UpdateRow(row, entry)
     if entry.kid then
         row.waitsFor = nil
         local color = type(entry.label) == "string" and entry.label:match("^|c%x%x%x%x%x%x%x%x") or ""
-        Theme.SetRowName(row.name, color .. entry.name .. (color ~= "" and "|r" or ""))
+        local label = color .. entry.name .. (color ~= "" and "|r" or "")
+        -- A suffix with its own price says so, as its item does.
+        if select(3, Mine(entry.itemID, entry.suffix)) then
+            label = L.Format("%s  |c%smy price|r", label, ns.COLORS.warn)
+        end
+        Theme.SetRowName(row.name, label)
     else
         -- An item the game had not loaded yet shows "item 1234". The row
         -- remembers it, so its name is put in once the game sends it.
@@ -758,7 +770,7 @@ local function SaveMyPrice()
     local itemID = my and my.itemID
     if not itemID then return end
 
-    ns.Prices:SetMine(itemID, MyPriceTyped(my), my.mode:GetValue() or "use", PlainName(itemID))
+    ns.Prices:SetMine(itemID, MyPriceTyped(my), my.mode:GetValue() or "use", PlainName(itemID), my.suffix)
     if Refresh then Refresh() end
 end
 
@@ -774,9 +786,9 @@ local function SaveMyLimits(field)
     local itemID = my and my.itemID
     if not itemID or not ns.Prices.SetMyHigh then return end
     if field == "high" then
-        ns.Prices:SetMyHigh(itemID, MyHighTyped(my))
+        ns.Prices:SetMyHigh(itemID, MyHighTyped(my), my.suffix)
     else
-        ns.Prices:SetMyWait(itemID, my.under:GetValue() == "wait")
+        ns.Prices:SetMyWait(itemID, my.under:GetValue() == "wait", my.suffix)
     end
     if Refresh then Refresh() end
 end
@@ -826,7 +838,7 @@ BuildMyPrice = function(detail, anchor)
 
     my.clear = Widgets.CreateButton(detail, L["Clear"], function()
         if not my.itemID then return end
-        ns.Prices:SetMine(my.itemID, nil)
+        ns.Prices:SetMine(my.itemID, nil, nil, nil, my.suffix)
         if Refresh then Refresh() end
     end, { width = 64, height = 22, tooltip = L["Back to the auction house price"] })
     my.clear:SetPoint("TOPRIGHT", my.mode, "BOTTOMRIGHT", 0, -6)
@@ -933,18 +945,21 @@ BuildMyPrice = function(detail, anchor)
         return type(edit.HasFocus) == "function" and edit:HasFocus() == true
     end
 
-    function my:Show(itemID)
+    function my:Show(itemID, suffix)
         -- Another item: a box still being typed in saves first, to its own.
-        if self.itemID ~= itemID then
+        if self.itemID ~= itemID or self.suffix ~= suffix then
             for _, box in ipairs({ self.gold, self.silver, self.copper }) do
                 if Focused(box) then box.editBox:ClearFocus() end
             end
         end
-        self.itemID = itemID
+        self.itemID, self.suffix = itemID, suffix
 
         -- A redraw while typing (the auction house redraws often) leaves
-        -- the box being typed in alone.
-        local price, mode = Mine(itemID)
+        -- the box being typed in alone. A suffix row shows only its own
+        -- price; one it takes from its item is named on the status line.
+        local price, mode, own = Mine(itemID, suffix)
+        local fromItem = suffix ~= nil and price ~= nil and not own
+        if fromItem then price, mode = nil, nil end
         local gold, silver, copper = Util.SplitMoney(price or 0)
         if not Focused(self.gold) then self.gold:SetValue(gold, true) end
         if not Focused(self.silver) then self.silver:SetValue(silver, true) end
@@ -954,7 +969,7 @@ BuildMyPrice = function(detail, anchor)
 
         local limited = price ~= nil and mode == "floor" and ns.Prices.GetMyLimits ~= nil
         local high, wait
-        if limited then high, wait = ns.Prices:GetMyLimits(itemID) end
+        if limited then high, wait = ns.Prices:GetMyLimits(itemID, suffix) end
         ShowLimits(limited)
         if limited then
             local hg, hs, hc = Util.SplitMoney(high or 0)
@@ -971,6 +986,9 @@ BuildMyPrice = function(detail, anchor)
                     Util.FormatMoney(high, { noColor = true })))
             end
             status:SetTextColor(Theme.Unpack("warn"))
+        elseif fromItem then
+            status:SetText(L["Not set, the item's price is used"])
+            status:SetTextColor(Theme.Unpack("dim"))
         else
             status:SetText(L["Not set, the AH price is used"])
             status:SetTextColor(Theme.Unpack("dim"))
@@ -1239,7 +1257,7 @@ local function UpdateDetail(entry)
     detail.title:SetText(title)
     Theme.SetItemIcon(detail.icon, entry.itemID)
     detail.star:SetItem(entry.itemID)
-    detail.myPrice:Show(entry.itemID)
+    detail.myPrice:Show(entry.itemID, entry.kid and entry.suffix or nil)
 
     -- A name that wraps to two lines pushes the rows down with it.
     local titleHeight = detail.title.GetStringHeight and detail.title:GetStringHeight() or 0
