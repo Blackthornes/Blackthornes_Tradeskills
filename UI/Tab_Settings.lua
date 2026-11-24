@@ -1794,7 +1794,7 @@ local function Build(outer)
         Config:Set("salvagerApart", checked)
         if not checked and ns.DisenchantLog then ns.DisenchantLog:StopSalvager() end
         if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
-    end, false)
+    end, true)
     widgets.salvagerApart:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The "made 1 of X, 4 left" lines while crafting from the queue (a

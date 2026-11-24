@@ -3847,7 +3847,9 @@ never buys what the pane doesn't show. Tested in
 
 The owner said build it from a mockup (2026-11-24). "Keep Salvager Results
 Apart:" on the tooltips page under "Disenchant Results:" (`salvagerApart`,
-off unless ticked). With it ticked, a disenchant done in Salvager mode goes
+on to start with since the owner asked, 2026-11-24; the first day's `false`
+copied into saves is turned on once by `Config:SalvagerApartOnOnce`,
+`salvagerApartOnOnce`, never rename it; unticked after that stays off). With it ticked, a disenchant done in Salvager mode goes
 in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
 `disenchantLog`) and the plain record is not touched. Off, nothing changes.
 
