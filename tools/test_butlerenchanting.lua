@@ -121,7 +121,8 @@ check("named for B", w and w.recipe, "Enchant Chest - Minor Mana")
 print("\nonly what it can count on")
 check("a blue is not named", For(3), nil)
 check("crafted gear is not named", For(4), nil)
-check("needs more skill than the character has", For(5), nil)
+-- On Forever any Enchanting skill breaks any item (2026-11-24).
+check("an item Classic would gate at 100 is still named", For(5) ~= nil, true)
 
 print("\nwhat is owned comes off")
 owned[DUST] = 35

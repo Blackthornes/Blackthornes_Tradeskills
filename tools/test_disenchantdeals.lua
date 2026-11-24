@@ -196,16 +196,15 @@ ns.Profit = nil
 
 print("\nwho can disenchant it")
 
-Enchanter(10)
+-- On Forever any enchanter breaks any item, from skill 1 (a player with
+-- Enchanting 4 saw only low level deals, 2026-11-24).
+Enchanter(4)
 rows = Disenchant:GetAuctionRows()
 chest = Find(rows, 2001)
-check("the chest needs 25", chest.needs == 25)
-check("Enchanting 10 cannot break it, but it is still shown", chest.canDisenchant == false)
-check("it names the enchanter", chest.enchanter == "Alt" and chest.enchanterSkill == 10)
-check("the low level bracers need 1, so 10 can", Find(rows, 2007).canDisenchant == true)
-
-Enchanter(50)
-check("Enchanting 50 can", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == true)
+check("the chest names no skill it needs", chest.needs == nil)
+check("Enchanting 4 can break a level 22 chest", chest.canDisenchant == true)
+check("it names the enchanter", chest.enchanter == "Alt" and chest.enchanterSkill == 4)
+check("and the low level bracers", Find(rows, 2007).canDisenchant == true)
 
 ns.db.characters = {}
 check("no enchanter at all is nil, not false", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == nil)
@@ -374,7 +373,7 @@ Disenchant:AnnounceDeals()
 check("with scan sounds off, the message and no sound", #printed == 1 and chimed == nil)
 config.scanSounds = nil
 
--- Only deals a character can break at today's skill count.
+-- Any enchanter counts every deal, whatever its skill.
 local function Breakable()
     local n = 0
     for _, row in ipairs(Disenchant:GetAuctionRows({ profitableOnly = true })) do
@@ -382,12 +381,12 @@ local function Breakable()
     end
     return n
 end
-Enchanter(10)
+Enchanter(4)
 local allDeals = #Disenchant:GetAuctionRows({ profitableOnly = true })
-check("some deals need more skill than Enchanting 10", Breakable() < allDeals)
+check("Enchanting 4 can break every deal", Breakable() == allDeals)
 printed = {}
-check("the message counts only deals Enchanting 10 can break",
-    Disenchant:AnnounceDeals() == Breakable())
+check("the message counts every deal for Enchanting 4",
+    Disenchant:AnnounceDeals() == allDeals)
 ns.db.characters = {}
 check("with no enchanter known, every deal counts", Disenchant:AnnounceDeals() == allDeals)
 Enchanter(50)
@@ -495,11 +494,11 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 2001))
 
--- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
+-- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, AGE. No SKILL column.
 check("PROFIT shows 474 in green", row.cells[1].text:find("74", 1, true) and row.cells[1].color == "profit")
 check("MARGIN shows 94% (rounded down)", row.cells[2].text == "94%")
 check("BUY shows the price", row.cells[4].text ~= "")
-check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
+check("no SKILL column", row.cells[5].text ~= "25")
 
 -- Reported 2026-10-08: the names drew white. Most rows are items read in an
 -- earlier session that the client's cache no longer holds, so the name's
@@ -519,13 +518,11 @@ ITEM_QUALITY_COLORS = nil
 checkboxes["Only deals over my minimums"].onToggle(false)
 check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
 
-Enchanter(10)
+Enchanter(4)
 tab.refresh()
-list.opts.updateRow(row, Find(list.data, 2001))
-check("too high for his enchanters: SKILL in red", row.cells[5].color == "loss")
-
 checkboxes["Only ones I can disenchant"].onToggle(true)
-check("and hidden when asked", Find(list.data, 2001) == nil and Find(list.data, 2007) ~= nil)
+check("Enchanting 4 keeps the level 22 chest when asked for only ones it can break",
+    Find(list.data, 2001) ~= nil and Find(list.data, 2007) ~= nil)
 checkboxes["Only ones I can disenchant"].onToggle(false)
 
 list.opts.menu(Find(list.data, 2003))[1].run()
