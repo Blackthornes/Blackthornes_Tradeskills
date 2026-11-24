@@ -1170,6 +1170,8 @@ end
 --- that turned into a loss stays too, so no row moves up under it.
 function PostPanel:ShownLines()
     local all, toVendor = ns.Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
+    all = PostPanel.KeepSteady(self.readLines, all)
+    self.readLines = all
     local lines, hidden = all, 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
     if self:CraftedOnly() then lines = PostPanel.CraftedLines(lines) end
@@ -1180,6 +1182,51 @@ function PostPanel:ShownLines()
     lines = PostPanel.HoldOrder(self.shownLines, lines, over and all or nil)
     self.orderHeld = over or nil
     return lines, hidden, toVendor or 0
+end
+
+--- The lines read now, plus any read before that went missing while the
+--- item is still in the bags and not hidden with its x. The auction house
+--- answers by fits while it sends your auctions or a scan, and rows went
+--- away and came back (the owner, 2026-11-24). Only listing an item, or it
+--- leaving the bags, takes its row away. A row kept this way says so
+--- (`carried`), so List all and the totals pass it over until it is read
+--- again.
+-- @param previous the lines read before, or nil
+-- @param all      the lines read now
+function PostPanel.KeepSteady(previous, all)
+    all = all or {}
+    if type(previous) ~= "table" or #previous == 0 then return all end
+    local Posting, Inventory = ns.Posting, ns.Inventory
+    if not (Inventory and Inventory.GetBagCount) then return all end
+
+    local now = {}
+    for _, line in ipairs(all) do
+        if line.itemID then now[line.itemID] = true end
+    end
+    local kept
+    for _, old in ipairs(previous) do
+        local id = old.itemID
+        if id and not now[id] then
+            local ok, inBags = pcall(Inventory.GetBagCount, Inventory, id)
+            inBags = ok and tonumber(inBags) or 0
+            local ignored = Posting and Posting.IsIgnored and Posting:IsIgnored(id)
+            if inBags > 0 and not ignored then
+                local copy = {}
+                for key, value in pairs(old) do copy[key] = value end
+                copy.carried = true
+                if copy.count and copy.count > inBags then copy.count = inBags end
+                if copy.postQuantity and copy.postQuantity > inBags then copy.postQuantity = inBags end
+                if copy.maxQuantity and copy.maxQuantity > inBags then copy.maxQuantity = inBags end
+                if not kept then
+                    kept = {}
+                    for i, line in ipairs(all) do kept[i] = line end
+                end
+                kept[#kept + 1] = copy
+                now[id] = true
+            end
+        end
+    end
+    return kept or all
 end
 
 --- True while the mouse is over the Sell list, so even a row that would
@@ -3075,7 +3122,7 @@ function PostPanel:Hide()
     self.closedThisVisit = false
     self.dockedTo, self.dockedLeft = nil, nil
     -- The next visit starts with the list sorted by worth again.
-    self.shownLines, self.orderHeld = nil, nil
+    self.shownLines, self.orderHeld, self.readLines = nil, nil, nil
 
     if self.frame then self.frame:Hide() end
 

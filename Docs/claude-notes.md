@@ -3912,3 +3912,23 @@ calls `PostPanel:LetGoOfOrder()` to drop it once the mouse leaves.
 The Sell list's scroll bar is 12 wide with a metal edge
 (`CreateScrollList`'s `scrollbarWidth` and `scrollbarEdge`; rows give up
 the bar's width plus 2). Tested in `tools/test_sellhold.lua`.
+
+## Sell rows stay while the auction house is busy (2026-11-24)
+
+The owner: Sell rows came and went while the auction house got ready to
+scan (sending your auctions, reading listings). The game can answer "cannot
+be sold" or "none" by fits then, for a stack it took a moment before. Two
+holds, both for the Sell list only:
+
+- `Posting:GetSellInfo(itemID, held, steady)`: with `steady` (asked by
+  `GetPostable` when `showNoted` is set, which only Sell sets), the last
+  yes this visit stands while the bags hold the same number
+  (`sellSeen`, cleared by `Posting:ForgetSellInfo` on AUCTION_HOUSE_CLOSED).
+  `Posting:Post` asks without it and takes the game's word.
+- `PostPanel.KeepSteady`: a row read before that goes missing stays while
+  the item is in the bags and not hidden with its x, its count capped at
+  the bags. It is marked `carried`; `GetNextPostable` and `GetSummary` pass
+  it over until it is read again. `self.readLines`, forgotten in `Hide`.
+
+Only listing an item or it leaving the bags (or its x) takes a row away.
+Tested in `tools/test_sellhold.lua` and `tools/test_bagstock.lua`.

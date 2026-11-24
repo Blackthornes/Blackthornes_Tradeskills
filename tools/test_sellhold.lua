@@ -128,6 +128,41 @@ check("an error reading the mouse sorts as usual", PostPanel:HoldsOrder() == fal
 check("nothing shown before, nothing to hold",
     Order(PostPanel.HoldOrder(nil, { { itemID = 5 } }, {})) == "5")
 
+-- Rows come and go while the auction house gets ready to scan (the owner,
+-- 2026-11-24): it answers "none" by fits for a stack it took a moment
+-- before. A row stays while its item is still in the bags.
+over = false
+settings.postHideLosses = nil
+PostPanel.frame = nil
+PostPanel:Hide()
+local inBags = { [1] = 5, [2] = 3, [3] = 7 }
+local ignored = {}
+ns.Inventory = { GetBagCount = function(_, id) return inBags[id] or 0 end }
+ns.Posting.IsIgnored = function(_, id) return ignored[id] == true end
+worth = { [1] = 300, [2] = 200, [3] = 100 }
+check("a fresh visit shows all three", Order(Look()) == "1,2,3")
+worth[2] = nil
+lines = Look()
+check("a row the game skips this second stays", Order(lines) == "1,2,3")
+check("and says it was kept", lines[2].carried == true and lines[1].carried == nil)
+worth[2] = 250
+lines = Look()
+check("read again, it is the real row", Order(lines) == "1,2,3" and lines[2].carried == nil and lines[2].total == 250)
+worth[3], worth[2] = nil, nil
+inBags[3] = 0
+check("listed and gone from the bags, it goes", Order(Look()) == "1,2")
+ignored[2] = true
+check("hidden with its x, it goes", Order(Look()) == "1")
+inBags[1] = 2
+worth[1] = nil
+lines = Look()
+check("a kept row counts no more than the bags hold", lines[1].count == nil or lines[1].count <= 2)
+check("nothing read before, nothing kept", #PostPanel.KeepSteady(nil, {}) == 0)
+
+local posting = assert(io.open(lfs_cwd .. "/Logic/Posting.lua")):read("*a")
+local _, carriedSkips = posting:gsub("not line%.carried", "")
+check("List all and the totals pass over a kept row", carriedSkips >= 2)
+
 local panel = assert(io.open(lfs_cwd .. "/UI/PostPanel.lua")):read("*a")
 check("the Sell list's scroll bar is wider, with an edge",
     panel:find("scrollbarWidth = 12", 1, true) ~= nil and panel:find("scrollbarEdge = true", 1, true) ~= nil)
