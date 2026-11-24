@@ -443,7 +443,7 @@ local AURAS_KEPT = 12
 local salvager      -- { from = "cast" | "buff", last = time of the last use }
 local salvagerTimer -- bumped so only the newest idle check acts
 
---- Keep Salvager Results Apart: (Settings, `salvagerApart`, off unless ticked).
+--- Keep Salvager Results Apart: (Settings, `salvagerApart`, on to start with).
 function DisenchantLog:SalvagerApart()
     return ns.Config ~= nil and ns.Config:Get("salvagerApart") == true
 end

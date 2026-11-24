@@ -504,8 +504,9 @@ local DEFAULTS = {
         -- What each disenchant gave, said in chat (Logic/DisenchantLog.lua).
         disenchantChat = true,
         -- Disenchants at an Arcane Salvager go in their own record
-        -- (Logic/DisenchantLog.lua, `salvagerLog`). Off unless ticked.
-        salvagerApart = false,
+        -- (Logic/DisenchantLog.lua, `salvagerLog`). On to start with (the
+        -- owner, 2026-11-24); Config:SalvagerApartOnOnce.
+        salvagerApart = true,
         -- The "made 1 of X, 4 left" lines while crafting from the queue.
         craftChat = true,
         -- The cheer when Set goal makes a Farmer goal.
@@ -1662,6 +1663,7 @@ function Config:Bootstrap()
 
     self:SisterKeepsOffOnce(db)
     self:RealmPricesOnOnce(db)
+    self:SalvagerApartOnOnce(db)
 
     -- Before any module reads prices or sales, so nothing caches the realm
     -- without them. Inside a pcall: a save it does not expect must never
@@ -1680,6 +1682,20 @@ function Config:RealmPricesOnOnce(db)
     if type(db.settings) == "table" and db.settings.realmPrices ~= true then
         ns.db = ns.db or db
         self:Set("realmPrices", true)
+    end
+end
+
+--- Keep Salvager Results Apart was off unless ticked for its first day
+--- (2026-11-24, before any release) until the owner asked for it on. The
+--- old default was copied into the save, so it is turned on once, and the
+--- save says so (`salvagerApartOnOnce`, never rename it). A player who
+--- unticks it after that keeps it off.
+function Config:SalvagerApartOnOnce(db)
+    if type(db) ~= "table" or db.salvagerApartOnOnce then return end
+    db.salvagerApartOnOnce = true
+    if type(db.settings) == "table" and db.settings.salvagerApart ~= true then
+        ns.db = ns.db or db
+        self:Set("salvagerApart", true)
     end
 end
 
