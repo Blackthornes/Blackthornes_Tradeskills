@@ -3829,15 +3829,19 @@ never buys what the pane doesn't show. Tested in
 `tools/test_disenchantquickbuy.lua` and the Buy One part of
 `tools/test_disenchantdeals.lua`. Not yet seen in game.
 
-## The Sell list holds still under the mouse (2026-11-24)
+## The Sell list is not sorted again (2026-11-24)
 
 A player's report: during a scan, rows on Sell moved and went away, so the
 second click of Check Price then List hit another item. Since 1.42.0 a scan
 writes its prices a few items a frame, and the list (sorted by worth) was
-sorted again each second as they landed. While the mouse is over the list,
-`PostPanel:ShownLines` keeps the rows in the order shown
-(`PostPanel.HoldOrder`): each item keeps its place with its new price, an
-item still in the bags stays even if Hide losses would now hide it, items
-gone from the bags drop out, new ones join at the bottom. The one-second
-look in `UI/Main.lua` calls `PostPanel:LetGoOfOrder()`, which sorts again
-once the mouse has left. Tested in `tools/test_sellhold.lua`.
+sorted again each second as they landed. The owner asked to stop sorting
+Sell (only Sell). `PostPanel:ShownLines` keeps the rows in the order they
+first showed this visit (`PostPanel.HoldOrder`): each item keeps its place
+with its new price, items no longer shown drop out, new ones join at the
+bottom. While the mouse is over the list, an item still in the bags stays
+even if Hide losses would now hide it; the one-second look in `UI/Main.lua`
+calls `PostPanel:LetGoOfOrder()` to drop it once the mouse leaves.
+`PostPanel:Hide` forgets the order, so each visit starts sorted by worth.
+The Sell list's scroll bar is 12 wide with a metal edge
+(`CreateScrollList`'s `scrollbarWidth` and `scrollbarEdge`; rows give up
+the bar's width plus 2). Tested in `tools/test_sellhold.lua`.

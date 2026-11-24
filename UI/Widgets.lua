@@ -2433,8 +2433,9 @@ function Widgets.CreateScrollList(parent, opts)
     list.offset = 0
 
     local scrollbar = CreateFrame("Slider", nil, list)
+    local barWidth = opts.scrollbarWidth or 8
     scrollbar:SetOrientation("VERTICAL")
-    scrollbar:SetWidth(8)
+    scrollbar:SetWidth(barWidth)
     scrollbar:SetPoint("TOPRIGHT", 0, 0)
     scrollbar:SetPoint("BOTTOMRIGHT", 0, 0)
     scrollbar:SetValueStep(1)
@@ -2446,8 +2447,9 @@ function Widgets.CreateScrollList(parent, opts)
 
     local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
     thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(8, 40)
+    thumb:SetSize(barWidth, 40)
     scrollbar:SetThumbTexture(thumb)
+    if opts.scrollbarEdge and Theme.Border then Theme.Border(scrollbar, "metal", 0.6) end
     Widgets.LightThumb(scrollbar, thumb)
 
     list.scrollbar = scrollbar
@@ -2633,7 +2635,7 @@ function Widgets.CreateScrollList(parent, opts)
     --- needs. Returns how many were drawn and whether every entry from the
     --- offset to the end was.
     local function Layout(self, height, maxOffset)
-        local right = maxOffset > 0 and -10 or 0
+        local right = maxOffset > 0 and -(barWidth + 2) or 0
         local y, index, drawn = 0, 0, 0
         local full = false
 
