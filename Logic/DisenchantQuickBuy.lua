@@ -341,20 +341,24 @@ function QuickBuy:Click()
         local ok, money = pcall(GetMoney)
         if ok then moneyBefore = money end
     end
-    local ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
-        and pcall(C_AuctionHouse.PlaceBid, listing.auctionID, listing.total)
+    -- Marked as waiting before PlaceBid: the game can take the money (and
+    -- send PLAYER_MONEY) inside the call itself, and a buy marked after it
+    -- missed that and held the button for BUY_WAIT seconds.
+    local pending = { auctionID = listing.auctionID, total = listing.total, moneyBefore = moneyBefore }
+    cur.pending = pending
     cur.armed = nil
     -- Tried either way: a listing the game refused is not offered again.
     cur.tried[listing.auctionID] = true
+    local ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
+        and pcall(C_AuctionHouse.PlaceBid, listing.auctionID, listing.total)
     if not ok then
+        if cur.pending == pending then cur.pending = nil end
         ns.Print(L["That buy didn't go through. Try it again."])
         if not self:Next() then cur.phase = "done" end
         Moved()
         return false
     end
 
-    local pending = { auctionID = listing.auctionID, total = listing.total, moneyBefore = moneyBefore }
-    cur.pending = pending
     Moved()
     After(self.BUY_WAIT, function()
         if QuickBuy.current == cur and cur.pending == pending then
@@ -372,7 +376,8 @@ function QuickBuy:Bought(auctionID)
     local pending = cur and cur.pending
     if not pending then return end
     -- Another buy (the game's own window, Snipe) finished, not this one.
-    if auctionID ~= nil and auctionID ~= pending.auctionID then return end
+    -- An event that names no auction (or not a number) counts as ours.
+    if type(auctionID) == "number" and auctionID ~= pending.auctionID then return end
     cur.pending = nil
     cur.bought = cur.bought + 1
     cur.spent = cur.spent + pending.total
