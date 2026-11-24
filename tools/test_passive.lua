@@ -506,4 +506,50 @@ check("the same book twice is not kept twice",
     #(Prices:GetSuffixEntry(HOOP, SORCERER).history or {}) == readings)
 ns.Util.LinkSuffix = nil
 
+
+-- Buy for on the Disenchanting tab followed the player's own refresh only
+-- now and then: a price read from a search the addon did not start was kept
+-- but nothing redrew the tab, so it showed a listing already bought until
+-- something else redrew it. One redraw per burst, on the tabs that show it.
+do
+    local redraws, waiting = 0, {}
+    ns.UI = { activeTab = "disenchanting", RefreshActiveTab = function() redraws = redraws + 1 end }
+    local oldAfter = C_Timer.After
+    C_Timer.After = function(_, fn) waiting[#waiting + 1] = fn end
+    local function Run() local list = waiting; waiting = {}; for _, fn in ipairs(list) do fn() end end
+
+    local BRACERS = 2868
+    clock = clock + 120
+    itemResults = { { buyoutAmount = 539, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("a refreshed list redraws the Disenchanting tab once", redraws == 1)
+
+    -- Someone bought the 5s 39c one; the refresh shows 5s 40c.
+    clock = clock + 2
+    itemResults = { { buyoutAmount = 540, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("the next refresh redraws it again", redraws == 2)
+    check("and Buy for reads the new cheapest", Prices:Get(BRACERS).rivalMin == 540)
+
+    -- The same list again teaches nothing, so nothing redraws.
+    clock = clock + 2
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("the same list again redraws nothing", redraws == 2)
+
+    -- A tab that does not show listing prices is left alone.
+    ns.UI.activeTab = "prices"
+    clock = clock + 2
+    itemResults = { { buyoutAmount = 545, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("other tabs are not redrawn", redraws == 2)
+
+    C_Timer.After = oldAfter
+    ns.UI = nil
+end
+
 print(("\n%d check(s) passed\n"):format(checks))

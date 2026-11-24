@@ -627,6 +627,7 @@ function Scanner:OnBrowseResults()
 
         self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
+        if learned > 0 then self:RedrawAfterLearn() end
         return
     end
 
@@ -2136,8 +2137,30 @@ function Scanner:CapturePassiveListings(itemID, listings, partial, bySuffix)
         partial, Scanner.BookKey(minBuyout, quantity, rivalMin, ownMin, partial, bySuffix))
 
     if learned and ns.Persist then ns.Persist:SaveLater() end
+    if learned then self:RedrawAfterLearn() end
 
     return learned
+end
+
+--- Tabs that show what a listing costs right now, so a price read from the
+--- player's own search (or Blizzard's refresh button) is shown at once.
+Scanner.REDRAW_TABS = { disenchanting = true, deals = true }
+
+--- A search the addon did not start taught a new price: redraw the tab
+--- showing it, once for a burst of results. Nothing redrew before, so
+--- Buy for on the Disenchanting tab kept a listing someone had bought
+--- until something else happened to redraw it.
+function Scanner:RedrawAfterLearn()
+    if self.learnRedrawQueued then return end
+    local ui = ns.UI
+    if not (ui and ui.RefreshActiveTab and self.REDRAW_TABS[ui.activeTab]) then return end
+    if not (C_Timer and C_Timer.After) then return end
+
+    self.learnRedrawQueued = true
+    C_Timer.After(0.2, function()
+        Scanner.learnRedrawQueued = false
+        if ns.UI and Scanner.REDRAW_TABS[ns.UI.activeTab] then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end)
 end
 
 --------------------------------------------------------------------------------
