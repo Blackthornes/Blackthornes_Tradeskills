@@ -494,6 +494,11 @@ end
 --- Is Salvager mode on? And did a buff turn it on?
 function DisenchantLog:SalvagerUp()
     if not salvager or not self:SalvagerApart() then return false, false end
+    -- The buff lasts only near the Salvager: once it is gone, so is the mode.
+    if salvager.from == "buff" and not self:SalvagerBuffOn() then
+        salvager = nil
+        return false, false
+    end
     if salvager.from ~= "buff" and Now() - (salvager.last or 0) > self.SALVAGER_IDLE then
         salvager = nil
         return false, false
@@ -563,6 +568,20 @@ local function SalvagerBuff(auras)
 end
 
 DisenchantLog._SalvagerBuff = SalvagerBuff
+
+--- Is the Salvager's buff on you right now?
+function DisenchantLog:SalvagerBuffOn()
+    return SalvagerBuff(self:ReadAuras())
+end
+
+--- Your buffs changed. While the buff is what turned Salvager mode on, a
+--- lost buff ends it and the purple line goes. Nothing is read otherwise.
+function DisenchantLog:OnAurasChanged(_, unit)
+    if unit and unit ~= "player" then return end
+    if not salvager or salvager.from ~= "buff" then return end
+    if self:SalvagerBuffOn() then return end
+    self:StopSalvager()
+end
 
 --- At each disenchant: read the buffs, and say whether it was at a Salvager.
 function DisenchantLog:CheckSalvager()
@@ -938,6 +957,7 @@ function DisenchantLog:OnEnable()
     local RegisterForPlayer = ns.RegisterPlayerEvent or ns.RegisterEvent
     RegisterForPlayer(self, "UNIT_SPELLCAST_SENT", self.OnCastSent)
     RegisterForPlayer(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
+    RegisterForPlayer(self, "UNIT_AURA", self.OnAurasChanged)
     ns.RegisterEvent(self, "LOOT_READY", self.OnLootReady)
     ns.RegisterEvent(self, "LOOT_OPENED", self.OnLootReady)
     ns.RegisterEvent(self, "ZONE_CHANGED_NEW_AREA", self.OnZoneChanged)

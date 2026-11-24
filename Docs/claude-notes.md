@@ -3858,7 +3858,10 @@ in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
   spell is 1263056 or whose name holds "salvager" or the client's name for
   the spell. A cast mode ends after `SALVAGER_IDLE` (600 s) with no
   disenchant, on `ZONE_CHANGED_NEW_AREA`, at logout (never saved) or from
-  Stop; a buff mode ends when the buff is gone. One `C_Timer.After` clears
+  Stop; a buff mode ends when the buff is gone (`UNIT_AURA` for the
+  player, read only while a buff mode is on, and `SalvagerUp` checks the
+  buff too: before 2026-11-24 it waited for the next disenchant, so the
+  purple line stayed on after walking away). One `C_Timer.After` clears
   the purple line after the idle time, no ticker.
 - The buff is "Boosted Disenchanting" (spell 1283701, seen in game
   2026-11-24); it is matched by spell or name. Placing the Salvager did not
