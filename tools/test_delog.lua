@@ -463,6 +463,23 @@ Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
 check("walking away from it makes the next one plain", PlainSnapshot() == bandBefore + 1
     and Log:GetSalvagerItem(1004).casts == 7 and (Log:SalvagerUp()) == false)
 
+-- Walking away with no disenchant after (seen in game 2026-11-24: the
+-- purple line stayed on in Orgrimmar, the buff long gone).
+buffs = { { name = "Boosted Disenchanting", spellId = 1283701 } }
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+check("the buff turns Salvager mode on again", (Log:SalvagerUp()) == true)
+buffs = { { name = "Well Fed", spellId = 1 } }
+check("once the buff is gone the purple line goes, with no disenchant", (Log:SalvagerUp()) == false)
+
+buffs = { { name = "Boosted Disenchanting", spellId = 1283701 } }
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+buffs = { { name = "Well Fed", spellId = 1 } }
+local savedUI, refreshed = ns.UI, 0
+ns.UI = { RefreshActiveTab = function() refreshed = refreshed + 1 end }
+Log:OnAurasChanged(nil, "player")
+check("losing the buff redraws the tab by itself", refreshed > 0)
+ns.UI = savedUI
+
 buffs = { { name = secret, spellId = secret } }
 local okSecret = pcall(Log.CheckSalvager, Log)
 check("a secret buff is skipped, not an error", okSecret)
@@ -471,7 +488,7 @@ C_UnitAuras = savedAuras
 local p2 = #printed
 Log._Report("")
 check("/bts delog prints the buffs at the last disenchant", Said("buffs at the last disenchant", p2 + 1) ~= nil)
-check("and the Salvager count", Said("Salvager: 7 recorded apart", p2 + 1) ~= nil)
+check("and the Salvager count", Said("Salvager: 9 recorded apart", p2 + 1) ~= nil)
 
 settings.salvagerApart = nil
 ns.Config = nil
