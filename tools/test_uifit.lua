@@ -1311,6 +1311,81 @@ sorter.buttons.name.scripts.OnClick(sorter.buttons.name)
 check("and a new sort", pricesList.offset, 0)
 check("by the heading clicked", sorter.key, "name")
 
+-- A "Never below" price adds Highest and When Cheaper under My price. In a
+-- short window the price graph was left one line tall (a player's report,
+-- 2026-11-23). The fake game lays nothing out, so the plot's height is worked
+-- out here the way the pane stacks: what is left after the shown rows.
+do
+    local widgets, state = UI._PricesWidgets()
+    local detail = widgets.detail
+    local floorItem = 1001
+    ns.Prices.GetMine = function(_, itemID) if itemID == floorItem then return 20000, "floor" end end
+    ns.Prices.GetMyLimits = function() return nil, nil end
+    detail.height = 440
+    detail.labels.market.height = 12
+    local function PlotHeight()
+        local used = 42 + 46 + 59 + 81
+        for _, label in pairs(detail.labels) do
+            if label:IsShown() then used = used + 18 end
+        end
+        if detail.myPrice.limits[1]:IsShown() then used = used + 78 end
+        return 440 - used
+    end
+    detail.graph.plot.GetHeight = PlotHeight
+
+    state.selected = { itemID = floorItem, record = records[floorItem] }
+    UI.tabs.prices.refresh()
+    check("Never below shows Highest and When Cheaper", detail.myPrice.limits[1]:IsShown(), true)
+    check("the price graph keeps room to read", PlotHeight() >= 60, true)
+    check("a row folded for it", detail.labels.bags:IsShown(), false)
+    check("the Market value row stays", detail.labels.market:IsShown(), true)
+    GameTooltip.AddDoubleLine = function(self, left) self.lines[#self.lines + 1] = left end
+    detail.marketHover.scripts.OnEnter(detail.marketHover)
+    local listed = table.concat(GameTooltip.lines, "|")
+    check("and its hover lists the folded row", listed:find("In your bags", 1, true) ~= nil, true)
+    GameTooltip:Hide()
+
+    ns.Prices.GetMine = function() return nil end
+    UI.tabs.prices.refresh()
+    check("cleared, every row is back", detail.labels.bags:IsShown(), true)
+    check("and the limits go", detail.myPrice.limits[1]:IsShown(), false)
+    ns.Prices.GetMine, ns.Prices.GetMyLimits = nil, nil
+    state.selected = nil
+end
+
+-- A suffix row's My price is that suffix's own (the owner chose it,
+-- 2026-11-24). One with none of its own says it takes the item's.
+do
+    local widgets, state = UI._PricesWidgets()
+    local my = widgets.detail.myPrice
+    local MAGIC, saved = 14327, nil
+    ns.Prices.GetMine = function(_, itemID, suffix)
+        if itemID ~= 1002 then return nil end
+        return 20000, "floor", nil
+    end
+    ns.Prices.SetMine = function(_, itemID, price, mode, name, suffix)
+        saved = { itemID = itemID, price = price, mode = mode, suffix = suffix }
+        return true
+    end
+    state.selected = { itemID = 1002, kid = true, suffix = MAGIC, name = "of Magic",
+        record = { market = 500 } }
+    UI.tabs.prices.refresh()
+    check("a suffix row shows no price taken from its item", my.gold:GetValue(), 0)
+    check("and says the item's is used", my.status.text, "Not set, the item's price is used")
+    check("no Highest or When Cheaper for it", my.limits[1]:IsShown(), false)
+    my.gold:SetValue(3)
+    check("a price typed there saves to that suffix", saved and saved.suffix, MAGIC)
+    check("for its item", saved and saved.itemID, 1002)
+
+    state.selected = { itemID = 1002, record = records[1002] }
+    UI.tabs.prices.refresh()
+    check("the item row shows the item's price", my.gold:GetValue(), 2)
+    my.gold:SetValue(4)
+    check("and saves to the whole item", saved and saved.suffix, nil)
+    ns.Prices.GetMine, ns.Prices.SetMine = nil, nil
+    state.selected = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("Characters")

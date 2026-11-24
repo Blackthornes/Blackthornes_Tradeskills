@@ -161,7 +161,7 @@ check("mostly Strange Dust, 4 to 6", armour[1].itemID == STRANGE_DUST and armour
     and armour[1].min == 4 and armour[1].max == 6)
 check("then Lesser Astral Essence", armour[2].itemID == LESSER_ASTRAL and armour[2].chance == 0.15)
 check("then a Small Glimmering Shard", armour[3].itemID == SMALL_GLIMMERING and armour[3].chance == 0.10)
-check("and needs Enchanting 25", facts.skill == 25)
+check("and names no Enchanting skill: any enchanter breaks it", facts.skill == nil)
 
 local weapon = Disenchant:GetOutcomes(1002)
 -- Forever's own (2026-10-09): green weapons of item level 21 to 30 give

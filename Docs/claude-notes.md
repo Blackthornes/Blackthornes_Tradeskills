@@ -96,6 +96,20 @@ change, heat, scans, readings), while sales, stock share and demand stay
 the item's (they are read by item only). A pick from Stats' own list shows
 the plain item. Tested in `tools/test_suffixdetails.lua`.
 
+My price per suffix (a player's report, the owner chose it 2026-11-24): a
+"Never below" set on "of Magic" was every suffix's. A suffix row on the
+Prices tab now sets that suffix's own price, kept on the item's entry as
+`myPrices[realm][itemID].suffixes[suffix] = { price, mode, high, under }`
+(never rename it). `Prices:GetMine(itemID, suffix)` answers with the
+suffix's own, else the item's (third return true when its own);
+`GetMyLimits`, `SetMine`, `SetMyHigh` and `SetMyWait` take the suffix last.
+`HasMine(itemID)` counts suffix prices too (My prices only, the list's
+"my price" tag). Clearing the item's price keeps its suffixes'. Posting
+(`Profit:ChoosePostPrice` by link), `GetLinkValue` and the tooltip read
+the copy's suffix. A suffix row with none of its own shows empty boxes and
+"Not set, the item's price is used". Tested in `tools/test_myprices.lua`
+and `tools/test_uifit.lua`.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
@@ -3863,3 +3877,32 @@ in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
   Disenchant Results is on; no learning or lucky lines for these.
 - Tested in `tools/test_delog.lua` (at an Arcane Salvager) and
   `tools/test_disenchantingbags.lua`.
+
+## Any enchanter breaks any item
+
+A player with Enchanting 4 saw only low level deals on the Disenchanting tab
+(2026-11-24). On Forever any enchanter can disenchant any item from skill 1;
+Classic's skill by item level (25 for item level 21 and up, and so on) does
+not hold. `Logic/Disenchant.lua` has no skill table now: `facts.skill` is
+nil, `canDisenchant` is true for any character with Enchanting and nil with
+none. Profit's way by disenchant and Butler's `Advise` read it the same way.
+The SKILL column and the "Needs Enchanting about N" words are gone. "Only
+ones I can disenchant" now hides deals only when no character has
+Enchanting. Tested in `tools/test_disenchantdeals.lua`.
+
+## The Sell list is not sorted again (2026-11-24)
+
+A player's report: during a scan, rows on Sell moved and went away, so the
+second click of Check Price then List hit another item. Since 1.42.0 a scan
+writes its prices a few items a frame, and the list (sorted by worth) was
+sorted again each second as they landed. The owner asked to stop sorting
+Sell (only Sell). `PostPanel:ShownLines` keeps the rows in the order they
+first showed this visit (`PostPanel.HoldOrder`): each item keeps its place
+with its new price, items no longer shown drop out, new ones join at the
+bottom. While the mouse is over the list, an item still in the bags stays
+even if Hide losses would now hide it; the one-second look in `UI/Main.lua`
+calls `PostPanel:LetGoOfOrder()` to drop it once the mouse leaves.
+`PostPanel:Hide` forgets the order, so each visit starts sorted by worth.
+The Sell list's scroll bar is 12 wide with a metal edge
+(`CreateScrollList`'s `scrollbarWidth` and `scrollbarEdge`; rows give up
+the bar's width plus 2). Tested in `tools/test_sellhold.lua`.

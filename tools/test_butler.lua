@@ -191,7 +191,8 @@ check("value", a.disenchant, 3000)
 check("cannot without the spell", a.canDisenchant, false)
 check("the alt with enough skill on this account", a.enchanter, "Ana")
 local b = Butler:Advise(4)
-check("too much for every alt here: nobody", b.enchanter, nil)
+-- On Forever any Enchanting skill breaks any item (2026-11-24).
+check("an alt here at any skill can", b.enchanter, "Ana")
 check("its value still shows", b.disenchant, 7000)
 check("not gear cannot be broken", Butler:Advise(3).canDisenchant, false)
 check("and has no value", Butler:Advise(3).disenchant, nil)
@@ -200,7 +201,7 @@ check("not loaded yet is unknown", Butler:Advise(99).canDisenchant, nil)
 typed = "Zed"
 Butler:Forget()
 check("the disenchanter typed in Settings comes first", Butler:Advise(1).enchanter, "Zed")
-check("but not above the quality picked", Butler:Advise(4).enchanter, nil)
+check("but not above the quality picked: an alt instead", Butler:Advise(4).enchanter, "Ana")
 check("gear the Mail page sends there names it", Butler:Advise(1).disenchanter, "Zed")
 check("gear it does not send names nobody", Butler:Advise(4).disenchanter, nil)
 typed = nil
@@ -213,7 +214,7 @@ Butler:Forget()
 local c = Butler:Advise(1)
 check("knows it and has the skill", c.canDisenchant, true)
 check("then no alt is named", c.enchanter, nil)
-check("short of the skill", Butler:Advise(4).canDisenchant, false)
+check("any skill breaks it", Butler:Advise(4).canDisenchant, true)
 
 -- Forever's spell checks can say no for a character that disenchants: the
 -- Enchanting on its own record still counts (a German client's enchanter
@@ -221,7 +222,7 @@ check("short of the skill", Butler:Advise(4).canDisenchant, false)
 knows = false
 Butler:Forget()
 check("Enchanting on record, spell check says no", Butler:Advise(1).canDisenchant, true)
-check("and still short of the skill", Butler:Advise(4).canDisenchant, false)
+check("and any skill breaks it", Butler:Advise(4).canDisenchant, true)
 ns.db.characters[SELF].professions = nil
 Butler:Forget()
 check("no Enchanting and the spell check says no", Butler:Advise(1).canDisenchant, false)

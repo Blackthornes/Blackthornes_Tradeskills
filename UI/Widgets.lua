@@ -568,7 +568,30 @@ function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback, link)
         return false
     end
 
+    -- Drawn by ID, a random suffix copy shows the plain item's name. The
+    -- row's own name ("Captain's Breastplate of Magic") goes on top then
+    -- (a player's report, 2026-11-23).
+    Widgets.TakeFullName(fallback)
     return true
+end
+
+--- Put a row's full name on the tooltip's top line, when it is the name
+--- shown there with words added after it (a random suffix). A link counts
+--- by the name inside it. Anything else leaves the line alone.
+function Widgets.TakeFullName(full)
+    if type(full) ~= "string" then return false end
+    local ok, done = pcall(function()
+        full = full:match("|h%[(.-)%]|h") or full
+        local line = _G.GameTooltipTextLeft1
+        local shown = line and line.GetText and line:GetText()
+        if type(shown) ~= "string" or shown == "" or #full <= #shown + 1 then return false end
+        if full:sub(1, #shown + 1) ~= shown .. " " then return false end
+        -- A count ("Linen Cloth (20)") or a colour code is not a suffix.
+        if full:find("[%d%(%[|]", #shown + 1) then return false end
+        line:SetText(full)
+        return true
+    end)
+    return ok and done == true
 end
 
 --- A row whose whole tooltip is the item's own.
@@ -2433,8 +2456,9 @@ function Widgets.CreateScrollList(parent, opts)
     list.offset = 0
 
     local scrollbar = CreateFrame("Slider", nil, list)
+    local barWidth = opts.scrollbarWidth or 8
     scrollbar:SetOrientation("VERTICAL")
-    scrollbar:SetWidth(8)
+    scrollbar:SetWidth(barWidth)
     scrollbar:SetPoint("TOPRIGHT", 0, 0)
     scrollbar:SetPoint("BOTTOMRIGHT", 0, 0)
     scrollbar:SetValueStep(1)
@@ -2446,8 +2470,9 @@ function Widgets.CreateScrollList(parent, opts)
 
     local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
     thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(8, 40)
+    thumb:SetSize(barWidth, 40)
     scrollbar:SetThumbTexture(thumb)
+    if opts.scrollbarEdge and Theme.Border then Theme.Border(scrollbar, "metal", 0.6) end
     Widgets.LightThumb(scrollbar, thumb)
 
     list.scrollbar = scrollbar
@@ -2633,7 +2658,7 @@ function Widgets.CreateScrollList(parent, opts)
     --- needs. Returns how many were drawn and whether every entry from the
     --- offset to the end was.
     local function Layout(self, height, maxOffset)
-        local right = maxOffset > 0 and -10 or 0
+        local right = maxOffset > 0 and -(barWidth + 2) or 0
         local y, index, drawn = 0, 0, 0
         local full = false
 

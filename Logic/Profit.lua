@@ -180,9 +180,11 @@ function Profit:ChoosePostPrice(itemID, knownCost, link, forSale)
     -- A price the player set on the Prices tab (2026-10-06): "use"
     -- lists at it, "floor" undercuts as usual but never goes below it.
     -- A "floor" may also carry Highest and When Cheaper (2026-10-28).
+    -- A random suffix's own price, when the link names one that has it.
+    local suffix = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link) or nil
     local mine, mode, high, wait
-    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
-    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID) end
+    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID, suffix) end
+    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID, suffix) end
 
     -- Else its list's Lowest Price (Logic/ListRules.lua, 2026-10-19):
     -- undercuts as usual, never below it; and its Highest Price and When
@@ -949,17 +951,14 @@ local NO_WAY_REASON = {
 
 --- Can one of your characters disenchant this? Read from what each last
 --- recorded, so an alt counts without logging in. nil when nobody knows
---- Enchanting, false when nobody has the skill for this item yet.
+--- Enchanting. On Forever any Enchanting skill breaks any item.
 local function CanDisenchant(itemID)
     local Disenchant = ns.Disenchant
     if not (Disenchant and Disenchant.GetBestEnchanter) then return nil end
 
     local skill = Disenchant:GetBestEnchanter()
     if skill == nil then return nil end
-
-    local facts = Disenchant.GetItemFacts and Disenchant:GetItemFacts(itemID)
-    local needs = type(facts) == "table" and facts.skill or nil
-    return needs == nil or skill >= needs
+    return true
 end
 
 --- The method the Profit tab and its commands rank by: Settings' choice,

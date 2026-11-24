@@ -609,7 +609,8 @@ local function AddCraftedLines(line)
 end
 
 local function ShowRowTooltip(row, line)
-    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label)
+    -- The copy's own link, so a random suffix shows as itself.
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label, line.link)
     GameTooltip:AddLine(" ")
 
     -- Another Blackthornes addon wants it kept (Logic/SisterKeeps.lua).
@@ -723,6 +724,8 @@ local function ShowRowTooltip(row, line)
 
     GameTooltip:Show()
 end
+
+PostPanel._ShowRowTooltip = ShowRowTooltip
 
 --------------------------------------------------------------------------------
 -- Panel
@@ -935,6 +938,10 @@ function PostPanel:Build()
 
     local list = Widgets.CreateScrollList(body, {
         rowHeight = ROW_HEIGHT,
+        -- Wider, with an edge: the thin bar was easy to miss (the owner,
+        -- 2026-11-24).
+        scrollbarWidth = 12,
+        scrollbarEdge = true,
         createRow = CreateRow,
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
@@ -1153,15 +1160,77 @@ function PostPanel:CloseForVisit()
 end
 
 --- The lines Sell shows now, Hide losses applied.
+---
+--- Sell is not sorted again while the auction house is open: rows keep the
+--- order they first showed in (PostPanel.HoldOrder), and new items join at
+--- the bottom. A scan writes prices a few items a frame, so the list sorted
+--- by worth moved under the mouse every second, and the second click of
+--- Check Price then List landed on another item (a player's report; the
+--- owner asked to stop sorting Sell, 2026-11-24). Under the mouse, an item
+--- that turned into a loss stays too, so no row moves up under it.
 function PostPanel:ShownLines()
-    local lines, toVendor = ns.Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
-    local hidden = 0
+    local all, toVendor = ns.Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
+    local lines, hidden = all, 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
     if self:CraftedOnly() then lines = PostPanel.CraftedLines(lines) end
     local waiting = PostPanel.WaitingLines(lines)
     self.waitingLines = waiting
     if not self:ShowWaiting() then lines = PostPanel.WithoutWaiting(lines) end
+    local over = self:HoldsOrder()
+    lines = PostPanel.HoldOrder(self.shownLines, lines, over and all or nil)
+    self.orderHeld = over or nil
     return lines, hidden, toVendor or 0
+end
+
+--- True while the mouse is over the Sell list, so even a row that would
+--- now be hidden keeps its place.
+function PostPanel:HoldsOrder()
+    local list = self.list
+    if not (list and list.IsMouseOver and list.IsShown and self.shownLines) then return false end
+    local ok, over = pcall(function() return list:IsShown() and list:IsMouseOver() end)
+    return ok and over == true
+end
+
+--- The new lines in the order of the rows shown before. Each item keeps its
+--- place with its new price. With `all` given (the mouse is on the list),
+--- an item still in the bags stays even if it would now be hidden (a loss,
+--- say), so no row below moves up. Items no longer shown go; new items join
+--- at the bottom.
+-- @param previous the lines shown before
+-- @param lines    the lines that would show now, sorted
+-- @param all      every line before Hide losses and the like
+function PostPanel.HoldOrder(previous, lines, all)
+    if type(previous) ~= "table" or #previous == 0 then return lines end
+    local now, anyNow = {}, {}
+    for _, line in ipairs(lines or {}) do
+        if line.itemID then now[line.itemID] = line end
+    end
+    for _, line in ipairs(all or {}) do
+        if line.itemID then anyNow[line.itemID] = line end
+    end
+
+    local held, placed = {}, {}
+    for _, old in ipairs(previous) do
+        local id = old.itemID
+        local line = id and (now[id] or anyNow[id])
+        if line and not placed[id] then
+            held[#held + 1] = line
+            placed[id] = true
+        end
+    end
+    for _, line in ipairs(lines or {}) do
+        if not (line.itemID and placed[line.itemID]) then
+            held[#held + 1] = line
+            if line.itemID then placed[line.itemID] = true end
+        end
+    end
+    return held
+end
+
+--- Once the mouse leaves the list, drop the rows held only for it (a new
+--- loss under Hide losses). The order stays. Called each second.
+function PostPanel:LetGoOfOrder()
+    if self.orderHeld and self.view == "sell" and not self:HoldsOrder() then self:Refresh() end
 end
 
 --- Show Waiting: true unless unticked, so Butler's held items stay in view.
@@ -3005,6 +3074,8 @@ function PostPanel:Hide()
     self.attached = false
     self.closedThisVisit = false
     self.dockedTo, self.dockedLeft = nil, nil
+    -- The next visit starts with the list sorted by worth again.
+    self.shownLines, self.orderHeld = nil, nil
 
     if self.frame then self.frame:Hide() end
 
