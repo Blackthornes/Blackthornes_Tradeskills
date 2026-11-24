@@ -202,7 +202,7 @@ do
     check("a scrollbar coming places the rows again", places, 5)
 
     places = 0
-    list.scrollbar.scripts.OnValueChanged(list.scrollbar, 3)
+    list.scrollbar:SetValue(3)
     check("scrolled, the first row shows the fourth entry", list.rows[1].data, data[4])
     check("and no row frame was placed again", places, 0)
 

@@ -3932,6 +3932,22 @@ The Sell list's scroll bar is 12 wide with a metal edge
 (`CreateScrollList`'s `scrollbarWidth` and `scrollbarEdge`; rows give up
 the bar's width plus 2). Tested in `tools/test_sellhold.lua`.
 
+## Scroll bars drawn by hand (2026-11-24)
+
+The owner: dragging the Sell list's thumb down scrolled the list up. On
+Forever the game's vertical Slider runs the wrong way (Butler met it
+2026-10-13). Every scroll bar here is now `Widgets.CreateScrollbar(parent,
+width)`, a plain frame copied from Butler's: the thumb sits `value` steps
+down from the top and follows the cursor while the button is held (OnUpdate
+only then); a press off the thumb jumps its middle there. It answers
+`SetMinMaxValues`, `GetMinMaxValues`, `SetValue` and `GetValue` like the
+Slider, `SetThumbHeight(h)` sizes the thumb, and `bar.onValueChanged(value)`
+hears each change, from the player or code (not `SetScript("OnValueChanged")`,
+which a plain frame refuses). Used by `CreateScrollList`, `CreateScrollFrame`
+and the import code box in `UI/Main.lua`. Never use the game's Slider for a
+scroll bar. Tested in `tools/test_scrollbar.lua`. Farmer's `UI/Widgets.lua`
+list and `UI/Export.lua` still use the Slider.
+
 ## Sell rows stay while the auction house is busy (2026-11-24)
 
 The owner: Sell rows came and went while the auction house got ready to

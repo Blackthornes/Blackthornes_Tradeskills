@@ -792,7 +792,9 @@ local dialog = UI.transferDialog
 local scroll = dialog.editBox:GetParent()
 local slider
 for _, child in ipairs(scroll:GetParent().children) do
-    if child.frameType == "Slider" then slider = child end
+    -- Drawn by hand (Widgets.CreateScrollbar): the game's Slider runs
+    -- backwards on Forever.
+    if child.Room and child.SetThumbHeight then slider = child end
 end
 check("the code box has a bar down its edge", slider ~= nil, true)
 check("hidden while the code fits", slider.shown, false)
