@@ -1946,7 +1946,9 @@ function Scanner:CapturePassiveBrowse()
     -- ownership included and an item's rows taken together. A row priced
     -- past what anyone can pay is passed over for the same reason it is there.
     for _, item in ipairs((CombineBrowseRows(results))) do
-        if self:RecordPassive(item.itemID, item.price, item.price, item.quantity,
+        if self:HeldAfterBuy(item.itemID, item.price) then
+            -- The listing just bought, still in the browse row: not read.
+        elseif self:RecordPassive(item.itemID, item.price, item.price, item.quantity,
             item.rivalMin, item.ownMin) then
             learned = learned + 1
         end
@@ -1956,6 +1958,33 @@ function Scanner:CapturePassiveBrowse()
     if learned > 0 and ns.Persist then ns.Persist:SaveLater() end
 
     return learned
+end
+
+--- Seconds after a buy that a browse row still at the price paid is
+--- taken as the listing just bought, not as another one.
+Scanner.BOUGHT_HOLD = 15
+
+--- A buy of one listing went through at this unit price (AHBuys:Confirm).
+--- On Forever the browse row can still show it for a moment after, and
+--- reading that put the sold out price back on the Disenchanting tab.
+function Scanner:NoteBought(itemID, unitPrice)
+    if not itemID then return end
+    self:ForgetPassive(itemID)
+    if not unitPrice then return end
+    self.boughtHold = self.boughtHold or {}
+    self.boughtHold[itemID] = { at = time(), price = unitPrice }
+end
+
+--- Is this browse row the listing just bought? Within BOUGHT_HOLD of the
+--- buy, at the price paid or under it. A dearer row is the next listing.
+function Scanner:HeldAfterBuy(itemID, price)
+    local hold = self.boughtHold and self.boughtHold[itemID]
+    if not hold then return false end
+    if time() - hold.at > self.BOUGHT_HOLD then
+        self.boughtHold[itemID] = nil
+        return false
+    end
+    return price ~= nil and price <= hold.price + 1
 end
 
 --- Forget the last price passive capture read for an item, so the next
