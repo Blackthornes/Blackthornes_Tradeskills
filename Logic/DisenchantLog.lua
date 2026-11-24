@@ -677,9 +677,21 @@ end
 function DisenchantLog:OnCastSucceeded(_, unit, _, spellID)
     if not IsPlayer(unit) then return end
 
-    -- Placing an Arcane Salvager yourself turns Salvager mode on.
-    if self:SalvagerApart() then
-        local ok, placed = pcall(function() return spellID == SALVAGER_SPELL end)
+    -- Placing an Arcane Salvager yourself turns Salvager mode on. Known by
+    -- its spell, or by a spell name with "Salvager" in it, in case Forever
+    -- numbers the placing cast differently (2026-11-24: placed in game, and
+    -- the mode did not start).
+    if self:SalvagerApart() and not IsDisenchant(spellID) then
+        local name = SpellName(spellID)
+        local ok, placed = pcall(function()
+            if spellID == SALVAGER_SPELL then return true end
+            return type(name) == "string" and name:lower():find("salvager", 1, true) ~= nil
+        end)
+        -- Kept for /bts delog, so the real spell can be named.
+        pcall(function()
+            self.lastSpell = { id = type(spellID) == "number" and (spellID + 0) or nil,
+                               name = type(name) == "string" and (name .. "") or nil }
+        end)
         if ok and placed then
             self:StartSalvager("cast")
             return
@@ -864,6 +876,11 @@ local function Report(input)
         end
     end
 
+    local spell = DisenchantLog.lastSpell
+    if spell and DisenchantLog:SalvagerApart() then
+        ns.Print(L.Format("Your last spell: %s (%s)", tostring(spell.name or "?"), tostring(spell.id or "?")))
+    end
+
     local auras = DisenchantLog.lastAuras
     if auras then
         local names = {}
@@ -882,6 +899,22 @@ end
 DisenchantLog._Report = Report
 
 ns.RegisterCommand("delog", L["your recorded disenchants; /bts delog reset clears them"], Report)
+
+-- Start or stop Salvager mode by hand, for a Salvager the addon did not
+-- see placed (one already up after a /reload, or a cast it missed).
+ns.RegisterCommand("salvager", L["turn Salvager mode on or off by hand: /bts salvager on|off"], function(args)
+    local word = tostring(args or ""):lower():match("^(%S*)")
+    if not DisenchantLog:SalvagerApart() then
+        ns.Print(L["Tick Keep Salvager Results Apart in Settings first."])
+        return
+    end
+    if word == "on" then
+        DisenchantLog:StartSalvager("cast")
+    elseif word == "off" then
+        DisenchantLog:StopSalvager()
+    end
+    ns.Print((DisenchantLog:SalvagerUp()) and L["Salvager mode is on."] or L["Salvager mode is off."])
+end)
 
 ns.RegisterCommand("dechat", L["show what each disenchant gave in chat: /bts dechat on|off"], function(args)
     local word = tostring(args or ""):lower():match("^(%S*)")
