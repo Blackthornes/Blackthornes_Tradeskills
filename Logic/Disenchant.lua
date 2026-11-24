@@ -654,6 +654,60 @@ function Disenchant:GetOutcomes(itemID)
 end
 
 --------------------------------------------------------------------------------
+-- At an Arcane Salvager
+--------------------------------------------------------------------------------
+
+-- An item's own Salvager results are shown once it has this many.
+Disenchant.SALVAGER_LEARN_AFTER = 5
+
+--- What one disenchant of this item gives at an Arcane Salvager, from your
+--- own Salvager disenchants only (Logic/DisenchantLog.lua, `salvagerLog`).
+--- Only the Disenchanting tab reads it: every price elsewhere stays on the
+--- plain chances.
+--
+-- The item's own results once it has SALVAGER_LEARN_AFTER, else its kind
+-- of item's once those reach LEARN_AFTER.
+--
+-- @return outcomes (nil when too few), facts
+--   facts.casts   how many the chances come from
+--   facts.byItem  true when they are this item's own
+--   facts.seen    the item's own record so far ({ casts, got }), or nil
+--   facts.need    how many more of this item before it shows, when too few
+--   nil, nil when the item cannot be disenchanted.
+function Disenchant:GetSalvagerOutcomes(itemID)
+    local _, plain = self:GetOutcomes(itemID)
+    if not plain or not plain.key then return nil, nil end
+
+    local log = ns.DisenchantLog
+    local own = log and log.GetSalvagerItem and log:GetSalvagerItem(itemID)
+    local band = log and log.GetSalvagerBand and log:GetSalvagerBand(plain.key)
+
+    local facts = { key = plain.key, seen = own, casts = 0 }
+
+    if own and (own.casts or 0) >= self.SALVAGER_LEARN_AFTER then
+        facts.casts, facts.byItem = own.casts, true
+        return Learned(own), facts
+    end
+
+    if band and (band.casts or 0) >= self.LEARN_AFTER then
+        facts.casts = band.casts
+        return Learned(band), facts
+    end
+
+    facts.casts = own and own.casts or 0
+    facts.need = self.SALVAGER_LEARN_AFTER - facts.casts
+    return nil, facts
+end
+
+--- GetValue at an Arcane Salvager: value, partial, breakdown; nil value
+--- when there are too few Salvager disenchants (breakdown still has facts).
+function Disenchant:GetSalvagerValue(itemID)
+    local outcomes, facts = self:GetSalvagerOutcomes(itemID)
+    if not outcomes then return nil, nil, facts and { outcomes = {}, facts = facts } or nil end
+    return self:ValueOf(outcomes, facts)
+end
+
+--------------------------------------------------------------------------------
 -- Value
 --------------------------------------------------------------------------------
 
@@ -680,6 +734,12 @@ end
 function Disenchant:GetValue(itemID)
     local outcomes, facts = self:GetOutcomes(itemID)
     if not outcomes then return nil end
+    return self:ValueOf(outcomes, facts)
+end
+
+--- GetValue's sum for any list of outcomes (the plain ones, or the
+--- Salvager's).
+function Disenchant:ValueOf(outcomes, facts)
 
     -- Each disenchant gives one outcome, never the likely one plus extras
     -- (a player's math, 2026-11-19: Burnside Rifle showed 1.5 essence at

@@ -86,11 +86,14 @@ ns.Theme = {
 }
 
 local checkboxes, dropdown, buttons, pages = {}, nil, {}, nil
+local salvagerSwitch
 
 ns.Widgets = {
     CreateTabStrip = function(_, tabs, onSelect)
-        pages = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
-        return pages
+        local strip = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
+        -- The Salvager switch in the detail panel is a strip too.
+        if tabs[1].key == "plain" then salvagerSwitch = strip else pages = strip end
+        return strip
     end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function(_, options, onSelect)

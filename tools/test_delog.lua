@@ -353,6 +353,107 @@ Log:SetChat(true)
 p0 = #printed
 Log:Announce(1002, { [STRANGE_DUST] = 5 }, CHEST_KEY, learnedBand, 100, nil, nil)
 check("ticked again, the result is said in chat", Said("Disenchanted", p0 + 1) ~= nil)
+
+print("\nat an Arcane Salvager")
+
+-- The owner said build it, 2026-11-24: Salvager disenchants in their own
+-- record, the plain one left alone.
+local SALVAGER = 1263056
+local function Place()
+    Log:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", SALVAGER)
+end
+local function PlainSnapshot()
+    local log = Log:GetTable()
+    local band = log.bands["2:weapon:25"]
+    local item = log.items[1004]
+    return (band and band.casts or 0), (item and item.casts or 0), log.recent[1]
+end
+
+settings.salvagerApart = nil
+Place()
+check("with the box off, placing one changes nothing", (Log:SalvagerUp()) == false)
+local bandBefore, itemBefore = PlainSnapshot()
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+local bandAfter, itemAfter = PlainSnapshot()
+check("and the disenchant goes in the plain record as always",
+    bandAfter == bandBefore + 1 and itemAfter == itemBefore + 1 and ns.db.salvagerLog == nil)
+
+settings.salvagerApart = true
+check("ticked, nothing is on until a Salvager is placed", (Log:SalvagerUp()) == false)
+Place()
+local up, byBuff = Log:SalvagerUp()
+check("placing one yourself turns Salvager mode on", up == true and byBuff == false)
+
+bandBefore, itemBefore = PlainSnapshot()
+local recentBefore = select(3, PlainSnapshot())
+local p1 = #printed
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 }, { SMALL_GLIMMERING, 1 } } })
+bandAfter, itemAfter = PlainSnapshot()
+check("a disenchant then goes in the Salvager record",
+    Log:GetSalvagerItem(1004) and Log:GetSalvagerItem(1004).casts == 1
+        and Log:GetSalvagerBand("2:weapon:25").casts == 1)
+check("and the plain record is not touched", bandAfter == bandBefore and itemAfter == itemBefore
+    and Log:GetTable().recent[1] == recentBefore)
+check("chat starts with Salvager:", Said("Salvager:.-gave .-x2", p1 + 1) ~= nil
+    and Said("Disenchanted", p1 + 1) == nil)
+check("it still counts toward this session", (Log:GetSession()) > 0)
+
+local plainValue = Disenchant:GetValue(1004)
+local outcomes, sFacts = Disenchant:GetSalvagerOutcomes(1004)
+check("with one, there are too few to show chances", outcomes == nil and sFacts.need == 4
+    and sFacts.seen.got[GREATER_MAGIC].times == 1)
+
+for _ = 1, 4 do Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 3 } } }) end
+outcomes, sFacts = Disenchant:GetSalvagerOutcomes(1004)
+check("after five, the item's own Salvager chances show", outcomes ~= nil and sFacts.byItem == true
+    and sFacts.casts == 5 and outcomes[1].itemID == GREATER_MAGIC and outcomes[1].chance == 1)
+local salvagerValue = Disenchant:GetSalvagerValue(1004)
+check("its value comes from them", salvagerValue and salvagerValue > plainValue)
+check("prices elsewhere stay on plain chances", Disenchant:GetValue(1004) == plainValue)
+
+clock = clock + Log.SALVAGER_IDLE + 1
+check("ten minutes with no disenchant ends it", (Log:SalvagerUp()) == false)
+bandBefore = PlainSnapshot()
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+check("and the next one is plain again", PlainSnapshot() == bandBefore + 1
+    and Log:GetSalvagerItem(1004).casts == 5)
+
+Place()
+Log:OnZoneChanged()
+check("a new zone ends it", (Log:SalvagerUp()) == false)
+
+Place()
+Log:StopSalvager()
+check("so does Stop", (Log:SalvagerUp()) == false)
+
+-- If the game gives a buff near a Salvager, it is read at each disenchant.
+local savedAuras = C_UnitAuras
+local buffs = {}
+C_UnitAuras = { GetAuraDataByIndex = function(_, index) return buffs[index] end }
+buffs = { { name = "Well Fed", spellId = 1 }, { name = "Arcane Salvager", spellId = 99 } }
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+check("a Salvager buff counts with no cast", Log:GetSalvagerItem(1004).casts == 6)
+up, byBuff = Log:SalvagerUp()
+check("and says it came from the buff", up == true and byBuff == true)
+check("the buffs are kept for /bts delog", Log.lastAuras and Log.lastAuras[2].name == "Arcane Salvager")
+
+buffs = { { name = "Well Fed", spellId = 1 } }
+bandBefore = PlainSnapshot()
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+check("walking away from it makes the next one plain", PlainSnapshot() == bandBefore + 1
+    and Log:GetSalvagerItem(1004).casts == 6 and (Log:SalvagerUp()) == false)
+
+buffs = { { name = secret, spellId = secret } }
+local okSecret = pcall(Log.CheckSalvager, Log)
+check("a secret buff is skipped, not an error", okSecret)
+C_UnitAuras = savedAuras
+
+local p2 = #printed
+Log._Report("")
+check("/bts delog prints the buffs at the last disenchant", Said("buffs at the last disenchant", p2 + 1) ~= nil)
+check("and the Salvager count", Said("Salvager: 6 recorded apart", p2 + 1) ~= nil)
+
+settings.salvagerApart = nil
 ns.Config = nil
 
 C_Item, C_Container, GetTime, CreateFrame = saved.C_Item, saved.C_Container, saved.GetTime, saved.CreateFrame
