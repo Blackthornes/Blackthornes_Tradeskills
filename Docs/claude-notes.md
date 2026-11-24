@@ -3743,6 +3743,22 @@ when the box goes. `/bts value` prints an "upgrades only box" line saying
 which list it found. The list path is a guess until seen in game. Tested in
 `tools/test_upgradesonly.lua`.
 
+## Upgrades Only on the Craft queue (2026-11-24)
+
+The owner asked for the same box on the Crafting tab's Craft queue and said
+build it from the mockup (`ts-craft-queue-upgrades-only.html`).
+`UI/CraftPanel.lua`: "Upgrades Only:" right of Search recipes, shown only
+while Equipment can answer and the arrows are on (`UpgradesAvailable`,
+`UpdateUpgradesBox`, which narrows the search box to make room). Ticked,
+`RowFor` keeps only crafts whose made item passes `Upgrades:IsUpgrade`, or
+whose enchant `Upgrades:EnchantFor` says beats something worn
+(`CraftPanel.MakesUpgrade`). Upgrades at their Keep in stock limit still
+show; ignored crafts stay hidden; a search narrows the upgrades. Saved as
+`craftPaneUpgradesOnly` (never rename it), off until ticked, apart from the
+profession window's `upgradesOnlyRecipes`. Same words as that box, so no new
+strings. `Upgrades:RedrawSoon` already redraws the pane when gear changes.
+Tested in `tools/test_craftpane.lua`.
+
 ## The gamepad's window cursor (2026-11-23)
 
 A player on a gamepad got 14x "Blackthornes_TS tried to call the protected

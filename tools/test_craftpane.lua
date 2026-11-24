@@ -1280,6 +1280,88 @@ do
   CraftPanel.shownByHand, CraftPanel.waitingForQueue = nil, nil
 end
 
+--------------------------------------------------------------------------------
+-- Upgrades Only (the owner, 2026-11-24)
+--------------------------------------------------------------------------------
+
+-- Ticked, the pane lists only crafts that make an upgrade for the character
+-- playing, as Equipment answers it. Upgrades at their Keep in stock limit
+-- still show (made to wear, not to sell), ignored crafts stay hidden, and a
+-- search narrows the upgrades further.
+do
+  local oldUpgrades, oldSettings = ns.Upgrades, SETTINGS
+  local UPGRADE_ITEMS = { [2853] = true }   -- Copper Chain Belt
+  local ENCHANTS = { [103] = { slot = "Chest" } }
+  local equipment = {}
+  ns.Upgrades = {
+    Equipment = function() return equipment end,
+    IsEnabled = function() return SETTINGS.showUpgradeArrows ~= false end,
+    IsUpgrade = function(_, itemID) return UPGRADE_ITEMS[itemID] == true end,
+    EnchantFor = function(_, recipeID) return ENCHANTS[recipeID] end,
+  }
+  SETTINGS = setmetatable({}, { __index = oldSettings })
+
+  check("off, every craft shows", #CraftPanel:GetRows({}), 3)
+  check("on, only upgrades and upgrade enchants show",
+    names(CraftPanel:GetRows({ sortBy = "name", upgradesOnly = true })),
+    "Brown Linen Shirt, Copper Chain Belt")
+  check("a search narrows the upgrades",
+    names(CraftPanel:GetRows({ search = "copper", upgradesOnly = true })), "Copper Chain Belt")
+  check("a search never finds what is not an upgrade",
+    #CraftPanel:GetRows({ search = "sharpening", upgradesOnly = true }), 0)
+
+  ANALYSIS[101].atPostLimit = true
+  check("off, an upgrade at its limit is hidden",
+    names(CraftPanel:GetRows({ sortBy = "name" })), "Brown Linen Shirt, Rough Sharpening Stone")
+  check("on, it still shows",
+    names(CraftPanel:GetRows({ sortBy = "name", upgradesOnly = true })),
+    "Brown Linen Shirt, Copper Chain Belt")
+  ANALYSIS[101].atPostLimit = nil
+
+  IGNORED[101] = "Copper Chain Belt"
+  check("an ignored upgrade stays hidden",
+    names(CraftPanel:GetRows({ upgradesOnly = true })), "Brown Linen Shirt")
+  check("and is counted", CraftPanel.hiddenIgnored, 1)
+  IGNORED[101] = nil
+
+  check("the order key changes with the box",
+    CraftPanel:OrderKey({ upgradesOnly = true }) ~= CraftPanel:OrderKey({}), true)
+
+  -- The setting counts only while the box can show.
+  SETTINGS.craftPaneUpgradesOnly = true
+  check("ticked with Equipment there, it is on", CraftPanel:UpgradesOnly(), true)
+  SETTINGS.showUpgradeArrows = false
+  check("with the arrows off, it is off", CraftPanel:UpgradesOnly(), false)
+  SETTINGS.showUpgradeArrows = nil
+  equipment = nil
+  check("without Equipment, it is off", CraftPanel:UpgradesOnly(), false)
+  equipment = {}
+
+  -- The box shows only while Equipment can answer, and the search box gives
+  -- it room, then takes the room back.
+  local function Fake(width)
+    local f = { width = width, shown = false }
+    function f:GetWidth() return self.width end
+    function f:SetSize(w) self.width = w end
+    function f:Show() self.shown = true end
+    function f:Hide() self.shown = false end
+    return f
+  end
+  local savedBox, savedSearch = CraftPanel.upgradesBox, CraftPanel.search
+  CraftPanel.upgradesBox, CraftPanel.search = Fake(110), Fake(500)
+  CraftPanel:UpdateUpgradesBox()
+  check("with Equipment, the box shows", CraftPanel.upgradesBox.shown, true)
+  local narrow = CraftPanel.search.width
+  equipment = nil
+  CraftPanel:UpdateUpgradesBox()
+  check("without it, the box hides", CraftPanel.upgradesBox.shown, false)
+  check("and the search box takes the room back", CraftPanel.search.width > narrow, true)
+  equipment = {}
+  CraftPanel.upgradesBox, CraftPanel.search = savedBox, savedSearch
+
+  ns.Upgrades, SETTINGS = oldUpgrades, oldSettings
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))

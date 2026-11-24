@@ -215,6 +215,11 @@ local DEFAULTS = {
         -- Add queue past the Keep in stock limit, without changing the limit.
         craftPaneIgnoreLimit = false,
 
+        -- The craft pane's "Upgrades Only:" box: list only the crafts that
+        -- make an upgrade for the character playing (the owner, 2026-11-24).
+        -- Its own box, apart from upgradesOnlyRecipes. Never rename it.
+        craftPaneUpgradesOnly = false,
+
         -- Side panels folded down to their title strip by the small button at
         -- their top left (UI/Collapse.lua). Remembered between sessions.
         postPanelCollapsed = false,
