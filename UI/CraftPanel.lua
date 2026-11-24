@@ -363,6 +363,30 @@ local function RowSources(self, opts)
     return list, search
 end
 
+--- Can the "Upgrades Only:" box be shown? Only while Equipment can answer
+--- and the upgrade arrows are on; without them every answer would be "no".
+function CraftPanel:UpgradesAvailable()
+    local upgrades = ns.Upgrades
+    if type(upgrades) ~= "table" or type(upgrades.Equipment) ~= "function" then return false end
+    return upgrades:Equipment() ~= nil and upgrades:IsEnabled() == true
+end
+
+--- Is the "Upgrades Only:" box ticked, and can it be?
+function CraftPanel:UpgradesOnly()
+    return ns.Config:Get("craftPaneUpgradesOnly") == true and self:UpgradesAvailable()
+end
+
+--- Does this recipe make an upgrade for the character playing: gear that
+--- beats what is worn (the green arrow's answer), or an enchant that does.
+local function MakesUpgrade(recipeID, recipe)
+    local upgrades = ns.Upgrades
+    if type(upgrades) ~= "table" then return false end
+    if recipe.outputItemID and upgrades:IsUpgrade(recipe.outputItemID) then return true end
+    return type(upgrades.EnchantFor) == "function" and upgrades:EnchantFor(recipeID) ~= nil
+end
+
+CraftPanel.MakesUpgrade = MakesUpgrade
+
 --- One recipe's row, or nil when it is left out. `tally` counts what the
 --- Keep in stock limit and the ignored crafts hid.
 local function RowFor(recipeID, recipe, opts, search, tally)
@@ -375,6 +399,9 @@ local function RowFor(recipeID, recipe, opts, search, tally)
         tally.ignored = (tally.ignored or 0) + 1
         return nil
     end
+
+    -- Upgrades Only: what is not an upgrade is left out, searched for or not.
+    if opts.upgradesOnly and not MakesUpgrade(recipeID, recipe) then return nil end
 
     -- Plain substring, not a pattern: a recipe name with a hyphen in
     -- it would otherwise be a malformed pattern and match nothing.
@@ -400,6 +427,7 @@ local function RowFor(recipeID, recipe, opts, search, tally)
         local suppressed = atLimit
             and search == ""
             and not opts.ignoreLimit
+            and not opts.upgradesOnly
             and not (opts.keepOrder and opts.keepOrder[recipeID])
             and ns.Config:Get("hideAtPostLimit") ~= false
 
@@ -473,7 +501,9 @@ end
 
 --- The rows to draw: one per recipe, with what it is worth and what is queued.
 --
--- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
+-- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit,
+--   upgradesOnly } (upgradesOnly also shows upgrades at their limit: they
+--   are made to wear, not to sell)
 function CraftPanel:GetRows(opts)
     opts = opts or {}
 
@@ -508,7 +538,8 @@ function CraftPanel:OrderKey(opts)
     end
 
     return table.concat({ tostring(opts.sortBy), opts.search or "",
-        tostring(opts.ignoreLimit), tostring(opts.method), count, sum }, "|")
+        tostring(opts.ignoreLimit), tostring(opts.method),
+        tostring(opts.upgradesOnly), count, sum }, "|")
 end
 
 --------------------------------------------------------------------------------
@@ -1180,6 +1211,23 @@ function CraftPanel:Build()
     search:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     search:SetSize(PANEL_WIDTH - 28, 22)
     self.search = search
+
+    -- "Upgrades Only:" beside the search, shown only while Equipment can
+    -- answer (UpdateUpgradesBox). The words are the profession window's box's.
+    local upgradesBox = Widgets.CreateCheckbox(body, L["Upgrades Only:"], function(checked)
+        ns.Config:Set("craftPaneUpgradesOnly", checked)
+        CraftPanel:Refresh()
+    end, ns.Config:Get("craftPaneUpgradesOnly") == true)
+    upgradesBox:SetPoint("LEFT", search, "RIGHT", 10, 0)
+    upgradesBox:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Upgrades Only:"])
+        GameTooltip:AddLine(L["Shows only the gear you can make that beats what you wear now."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    upgradesBox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    upgradesBox:Hide()
+    self.upgradesBox = upgradesBox
 
     local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -8)
@@ -1944,11 +1992,13 @@ function CraftPanel:BeginRefresh()
     end
 
     self.title:SetText(L["Craft queue"])
+    self:UpdateUpgradesBox()
 
     local opts = {
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
         ignoreLimit = self:IgnoringLimit(),
+        upgradesOnly = self:UpgradesOnly(),
         method = PaneMethod(),
         methodRead = true,
     }
@@ -1959,6 +2009,27 @@ function CraftPanel:BeginRefresh()
     end
     opts.keepOrder = self.heldOrder
     return opts
+end
+
+--- Show the "Upgrades Only:" box only while Equipment can answer, and give
+--- the search box back the room when it goes. Moves nothing while unchanged.
+function CraftPanel:UpdateUpgradesBox()
+    local box, search = self.upgradesBox, self.search
+    if not (box and search) then return end
+
+    local show = self:UpgradesAvailable()
+    if box.shownFor == show then return end
+    box.shownFor = show
+
+    local full = PANEL_WIDTH - 28
+    if show then
+        local room = math.ceil(box:GetWidth() or 0) + 10
+        search:SetSize(math.max(80, full - room), 22)
+        box:Show()
+    else
+        box:Hide()
+        search:SetSize(full, 22)
+    end
 end
 
 --- Is the cursor on the pane? The order is held only then, so a row never
@@ -2017,6 +2088,8 @@ function CraftPanel:ApplyRows(rows, opts)
 
         self.empty:SetText(searching
             and L["Nothing here matches that."]
+            or opts and opts.upgradesOnly
+                and L["Nothing you can make here is an upgrade right now."]
             or (self.hiddenAtLimit or 0) > 0
                 and L["Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."]
             or (self.hiddenIgnored or 0) > 0
@@ -2944,7 +3017,8 @@ function CraftPanel:Toggle()
     if self:IsShown() then
         local _, frameName = self:FindTradeSkillFrame()
 
-        local count = #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })
+        local count = #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit(),
+            upgradesOnly = self:UpgradesOnly() })
         ns.Print(frameName
             and L.Format("craft pane shown, docked to the profession window, %d recipe(s) listed.", count)
             or L.Format("craft pane shown (no profession window open), %d recipe(s) listed.", count))
