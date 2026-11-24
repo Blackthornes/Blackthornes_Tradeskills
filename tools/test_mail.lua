@@ -1122,8 +1122,9 @@ do
     ns.MethodProfit = { KeepOlderSale = function(_, entry) kept[#kept + 1] = entry end,
         BuyCost = function() return nil end }
     local full = Mail:GetLedger()
+    -- Older than 60 days, so the newest 400 are all that stay.
     for i = 1, 400 do
-        full.entries[i] = { kind = "sold", name = "Old " .. i, net = 1, t = i }
+        full.entries[i] = { kind = "sold", name = "Old " .. i, net = 1, t = time() - 70 * 86400 + i }
     end
     inbox = {
         { sender = "Auction House", subject = "Auction successful: Linen Bag",
@@ -1135,6 +1136,54 @@ do
     check("the ledger stays at its size",        #Mail:GetLedger().entries, 400)
     check("the oldest sale is handed over",      kept[1] and kept[1].name, "Old 1")
     check("only that one",                       #kept, 1)
+    ns.MethodProfit = nil
+end
+
+print("")
+print("sales are kept 60 days, up to 2,000, and at least 400")
+--------------------------------------------------------------------------------
+
+Reset()
+do
+    local kept = {}
+    ns.MethodProfit = { KeepOlderSale = function(_, entry) kept[#kept + 1] = entry end,
+        BuyCost = function() return nil end }
+    local DAY = 86400
+    local now = 100 * DAY
+
+    -- A busy week: 900 sales in the last few days all stay (the old cap was 400).
+    local ledger = { entries = {} }
+    for i = 1, 900 do ledger.entries[i] = { kind = "sold", name = "S" .. i, net = 1, t = now - 3 * DAY + i } end
+    Mail:TrimLedger(ledger, now)
+    check("900 sales from this week all stay",   #ledger.entries, 900)
+    check("none handed over",                    #kept, 0)
+
+    -- Older than 60 days go, once there are more than 400.
+    ledger = { entries = {} }
+    for i = 1, 300 do ledger.entries[#ledger.entries + 1] = { kind = "sold", name = "Old", net = 1, t = now - 70 * DAY + i } end
+    for i = 1, 500 do ledger.entries[#ledger.entries + 1] = { kind = "sold", name = "New", net = 1, t = now - 10 * DAY + i } end
+    Mail:TrimLedger(ledger, now)
+    check("sales past 60 days go",               #ledger.entries, 500)
+    check("the newest stay, in order",           ledger.entries[1].name == "New" and ledger.entries[500].t == now - 10 * DAY + 500, true)
+    check("what went is handed over",            #kept, 300)
+
+    -- Back from a long break: the last 400 stay however old.
+    kept = {}
+    ledger = { entries = {} }
+    for i = 1, 450 do ledger.entries[i] = { kind = "sold", name = "A" .. i, net = 1, t = i } end
+    Mail:TrimLedger(ledger, now)
+    check("at least 400 stay",                   #ledger.entries, 400)
+    check("the newest 400",                      ledger.entries[1].name, "A51")
+    check("and 50 handed over",                  #kept, 50)
+
+    -- Never more than 2,000, even all from this week.
+    kept = {}
+    ledger = { entries = {} }
+    for i = 1, 2100 do ledger.entries[i] = { kind = "sold", name = "B" .. i, net = 1, t = now - DAY + i } end
+    Mail:TrimLedger(ledger, now)
+    check("never more than 2,000",               #ledger.entries, 2000)
+    check("the oldest 100 go",                   ledger.entries[1].name, "B101")
+    check("nothing left past the end",           ledger.entries[2001], nil)
     ns.MethodProfit = nil
 end
 
