@@ -283,6 +283,19 @@ check("once it arrives it is not counted twice", View:Extra(best.best.itemID) ==
 
 C_AuctionHouse.GetItemCommodityStatus = function() return 1 end
 check("an item sold one at a time is searched for", View.Kind({ itemID = LINEN, count = 20 }) == "search")
+-- As Forever answers: it takes an item in the bags and raises for an item
+-- ID, so the ID alone read as "sold in stacks". The scanner's memory says.
+C_AuctionHouse.GetItemCommodityStatus = function(item)
+    if type(item) ~= "table" then error("bad argument #1 to 'GetItemCommodityStatus'") end
+    return 1
+end
+local savedScanner = ns.Scanner
+ns.Scanner = { GetCommodityStatus = function() return false end }
+check("an item the scanner knows sells one at a time is searched for",
+    View.Kind({ itemID = LINEN, count = 20 }) == "search")
+ns.Scanner = { GetCommodityStatus = function() return nil end }
+check("one nobody knows yet is still bought as a stack", View.Kind({ itemID = LINEN, count = 20 }) == "buy")
+ns.Scanner = savedScanner
 C_AuctionHouse.GetItemCommodityStatus = function() return 2 end
 
 bags[best.itemID] = 2
