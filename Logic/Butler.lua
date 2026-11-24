@@ -726,11 +726,11 @@ local function Breaking(itemID, kept, quality)
     if able == nil then return nil, nil, nil end
     if not able then return nil, false, nil end
 
-    local value, _, breakdown = disenchant:GetValue(itemID)
-    local needs = breakdown and breakdown.facts and breakdown.facts.skill
+    local value = disenchant:GetValue(itemID)
 
+    -- On Forever any Enchanting skill breaks any item.
     local function Enough(skill)
-        return skill ~= nil and (needs == nil or skill >= needs)
+        return skill ~= nil
     end
 
     -- Enchanting on this character's own record is enough: it teaches

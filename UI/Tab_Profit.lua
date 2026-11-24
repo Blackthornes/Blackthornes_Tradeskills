@@ -624,9 +624,6 @@ local function ShowBreaksInto(owner, analysis)
     end
 
     local facts = breakdown.facts or {}
-    if facts.skill then
-        GameTooltip:AddLine(L.Format("Needs Enchanting about %d.", facts.skill), 0.7, 0.7, 0.7, true)
-    end
     if facts.source == "yours" then
         GameTooltip:AddLine(L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
     else

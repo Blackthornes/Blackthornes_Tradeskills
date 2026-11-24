@@ -3828,3 +3828,15 @@ timer that buys. Picking another deal lets the last one go, so the key
 never buys what the pane doesn't show. Tested in
 `tools/test_disenchantquickbuy.lua` and the Buy One part of
 `tools/test_disenchantdeals.lua`. Not yet seen in game.
+
+## Any enchanter breaks any item
+
+A player with Enchanting 4 saw only low level deals on the Disenchanting tab
+(2026-11-24). On Forever any enchanter can disenchant any item from skill 1;
+Classic's skill by item level (25 for item level 21 and up, and so on) does
+not hold. `Logic/Disenchant.lua` has no skill table now: `facts.skill` is
+nil, `canDisenchant` is true for any character with Enchanting and nil with
+none. Profit's way by disenchant and Butler's `Advise` read it the same way.
+The SKILL column and the "Needs Enchanting about N" words are gone. "Only
+ones I can disenchant" now hides deals only when no character has
+Enchanting. Tested in `tools/test_disenchantdeals.lua`.

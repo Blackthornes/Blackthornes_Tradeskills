@@ -949,17 +949,14 @@ local NO_WAY_REASON = {
 
 --- Can one of your characters disenchant this? Read from what each last
 --- recorded, so an alt counts without logging in. nil when nobody knows
---- Enchanting, false when nobody has the skill for this item yet.
+--- Enchanting. On Forever any Enchanting skill breaks any item.
 local function CanDisenchant(itemID)
     local Disenchant = ns.Disenchant
     if not (Disenchant and Disenchant.GetBestEnchanter) then return nil end
 
     local skill = Disenchant:GetBestEnchanter()
     if skill == nil then return nil end
-
-    local facts = Disenchant.GetItemFacts and Disenchant:GetItemFacts(itemID)
-    local needs = type(facts) == "table" and facts.skill or nil
-    return needs == nil or skill >= needs
+    return true
 end
 
 --- The method the Profit tab and its commands rank by: Settings' choice,
