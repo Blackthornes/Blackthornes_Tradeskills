@@ -1875,25 +1875,12 @@ function UI:ShowTransferDialog(mode)
         -- A long code runs past the bottom of the box. A slim bar down its
         -- right edge and the mouse wheel move through it; before, only the
         -- first lines could be seen.
-        local bar = CreateFrame("Slider", nil, box)
-        bar:SetOrientation("VERTICAL")
-        bar:SetWidth(6)
+        -- Drawn by hand: the game's Slider runs backwards on Forever.
+        local bar = Widgets.CreateScrollbar(box, 6)
         bar:SetPoint("TOPRIGHT", -3, -6)
         bar:SetPoint("BOTTOMRIGHT", -3, 6)
-        bar:SetValueStep(1)
-        bar:SetMinMaxValues(0, 0)
-        bar:SetValue(0)
+        bar:SetThumbHeight(30)
         bar:Hide()
-
-        local track = bar:CreateTexture(nil, "BACKGROUND")
-        track:SetAllPoints(bar)
-        track:SetColorTexture(Theme.Unpack("panel"))
-
-        local thumb = bar:CreateTexture(nil, "ARTWORK")
-        thumb:SetColorTexture(Theme.Unpack("borderLit"))
-        thumb:SetSize(6, 30)
-        bar:SetThumbTexture(thumb)
-        Widgets.LightThumb(bar, thumb)
 
         local function ScrollTo(offset)
             local range = scroll:GetVerticalScrollRange() or 0
@@ -1902,7 +1889,7 @@ function UI:ShowTransferDialog(mode)
             if bar:GetValue() ~= offset then bar:SetValue(offset) end
         end
 
-        bar:SetScript("OnValueChanged", function(_, value) scroll:SetVerticalScroll(value) end)
+        bar.onValueChanged = function(value) scroll:SetVerticalScroll(value) end
 
         scroll:SetScript("OnScrollRangeChanged", function(_, _, range)
             range = tonumber(range) or 0

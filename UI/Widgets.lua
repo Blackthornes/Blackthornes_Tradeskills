@@ -1793,6 +1793,135 @@ function Widgets.LightThumb(bar, thumb)
     end)
 end
 
+--- A scroll bar down a list's right edge: a dark track and a thumb that
+--- lights gold under the mouse.
+---
+--- Drawn and dragged by hand, not with the game's Slider: on Forever a
+--- vertical Slider runs the wrong way, so dragging the thumb down scrolled
+--- the list up (Butler met it 2026-10-13, the Sell list 2026-11-24). Here the
+--- thumb sits `value` steps down from the top and follows the cursor while it
+--- is held, so down is always down. It answers the Slider's calls
+--- (SetMinMaxValues, GetMinMaxValues, SetValue, GetValue), and
+--- `bar.onValueChanged(value)` hears each change, from the player or code.
+-- @param parent the frame it sits on
+-- @param width  pixels wide
+function Widgets.CreateScrollbar(parent, width)
+    local bar = CreateFrame("Frame", nil, parent)
+    bar:SetWidth(width)
+    bar.min, bar.max, bar.value = 0, 0, 0
+
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints(bar)
+    track:SetColorTexture(Theme.Unpack("panel"))
+
+    local thumb = bar:CreateTexture(nil, "ARTWORK")
+    thumb:SetColorTexture(Theme.Unpack("metal"))
+    thumb:SetSize(width, 40)
+    thumb:SetPoint("TOP", bar, "TOP", 0, 0)
+    bar.thumb = thumb
+    bar.thumbHeight = 40
+    Widgets.LightThumb(bar, thumb)
+
+    --- Pixels the thumb can travel: the bar less the thumb.
+    function bar:Room()
+        local height = tonumber(self:GetHeight()) or 0
+        return math.max(0, height - (self.thumbHeight or 0))
+    end
+
+    --- How far down the bar the thumb's top is, in pixels.
+    function bar:ThumbTop()
+        local span = (self.max or 0) - (self.min or 0)
+        if span <= 0 then return 0 end
+        return self:Room() * ((self.value or 0) - self.min) / span
+    end
+
+    local function Place()
+        thumb:ClearAllPoints()
+        thumb:SetPoint("TOP", bar, "TOP", 0, -bar:ThumbTop())
+    end
+
+    function bar:SetThumbHeight(height)
+        self.thumbHeight = tonumber(height) or 40
+        thumb:SetHeight(self.thumbHeight)
+        Place()
+    end
+
+    function bar:SetValue(value)
+        value = math.floor((tonumber(value) or 0) + 0.5)
+        value = math.max(self.min or 0, math.min(self.max or 0, value))
+        local before = self.value
+        self.value = value
+        Place()
+        if value ~= before and self.onValueChanged then self.onValueChanged(value) end
+    end
+
+    function bar:GetValue() return self.value end
+
+    function bar:SetMinMaxValues(low, high)
+        low = tonumber(low) or 0
+        self.min, self.max = low, math.max(low, tonumber(high) or 0)
+        self:SetValue(self.value)
+        Place()
+    end
+
+    function bar:GetMinMaxValues() return self.min, self.max end
+
+    --- The value that puts the thumb's top `pos` pixels down the bar.
+    function bar:ValueAt(pos)
+        local room = self:Room()
+        if room <= 0 then return self.min or 0 end
+        pos = math.max(0, math.min(room, pos))
+        return (self.min or 0) + pos / room * ((self.max or 0) - (self.min or 0))
+    end
+
+    --- How far down the bar the cursor is, in the bar's own pixels, or nil.
+    function bar:CursorDown()
+        local top = self:GetTop()
+        if type(top) ~= "number" or type(GetCursorPosition) ~= "function" then return nil end
+        local _, y = GetCursorPosition()
+        if type(y) ~= "number" then return nil end
+        local scale = self:GetEffectiveScale()
+        if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+        return top - y / scale
+    end
+
+    --- Press on the thumb: it is held where it was caught. Off it, the
+    --- thumb's middle jumps under the cursor. Until the button comes up the
+    --- thumb follows the cursor (OnUpdate runs only then).
+    local function StartDrag(self)
+        if (self.max or 0) <= (self.min or 0) then return end
+        local pos = self:CursorDown()
+        if not pos then return end
+        local top, size = self:ThumbTop(), self.thumbHeight or 0
+        if pos >= top and pos <= top + size then
+            self.grabAt = pos - top
+        else
+            self.grabAt = size / 2
+            self:SetValue(self:ValueAt(pos - self.grabAt))
+        end
+        self:SetScript("OnUpdate", function(held)
+            local now = held:CursorDown()
+            if now then held:SetValue(held:ValueAt(now - (held.grabAt or 0))) end
+        end)
+    end
+
+    local function StopDrag(self)
+        self.grabAt = nil
+        self:SetScript("OnUpdate", nil)
+    end
+
+    bar:SetScript("OnMouseDown", function(self, button)
+        if button ~= nil and button ~= "LeftButton" then return end
+        StartDrag(self)
+    end)
+    bar:SetScript("OnMouseUp", StopDrag)
+    -- Hidden mid-drag (the list shrank), the mouse-up never comes: let go.
+    bar:SetScript("OnHide", StopDrag)
+    bar:SetScript("OnSizeChanged", function() Place() end)
+
+    return bar
+end
+
 --------------------------------------------------------------------------------
 -- Scroll frame
 --------------------------------------------------------------------------------
@@ -2072,31 +2201,16 @@ function Widgets.CreateScrollFrame(parent, opts)
     -- Parented to `parent`, not to the scroll child: anything inside the child
     -- scrolls with it, and a scrollbar that slides itself off the screen is a
     -- memorable bug to chase.
-    local bar = CreateFrame("Slider", nil, parent)
-    bar:SetOrientation("VERTICAL")
-    bar:SetWidth(8)
+    local bar = Widgets.CreateScrollbar(parent, 8)
     bar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 8, 0)
     bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 8, 0)
-    bar:SetValueStep(1)
-    bar:SetObeyStepOnDrag(true)
-    bar:SetValue(0)
     bar:Hide()
-
-    local track = bar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints(bar)
-    track:SetColorTexture(Theme.Unpack("panel"))
-
-    local thumb = bar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(8, 40)
-    bar:SetThumbTexture(thumb)
-    Widgets.LightThumb(bar, thumb)
 
     scroll.scrollbar = bar
 
-    bar:SetScript("OnValueChanged", function(_, value)
+    bar.onValueChanged = function(value)
         scroll:SetVerticalScroll(value)
-    end)
+    end
 
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta)
@@ -2119,7 +2233,7 @@ function Widgets.CreateScrollFrame(parent, opts)
         if range > 0 and view > 0 then
             -- Thumb length tracks the visible fraction, so the bar says how
             -- much more there is rather than just that there is more.
-            thumb:SetHeight(math.max(20, view * (view / height)))
+            bar:SetThumbHeight(math.max(20, view * (view / height)))
         end
     end
 
@@ -2455,25 +2569,11 @@ function Widgets.CreateScrollList(parent, opts)
     list.rows = {}
     list.offset = 0
 
-    local scrollbar = CreateFrame("Slider", nil, list)
     local barWidth = opts.scrollbarWidth or 8
-    scrollbar:SetOrientation("VERTICAL")
-    scrollbar:SetWidth(barWidth)
+    local scrollbar = Widgets.CreateScrollbar(list, barWidth)
     scrollbar:SetPoint("TOPRIGHT", 0, 0)
     scrollbar:SetPoint("BOTTOMRIGHT", 0, 0)
-    scrollbar:SetValueStep(1)
-    scrollbar:SetObeyStepOnDrag(true)
-
-    local track = scrollbar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints(scrollbar)
-    track:SetColorTexture(Theme.Unpack("panel"))
-
-    local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(barWidth, 40)
-    scrollbar:SetThumbTexture(thumb)
     if opts.scrollbarEdge and Theme.Border then Theme.Border(scrollbar, "metal", 0.6) end
-    Widgets.LightThumb(scrollbar, thumb)
 
     list.scrollbar = scrollbar
 
@@ -2790,7 +2890,7 @@ function Widgets.CreateScrollList(parent, opts)
         -- scroll frame's is, so it says how much more there is rather than
         -- only that there is more.
         if maxOffset > 0 and drawn > 0 and total > 0 then
-            thumb:SetHeight(math.max(20, math.floor(height * drawn / total)))
+            scrollbar:SetThumbHeight(math.max(20, math.floor(height * drawn / total)))
         end
 
         if scrollbar:GetValue() ~= self.offset then
@@ -2865,13 +2965,13 @@ function Widgets.CreateScrollList(parent, opts)
         return self.data
     end
 
-    scrollbar:SetScript("OnValueChanged", function(_, value)
+    scrollbar.onValueChanged = function(value)
         local newOffset = math.floor(value + 0.5)
         if newOffset ~= list.offset then
             list.offset = newOffset
             list:Refresh()
         end
-    end)
+    end
 
     list:EnableMouseWheel(true)
 
