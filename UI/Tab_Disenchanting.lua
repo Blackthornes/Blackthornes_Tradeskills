@@ -207,8 +207,88 @@ local function SearchAuctionHouse(entry)
     -- What is bought of it now is marked to disenchant.
     if ns.DisenchantBuys then ns.DisenchantBuys:Intend(entry.itemID) end
 
+    -- Buy One (2026-11-24): its listings, so the same button can buy them.
+    if ns.DisenchantQuickBuy then ns.DisenchantQuickBuy:Start(entry) end
+
     ns.Print(L.Format("Searching the auction house for %s. Buy it in the auction house window at %s or less and it's marked to disenchant. If the list there doesn't change, type the name into its search box.",
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
+end
+
+--- Buy One: what the side pane's auction button says, and its line under.
+-- Before a search it reads "Search the auction house". Once the search is
+-- back it buys the cheapest listing on each click (Logic/DisenchantQuickBuy).
+local function Picked()
+    local entry = state.selected
+    if entry and entry.source and entry.kind == "auction" then entry = entry.source end
+    return entry
+end
+
+local function QuickBuyState(entry)
+    local quick = ns.DisenchantQuickBuy
+    if not (quick and entry and entry.kind == "auction") then return nil end
+    return quick:StateFor(entry.itemID), quick
+end
+
+local function UpdateQuickBuy()
+    local detail = widgets.detail
+    if not detail then return end
+    local button, under = detail.searchButton, detail.quickLine
+    local entry = Picked()
+    local phase, quick = QuickBuyState(entry)
+
+    -- A different deal picked lets the last one go, so the key never buys
+    -- something the pane doesn't show.
+    if quick and not phase and quick.current and entry and entry.kind == "auction" then
+        quick:Closed()
+    end
+
+    local text, enabled, confirming, line = L["Search the auction house"], true, false, nil
+    if phase == "ready" or phase == "confirm" then
+        local nextOne = quick:Next()
+        text = phase == "confirm" and L["Confirm"]
+            or L.Format("Buy One for %s", Util.FormatMoney(nextOne.total, { noColor = true }))
+        confirming = phase == "confirm"
+        local more = quick:MoreAfterNext()
+        if more > 0 and quick.current.most then
+            line = L.Format("%d more at %s or less", more, Util.FormatMoney(quick.current.most, { noColor = true }))
+        end
+    elseif phase == "done" then
+        text, enabled = L["No more deals for this item"], false
+        local cur = quick.current
+        if cur.bought > 0 then
+            line = L.Format("Bought %d for %s", cur.bought, Util.FormatMoney(cur.spent, { noColor = true }))
+        end
+    end
+
+    button:SetText(text)
+    -- Its tooltip tells how Search works; a buy needs none.
+    button.tooltipText = phase == nil and L["Finds this item on the auction house. You click Buy yourself."] or nil
+    if button.SetEnabledState then button:SetEnabledState(enabled) end
+    if button.SetConfirming then button:SetConfirming(confirming) end
+    -- Wide enough for the longest of its words, never past the pane.
+    local width = 180
+    if Theme.MeasureText then
+        for _, word in ipairs({ L["Search the auction house"], L["No more deals for this item"], text }) do
+            local ok, measured = pcall(Theme.MeasureText, "small", word)
+            if ok and type(measured) == "number" then width = math.max(width, measured + 24) end
+        end
+    end
+    button:SetWidth(math.min(width, DETAIL_WIDTH - 24))
+    under:SetText(line or "")
+    under:SetShown(line ~= nil and button:IsShown())
+end
+
+--- The button's click: buy the next listing once the search is back, else
+--- search.
+local function AuctionButtonClicked()
+    local entry = Picked()
+    local phase, quick = QuickBuyState(entry)
+    if phase == "ready" or phase == "confirm" then
+        quick:Click()
+    elseif phase ~= "done" then
+        SearchAuctionHouse(entry)
+    end
+    UpdateQuickBuy()
 end
 
 --------------------------------------------------------------------------------
@@ -573,19 +653,27 @@ local function BuildDetail(parent)
     detail.verdict = verdict
 
     local note = Theme.CreateLabel(detail, "tiny", "dim")
-    note:SetPoint("BOTTOMLEFT", 12, 44)
-    note:SetPoint("BOTTOMRIGHT", -12, 44)
+    note:SetPoint("BOTTOMLEFT", 12, 50)
+    note:SetPoint("BOTTOMRIGHT", -12, 50)
     note:SetWordWrap(true)
     note:SetJustifyV("BOTTOM")
     note:SetHeight(60)
     detail.note = note
 
-    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
-        SearchAuctionHouse(state.selected)
-    end, { width = 180, primary = true, height = 24 })
-    searchButton:SetPoint("BOTTOMLEFT", 12, 14)
+    -- Search, then Buy One on each click once the search is back.
+    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], AuctionButtonClicked,
+        { width = 180, primary = true, height = 24 })
+    searchButton:SetPoint("BOTTOMLEFT", 12, 20)
     searchButton.tooltipText = L["Finds this item on the auction house. You click Buy yourself."]
     detail.searchButton = searchButton
+
+    -- Under it: how many more are deals, or how many were bought.
+    local quickLine = Theme.CreateLabel(detail, "tiny", "muted")
+    quickLine:SetPoint("BOTTOMLEFT", 12, 5)
+    quickLine:SetPoint("BOTTOMRIGHT", -12, 5)
+    quickLine:SetWordWrap(false)
+    quickLine:Hide()
+    detail.quickLine = quickLine
 
     -- Disenchant, for an item in the bags. The click itself is taken by the
     -- secure button UI/Disenchanter.lua lays over this one; this handler
@@ -921,6 +1009,7 @@ local function UpdateDetail(entry)
     end
 
     detail.searchButton:SetShown(shown and not isBag and not own)
+    UpdateQuickBuy()
     detail.actionButton:Hide()
 
     -- Hiding the button takes the secure button away with it.
@@ -1595,6 +1684,13 @@ local function Build(container)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+
+    -- Buy One redraws only the button and its line, and only when shown.
+    if ns.DisenchantQuickBuy then
+        ns.DisenchantQuickBuy.onChange = function()
+            if detail:IsVisible() then UpdateQuickBuy() end
+        end
+    end
 
     ApplyView()
     UpdateDetail(nil)

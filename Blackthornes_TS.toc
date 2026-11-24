@@ -151,6 +151,7 @@ UI\ShoppingListsView.lua
 UI\AuctionWheel.lua
 UI\SaleTotal.lua
 Logic\Snipe.lua
+Logic\DisenchantQuickBuy.lua
 UI\PostPanel.lua
 UI\PostConfirm.lua
 UI\HiddenItemsWindow.lua

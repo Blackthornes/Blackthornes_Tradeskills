@@ -1136,6 +1136,8 @@ _G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = L["Disenchant the
 -- The Snipe key buys the top find, as a click on its gold button does. A key
 -- press counts as the player's own action, so the buy goes through.
 _G.BINDING_NAME_BLACKTHORNESTS_SNIPEBUY = L["Snipe: Buy Top"]
+-- Buy One on the Disenchanting tab, as a click on its button does.
+_G.BINDING_NAME_BLACKTHORNESTS_DEBUYNEXT = L["Disenchanting: Buy Next"]
 
 function UI:Toggle()
     self:Build()

@@ -1,0 +1,370 @@
+-- Blackthornes Tradeskills -- Logic/DisenchantQuickBuy.lua
+-- Buy One on the Disenchanting tab's side pane (the owner said build it,
+-- 2026-11-24, from a mockup). Buying a pile of one deal took Buyout and
+-- Accept for every listing. Now, once "Search the auction house" has sent
+-- its search, the same button buys the cheapest listing on each click, with
+-- no Accept pop-up, and readies the next one.
+--
+-- The game lets an addon buy only inside the player's own click or key
+-- press, one listing at a time, so: one PlaceBid per click, never a loop or
+-- a timer that buys. Snipe buys the same way (Logic/Snipe.lua AskItem,
+-- ItemResults, Pay); this is that path cut down to one item, with the
+-- Disenchanting minimums as the limit instead of Snipe's settings, so the
+-- Snipe tab need not be on.
+--
+-- What holds:
+--   * Only listings at or under the highest price that still meets the
+--     Disenchanting minimums (MostToPay). Your own listings are skipped.
+--   * A buy at or over Double Check Over (snipeConfirmOver, Snipe's own
+--     setting, 10g unless changed) asks for a second click (Confirm).
+--   * Each buy is marked to disenchant (DisenchantBuys:Intend); AHBuys
+--     records the PlaceBid itself.
+--   * One search when the player clicks Search, and none after. The list is
+--     read again only when the game sends its own update, so selling at the
+--     auction house is never held up.
+
+local _, ns = ...
+
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
+local QuickBuy = ns.NewModule("DisenchantQuickBuy")
+
+local Util = ns.Util
+
+-- Seconds a buy may wait on the game's answer before it is let go.
+QuickBuy.BUY_WAIT = 15
+-- Seconds the second click (Confirm) stays armed.
+QuickBuy.CONFIRM_FOR = 5
+-- Seconds the item search may wait in the queue.
+QuickBuy.QUOTE_WAIT = 10
+-- Double Check Over when Snipe isn't loaded (10g).
+QuickBuy.CONFIRM_OVER = 100000
+
+-- The item being bought, or nil:
+-- { itemID, key, most, phase = "asking" | "ready" | "done", listings,
+--   tried = { [auctionID] = true }, bought, spent, pending, armed }
+QuickBuy.current = nil
+QuickBuy.version = 0
+-- Called with no arguments when what the button shows has changed.
+QuickBuy.onChange = nil
+
+local function Now() return (GetTime and GetTime()) or 0 end
+
+local function After(seconds, fn)
+    if C_Timer and C_Timer.After then C_Timer.After(seconds, fn) end
+end
+
+local function Moved()
+    QuickBuy.version = QuickBuy.version + 1
+    if QuickBuy.onChange then pcall(QuickBuy.onChange) end
+end
+
+--------------------------------------------------------------------------
+-- The price limit
+--------------------------------------------------------------------------
+
+--- Does buying at `price` meet the minimums? The same test the tab's list
+--- uses (Disenchant:AuctionRow): profit over 0, at least minProfit, and a
+--- margin (profit over price) of at least minMargin percent.
+function QuickBuy.Clears(price, net, minProfit, minMarginPercent)
+    if type(price) ~= "number" or price <= 0 or type(net) ~= "number" then return false end
+    local gain = net - price
+    return gain > 0 and gain >= (minProfit or 0) and gain / price >= (minMarginPercent or 0) / 100
+end
+
+--- The highest price in copper that still meets the minimums, or nil.
+function QuickBuy.MostToPay(net, minProfit, minMarginPercent)
+    if type(net) ~= "number" or net <= 1 then return nil end
+    local most = net - math.max(1, minProfit or 0)
+    local margin = (minMarginPercent or 0) / 100
+    if margin > 0 then most = math.min(most, math.floor(net / (1 + margin))) end
+    most = math.floor(most)
+    -- Rounding can leave it a copper over; step down until it clears.
+    while most > 0 and not QuickBuy.Clears(most, net, minProfit, minMarginPercent) do most = most - 1 end
+    return most > 0 and most or nil
+end
+
+local function Minimums()
+    if ns.Profit and ns.Profit.DisenchantMinimums then
+        local ok, profit, margin = pcall(ns.Profit.DisenchantMinimums, ns.Profit)
+        if ok and profit then return profit, margin or 0 end
+    end
+    local ok, profit, margin = pcall(function()
+        return ns.Config:Get("minProfit"), ns.Config:Get("minMarginPercent")
+    end)
+    if ok then return profit or 0, margin or 0 end
+    return 0, 0
+end
+
+--- Double Check Over: Snipe's setting, read the same way.
+function QuickBuy:ConfirmOver()
+    if ns.Snipe and ns.Snipe.ConfirmOver then
+        local ok, over = pcall(ns.Snipe.ConfirmOver, ns.Snipe)
+        if ok and type(over) == "number" then return over end
+    end
+    local ok, over = pcall(function() return ns.Config:Get("snipeConfirmOver") end)
+    over = ok and tonumber(over) or self.CONFIRM_OVER
+    return math.max(0, math.floor(over))
+end
+
+--------------------------------------------------------------------------
+-- Asking for the listings
+--------------------------------------------------------------------------
+
+local function PriceSort()
+    local enum = Enum and Enum.AuctionHouseSortOrder
+    local price = enum and enum.Price or 0
+    return { { sortOrder = price, reverseSort = false } }
+end
+
+--- Is this item the one being bought?
+function QuickBuy:IsFor(itemID)
+    local cur = self.current
+    return cur ~= nil and itemID ~= nil and cur.itemID == itemID
+end
+
+--- Ask the auction house for this deal's listings, cheapest first. Called
+--- right after the Search button's own search. `entry` is the tab's row
+--- (itemID, net). Nothing is bought here.
+function QuickBuy:Start(entry)
+    if not (entry and entry.itemID) then return false end
+    local q = ns.AHQueue
+    if not (Util.HasFunction("C_AuctionHouse.MakeItemKey")
+        and Util.HasFunction("C_AuctionHouse.SendSearchQuery") and q and q.Request) then
+        return false
+    end
+    local ok, key = pcall(C_AuctionHouse.MakeItemKey, entry.itemID)
+    if not (ok and key) then return false end
+    local minProfit, minMargin = Minimums()
+    local mine = {
+        itemID = entry.itemID, key = key, net = entry.net,
+        minProfit = minProfit, minMargin = minMargin,
+        most = QuickBuy.MostToPay(entry.net, minProfit, minMargin),
+        phase = "asking", listings = {}, tried = {}, bought = 0, spent = 0,
+    }
+    self.current = mine
+    Moved()
+    q:Request({
+        name = "disenchanting buy one",
+        key = "de-quickbuy",
+        priority = q.PRIORITY and q.PRIORITY.urgent or 10,
+        expires = self.QUOTE_WAIT,
+        send = function()
+            if QuickBuy.current ~= mine then return false end
+            local sent = pcall(C_AuctionHouse.SendSearchQuery, key, PriceSort(), true)
+            if sent then mine.sent = Now() end
+            return sent
+        end,
+        onGiveUp = function()
+            -- Busy: the button goes back to Search for another try.
+            if QuickBuy.current == mine and mine.phase == "asking" then
+                QuickBuy.current = nil
+                Moved()
+            end
+        end,
+    })
+    return true
+end
+
+--- Read the listings the game holds for the item, cheapest first: someone
+--- else's, priced at or under the limit, and not tried on this run.
+function QuickBuy:Read()
+    local cur = self.current
+    if not cur then return end
+    if not (Util.HasFunction("C_AuctionHouse.GetNumItemSearchResults")
+        and Util.HasFunction("C_AuctionHouse.GetItemSearchResultInfo")) then return end
+    local okN, count = pcall(C_AuctionHouse.GetNumItemSearchResults, cur.key)
+    if not (okN and type(count) == "number") then return end
+    local listings = {}
+    for i = 1, count do
+        local ok, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, cur.key, i)
+        if ok and type(info) == "table" and info.auctionID and not info.containsOwnerItem
+            and not cur.tried[info.auctionID] then
+            local buyout, qty = info.buyoutAmount, info.quantity or 1
+            if type(buyout) == "number" and buyout > 0 and qty > 0
+                and cur.most and buyout / qty <= cur.most then
+                listings[#listings + 1] = { auctionID = info.auctionID, total = buyout }
+            end
+        end
+    end
+    table.sort(listings, function(a, b)
+        if a.total ~= b.total then return a.total < b.total end
+        return a.auctionID < b.auctionID
+    end)
+    cur.listings = listings
+    cur.phase = #listings > 0 and "ready" or "done"
+    if cur.armed and (not listings[1] or listings[1].auctionID ~= cur.armed) then cur.armed = nil end
+    Moved()
+end
+
+--- The game's item listings changed: read them again if they are ours.
+function QuickBuy:OnResults(itemKey)
+    local cur = self.current
+    if not (cur and cur.sent) then return end
+    local named = type(itemKey) == "table" and itemKey.itemID or nil
+    if named and named ~= cur.itemID then return end
+    self:Read()
+end
+
+--------------------------------------------------------------------------
+-- What the button shows
+--------------------------------------------------------------------------
+
+--- The cheapest listing still to buy, or nil.
+function QuickBuy:Next()
+    local cur = self.current
+    if not cur then return nil end
+    for _, listing in ipairs(cur.listings) do
+        if not cur.tried[listing.auctionID] then return listing end
+    end
+    return nil
+end
+
+--- How many listings are left after the next one.
+function QuickBuy:MoreAfterNext()
+    local cur = self.current
+    if not cur then return 0 end
+    local left = 0
+    for _, listing in ipairs(cur.listings) do
+        if not cur.tried[listing.auctionID] then left = left + 1 end
+    end
+    return math.max(0, left - 1)
+end
+
+--- What the button is for this item: nil (Search), "asking", "ready",
+--- "confirm" or "done".
+function QuickBuy:StateFor(itemID)
+    if not self:IsFor(itemID) then return nil end
+    local cur = self.current
+    if cur.phase == "asking" then return "asking" end
+    local nextOne = self:Next()
+    if not nextOne then return "done" end
+    if cur.armed == nextOne.auctionID then return "confirm" end
+    return "ready"
+end
+
+--------------------------------------------------------------------------
+-- Buying
+--------------------------------------------------------------------------
+
+--- The player's click (or the Disenchanting: Buy Next key): buy the
+--- cheapest listing, one PlaceBid. Returns true when a buy was sent,
+--- "confirm" when it waits for a second click, else false.
+function QuickBuy:Click()
+    local cur = self.current
+    if not (cur and cur.phase == "ready") or cur.pending then return false end
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+    local listing = self:Next()
+    if not listing then
+        cur.phase = "done"
+        Moved()
+        return false
+    end
+
+    if type(GetMoney) == "function" then
+        local ok, money = pcall(GetMoney)
+        if ok and type(money) == "number" and money < listing.total then
+            ns.Print(L.Format("You need %s for that.", Util.FormatMoney(listing.total, { noColor = true })))
+            return false
+        end
+    end
+
+    if listing.total >= self:ConfirmOver() and cur.armed ~= listing.auctionID then
+        cur.armed = listing.auctionID
+        Moved()
+        After(self.CONFIRM_FOR, function()
+            if QuickBuy.current == cur and cur.armed == listing.auctionID then
+                cur.armed = nil
+                Moved()
+            end
+        end)
+        return "confirm"
+    end
+
+    if ns.DisenchantBuys and ns.DisenchantBuys.Intend then
+        pcall(ns.DisenchantBuys.Intend, ns.DisenchantBuys, cur.itemID)
+    end
+
+    local moneyBefore
+    if type(GetMoney) == "function" then
+        local ok, money = pcall(GetMoney)
+        if ok then moneyBefore = money end
+    end
+    local ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
+        and pcall(C_AuctionHouse.PlaceBid, listing.auctionID, listing.total)
+    cur.armed = nil
+    -- Tried either way: a listing the game refused is not offered again.
+    cur.tried[listing.auctionID] = true
+    if not ok then
+        ns.Print(L["That buy didn't go through. Try it again."])
+        if not self:Next() then cur.phase = "done" end
+        Moved()
+        return false
+    end
+
+    local pending = { auctionID = listing.auctionID, total = listing.total, moneyBefore = moneyBefore }
+    cur.pending = pending
+    Moved()
+    After(self.BUY_WAIT, function()
+        if QuickBuy.current == cur and cur.pending == pending then
+            cur.pending = nil
+            if not QuickBuy:Next() then cur.phase = "done" end
+            Moved()
+        end
+    end)
+    return true
+end
+
+--- The buy went through.
+function QuickBuy:Bought(auctionID)
+    local cur = self.current
+    local pending = cur and cur.pending
+    if not pending then return end
+    -- Another buy (the game's own window, Snipe) finished, not this one.
+    if auctionID ~= nil and auctionID ~= pending.auctionID then return end
+    cur.pending = nil
+    cur.bought = cur.bought + 1
+    cur.spent = cur.spent + pending.total
+    if not self:Next() then cur.phase = "done" end
+    Moved()
+end
+
+--- An item buy went through when the money left the purse.
+function QuickBuy:MoneyMoved()
+    local cur = self.current
+    local pending = cur and cur.pending
+    if not (pending and pending.moneyBefore) or type(GetMoney) ~= "function" then return end
+    local ok, money = pcall(GetMoney)
+    if ok and type(money) == "number" and pending.moneyBefore - money >= pending.total then
+        self:Bought()
+    end
+end
+
+--- The game said no (gone already, or not enough money): move on.
+function QuickBuy:BuyError()
+    local cur = self.current
+    if not (cur and cur.pending) then return end
+    cur.pending = nil
+    if not self:Next() then cur.phase = "done" end
+    Moved()
+end
+
+function QuickBuy:Closed()
+    if self.current then
+        self.current = nil
+        Moved()
+    end
+end
+
+--- The key binding: the same as a click on the button.
+function QuickBuy:BuyNext()
+    return self:Click()
+end
+
+function QuickBuy:Init()
+    ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) QuickBuy:OnResults(itemKey) end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function(_, _, auctionID) QuickBuy:Bought(auctionID) end)
+    ns.RegisterEvent(self, "PLAYER_MONEY", function() QuickBuy:MoneyMoved() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_ERROR", function() QuickBuy:BuyError() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() QuickBuy:Closed() end)
+end

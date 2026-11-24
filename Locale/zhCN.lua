@@ -3914,3 +3914,10 @@ L["Nothing you can make here is an upgrade right now."] = "你在这里能做的
 L["Tradeskills Settings:"] = "Tradeskills 设置："
 L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."] = "把 Tradeskills 的每个设置恢复到最初的样子。 你的价格、队列、销售和配方都会保留。 你的窗口位置和这一页的选择也会保留。"
 L["Every Tradeskills setting is back to how it started."] = "Tradeskills 的所有设置都已恢复到最初的样子。"
+
+-- Disenchanting tab: Buy One (2026-11-24)
+L["Buy One for %s"] = "花 %s 买一件"
+L["%d more at %s or less"] = "还有 %d 件，价格不超过 %s"
+L["No more deals for this item"] = "这件物品没有更划算的了"
+L["Bought %d for %s"] = "共买了 %d 件，花了 %s"
+L["Disenchanting: Buy Next"] = "分解：买下一件"

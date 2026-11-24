@@ -427,11 +427,12 @@ CreateFrame = function() return Stub() end
 C_Timer = { After = function() end }
 GameTooltip = Stub()
 
+local panels = {}
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
     SetItemNameColor = function() return false end,
     CreateLabel = function() return Label() end,
-    CreatePanel = function() return Stub() end,
+    CreatePanel = function() local panel = Stub(); panels[#panels + 1] = panel; return panel end,
     CreateDivider = function() return Stub() end,
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
@@ -441,13 +442,23 @@ ns.Theme = {
     CreateHeading = function() return Stub() end,
 }
 
-local checkboxes, lists = {}, {}
+local checkboxes, lists, buttons = {}, {}, {}
 ns.Widgets = {
     CreateTabStrip = function() return Stub() end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function() return Stub() end,
     CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,
-    CreateButton = function() return Stub() end,
+    CreateButton = function(_, text, onClick)
+        local button = Stub({
+            text = text, onClick = onClick, enabled = true,
+            SetText = function(self, value) self.text = value end,
+            SetEnabledState = function(self, on) self.enabled = on end,
+            SetConfirming = function(self, on) self.confirming = on end,
+            IsShown = function() return true end,
+        })
+        buttons[text] = button
+        return button
+    end,
     ShowItemTooltip = function() return true end,
     CreateScrollList = function(_, opts)
         local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
@@ -577,6 +588,67 @@ for _, fn in ipairs(later) do fn() end
 check("closing the auction house rebuilds the list", Disenchant.rowBuilds == builds + 1)
 ns.Scanner.isAuctionHouseOpen = true
 C_Timer.After = function() end
+
+-- Buy One (2026-11-24): after Search, the same button buys the cheapest
+-- listing on each click, up to the highest price that meets the minimums.
+print("\nBuy One")
+
+local bids, requests = {}, {}
+local listings = {}
+local savedMoney = GetMoney
+GetMoney = function() return 1000000 end
+C_AuctionHouse = {
+    MakeItemKey = function(id) return { itemID = id } end,
+    SendSearchQuery = function() return true end,
+    GetNumItemSearchResults = function() return #listings end,
+    GetItemSearchResultInfo = function(_, i) return listings[i] end,
+    PlaceBid = function(id, total) bids[#bids + 1] = { id, total } end,
+}
+ns.AHQueue = { PRIORITY = { urgent = 10 }, Request = function(_, r) requests[r.key] = r; return true end }
+ns.DisenchantBuys = { Intend = function() end }
+assert(loadfile(lfs_cwd .. "/Logic/DisenchantQuickBuy.lua"))("Blackthornes_TS", ns)
+local Quick = ns.DisenchantQuickBuy
+Quick:Init()
+-- The tab hooked its redraw when it was built, before the module loaded here.
+tab.build(Stub())
+tab.refresh()
+list = lists[#lists]
+local detail
+for _, panel in ipairs(panels) do if rawget(panel, "quickLine") then detail = panel end end
+local button = detail.searchButton
+local chest = Find(list.data, 2001)
+list.opts.onClick(chest, nil, "LeftButton")
+check("before a search the button searches", button.text == "Search the auction house")
+
+local most = Quick.MostToPay(chest.net, Disenchant:AuctionContext().minProfit, config.minMarginPercent or 0)
+listings = {
+    { auctionID = 11, buyoutAmount = chest.buy, quantity = 1 },
+    { auctionID = 12, buyoutAmount = chest.buy + 2, quantity = 1 },
+    { auctionID = 13, buyoutAmount = chest.buy, quantity = 1, containsOwnerItem = true },
+    { auctionID = 14, buyoutAmount = most + 1, quantity = 1 },
+}
+sent = {}
+button.onClick()
+check("a click searches first", sent[#sent] == "item2001" and #bids == 0)
+requests["de-quickbuy"].send()
+for _, fn in ipairs(handlers.ITEM_SEARCH_RESULTS_UPDATED) do fn(nil, nil, { itemID = 2001 }) end
+check("then it reads Buy One for the cheapest", button.text == "Buy One for " .. ns.Util.FormatMoney(chest.buy, { noColor = true }))
+check("with how many more under it", detail.quickLine.text:find("1 more at", 1, true) ~= nil and detail.quickLine.shown)
+button.onClick()
+check("a click buys the cheapest, once", #bids == 1 and bids[1][1] == 11 and bids[1][2] == chest.buy)
+for _, fn in ipairs(handlers.AUCTION_HOUSE_PURCHASE_COMPLETED) do fn(nil, nil, 11) end
+check("and readies the next", button.text == "Buy One for " .. ns.Util.FormatMoney(chest.buy + 2, { noColor = true }))
+button.onClick()
+for _, fn in ipairs(handlers.AUCTION_HOUSE_PURCHASE_COMPLETED) do fn(nil, nil, 12) end
+check("own listings and ones over the limit are never bought", #bids == 2 and bids[2][1] == 12)
+check("done: the button says so and can't be clicked",
+    button.text == "No more deals for this item" and button.enabled == false)
+check("and the line says what was bought", detail.quickLine.text:find("Bought 2 for", 1, true) ~= nil)
+button.onClick()
+check("a click when done buys nothing", #bids == 2)
+list.opts.onClick(Find(list.data, 2003), nil, "LeftButton")
+check("another deal picked goes back to Search", button.text == "Search the auction house" and Quick.current == nil)
+C_AuctionHouse, ns.AHQueue, ns.DisenchantBuys, GetMoney = nil, nil, nil, savedMoney
 
 ns.Scanner.isAuctionHouseOpen = false
 printed = {}
