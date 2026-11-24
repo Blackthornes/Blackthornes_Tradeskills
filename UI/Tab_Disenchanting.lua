@@ -1030,6 +1030,11 @@ local function DrawView(detail, entry, breakdown)
     PlaceSwitch(detail, on)
 
     local view = on and state.salvagerView or "plain"
+
+    -- Side by Side has its own value lines, and its list runs down into the
+    -- summary's place (seen in game 2026-11-24: the compare line sat on top
+    -- of Disenchant value and Sells for), so the summary steps aside.
+    detail.summary:SetShown(view ~= "side")
     if view == "plain" then
         DrawOutcomes(detail, breakdown)
         return nil
