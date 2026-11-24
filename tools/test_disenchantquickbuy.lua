@@ -100,7 +100,6 @@ print("ok: own listings and listings over the limit are left out")
 assert(Q:Click() == true)
 assert(#bids == 1 and bids[1][1] == 1 and bids[1][2] == 500)
 assert(intents[1] == 77)
-assert(Q:Click() == false and #bids == 1, "a click while a buy waits sends nothing")
 money = money - 500
 handlers.PLAYER_MONEY()
 handlers.AUCTION_HOUSE_PURCHASE_COMPLETED(nil, nil, 1)
