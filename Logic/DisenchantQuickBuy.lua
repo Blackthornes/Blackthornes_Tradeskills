@@ -46,7 +46,8 @@ QuickBuy.CONFIRM_OVER = 100000
 
 -- The item being bought, or nil:
 -- { itemID, key, most, phase = "asking" | "ready" | "done", listings,
---   tried = { [auctionID] = true }, bought, spent, pending, armed }
+--   tried = { [auctionID] = true }, bought, spent, armed,
+--   waiting = { buys sent, no answer yet }, moneyStart, paid }
 QuickBuy.current = nil
 QuickBuy.version = 0
 -- Called with no arguments when what the button shows has changed.
@@ -298,12 +299,33 @@ end
 -- Buying
 --------------------------------------------------------------------------
 
+--- Is the game's auction channel free to take a buy right now? A buy sent
+--- while it is busy is dropped by the game with no answer at all.
+local function ChannelReady()
+    if not Util.HasFunction("C_AuctionHouse.IsThrottledMessageSystemReady") then return true end
+    local ok, ready = pcall(C_AuctionHouse.IsThrottledMessageSystemReady)
+    return not ok or ready ~= false
+end
+
+local function ReadMoney()
+    if type(GetMoney) ~= "function" then return nil end
+    local ok, money = pcall(GetMoney)
+    if ok and type(money) == "number" then return money end
+    return nil
+end
+
 --- The player's click (or the Disenchanting: Buy Next key): buy the
 --- cheapest listing, one PlaceBid. Returns true when a buy was sent,
---- "confirm" when it waits for a second click, else false.
+--- "confirm" when it waits for a second click, "busy" when the game's
+--- channel was busy (nothing sent, the same listing stays next), else false.
+---
+--- A buy sent is not waited on (seen in game 2026-11-24: the button sat
+--- for about 15 seconds after each buy while it waited on the game's
+--- answer). The next click buys the next listing at once; the game's
+--- answers only keep the count of what was bought.
 function QuickBuy:Click()
     local cur = self.current
-    if not (cur and cur.phase == "ready") or cur.pending then return false end
+    if not (cur and cur.phase == "ready") then return false end
     if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
     local listing = self:Next()
     if not listing then
@@ -312,12 +334,10 @@ function QuickBuy:Click()
         return false
     end
 
-    if type(GetMoney) == "function" then
-        local ok, money = pcall(GetMoney)
-        if ok and type(money) == "number" and money < listing.total then
-            ns.Print(L.Format("You need %s for that.", Util.FormatMoney(listing.total, { noColor = true })))
-            return false
-        end
+    local money = ReadMoney()
+    if money and money < listing.total then
+        ns.Print(L.Format("You need %s for that.", Util.FormatMoney(listing.total, { noColor = true })))
+        return false
     end
 
     if listing.total >= self:ConfirmOver() and cur.armed ~= listing.auctionID then
@@ -332,75 +352,109 @@ function QuickBuy:Click()
         return "confirm"
     end
 
+    if not ChannelReady() then
+        if ns.Debug then ns.Debug("Buy One: the auction house is busy, click again") end
+        return "busy"
+    end
+
     if ns.DisenchantBuys and ns.DisenchantBuys.Intend then
         pcall(ns.DisenchantBuys.Intend, ns.DisenchantBuys, cur.itemID)
     end
 
-    local moneyBefore
-    if type(GetMoney) == "function" then
-        local ok, money = pcall(GetMoney)
-        if ok then moneyBefore = money end
-    end
-    -- Marked as waiting before PlaceBid: the game can take the money (and
-    -- send PLAYER_MONEY) inside the call itself, and a buy marked after it
-    -- missed that and held the button for BUY_WAIT seconds.
-    local pending = { auctionID = listing.auctionID, total = listing.total, moneyBefore = moneyBefore }
-    cur.pending = pending
+    -- Noted before PlaceBid: the game can take the money (and send
+    -- PLAYER_MONEY) inside the call itself.
+    cur.waiting = cur.waiting or {}
+    cur.paid = cur.paid or 0
+    if money and not cur.moneyStart then cur.moneyStart = money end
+    local buy = { auctionID = listing.auctionID, total = listing.total, at = Now() }
+    cur.waiting[#cur.waiting + 1] = buy
     cur.armed = nil
     -- Tried either way: a listing the game refused is not offered again.
     cur.tried[listing.auctionID] = true
     local ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
         and pcall(C_AuctionHouse.PlaceBid, listing.auctionID, listing.total)
     if not ok then
-        if cur.pending == pending then cur.pending = nil end
+        self:Forget(buy)
         ns.Print(L["That buy didn't go through. Try it again."])
         if not self:Next() then cur.phase = "done" end
         Moved()
         return false
     end
+    if ns.Debug then ns.Debug("Buy One: sent", listing.auctionID, listing.total) end
 
+    if not self:Next() then cur.phase = "done" end
     Moved()
+    -- No answer in time: stop waiting on it (the count only).
     After(self.BUY_WAIT, function()
-        if QuickBuy.current == cur and cur.pending == pending then
-            cur.pending = nil
-            if not QuickBuy:Next() then cur.phase = "done" end
-            Moved()
-        end
+        if QuickBuy.current == cur then QuickBuy:Forget(buy) end
     end)
     return true
 end
 
---- The buy went through.
+--- Stop waiting on a buy; true when it was still waited on.
+function QuickBuy:Forget(buy)
+    local cur = self.current
+    if not (cur and cur.waiting) then return false end
+    for i, waiting in ipairs(cur.waiting) do
+        if waiting == buy then
+            table.remove(cur.waiting, i)
+            return true
+        end
+    end
+    return false
+end
+
+local function Count(cur, buy)
+    cur.bought = cur.bought + 1
+    cur.spent = cur.spent + buy.total
+    cur.paid = (cur.paid or 0) + buy.total
+end
+
+--- The buy went through. An event that names no auction counts the oldest.
 function QuickBuy:Bought(auctionID)
     local cur = self.current
-    local pending = cur and cur.pending
-    if not pending then return end
-    -- Another buy (the game's own window, Snipe) finished, not this one.
-    -- An event that names no auction (or not a number) counts as ours.
-    if type(auctionID) == "number" and auctionID ~= pending.auctionID then return end
-    cur.pending = nil
-    cur.bought = cur.bought + 1
-    cur.spent = cur.spent + pending.total
+    if not (cur and cur.waiting and cur.waiting[1]) then return end
+    local index
+    if type(auctionID) == "number" then
+        for i, buy in ipairs(cur.waiting) do
+            if buy.auctionID == auctionID then index = i; break end
+        end
+        -- Another buy (the game's own window, Snipe) finished, not ours.
+        if not index then return end
+    else
+        index = 1
+    end
+    local buy = table.remove(cur.waiting, index)
+    Count(cur, buy)
+    if ns.Debug then ns.Debug("Buy One: bought", buy.auctionID) end
     if not self:Next() then cur.phase = "done" end
     Moved()
 end
 
---- An item buy went through when the money left the purse.
+--- Money left the purse: count the waiting buys it covers, oldest first.
 function QuickBuy:MoneyMoved()
     local cur = self.current
-    local pending = cur and cur.pending
-    if not (pending and pending.moneyBefore) or type(GetMoney) ~= "function" then return end
-    local ok, money = pcall(GetMoney)
-    if ok and type(money) == "number" and pending.moneyBefore - money >= pending.total then
-        self:Bought()
+    if not (cur and cur.waiting and cur.waiting[1] and cur.moneyStart) then return end
+    local money = ReadMoney()
+    if not money then return end
+    local gone = cur.moneyStart - money
+    local counted = false
+    while cur.waiting[1] and (cur.paid or 0) + cur.waiting[1].total <= gone do
+        Count(cur, table.remove(cur.waiting, 1))
+        counted = true
+    end
+    if counted then
+        if not self:Next() then cur.phase = "done" end
+        Moved()
     end
 end
 
---- The game said no (gone already, or not enough money): move on.
+--- The game said no (gone already, or not enough money): the oldest buy
+--- waited on failed. The next listing is already offered.
 function QuickBuy:BuyError()
     local cur = self.current
-    if not (cur and cur.pending) then return end
-    cur.pending = nil
+    if not (cur and cur.waiting and cur.waiting[1]) then return end
+    table.remove(cur.waiting, 1)
     if not self:Next() then cur.phase = "done" end
     Moved()
 end
