@@ -629,7 +629,12 @@ end
 function Prices:NoteBought(itemID, unitPrice, quantity, askedAt)
     local record = itemID and self:GetTable()[itemID]
     if type(record) ~= "table" then return false end
-    if askedAt and (record.seen or 0) > askedAt then return false end
+    -- Only a whole book read after the buy is known to leave it out. A
+    -- browse row read after it can still carry the listing just bought: on
+    -- Forever it is read again between the click and the client's answer,
+    -- at the old price (2026-11-24), and taking that as the newer word kept
+    -- a sold out price on the Disenchanting tab.
+    if askedAt and (record.ladderAt or 0) > askedAt then return false end
 
     quantity = math.max(1, math.floor(tonumber(quantity) or 1))
     local paid = tonumber(unitPrice)

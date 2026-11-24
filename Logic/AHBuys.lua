@@ -327,6 +327,10 @@ function AHBuys:Confirm(auctionID)
         if ok and changed and ns.Scanner and ns.Scanner.ForgetPassive then
             ns.Scanner:ForgetPassive(wait.itemID)
         end
+        -- But not the browse row that still shows the one just bought.
+        if ns.Scanner and ns.Scanner.NoteBought then
+            pcall(ns.Scanner.NoteBought, ns.Scanner, wait.itemID, unit)
+        end
     end
     self:Record(wait.itemID, wait.quantity)
     -- Bought after a search from the Disenchanting tab: marked to disenchant.
