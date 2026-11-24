@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.42.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Restore Defaults.** The All Addons page in Settings has a Set Default button under Window Locations. After you click Confirm, it puts this addon's settings back to how they started.
+
 ## 1.41.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
