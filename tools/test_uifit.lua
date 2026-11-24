@@ -262,7 +262,8 @@ ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = noop, noop, noop, noop
 
 ns.db = { global = {}, characters = {}, prices = {}, postLimits = {} }
 ns.Config = {
-    DEFAULTS = { settings = { undercutCopper = 1, postPanelCollapsed = false, craftPaneCollapsed = false } },
+    DEFAULTS = { settings = { undercutCopper = 1, postPanelCollapsed = false, craftPaneCollapsed = false,
+        textSize = "normal", windowEffects = "full", goldTrackerX = 0, disenchanterName = "" } },
     Get = function(_, key) return settings[key] end,
     Set = function(_, key, value) settings[key] = value end,
     GetRealmKey = function() return "Forever" end,
@@ -1099,10 +1100,26 @@ check("no Recipes to Learn button (the tab is one click away)", RowButton("Recip
 check("no Stats button", RowButton("Stats:"), nil)
 check("no Tracker Place button: Window Spots does it", RowButton("Tracker Place:"), nil)
 check("no Gold Tracker Place button", RowButton("Gold Tracker Place:"), nil)
-check("Window Spots is still offered", RowButton("Window Spots:") ~= nil, true)
+check("Window Spots is still offered", RowButton("Window Locations:") ~= nil, true)
 check("Road to 300 is still offered", RowButton("Road to 300:") ~= nil, true)
-check("What's New sits on All Addons, with Window Spots", Holder(RowButton("What's New:")) == Holder(RowButton("Window Spots:")), true)
+check("What's New sits on All Addons, with Window Spots", Holder(RowButton("What's New:")) == Holder(RowButton("Window Locations:")), true)
 check("Road to 300 stays on About", Holder(RowButton("Road to 300:")) ~= Holder(RowButton("What's New:")), true)
+
+-- Tradeskills Settings: Set Default (the owner said build it, 2026-11-23).
+do
+    local restore = RowButton("Tradeskills Settings:")
+    check("Set Default for every setting is offered", restore ~= nil, true)
+    check("on All Addons, under Window Locations", Holder(restore) == Holder(RowButton("Window Locations:")), true)
+    local resets, real = 0, UI.ResetSettings
+    UI.ResetSettings = function() resets = resets + 1 end
+    restore:GetScript("OnClick")(restore, "LeftButton")
+    check("the first click says Confirm", restore.label.text, "Confirm")
+    check("and resets nothing yet", resets, 0)
+    restore:GetScript("OnClick")(restore, "LeftButton")
+    check("the second click resets the settings", resets, 1)
+    check("and the button says Set Default again", restore.label.text, "Set Default")
+    UI.ResetSettings = real
+end
 
 --- The box on the row whose label says `text`.
 local function RowDropdown(text)
@@ -1224,8 +1241,16 @@ ns.PostPanel = {
 }
 check("the sell list starts folded", sellBody.shown, false)
 
+settings.textSize, settings.windowEffects = "large", "off"
+settings.goldTrackerX, settings.disenchanterName = 55, "Someone Else"
+settings.tsmPriceSource, settings.undercutCopper = "dbmarket", 987654
 UI:ResetSettings()
 check("Reset to defaults opens the folded sell list", sellBody.shown, true)
+check("Reset puts a setting back", settings.undercutCopper, 1)
+check("and one with no default", settings.tsmPriceSource, nil)
+check("Reset keeps the choices every addon shares", settings.textSize == "large" and settings.windowEffects == "off", true)
+check("Reset keeps a small window's spot", settings.goldTrackerX, 55)
+check("Reset keeps the disenchanter picked", settings.disenchanterName, "Someone Else")
 check("whose button turns back to a minus", sellButton.glyph.stem.shown, false)
 check("measures it again", calls.height, 1)
 check("and redraws it", calls.panel, 1)

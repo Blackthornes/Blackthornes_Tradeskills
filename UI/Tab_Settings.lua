@@ -1937,13 +1937,48 @@ local function Build(outer)
     widgets.craftPaneBeside:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
-    local windowPlacesRow = CreateRow(pages.all, 1, L["Window Spots:"],
+    local windowPlacesRow = CreateRow(pages.all, 1, L["Window Locations:"],
         L["Puts every Blackthornes window back where it started. Your settings and data stay the same."])
     local windowPlaces = Widgets.CreateButton(windowPlacesRow, L["Set Default"], function()
         UI:ResetAllWindows()
     end, { width = 60, height = 20 })
     windowPlaces:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(windowPlaces)
+
+    -- Tradeskills Settings: Set Default (the owner said build it,
+    -- 2026-11-23): a red Confirm first, then every setting back.
+    local restoreRow = CreateRow(pages.all, 1, L["Tradeskills Settings:"],
+        L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."])
+    local restore
+    restore = Widgets.CreateButton(restoreRow, L["Set Default"], function()
+        local now = GetTime and GetTime() or 0
+        if restore.armedUntil and now <= restore.armedUntil then
+            restore.armedUntil = nil
+            restore:SetText(L["Set Default"])
+            if restore.SetConfirming then restore:SetConfirming(false) end
+            UI:ResetSettings()
+            return
+        end
+        restore.armedUntil = now + UI.RESTORE_CONFIRM_SECONDS
+        restore:SetText(L["Confirm"])
+        if restore.SetConfirming then restore:SetConfirming(true) end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(UI.RESTORE_CONFIRM_SECONDS, function()
+                if restore.armedUntil and (GetTime and GetTime() or 0) >= restore.armedUntil then
+                    restore.armedUntil = nil
+                    restore:SetText(L["Set Default"])
+                    if restore.SetConfirming then restore:SetConfirming(false) end
+                end
+            end)
+        end
+    end, { width = 60, height = 20 })
+    restore:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- As wide as the longer of its two words.
+    restore:SetText(L["Confirm"])
+    FitButton(restore)
+    restore:SetText(L["Set Default"])
+    FitButton(restore)
+    widgets.restoreDefaults = restore
 
     -- My Auctions (the owner said build it, 2026-11-11, from a mockup whose
     -- words he approved): a small window of what you have up. Off unless
@@ -3423,12 +3458,33 @@ function UI:ClearPriceData()
     if UI.UpdateHeader then UI:UpdateHeader() end
 end
 
+--- Settings a reset leaves alone (the owner said build Tradeskills Settings:
+--- Set Default, 2026-11-23): the ALL ADDONS choices, shared by all five and
+--- changed in the others too when changed here; small windows' spots; and
+--- the characters and account names picked, which are kept like data.
+UI.RESET_KEEPS = {
+    textSize = true, windowStyle = true, windowEffects = true,
+    goldTrackerX = true, goldTrackerY = true,
+    auctionTrackerX = true, auctionTrackerY = true,
+    disenchanterName = true, disenchanterGuess = true, linkNames = true,
+}
+
+--- Settings with no entry in the defaults (nil is how they start), put back
+--- with the rest.
+UI.RESET_ALSO = { "tsmPriceSource", "tsmGearPriceSource", "snipeConfirmOver" }
+
 --- Put every setting back to how it started.
 function UI:ResetSettings()
     -- Through Config:Set, as every other setting change is, so a session
     -- keeping its settings in the backup store saves these too.
     for key, value in pairs(ns.Config.DEFAULTS.settings) do
-        ns.Config:Set(key, value)
+        if not UI.RESET_KEEPS[key] then
+            if type(value) == "table" then value = CopyTable and CopyTable(value) or value end
+            ns.Config:Set(key, value)
+        end
+    end
+    for _, key in ipairs(UI.RESET_ALSO) do
+        ns.Config:Set(key, nil)
     end
 
     -- What each control does on a change, done for the reset too. Only the
@@ -3448,9 +3504,12 @@ function UI:ResetSettings()
         end
     end
 
-    ns.Print(L["settings reset to defaults"])
+    ns.Print(L["Every Tradeskills setting is back to how it started."])
     if UI.RefreshActiveTab then UI:RefreshActiveTab() end
 end
+
+--- How long the red Confirm waits for the second click, in seconds.
+UI.RESTORE_CONFIRM_SECONDS = 4
 
 --- True when the typed words are "confirm".
 local function Confirmed(args)
