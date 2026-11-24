@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.43.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file and a key binding were added.
+
+- **Buy One.** On the Disenchanting tab, click Search the auction house, then the same button buys the cheapest listing on each click. No Accept pop-up shows. It stops at the highest price your Disenchanting minimums allow, and it skips your own listings. Double Check Over still asks you to confirm. You can bind a key to Disenchanting: Buy Next. It also works on armor and weapon listings.
+- **Arcane Salvager.** Keep Salvager Results Apart on the Tooltips page of Settings now starts ticked, so disenchants at an Arcane Salvager are kept in their own record. The addon spots a Salvager by its Boosted Disenchanting buff. `/bts salvager on` or `off` sets it by hand.
+- **Random suffixes.** Each suffix on the Prices tab has its own My Price. A suffix with none of its own uses the item's price. Item cards and Sales show the suffix name (of the Eagle, of Magic and so on), and each suffix gets its own By item row.
+- **Sell list.** Rows stay in the order they first showed in while the auction house is open, and new items join at the bottom. Rows no longer jump or vanish while a scan runs. The scroll bar is wider.
+- **Disenchanting.** Any enchanter can disenchant any item, so level 21 and up deals no longer show as too high for a low enchanter. The Disenchanting tab, the deals message, Profit and Butler all agree.
+- **Value on Tooltips.** Off now hides the Disenchant Value line too, for both Off and Shift.
+- **Buy For.** The Disenchanting and Deals tabs redraw when a search you start yourself shows a new price.
+- **Prices tab.** In a short window the graph stays readable when Never Below shows its limits. Side by Side no longer draws over the Disenchant Value and Sells For lines.
+
 ## 1.42.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
