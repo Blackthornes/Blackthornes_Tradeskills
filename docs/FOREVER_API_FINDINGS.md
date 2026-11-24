@@ -584,6 +584,7 @@ Read from saved links and saved suffix prices, not from a probe.
 
 - Item 279985, placed with spell 1263056 (needs Enchanting 140 and a
   campfire). The game does not publish how much more it gives.
-- Not yet seen: whether standing near one puts a buff on the player, and
-  that buff's name and spell ID. `/bts delog` prints the buffs at the last
-  disenchant once Keep Salvager Results Apart is ticked; note them here.
+- Seen in game 2026-11-24: standing near one gives the buff "Boosted
+  Disenchanting" (spell 1283701); a campfire gives "Campfire Nearby"
+  (1283391). Placing it did not fire spell 1263056 as the player's
+  UNIT_SPELLCAST_SUCCEEDED; the buff is what Salvager mode reads now.

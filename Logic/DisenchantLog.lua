@@ -429,6 +429,11 @@ DisenchantLog._IsDisenchant = IsDisenchant
 -- plain record is never moved, mixed or cleared.
 local SALVAGER_SPELL = 1263056
 DisenchantLog.SALVAGER_SPELL = SALVAGER_SPELL
+-- The buff a Salvager puts on you nearby, "Boosted Disenchanting" (seen in
+-- game 2026-11-24 with /bts delog).
+local SALVAGER_BUFF = 1283701
+local SALVAGER_BUFF_NAME = "boosted disenchanting"
+DisenchantLog.SALVAGER_BUFF = SALVAGER_BUFF
 DisenchantLog.SALVAGER_ITEM = 279985
 DisenchantLog.SALVAGER_IDLE = 600
 
@@ -547,9 +552,9 @@ local function SalvagerBuff(auras)
     local own = SpellName(SALVAGER_SPELL)
     for _, aura in ipairs(auras) do
         local ok, yes = pcall(function()
-            if aura.spellID == SALVAGER_SPELL then return true end
+            if aura.spellID == SALVAGER_BUFF or aura.spellID == SALVAGER_SPELL then return true end
             local name = aura.name and aura.name:lower() or ""
-            if name:find("salvager", 1, true) then return true end
+            if name:find("salvager", 1, true) or name == SALVAGER_BUFF_NAME then return true end
             return type(own) == "string" and own ~= "" and name:find(own:lower(), 1, true) ~= nil
         end)
         if ok and yes then return true end
