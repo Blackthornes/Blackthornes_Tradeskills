@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.45.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Buy One.** Buy One buys the next listing as soon as you click it again.
+- **Sales.** The Sales tab keeps 60 days of sales, up to 2,000.
+- Various bug fixes for Tradeskills.
+
 ## 1.44.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
