@@ -73,7 +73,7 @@ local Fit = RoadView.Fit
 function RoadView.PickByWidth()
     local width = 120
     if Theme.MeasureText then
-        for _, text in ipairs({ L["Lowest Cost"], L["Real Cost"] }) do
+        for _, text in ipairs({ L["Lowest Cost"], L["Lowest After Selling"] }) do
             local ok, measured = pcall(Theme.MeasureText, "small", text)
             if ok and type(measured) == "number" then width = math.max(width, math.ceil(measured + 30)) end
         end
@@ -271,7 +271,7 @@ function RoadView:Build(view)
     -- Pick By (the owner, 2026-10-27): lowest cost or real cost.
     widgets.pickBy = Widgets.CreateDropdown(toolbar, {
         { text = L["Lowest Cost"], value = "lowest" },
-        { text = L["Real Cost"], value = "real" },
+        { text = L["Lowest After Selling"], value = "real" },
     }, function(value)
         RoadView:SetPickBy(value)
     end, { width = RoadView.PickByWidth() })
@@ -464,7 +464,7 @@ function RoadView.FishFoot(plan)
 end
 
 --- The footer's second line: what you own takes off, or where it stops,
---- and with Real Cost what selling the crafts brings back.
+--- and with Lowest After Selling what selling the crafts brings back.
 function RoadView.FootText(plan, skipped)
     local lines = {}
     if (plan.saved or 0) > 0 then
