@@ -1786,6 +1786,17 @@ local function Build(outer)
     end, true)
     widgets.disenchantChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Disenchants at an Arcane Salvager in their own record (the owner said
+    -- build it, 2026-11-24; Logic/DisenchantLog.lua, `salvagerApart`).
+    local salvagerRow = CreateRow(pages.tooltips, 2, L["Keep Salvager Results Apart:"],
+        L["Disenchants you do at an Arcane Salvager go in their own record, so you can see how much more they give. Your other disenchants and their chances stay the same."])
+    widgets.salvagerApart = Widgets.CreateCheckbox(salvagerRow, L["On"], function(checked)
+        Config:Set("salvagerApart", checked)
+        if not checked and ns.DisenchantLog then ns.DisenchantLog:StopSalvager() end
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end, false)
+    widgets.salvagerApart:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- The "made 1 of X, 4 left" lines while crafting from the queue (a
     -- player asked, the owner said build it, 2026-11-17).
     local craftChatRow = CreateRow(pages.tooltips, 2, L["Craft Messages:"],
@@ -3350,6 +3361,7 @@ local function Refresh()
     widgets.sharedChatNotice:SetChecked(Config:Get("sharedChatNotice") == true)
     if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     if widgets.disenchantChat then widgets.disenchantChat:SetChecked(Config:Get("disenchantChat") ~= false) end
+    if widgets.salvagerApart then widgets.salvagerApart:SetChecked(Config:Get("salvagerApart") == true) end
     if widgets.craftChat then widgets.craftChat:SetChecked(Config:Get("craftChat") ~= false) end
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)

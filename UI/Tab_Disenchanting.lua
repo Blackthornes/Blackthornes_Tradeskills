@@ -104,6 +104,9 @@ local state = {
     hidden = 0,
     -- The material Find a material shows, picked the first time it opens.
     material = nil,
+    -- With Keep Salvager Results Apart ticked: "plain", "salvager" or
+    -- "side", the switch above Breaks Into.
+    salvagerView = "side",
 }
 
 local widgets = {}
@@ -622,9 +625,64 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
+    -- Arcane Salvager (the owner said build it, 2026-11-24): a purple line
+    -- across the top while Salvager mode is on, with Stop when only the
+    -- cast turned it on, and a Plain / Salvager / Side by Side switch above
+    -- Breaks Into. Both show only with Keep Salvager Results Apart ticked.
+    local bar = CreateFrame("Frame", nil, detail)
+    bar:SetPoint("TOPLEFT", 8, -8)
+    bar:SetPoint("TOPRIGHT", -8, -8)
+    bar:SetHeight(34)
+    if Theme.Fill then Theme.Fill(bar, "xp", 0.28) end
+    if Theme.Border then Theme.Border(bar, "way_disenchant", 0.8) end
+    bar:Hide()
+    detail.salvagerBar = bar
+
+    local dot = bar.CreateTexture and bar:CreateTexture(nil, "ARTWORK")
+    if dot then
+        dot:SetSize(6, 6)
+        dot:SetPoint("LEFT", 8, 0)
+        dot:SetColorTexture(Theme.Unpack("way_disenchant"))
+    end
+
+    local stop = Widgets.CreateButton(bar, L["Stop"], function()
+        if ns.DisenchantLog then ns.DisenchantLog:StopSalvager() end
+    end, { height = 20 })
+    stop:SetPoint("RIGHT", -6, 0)
+    do  -- As wide as its word, in any language.
+        local label = rawget(stop, "label")
+        local ok, width = false, nil
+        if label then ok, width = pcall(label.GetStringWidth, label) end
+        stop:SetWidth(math.max(44, (ok and type(width) == "number" and math.ceil(width) or 30) + 20))
+    end
+    detail.salvagerStop = stop
+
+    local barText = Theme.CreateLabel(bar, "tiny", "text")
+    barText:SetPoint("LEFT", 20, 0)
+    barText:SetPoint("RIGHT", stop, "LEFT", -6, 0)
+    barText:SetWordWrap(true)
+    barText:SetText(L["Arcane Salvager is up. Your disenchants count as Salvager ones."])
+    detail.salvagerText = barText
+
+    local switch = Widgets.CreateTabStrip(detail, {
+        { key = "plain",    text = L["Plain"] },
+        { key = "salvager", text = L["Salvager"] },
+        { key = "side",     text = L["Side by Side"] },
+    }, function(key)
+        state.salvagerView = key
+        detail.salvagerSwitch:Select(key)
+        if detail.redraw then detail.redraw() end
+    end)
+    switch:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -8)
+    switch:Select(state.salvagerView)
+    switch:Hide()
+    detail.salvagerSwitch = switch
+
     local heading = Theme.CreateHeading(detail, L["BREAKS INTO"])
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.heading = heading
+
+    detail.sideLines = {}
 
     detail.outcomeLines = {}
 
@@ -811,8 +869,12 @@ local function DrawOutcomes(detail, breakdown)
             or ("%d-%d"):format(outcome.min, outcome.max)
 
         -- Each disenchant gives one of these; the value is their average.
-        line.name:SetText(("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
-            Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)))
+        local named = Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)
+        if outcome.soFar then
+            line.name:SetText(("%s  %s"):format(L.Format("%d so far", outcome.soFar), named))
+        else
+            line.name:SetText(("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count, named))
+        end
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then
@@ -829,6 +891,270 @@ local function DrawOutcomes(detail, breakdown)
     end
 end
 
+--------------------------------------------------------------------------------
+-- At an Arcane Salvager
+--------------------------------------------------------------------------------
+
+local function SalvagerOn()
+    local log = ns.DisenchantLog
+    return log ~= nil and log.SalvagerApart ~= nil and log:SalvagerApart() or false
+end
+
+--- The purple line, and the icon and title moved down under it.
+local function UpdateSalvagerBar(detail)
+    local up, byBuff = false, false
+    if SalvagerOn() then up, byBuff = ns.DisenchantLog:SalvagerUp() end
+
+    detail.salvagerBar:SetShown(up)
+    detail.salvagerStop:SetShown(up and not byBuff)
+    if up and not byBuff then
+        detail.salvagerText:SetPoint("RIGHT", detail.salvagerStop, "LEFT", -6, 0)
+    else
+        detail.salvagerText:SetPoint("RIGHT", detail.salvagerBar, "RIGHT", -8, 0)
+    end
+
+    local top = up and -50 or -12
+    detail.icon:ClearAllPoints()
+    detail.icon:SetPoint("TOPLEFT", 12, top)
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", 50, top)
+    detail.title:SetPoint("TOPRIGHT", -12, top)
+end
+
+--- Show the switch (or not), and hang Breaks Into under whichever is last.
+local function PlaceSwitch(detail, shown)
+    detail.salvagerSwitch:SetShown(shown)
+    if shown then detail.salvagerSwitch:Select(state.salvagerView) end
+
+    detail.heading:ClearAllPoints()
+    if shown then
+        detail.heading:SetPoint("TOPLEFT", detail.salvagerSwitch, "BOTTOMLEFT", 0, -8)
+    else
+        detail.heading:SetPoint("TOPLEFT", detail.subtitle, "BOTTOMLEFT", -38, -12)
+    end
+end
+
+local function HideSideLines(detail)
+    for _, line in ipairs(detail.sideLines) do line.frame:Hide() end
+end
+
+--- "58% (1.4)": how often, and how many on average when it is not one.
+local function ChanceText(outcome)
+    if not outcome then return "" end
+    local text = ("%s%%"):format(Util.Round((outcome.chance or 0) * 100, 0))
+    local average = outcome.average or ((outcome.min or 1) + (outcome.max or 1)) / 2
+    if math.abs(average - 1) > 0.05 then
+        text = ("%s (%s)"):format(text, Util.Round(average, 1))
+    end
+    return text
+end
+
+local SIDE_PLAIN_X, SIDE_SALVAGER_X = -70, 0
+local SIDE_COLUMN = 64
+
+--- One Side by Side line: a name on the left, Plain and Salvager on the right.
+local function SideLine(detail, index)
+    local line = detail.sideLines[index]
+    if line then return line end
+
+    local frame = CreateFrame("Frame", nil, detail)
+    frame:SetHeight(16)
+
+    local name = Theme.CreateLabel(frame, "small", "text")
+    name:SetPoint("LEFT", 0, 0)
+    name:SetPoint("RIGHT", frame, "RIGHT", SIDE_PLAIN_X - SIDE_COLUMN - 4, 0)
+    name:SetWordWrap(true)
+
+    local plain = Theme.CreateLabel(frame, "small", "text", "RIGHT")
+    plain:SetPoint("RIGHT", SIDE_PLAIN_X, 0)
+    plain:SetWidth(SIDE_COLUMN)
+    plain:SetWordWrap(true)
+
+    local salvager = Theme.CreateLabel(frame, "small", "text", "RIGHT")
+    salvager:SetPoint("RIGHT", SIDE_SALVAGER_X, 0)
+    salvager:SetWidth(SIDE_COLUMN)
+    salvager:SetWordWrap(true)
+
+    line = { frame = frame, name = name, plain = plain, salvager = salvager }
+    detail.sideLines[index] = line
+    return line
+end
+
+local function Height(label)
+    local ok, height = pcall(label.GetStringHeight, label)
+    return ok and type(height) == "number" and height or 12
+end
+
+--- Draw the Side by Side lines under Breaks Into.
+-- @param rows { { name, plain, salvager, nameColor, plainColor, salvagerColor } }
+local function DrawSide(detail, rows)
+    local anchor = detail.heading
+    for index, row in ipairs(rows) do
+        local line = SideLine(detail, index)
+
+        line.frame:ClearAllPoints()
+        line.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, index == 1 and -6 or -2)
+        line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+
+        line.name:SetText(row.name or "")
+        line.name:SetTextColor(Theme.Unpack(row.nameColor or "text"))
+        line.plain:SetText(row.plain or "")
+        line.plain:SetTextColor(Theme.Unpack(row.plainColor or "text"))
+        line.salvager:SetText(row.salvager or "")
+        line.salvager:SetTextColor(Theme.Unpack(row.salvagerColor or "text"))
+
+        line.frame:SetHeight(math.max(16, math.ceil(math.max(Height(line.name), Height(line.plain),
+            Height(line.salvager))) + 2))
+        line.frame:Show()
+        anchor = line.frame
+    end
+end
+
+--- "From your own 40 plain and 14 Salvager disenchants of this item."
+local function SideNote(itemID, salvagerFacts)
+    local log = ns.DisenchantLog
+    local _, plainFacts = ns.Disenchant:GetOutcomes(itemID)
+    local plainCasts = 0
+    if salvagerFacts.byItem then
+        local own = log and log:GetItem(itemID)
+        plainCasts = own and own.casts or 0
+        return L.Format("From your own %d plain and %d Salvager disenchants of this item.",
+            plainCasts, salvagerFacts.casts or 0)
+    end
+    local band = log and plainFacts and log:GetBand(plainFacts.key)
+    plainCasts = band and band.casts or 0
+    return L.Format("From your own %d plain and %d Salvager disenchants of items like this.",
+        plainCasts, salvagerFacts.casts or 0)
+end
+
+--- Draw Breaks Into for the view picked on the switch.
+--
+-- @return nil for the plain view (the caller fills it as always), else
+--   { view, value, partial, note } for the Salvager or Side by Side view.
+local function DrawView(detail, entry, breakdown)
+    HideSideLines(detail)
+
+    local on = SalvagerOn() and entry.itemID ~= nil
+    PlaceSwitch(detail, on)
+
+    local view = on and state.salvagerView or "plain"
+    if view == "plain" then
+        DrawOutcomes(detail, breakdown)
+        return nil
+    end
+
+    local Disenchant = ns.Disenchant
+    local value, partial, salvaged = Disenchant:GetSalvagerValue(entry.itemID)
+    local facts = salvaged and salvaged.facts or {}
+    local enough = salvaged and #(salvaged.outcomes or {}) > 0
+    local seen = facts.seen and facts.seen.got or {}
+
+    local result = { view = view, value = value, partial = partial }
+    if not enough then
+        result.note = L.Format("Disenchant %d more at a Salvager to see its chances.",
+            math.max(1, facts.need or Disenchant.SALVAGER_LEARN_AFTER))
+    elseif view == "salvager" then
+        result.note = facts.byItem
+            and L.Format("Chances come from your own %d Salvager disenchants of this item.", facts.casts or 0)
+            or L.Format("Chances come from your own %d Salvager disenchants of items like this.", facts.casts or 0)
+    else
+        result.note = SideNote(entry.itemID, facts)
+    end
+
+    if view == "salvager" then
+        if enough then
+            DrawOutcomes(detail, salvaged)
+        else
+            -- Too few yet: what came out so far, by how often.
+            local soFar = {}
+            for materialID, got in pairs(seen) do
+                soFar[#soFar + 1] = { itemID = materialID, soFar = got.times or 0,
+                    min = got.min or 1, max = got.max or 1,
+                    name = Disenchant:MaterialName(materialID),
+                    price = Disenchant:GetMaterialPrice(materialID) }
+            end
+            table.sort(soFar, function(a, b)
+                if a.soFar ~= b.soFar then return a.soFar > b.soFar end
+                return a.itemID < b.itemID
+            end)
+            DrawOutcomes(detail, { outcomes = soFar })
+        end
+        return result
+    end
+
+    -- Side by Side: every material either record has, plain order first.
+    local plainBy, salvagerBy, order, listed = {}, {}, {}, {}
+    for _, outcome in ipairs(breakdown.outcomes or {}) do
+        plainBy[outcome.itemID] = outcome
+        if not listed[outcome.itemID] then order[#order + 1] = outcome.itemID; listed[outcome.itemID] = true end
+    end
+    for _, outcome in ipairs(enough and salvaged.outcomes or {}) do
+        salvagerBy[outcome.itemID] = outcome
+        if not listed[outcome.itemID] then order[#order + 1] = outcome.itemID; listed[outcome.itemID] = true end
+    end
+    if not enough then
+        for materialID in pairs(seen) do
+            if not listed[materialID] then order[#order + 1] = materialID; listed[materialID] = true end
+        end
+    end
+
+    local rows = { { name = L["Gives"], plain = L["Plain"], salvager = L["Salvager"],
+        nameColor = "muted", plainColor = "muted", salvagerColor = "muted" } }
+
+    for _, materialID in ipairs(order) do
+        local cell
+        if enough then
+            cell = ChanceText(salvagerBy[materialID])
+        else
+            local got = seen[materialID]
+            cell = got and L.Format("%d so far", got.times or 0) or ""
+        end
+        rows[#rows + 1] = {
+            name = Util.ColorItemName(materialID, Disenchant:MaterialName(materialID))
+                or Util.GetItemLabel(materialID),
+            plain = ChanceText(plainBy[materialID]),
+            salvager = cell,
+            salvagerColor = enough and "text" or "dim",
+        }
+    end
+
+    local plainValue = entry.value or Disenchant:GetValue(entry.itemID)
+    if enough then
+        rows[#rows + 1] = {
+            name = L["Disenchant value"],
+            plain = plainValue and Util.FormatMoney(plainValue) or "",
+            salvager = value and Util.FormatMoney(value) or "",
+        }
+        if value and plainValue and plainValue > 0 then
+            local gap = value - plainValue
+            local percent = math.floor(math.abs(gap) / plainValue * 100 + 0.5)
+            local text = gap >= 0
+                and L.Format("%s more (%d%%)", Util.FormatMoney(gap, { noColor = true }), percent)
+                or L.Format("%s less (%d%%)", Util.FormatMoney(-gap, { noColor = true }), percent)
+            rows[#rows + 1] = { name = L["The Salvager gives"], salvager = text,
+                salvagerColor = gap >= 0 and "profit" or "loss" }
+            -- The compare text is wide: it takes both columns.
+            result.compareWide = true
+        end
+    end
+
+    DrawSide(detail, rows)
+
+    -- The compare line's words run across both columns.
+    local last = detail.sideLines[#rows]
+    if result.compareWide and last then
+        last.salvager:SetWidth(SIDE_COLUMN * 2 + 6)
+    end
+    for index = 1, #rows - (result.compareWide and 1 or 0) do
+        detail.sideLines[index].salvager:SetWidth(SIDE_COLUMN)
+    end
+    if result.compareWide and last then
+        last.frame:SetHeight(math.max(16, math.ceil(math.max(Height(last.name), Height(last.salvager))) + 2))
+    end
+
+    return result
+end
+
 --- The detail panel for an item in the bags.
 local function UpdateBagDetail(entry)
     local detail = widgets.detail
@@ -840,7 +1166,7 @@ local function UpdateBagDetail(entry)
         facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0))
     detail.subtitle:SetTextColor(Theme.Unpack("muted"))
 
-    DrawOutcomes(detail, breakdown)
+    local salvagerView = DrawView(detail, entry, breakdown)
 
     local lines = detail.lines
     if entry.value then
@@ -902,6 +1228,21 @@ local function UpdateBagDetail(entry)
     end
     if not entry.soulbound then
         note = note .. L[" If it is already bound to you, only a vendor will buy it."]
+    end
+
+    -- The Salvager's own value and note; prices elsewhere stay plain.
+    if salvagerView then
+        if salvagerView.view == "salvager" then
+            if salvagerView.value then
+                SetLine(lines[1], L["Disenchant value"], salvagerView.partial
+                    and L.Format("%s  or more", Util.FormatMoney(salvagerView.value))
+                    or Util.FormatMoney(salvagerView.value), "text")
+            else
+                SetLine(lines[1], nil)
+            end
+        end
+        detail.verdict:SetText("")
+        note = salvagerView.note
     end
     detail.note:SetText(note)
 
@@ -1002,6 +1343,9 @@ local function UpdateDetail(entry)
     for _, line in ipairs(detail.outcomeLines) do
         line.frame:Hide()
     end
+    HideSideLines(detail)
+    UpdateSalvagerBar(detail)
+    PlaceSwitch(detail, false)
 
     for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
                             detail.summary, detail.verdict, detail.note }) do
@@ -1040,7 +1384,7 @@ local function UpdateDetail(entry)
         facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0, who))
     detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
 
-    DrawOutcomes(detail, breakdown)
+    local salvagerView = DrawView(detail, entry, breakdown)
 
     local lines = detail.lines
     SetLine(lines[1], entry.loneLow and L["Buy for (a lone low listing)"] or L["Buy for"],
@@ -1070,6 +1414,21 @@ local function UpdateDetail(entry)
     note = note .. L.Format(" The buy price is the cheapest listing when last scanned (%s).",
         entry.age and Util.FormatAgeAgo(entry.age) or L["never"])
     if entry.stale then note = note .. L[" That was a while ago, so it may have sold."] end
+
+    -- The Salvager's chances are shown; buy and profit stay plain.
+    if salvagerView then
+        if salvagerView.view == "salvager" then
+            if salvagerView.value then
+                SetLine(lines[2], L["Disenchant value"], salvagerView.partial
+                    and L.Format("%s  or more", Util.FormatMoney(salvagerView.value))
+                    or Util.FormatMoney(salvagerView.value), "text")
+            else
+                SetLine(lines[2], nil)
+            end
+        end
+        detail.verdict:SetText("")
+        note = salvagerView.note
+    end
     detail.note:SetText(note)
 end
 
@@ -1684,6 +2043,7 @@ local function Build(container)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+    detail.redraw = function() UpdateDetail(state.selected) end
 
     -- Buy One redraws only the button and its line, and only when shown.
     if ns.DisenchantQuickBuy then

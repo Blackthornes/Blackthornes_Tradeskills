@@ -579,3 +579,11 @@ Read from saved links and saved suffix prices, not from a probe.
   (`Prices:LearnSuffix`) or by the name's tail (`Prices:LearnKeyName`).
 - Still unverified: that `C_AuctionHouse.GetItemKeyInfo(key).itemName`
   carries the suffix, and that it answers with the auction house shut.
+
+## Arcane Salvager (2026-11-24)
+
+- Item 279985, placed with spell 1263056 (needs Enchanting 140 and a
+  campfire). The game does not publish how much more it gives.
+- Not yet seen: whether standing near one puts a buff on the player, and
+  that buff's name and spell ID. `/bts delog` prints the buffs at the last
+  disenchant once Keep Salvager Results Apart is ticked; note them here.

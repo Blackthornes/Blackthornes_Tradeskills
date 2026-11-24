@@ -503,6 +503,9 @@ local DEFAULTS = {
         disenchantSound = true,
         -- What each disenchant gave, said in chat (Logic/DisenchantLog.lua).
         disenchantChat = true,
+        -- Disenchants at an Arcane Salvager go in their own record
+        -- (Logic/DisenchantLog.lua, `salvagerLog`). Off unless ticked.
+        salvagerApart = false,
         -- The "made 1 of X, 4 left" lines while crafting from the queue.
         craftChat = true,
         -- The cheer when Set goal makes a Farmer goal.

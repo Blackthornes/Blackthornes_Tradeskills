@@ -117,9 +117,13 @@ end
 --
 -- @param results { [materialID] = count }
 -- @return true when it was recorded
-function DisenchantLog:Record(itemID, results, from)
+function DisenchantLog:Record(itemID, results, from, atSalvager)
     local _, facts = ns.Disenchant:GetOutcomes(itemID)
     if not facts or not facts.key then return false, L["that item cannot be disenchanted"] end
+
+    -- At an Arcane Salvager, with Keep Salvager Results Apart ticked, it
+    -- goes in its own record and the plain one is left alone.
+    if atSalvager then return self:RecordSalvager(itemID, results, from, facts) end
 
     -- What one of these was expected to give, before this one counts.
     local usual = ns.Disenchant:GetValue(itemID)
@@ -312,6 +316,18 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
     end
 end
 
+--- "Salvager: Dire Wand gave Greater Magic Essence x2, Soul Dust x2."
+function DisenchantLog:AnnounceSalvager(itemID, results)
+    local parts = {}
+    for materialID, count in pairs(results) do
+        parts[#parts + 1] = L.Format("%s x%d", MaterialLabel(materialID), count)
+    end
+    table.sort(parts)
+
+    Say(L.Format("%s %s gave %s.", Colour("accent", L["Salvager:"]), Util.GetItemLabel(itemID),
+        table.concat(parts, ", ")))
+end
+
 --- This session's running total, for the Disenchanting tab's bags list.
 -- Kept in memory only: it starts again at zero after a /reload.
 function DisenchantLog:AddToSession(results)
@@ -392,6 +408,210 @@ end
 
 DisenchantLog._IsDisenchant = IsDisenchant
 
+--------------------------------------------------------------------------------
+-- Arcane Salvager
+--------------------------------------------------------------------------------
+
+-- The Arcane Salvager is a Forever camp item (item 279985) that makes
+-- disenchanting give more; the game does not say how much (the owner asked
+-- 2026-11-24 to keep its results apart, so the two can be compared).
+--
+-- Salvager mode turns on from the player's own cast that places one, or
+-- from a buff on the player at a disenchant, if the game gives one near a
+-- Salvager. Nobody knows that buff's name yet, so `/bts delog` prints the
+-- player's buffs at the last disenchants. A mode started by the cast ends
+-- after SALVAGER_IDLE seconds with no disenchant, on a zone change, at
+-- logout (it is never saved), or from the Stop button on the tab. One
+-- started by a buff ends when the buff is gone.
+--
+-- Its record is `salvagerLog` (never rename it), shaped like
+-- `disenchantLog`: bands, items, recent. Nothing reads it for prices; the
+-- plain record is never moved, mixed or cleared.
+local SALVAGER_SPELL = 1263056
+DisenchantLog.SALVAGER_SPELL = SALVAGER_SPELL
+DisenchantLog.SALVAGER_ITEM = 279985
+DisenchantLog.SALVAGER_IDLE = 600
+
+-- Buffs kept with each recent disenchant, for /bts delog.
+local AURAS_KEPT = 12
+
+local salvager      -- { from = "cast" | "buff", last = time of the last use }
+local salvagerTimer -- bumped so only the newest idle check acts
+
+--- Keep Salvager Results Apart: (Settings, `salvagerApart`, off unless ticked).
+function DisenchantLog:SalvagerApart()
+    return ns.Config ~= nil and ns.Config:Get("salvagerApart") == true
+end
+
+--- Account wide, like the plain record.
+function DisenchantLog:GetSalvagerTable()
+    if not ns.db then return { bands = {}, items = {}, recent = {} } end
+
+    local log = ns.db.salvagerLog or {}
+    ns.db.salvagerLog = log
+
+    log.bands = log.bands or {}
+    log.items = log.items or {}
+    log.recent = log.recent or {}
+
+    return log
+end
+
+--- Salvager results for one item, or nil when there are none.
+function DisenchantLog:GetSalvagerItem(itemID)
+    if not itemID or not ns.db or not ns.db.salvagerLog then return nil end
+    return self:GetSalvagerTable().items[itemID]
+end
+
+--- Salvager results for one row of the table, or nil when there are none.
+function DisenchantLog:GetSalvagerBand(key)
+    if not key or not ns.db or not ns.db.salvagerLog then return nil end
+    return self:GetSalvagerTable().bands[key]
+end
+
+local function Refresh()
+    if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+end
+
+--- One check a little after the idle time, so the purple line goes away by
+--- itself. A single timer, not a ticker.
+local function WatchIdle()
+    if not (C_Timer and C_Timer.After) then return end
+    salvagerTimer = (salvagerTimer or 0) + 1
+    local mine = salvagerTimer
+    C_Timer.After(DisenchantLog.SALVAGER_IDLE + 1, function()
+        if mine ~= salvagerTimer or not salvager then return end
+        if DisenchantLog:SalvagerUp() then return end
+        Refresh()
+    end)
+end
+
+--- Is Salvager mode on? And did a buff turn it on?
+function DisenchantLog:SalvagerUp()
+    if not salvager or not self:SalvagerApart() then return false, false end
+    if salvager.from ~= "buff" and Now() - (salvager.last or 0) > self.SALVAGER_IDLE then
+        salvager = nil
+        return false, false
+    end
+    return true, salvager.from == "buff"
+end
+
+function DisenchantLog:StartSalvager(from)
+    salvager = { from = from or "cast", last = Now() }
+    WatchIdle()
+    Refresh()
+end
+
+function DisenchantLog:StopSalvager()
+    local was = salvager ~= nil
+    salvager = nil
+    if was then Refresh() end
+end
+
+--- The player's buffs as { name, spellID } pairs, each read inside a
+--- pcall: in an instance the client can hand out values that raise.
+function DisenchantLog:ReadAuras()
+    local auras = {}
+
+    local function Add(name, spellID)
+        local ok, copy = pcall(function()
+            return { name = type(name) == "string" and (name .. "") or nil,
+                     spellID = type(spellID) == "number" and (spellID + 0) or nil }
+        end)
+        if ok and copy and (copy.name or copy.spellID) then auras[#auras + 1] = copy end
+    end
+
+    for index = 1, 40 do
+        local name, spellID
+        if C_UnitAuras and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+            local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", index, "HELPFUL")
+            if not ok or type(data) ~= "table" then break end
+            pcall(function() name, spellID = data.name, data.spellId end)
+        elseif type(UnitAura) == "function" then
+            local ok, a, _, _, _, _, _, _, _, _, id = pcall(UnitAura, "player", index, "HELPFUL")
+            if not ok or a == nil then break end
+            name, spellID = a, id
+        else
+            break
+        end
+        Add(name, spellID)
+        if #auras >= AURAS_KEPT then break end
+    end
+
+    return auras
+end
+
+--- Is one of these buffs a Salvager's? By its spell, or a name that holds
+--- the client's name for the Salvager, or the English word.
+local function SalvagerBuff(auras)
+    local own = SpellName(SALVAGER_SPELL)
+    for _, aura in ipairs(auras) do
+        local ok, yes = pcall(function()
+            if aura.spellID == SALVAGER_SPELL then return true end
+            local name = aura.name and aura.name:lower() or ""
+            if name:find("salvager", 1, true) then return true end
+            return type(own) == "string" and own ~= "" and name:find(own:lower(), 1, true) ~= nil
+        end)
+        if ok and yes then return true end
+    end
+    return false
+end
+
+DisenchantLog._SalvagerBuff = SalvagerBuff
+
+--- At each disenchant: read the buffs, and say whether it was at a Salvager.
+function DisenchantLog:CheckSalvager()
+    if not self:SalvagerApart() then return false, nil end
+
+    local auras = self:ReadAuras()
+    if SalvagerBuff(auras) then
+        if not salvager or salvager.from ~= "buff" then
+            salvager = { from = "buff" }
+        end
+        salvager.last = Now()
+        return true, auras
+    end
+
+    -- The buff was what told us, and it is gone: walked away.
+    if salvager and salvager.from == "buff" then
+        salvager = nil
+        return false, auras
+    end
+
+    return (self:SalvagerUp()), auras
+end
+
+--- Add one Salvager disenchant to its own record.
+function DisenchantLog:RecordSalvager(itemID, results, from, facts)
+    local buys = ns.DisenchantBuys
+    if buys and buys.Used then pcall(buys.Used, buys, itemID, 1) end
+
+    local log = self:GetSalvagerTable()
+    DisenchantLog.Add(log.bands, facts.key, results)
+    DisenchantLog.Add(log.items, itemID, results)
+
+    table.insert(log.recent, 1, {
+        itemID = itemID, results = results, from = from,
+        at = time and time() or 0, auras = self.lastAuras,
+    })
+    while #log.recent > RECENT_KEPT do table.remove(log.recent) end
+
+    if salvager then
+        salvager.last = Now()
+        if salvager.from ~= "buff" then WatchIdle() end
+    end
+
+    if ns.MethodProfit then pcall(ns.MethodProfit.NoteDisenchant, ns.MethodProfit, itemID, results) end
+
+    self:AnnounceSalvager(itemID, results)
+    self:AddToSession(results)
+
+    self.version = (self.version or 0) + 1
+    Refresh()
+
+    return true
+end
+
 local function ItemAt(bag, slot)
     if not Util.HasFunction("C_Container.GetContainerItemID") then return nil end
     local ok, itemID = pcall(C_Container.GetContainerItemID, bag, slot)
@@ -455,15 +675,35 @@ function DisenchantLog:OnCastSent(_, unit, target, _, spellID)
 end
 
 function DisenchantLog:OnCastSucceeded(_, unit, _, spellID)
-    if not IsPlayer(unit) or not IsDisenchant(spellID) then return end
+    if not IsPlayer(unit) then return end
+
+    -- Placing an Arcane Salvager yourself turns Salvager mode on.
+    if self:SalvagerApart() then
+        local ok, placed = pcall(function() return spellID == SALVAGER_SPELL end)
+        if ok and placed then
+            self:StartSalvager("cast")
+            return
+        end
+    end
+
+    if not IsDisenchant(spellID) then return end
+
+    local atSalvager, auras = self:CheckSalvager()
+    self.lastAuras = auras
 
     local fresh = aimed and Now() - aimed.at < AIM_WINDOW
     cast = {
         itemID = fresh and aimed.itemID or nil,
         from = fresh and aimed.from or nil,
         at = Now(),
+        salvager = atSalvager or nil,
     }
     aimed = nil
+end
+
+--- A new zone ends a Salvager mode the cast started.
+function DisenchantLog:OnZoneChanged()
+    if salvager and salvager.from ~= "buff" then self:StopSalvager() end
 end
 
 --- The item a loot slot came from, when the game says.
@@ -539,7 +779,7 @@ function DisenchantLog:OnLootReady()
         return
     end
 
-    local recorded, why = self:Record(itemID, results, from)
+    local recorded, why = self:Record(itemID, results, from, pending.salvager)
     if not recorded then self:Miss(why or L["unknown"]) end
 end
 
@@ -608,6 +848,32 @@ local function Report(input)
             Describe(entry.results), FROM[entry.from] or entry.from or "?"))
     end
 
+    -- Salvager disenchants, and the buffs on you at the last ones, so the
+    -- Salvager's buff can be named once someone disenchants beside one.
+    if DisenchantLog:SalvagerApart() or (ns.db and ns.db.salvagerLog) then
+        local salvagerLog = DisenchantLog:GetSalvagerTable()
+        local count = 0
+        for _, band in pairs(salvagerLog.bands) do count = count + (band.casts or 0) end
+        local up, byBuff = DisenchantLog:SalvagerUp()
+        ns.Print(L.Format("Salvager: %d recorded apart. Salvager mode is %s.", count,
+            up and (byBuff and L["on, from its buff"] or L["on, from placing it"]) or L["off"]))
+
+        for index = 1, math.min(3, #salvagerLog.recent) do
+            local entry = salvagerLog.recent[index]
+            ns.Print(L.Format("  Salvager: %s gave %s", Util.GetItemLabel(entry.itemID), Describe(entry.results)))
+        end
+    end
+
+    local auras = DisenchantLog.lastAuras
+    if auras then
+        local names = {}
+        for _, aura in ipairs(auras) do
+            names[#names + 1] = ("%s (%s)"):format(tostring(aura.name or "?"), tostring(aura.spellID or "?"))
+        end
+        ns.Print(L.Format("Your buffs at the last disenchant: %s",
+            #names > 0 and table.concat(names, ", ") or L["none"]))
+    end
+
     if total == 0 and log.missed == 0 then
         ns.Print(L["disenchant something, then run /bts delog again to see it recorded"])
     end
@@ -636,6 +902,7 @@ function DisenchantLog:OnEnable()
     RegisterForPlayer(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
     ns.RegisterEvent(self, "LOOT_READY", self.OnLootReady)
     ns.RegisterEvent(self, "LOOT_OPENED", self.OnLootReady)
+    ns.RegisterEvent(self, "ZONE_CHANGED_NEW_AREA", self.OnZoneChanged)
 
     -- Watch bag clicks without replacing them: hooksecurefunc runs after
     -- Blizzard's own call and changes nothing about it.

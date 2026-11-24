@@ -3828,3 +3828,38 @@ timer that buys. Picking another deal lets the last one go, so the key
 never buys what the pane doesn't show. Tested in
 `tools/test_disenchantquickbuy.lua` and the Buy One part of
 `tools/test_disenchantdeals.lua`. Not yet seen in game.
+
+## Arcane Salvager disenchants kept apart
+
+The owner said build it from a mockup (2026-11-24). "Keep Salvager Results
+Apart:" on the tooltips page under "Disenchant Results:" (`salvagerApart`,
+off unless ticked). With it ticked, a disenchant done in Salvager mode goes
+in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
+`disenchantLog`) and the plain record is not touched. Off, nothing changes.
+
+- Salvager mode (`Logic/DisenchantLog.lua`): on from the player's own cast
+  of spell 1263056 (item 279985), or from a buff at a disenchant whose
+  spell is 1263056 or whose name holds "salvager" or the client's name for
+  the spell. A cast mode ends after `SALVAGER_IDLE` (600 s) with no
+  disenchant, on `ZONE_CHANGED_NEW_AREA`, at logout (never saved) or from
+  Stop; a buff mode ends when the buff is gone. One `C_Timer.After` clears
+  the purple line after the idle time, no ticker.
+- The buff's name is not yet known. `/bts delog` prints the player's buffs
+  at the last disenchant (`DisenchantLog.lastAuras`, read in a pcall) and
+  the Salvager count, so the first disenchant at a Salvager names it.
+- `Disenchant:GetSalvagerOutcomes(itemID)` and `GetSalvagerValue`: the
+  item's own Salvager results after `SALVAGER_LEARN_AFTER` (5), else its
+  row's after `LEARN_AFTER`; too few gives `facts.need` and `facts.seen`.
+  Only the Disenchanting tab reads them; every price elsewhere stays on
+  plain chances. `Disenchant:ValueOf(outcomes, facts)` is GetValue's sum.
+- The tab (`UI/Tab_Disenchanting.lua`, `DrawView`): purple line at the top
+  of the detail panel with Stop when only the cast turned it on; a
+  Plain / Salvager / Side by Side switch above Breaks Into (opens on Side
+  by Side, `state.salvagerView`); Side by Side lists both chances, both
+  values and "The Salvager gives" with "%s more (%d%%)" or "%s less
+  (%d%%)". Buy, profit and the bag lines stay plain; the verdict line is
+  blank outside Plain.
+- Chat: "Salvager: Dire Wand gave Greater Magic Essence x2, ..." when
+  Disenchant Results is on; no learning or lucky lines for these.
+- Tested in `tools/test_delog.lua` (at an Arcane Salvager) and
+  `tools/test_disenchantingbags.lua`.
