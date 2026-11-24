@@ -1,4 +1,4 @@
--- "Window Spots:" Set Default and /bts windows reset (a player's window slid off
+-- "Window Locations:" Set Default and /bts windows reset (a player's window slid off
 -- the screen, 2026-11-11), outside WoW.
 --
 -- What must hold:

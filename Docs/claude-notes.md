@@ -3792,3 +3792,18 @@ Tested in `tools/test_salecost.lua`, `test_tooltipkept.lua`,
 `test_listplace.lua`, `test_scancommit.lua`, `test_sellticker.lua`,
 `test_pagecommit.lua`, `test_tabstall.lua` and `test_bagsfollow.lua`. None
 of it has been timed in game yet: `/bts perf` shows the big pieces.
+
+## Restore Defaults (Tradeskills Settings: Set Default)
+
+The owner said build it, 2026-11-23 (a player asked how to reset settings),
+in all five addons, from `Docs/mockups/restore-defaults.html` in the project
+files. A row on the ALL ADDONS page under Window Locations (renamed from
+Window Spots the same day): "Tradeskills Settings:" with Set Default. The
+first click turns it red (`SetConfirming`) and says Confirm; a second within
+`UI.RESTORE_CONFIRM_SECONDS` (4 s) runs `UI:ResetSettings()`, the same reset
+as `/bts reset confirm`. It now leaves `UI.RESET_KEEPS` alone: the ALL ADDONS
+choices (text size, window style, effects; changing them here changed all
+five), small windows' spots, the disenchanter picked and the link names. It
+also clears `UI.RESET_ALSO` (settings with no default). Chat says "Every
+Tradeskills setting is back to how it started." Tested in
+`tools/test_uifit.lua`.

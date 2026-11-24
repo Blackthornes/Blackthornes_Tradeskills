@@ -3626,7 +3626,7 @@ L["· Skipped · 1 writ"] = "· 已跳过 · 1 张委托"
 L["· Skipped · %d writs"] = "· 已跳过 · %d 张委托"
 L["· 1 writ · %d rep"] = "· 1 张委托 · %d 声望"
 L["· %d writs · %d rep"] = "· %d 张委托 · %d 声望"
-L["Window Spots:"] = "窗口位置："
+L["Window Locations:"] = "窗口位置："
 L["Puts every Blackthornes window back where it started. Your settings and data stay the same."] = "把每个 Blackthornes 窗口放回最初的位置。你的设置和数据不会改变。"
 L["Every window is back in its first spot."] = "每个窗口都回到了最初的位置。"
 L["put every Blackthornes window back where it started (reset)"] = "把每个 Blackthornes 窗口放回最初的位置（reset）"
@@ -3909,3 +3909,8 @@ L["Or right-click the minimap button."] = "也可以右键点击小地图按钮�
 L["Upgrades Only:"] = "只显示升级："
 L["Shows only the gear you can make that beats what you wear now."] = "只显示你能做的、比你现在穿的更好的装备。"
 L["Nothing you can make here is an upgrade right now."] = "你在这里能做的东西现在都不是升级。"
+
+-- Tradeskills Settings: Set Default (2026-11-23)
+L["Tradeskills Settings:"] = "Tradeskills 设置："
+L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."] = "把 Tradeskills 的每个设置恢复到最初的样子。 你的价格、队列、销售和配方都会保留。 你的窗口位置和这一页的选择也会保留。"
+L["Every Tradeskills setting is back to how it started."] = "Tradeskills 的所有设置都已恢复到最初的样子。"

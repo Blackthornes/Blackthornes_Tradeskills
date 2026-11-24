@@ -3628,7 +3628,7 @@ L["· Skipped · 1 writ"] = "· Ignorée · 1 ordre"
 L["· Skipped · %d writs"] = "· Ignorée · %d ordres"
 L["· 1 writ · %d rep"] = "· 1 ordre · %d réputation"
 L["· %d writs · %d rep"] = "· %d ordres · %d réputation"
-L["Window Spots:"] = "Place des fenêtres :"
+L["Window Locations:"] = "Position des fenêtres :"
 L["Puts every Blackthornes window back where it started. Your settings and data stay the same."] = "Remet chaque fenêtre Blackthornes à sa place de départ. Tes réglages et tes données ne changent pas."
 L["Every window is back in its first spot."] = "Chaque fenêtre est revenue à sa première place."
 L["put every Blackthornes window back where it started (reset)"] = "remettre chaque fenêtre Blackthornes à sa place de départ (reset)"
@@ -3911,3 +3911,8 @@ L["Or right-click the minimap button."] = "Ou fais un clic droit sur le bouton d
 L["Upgrades Only:"] = "Améliorations seulement :"
 L["Shows only the gear you can make that beats what you wear now."] = "Montre seulement l'équipement que tu peux fabriquer et qui est meilleur que ce que tu portes."
 L["Nothing you can make here is an upgrade right now."] = "Rien de ce que tu peux fabriquer ici n'est une amélioration pour l'instant."
+
+-- Tradeskills Settings: Set Default (2026-11-23)
+L["Tradeskills Settings:"] = "Réglages de Tradeskills :"
+L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."] = "Remet chaque réglage de Tradeskills comme au départ. Tes prix, ta file, tes ventes et tes recettes restent. La position de tes fenêtres et les choix de cette page restent aussi."
+L["Every Tradeskills setting is back to how it started."] = "Tous les réglages de Tradeskills sont revenus comme au départ."
