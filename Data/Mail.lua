@@ -1409,7 +1409,7 @@ function Mail:GetItems(from, to)
         -- Two different unresolved names must not share a row, and an
         -- unresolved name must not collide with item 0 either, so the string
         -- key is prefixed rather than used bare.
-        local key = itemID or ("?" .. tostring(name or "unknown"))
+        local key = Mail.ItemKey(itemID, name)
         local bucket = byKey[key]
 
         if not bucket then
@@ -1645,6 +1645,28 @@ function Mail.PlainName(name)
 
     if not ok or type(plain) ~= "string" or plain == "" then return nil end
     return plain
+end
+
+--- The name a mail gave one random suffix copy ("Royal Cape of the
+--- Sorcerer"), when it is the item's own name with words added after it;
+--- nil for the plain item, or while the client has no name for it.
+function Mail.SuffixName(itemID, name)
+    local plain = itemID and Mail.PlainName(name)
+    if not plain or not (C_Item and C_Item.GetItemInfo) then return nil end
+    local ok, base = pcall(C_Item.GetItemInfo, itemID)
+    if not ok or type(base) ~= "string" or base == "" then return nil end
+    if #plain <= #base + 1 or plain:sub(1, #base + 1) ~= base .. " " then return nil end
+    return plain
+end
+
+--- The key By item files an entry under: the item, and each random suffix
+--- of it on a row of its own (a player's report, 2026-11-23). An entry
+--- with no item is keyed by its name.
+function Mail.ItemKey(itemID, name)
+    if not itemID then return "?" .. tostring(name or "unknown") end
+    local suffixName = Mail.SuffixName(itemID, name)
+    if suffixName then return itemID .. ":" .. suffixName end
+    return itemID
 end
 
 local function SameItem(heard, entry)

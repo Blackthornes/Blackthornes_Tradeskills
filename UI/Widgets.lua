@@ -568,7 +568,30 @@ function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback, link)
         return false
     end
 
+    -- Drawn by ID, a random suffix copy shows the plain item's name. The
+    -- row's own name ("Captain's Breastplate of Magic") goes on top then
+    -- (a player's report, 2026-11-23).
+    Widgets.TakeFullName(fallback)
     return true
+end
+
+--- Put a row's full name on the tooltip's top line, when it is the name
+--- shown there with words added after it (a random suffix). A link counts
+--- by the name inside it. Anything else leaves the line alone.
+function Widgets.TakeFullName(full)
+    if type(full) ~= "string" then return false end
+    local ok, done = pcall(function()
+        full = full:match("|h%[(.-)%]|h") or full
+        local line = _G.GameTooltipTextLeft1
+        local shown = line and line.GetText and line:GetText()
+        if type(shown) ~= "string" or shown == "" or #full <= #shown + 1 then return false end
+        if full:sub(1, #shown + 1) ~= shown .. " " then return false end
+        -- A count ("Linen Cloth (20)") or a colour code is not a suffix.
+        if full:find("[%d%(%[|]", #shown + 1) then return false end
+        line:SetText(full)
+        return true
+    end)
+    return ok and done == true
 end
 
 --- A row whose whole tooltip is the item's own.

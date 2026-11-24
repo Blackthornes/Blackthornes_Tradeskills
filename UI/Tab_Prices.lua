@@ -1402,6 +1402,24 @@ end
 --- For the tests: the tab's widgets and state.
 function UI._PricesWidgets() return widgets, state, UpdateRow end
 
+--- The hover on a row: the item's own card. A suffix row shows that suffix
+--- (its link when its bonus is known, else its full name on top); the
+--- item's own row stays the plain item.
+function UI._PricesRowTooltip(row, entry)
+    if not (entry and entry.itemID) then return end
+    local link, name = nil, entry.label
+    if entry.kid then
+        local suffixLink = ns.Prices and ns.Prices.SuffixLink
+        if suffixLink then
+            local ok, found = pcall(suffixLink, entry.itemID, entry.suffix)
+            link = ok and found or nil
+        end
+        name = entry.fullName
+    end
+    Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, name, link)
+    GameTooltip:Show()
+end
+
 --------------------------------------------------------------------------------
 -- Build
 --------------------------------------------------------------------------------
@@ -1526,7 +1544,7 @@ local function BuildDetails(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, entry) Widgets.ShowItemOnly(row, entry.itemID, entry.label) end,
+        onEnter = function(row, entry) UI._PricesRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
