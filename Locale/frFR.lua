@@ -3946,4 +3946,5 @@ L["Salvager: %d recorded apart. Salvager mode is %s."] = "Salvager : %d notés �
 L["on, from its buff"] = "actif, grâce à son effet"
 L["on, from placing it"] = "actif, car tu l'as posé"
 L["  Salvager: %s gave %s"] = "  Salvager : %s a donné %s"
+L["Your last spell: %s (%s)"] = "Ton dernier sort : %s (%s)"
 L["Your buffs at the last disenchant: %s"] = "Tes effets au dernier désenchantement : %s"

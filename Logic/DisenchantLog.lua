@@ -677,9 +677,21 @@ end
 function DisenchantLog:OnCastSucceeded(_, unit, _, spellID)
     if not IsPlayer(unit) then return end
 
-    -- Placing an Arcane Salvager yourself turns Salvager mode on.
-    if self:SalvagerApart() then
-        local ok, placed = pcall(function() return spellID == SALVAGER_SPELL end)
+    -- Placing an Arcane Salvager yourself turns Salvager mode on. Known by
+    -- its spell, or by a spell name with "Salvager" in it, in case Forever
+    -- numbers the placing cast differently (2026-11-24: placed in game, and
+    -- the mode did not start).
+    if self:SalvagerApart() and not IsDisenchant(spellID) then
+        local name = SpellName(spellID)
+        local ok, placed = pcall(function()
+            if spellID == SALVAGER_SPELL then return true end
+            return type(name) == "string" and name:lower():find("salvager", 1, true) ~= nil
+        end)
+        -- Kept for /bts delog, so the real spell can be named.
+        pcall(function()
+            self.lastSpell = { id = type(spellID) == "number" and (spellID + 0) or nil,
+                               name = type(name) == "string" and (name .. "") or nil }
+        end)
         if ok and placed then
             self:StartSalvager("cast")
             return
@@ -862,6 +874,11 @@ local function Report(input)
             local entry = salvagerLog.recent[index]
             ns.Print(L.Format("  Salvager: %s gave %s", Util.GetItemLabel(entry.itemID), Describe(entry.results)))
         end
+    end
+
+    local spell = DisenchantLog.lastSpell
+    if spell and DisenchantLog:SalvagerApart() then
+        ns.Print(L.Format("Your last spell: %s (%s)", tostring(spell.name or "?"), tostring(spell.id or "?")))
     end
 
     local auras = DisenchantLog.lastAuras

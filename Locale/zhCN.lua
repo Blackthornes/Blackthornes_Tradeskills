@@ -3944,4 +3944,5 @@ L["Salvager: %d recorded apart. Salvager mode is %s."] = "Salvager：已单独�
 L["on, from its buff"] = "开启，来自它的增益"
 L["on, from placing it"] = "开启，因为你放置了它"
 L["  Salvager: %s gave %s"] = "  Salvager：%s 分解出 %s"
+L["Your last spell: %s (%s)"] = "你最后施放的法术：%s（%s）"
 L["Your buffs at the last disenchant: %s"] = "上次分解时你身上的增益：%s"

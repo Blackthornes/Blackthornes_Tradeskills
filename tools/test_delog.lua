@@ -418,6 +418,17 @@ Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
 check("and the next one is plain again", PlainSnapshot() == bandBefore + 1
     and Log:GetSalvagerItem(1004).casts == 5)
 
+-- Forever may number the placing cast differently: its name still counts.
+local savedSpellName = C_Spell
+C_Spell = { GetSpellName = function(id) return id == 4242 and "Place Arcane Salvager" or nil end }
+Log:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 4242)
+check("a spell named for the Salvager turns it on too", (Log:SalvagerUp()) == true)
+check("and /bts delog can name it", Log.lastSpell and Log.lastSpell.id == 4242)
+Log:StopSalvager()
+Log:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 7418)
+check("some other spell does not", (Log:SalvagerUp()) == false)
+C_Spell = savedSpellName
+
 Place()
 Log:OnZoneChanged()
 check("a new zone ends it", (Log:SalvagerUp()) == false)

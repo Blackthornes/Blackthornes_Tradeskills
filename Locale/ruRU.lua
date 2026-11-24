@@ -3948,4 +3948,5 @@ L["Salvager: %d recorded apart. Salvager mode is %s."] = "Salvager: %d запи�
 L["on, from its buff"] = "включён, по его эффекту"
 L["on, from placing it"] = "включён, ты его поставил"
 L["  Salvager: %s gave %s"] = "  Salvager: %s дал %s"
+L["Your last spell: %s (%s)"] = "Твоё последнее заклинание: %s (%s)"
 L["Your buffs at the last disenchant: %s"] = "Твои эффекты при последнем распылении: %s"
