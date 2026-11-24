@@ -37,6 +37,10 @@ QuickBuy.BUY_WAIT = 15
 QuickBuy.CONFIRM_FOR = 5
 -- Seconds the item search may wait in the queue.
 QuickBuy.QUOTE_WAIT = 10
+-- Seconds after the search to look at the game's list again, in case no
+-- update came (reading only, never a search or a buy). After the last look
+-- with nothing there, the button goes back to Search.
+QuickBuy.LOOKS = { 1, 3, 6, 10 }
 -- Double Check Over when Snipe isn't loaded (10g).
 QuickBuy.CONFIRM_OVER = 100000
 
@@ -151,8 +155,14 @@ function QuickBuy:Start(entry)
         expires = self.QUOTE_WAIT,
         send = function()
             if QuickBuy.current ~= mine then return false end
-            local sent = pcall(C_AuctionHouse.SendSearchQuery, key, PriceSort(), true)
-            if sent then mine.sent = Now() end
+            -- Gear is filed under a key with its item level, which the
+            -- item's row in the Search button's browse results carries.
+            mine.key = QuickBuy.BrowseKey(mine.itemID) or mine.key
+            local sent = pcall(C_AuctionHouse.SendSearchQuery, mine.key, PriceSort(), true)
+            if sent then
+                mine.sent = Now()
+                QuickBuy:LookLater(mine)
+            end
             return sent
         end,
         onGiveUp = function()
@@ -166,15 +176,54 @@ function QuickBuy:Start(entry)
     return true
 end
 
+--- The item's own key from the browse results, or nil. For gear it names
+--- the item level, and only that key reads its listings.
+function QuickBuy.BrowseKey(itemID)
+    if not Util.HasFunction("C_AuctionHouse.GetBrowseResults") then return nil end
+    local ok, rows = pcall(C_AuctionHouse.GetBrowseResults)
+    if not (ok and type(rows) == "table") then return nil end
+    for _, row in ipairs(rows) do
+        local key = type(row) == "table" and row.itemKey
+        if type(key) == "table" and key.itemID == itemID then return key end
+    end
+    return nil
+end
+
+--- Look at the game's list a few times after the search, in case its
+--- update never came or named another key. Reading only. With nothing
+--- there after the last look, the button goes back to Search.
+function QuickBuy:LookLater(mine)
+    local looks = self.LOOKS
+    for i, seconds in ipairs(looks) do
+        After(seconds, function()
+            if QuickBuy.current ~= mine or mine.phase ~= "asking" then return end
+            QuickBuy:Read(true)
+            if i == #looks and QuickBuy.current == mine and mine.phase == "asking" then
+                QuickBuy.current = nil
+                Moved()
+            end
+        end)
+    end
+end
+
 --- Read the listings the game holds for the item, cheapest first: someone
 --- else's, priced at or under the limit, and not tried on this run.
-function QuickBuy:Read()
+--- `looking` (a look after the search, not the game's update) changes
+--- nothing while the list is still empty and not complete.
+function QuickBuy:Read(looking)
     local cur = self.current
     if not cur then return end
     if not (Util.HasFunction("C_AuctionHouse.GetNumItemSearchResults")
         and Util.HasFunction("C_AuctionHouse.GetItemSearchResultInfo")) then return end
     local okN, count = pcall(C_AuctionHouse.GetNumItemSearchResults, cur.key)
     if not (okN and type(count) == "number") then return end
+    if looking and cur.phase == "asking" and count == 0 then
+        local okF, full = false, false
+        if Util.HasFunction("C_AuctionHouse.HasFullItemSearchResults") then
+            okF, full = pcall(C_AuctionHouse.HasFullItemSearchResults, cur.key)
+        end
+        if not (okF and full == true) then return end
+    end
     local listings = {}
     for i = 1, count do
         local ok, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, cur.key, i)
@@ -203,6 +252,8 @@ function QuickBuy:OnResults(itemKey)
     if not (cur and cur.sent) then return end
     local named = type(itemKey) == "table" and itemKey.itemID or nil
     if named and named ~= cur.itemID then return end
+    -- Read under the key the game filed them by (gear names its level).
+    if named then cur.key = itemKey end
     self:Read()
 end
 
