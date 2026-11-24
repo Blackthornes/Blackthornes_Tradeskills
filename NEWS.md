@@ -27,11 +27,11 @@ tool prints a note for a shipped line that reads like an advert.
 
 - Buy One on the Disenchanting tab buys the cheapest listing on each click, with no pop-up. You can bind a key to it.
 - Each random suffix on the Prices tab has its own My Price, and item cards and Sales show the suffix name.
-- The Sell list keeps its order while the auction house is open, so rows stay where you clicked.
+- The Sell list keeps its order while the auction house is open.
 - Disenchants at an Arcane Salvager are kept in their own record from the start. The addon spots the Salvager by its buff.
 
 Fixes and changes:
-- Any enchanter can disenchant any item, so no deal is marked too high for a low enchanter.
+- Any enchanter can disenchant any item.
 - Value on Tooltips set to Off hides the Disenchant Value line too.
 - The Disenchanting and Deals tabs update when you search the auction house yourself.
 - The Prices graph stays readable in a short window, and Side by Side no longer covers the value lines.
