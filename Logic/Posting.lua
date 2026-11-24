@@ -580,7 +580,23 @@ end
 --   building many of these does not re-walk the bags for each one. A table
 --   with no bag means the caller looked and there is no slot to list from.
 -- @return sellable, postableCount
-function Posting:GetSellInfo(itemID, held)
+-- The last time the auction house said an item could be listed, this visit:
+-- sellSeen[itemID] = { bags = what the bags held then, count = how many }.
+local sellSeen = {}
+
+--- Forget what the auction house said this visit (it closed).
+function Posting:ForgetSellInfo()
+    sellSeen = {}
+end
+
+--- Whether an item can be listed, and how many.
+---
+--- `steady` (the Sell list): while the auction house is busy sending your
+--- auctions or a scan, it can answer "cannot be sold" or "none" for a stack
+--- it took a moment before, and the row went away and came back (the owner,
+--- 2026-11-24). So the last yes this visit stands while the bags still hold
+--- the same number. Listing asks without it and takes the game's answer.
+function Posting:GetSellInfo(itemID, held, steady)
     local bag, slot
 
     if held then
@@ -602,10 +618,20 @@ function Posting:GetSellInfo(itemID, held)
         sellable = not LooksBound(itemID)
     end
 
-    local count = ns.Inventory:GetBagCount(itemID)
+    local inBags = ns.Inventory:GetBagCount(itemID)
+    local count = inBags
     if Util.HasFunction("C_AuctionHouse.GetAvailablePostCount") then
         local ok, available = pcall(C_AuctionHouse.GetAvailablePostCount, location)
         if ok and available then count = available end
+    end
+
+    if steady then
+        local seen = sellSeen[itemID]
+        if sellable and count and count > 0 then
+            sellSeen[itemID] = { bags = inBags, count = count }
+        elseif seen and inBags and inBags > 0 and seen.bags == inBags then
+            return true, math.min(seen.count, inBags)
+        end
     end
 
     return sellable, count
@@ -1264,7 +1290,7 @@ function Posting:GetPostable(opts)
         if wanted then
             local held = slots[itemID]
 
-            local sellable, count = self:GetSellInfo(itemID, held)
+            local sellable, count = self:GetSellInfo(itemID, held, opts.showNoted)
             local copy = held and held.link and Util.LinkSuffix(held.link) and held.link or nil
             local price, basis, _, _, waits = self:GetPostPrice(itemID, copy or false)
 
@@ -1607,7 +1633,8 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not line.carried
+            and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID)
             and (anyway or not self:ButlerWaitsNow(line.itemID)) then
             if skipSettling and self:PendingFor(line.itemID) then
@@ -1629,7 +1656,8 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not line.carried
+            and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID) then
             count = count + 1
             total = total + (line.total or 0)
@@ -1665,6 +1693,7 @@ function Posting:OnEnable()
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         -- Prices move while away: the next visit checks them again.
         Posting:ForgetChecks()
+        Posting:ForgetSellInfo()
 
         local data = Posting.confirming
         Posting.confirming = nil

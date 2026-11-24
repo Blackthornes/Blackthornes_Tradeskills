@@ -405,6 +405,40 @@ do
 end
 
 print("")
+print("the auction house busy with a scan")
+
+Reset()
+
+do
+    -- While it sends your auctions or a scan, the game can answer "none" for
+    -- a stack it took a moment before, and the Sell row went away and came
+    -- back (the owner, 2026-11-24). The Sell list keeps the last yes while
+    -- the bags hold the same; listing still takes the game's word.
+    local busy = false
+    C_AuctionHouse = {
+        IsSellItemValid = function() return not busy end,
+        GetAvailablePostCount = function() return busy and 0 or 20 end,
+    }
+    Posting:ForgetSellInfo()
+    local function Sell()
+        return Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
+    end
+    check("the Sell list shows it",               LineFor(Sell(), CRAFTED) ~= nil, true)
+    busy = true
+    check("and still does while the game is busy", LineFor(Sell(), CRAFTED) ~= nil, true)
+    check("with the count it had",                LineFor(Sell(), CRAFTED) and LineFor(Sell(), CRAFTED).count, 20)
+    check("listing takes the game's word",        Posting:GetSellInfo(CRAFTED), false)
+    bags[0][1].stackCount = 10
+    check("once the bags change, the game's word", LineFor(Sell(), CRAFTED), nil)
+    busy = false
+    bags[0][1].stackCount = 20
+    Posting:ForgetSellInfo()
+    busy = true
+    check("nothing seen this visit, nothing kept", LineFor(Sell(), CRAFTED), nil)
+    C_AuctionHouse = nil
+end
+
+print("")
 
 if failures > 0 then
     error(("%d check(s) failed"):format(failures), 0)
