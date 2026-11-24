@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.41.2
+
+Fixes and changes:
+- Light Leather and other gathered goods list at the auction price.
+- Buy Sets and Merchant's Favor no longer stick on "auction house is busy".
+- Buy For on Disenchanting moves to the next price after you buy.
+
 ## 1.41.1
 
 - Road to 300 names the city for Undercity, Thunder Bluff and Darnassus trainers.
