@@ -1533,8 +1533,17 @@ function Snipe:Pay()
             local okM, money = pcall(GetMoney)
             if okM then pending.moneyBefore = money end
         end
+        -- Waiting before PlaceBid: the game can take the money (and send
+        -- PLAYER_MONEY) inside the call, which a later mark missed.
+        pending.phase = "buying"
         ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
             and pcall(C_AuctionHouse.PlaceBid, pending.auctionID, pending.total)
+        -- Bought already, inside the call: nothing more to mark.
+        if ok and Snipe.pending ~= pending then
+            self.armed = nil
+            Moved()
+            return true
+        end
     else
         ok = Util.HasFunction("C_AuctionHouse.ConfirmCommoditiesPurchase")
             and pcall(C_AuctionHouse.ConfirmCommoditiesPurchase, pending.itemID, pending.count)

@@ -193,6 +193,42 @@ for _ = 1, 6 do RunTimers() end
 assert(Q:StateFor(88) == nil, "no answer lets it go, got " .. tostring(Q:StateFor(88)))
 print("ok: no answer gives the Search button back")
 
+-- 8. Seen in game 2026-11-24: after a buy the button took about 15
+-- seconds to answer again. The game takes the money inside PlaceBid
+-- itself, so PLAYER_MONEY came before the buy was marked as waiting and
+-- was missed, and the purchase event named no auction. The next click
+-- must work as soon as the money has gone.
+money = 1000000
+listings = {
+    { auctionID = 41, buyoutAmount = 500, quantity = 1 },
+    { auctionID = 42, buyoutAmount = 510, quantity = 1 },
+    { auctionID = 43, buyoutAmount = 520, quantity = 1 },
+}
+C_AuctionHouse.GetNumItemSearchResults = function() return #listings end
+C_AuctionHouse.GetItemSearchResultInfo = function(_, i) return listings[i] end
+C_AuctionHouse.HasFullItemSearchResults = function() return true end
+C_AuctionHouse.GetBrowseResults = nil
+local placeBid = C_AuctionHouse.PlaceBid
+C_AuctionHouse.PlaceBid = function(id, total)
+    placeBid(id, total)
+    money = money - total
+    handlers.PLAYER_MONEY()
+end
+timers = {}
+Q:Start({ itemID = 99, net = 1000 })
+requests["de-quickbuy"].send()
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 99 })
+local before = #bids
+assert(Q:Click() == true and #bids == before + 1)
+assert(Q:Click() == true and #bids == before + 2, "the second click buys at once")
+-- The purchase event with no auction named still counts the buy.
+C_AuctionHouse.PlaceBid = placeBid
+assert(Q:Click() == true and #bids == before + 3)
+handlers.AUCTION_HOUSE_PURCHASE_COMPLETED(nil, nil, nil)
+assert(Q.current.pending == nil and Q.current.bought == 3,
+    "bought " .. tostring(Q.current.bought))
+print("ok: the next buy is ready as soon as the money goes")
+
 C_Timer = savedTimer
 C_AuctionHouse, GetMoney = nil, nil
 print("disenchant quick buy: all passed")
