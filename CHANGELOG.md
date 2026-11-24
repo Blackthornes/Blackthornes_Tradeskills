@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.44.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Upgrades Only.** The Craft queue on the Crafting tab has an Upgrades Only box beside Search recipes. It shows when Equipment is installed. Ticked, the list holds only crafts that make an upgrade for you.
+- **Your Way There.** The Your Way There window is now a small see-through box. It shows only your current step, how far it is and the time left. A dial at the end turns to point the way. Stop and Show on Map show while the mouse is on the box. A red X puts it away for this trip. While the box shows, the big arrow keeps only its name. It sits under the big arrow.
+- **Arcane Salvager.** The Salvager notice goes away when the Boosted Disenchanting buff ends.
+- **Scroll bars.** Scroll bars move the way you drag them.
+
 ## 1.43.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file and a key binding were added.
