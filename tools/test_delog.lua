@@ -448,11 +448,20 @@ up, byBuff = Log:SalvagerUp()
 check("and says it came from the buff", up == true and byBuff == true)
 check("the buffs are kept for /bts delog", Log.lastAuras and Log.lastAuras[2].name == "Arcane Salvager")
 
+-- The buff the game really gives (seen in game 2026-11-24).
+Log:StopSalvager()
+buffs = { { name = "Campfire Nearby", spellId = 1283391 }, { name = "Boosted Disenchanting", spellId = 1283701 } }
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+check("Boosted Disenchanting counts as the Salvager's buff", Log:GetSalvagerItem(1004).casts == 7
+    and select(2, Log:SalvagerUp()) == true)
+buffs = { { name = "Campfire Nearby", spellId = 1283391 } }
+check("a campfire alone does not", Log._SalvagerBuff(buffs) == false)
+
 buffs = { { name = "Well Fed", spellId = 1 } }
 bandBefore = PlainSnapshot()
 Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
 check("walking away from it makes the next one plain", PlainSnapshot() == bandBefore + 1
-    and Log:GetSalvagerItem(1004).casts == 6 and (Log:SalvagerUp()) == false)
+    and Log:GetSalvagerItem(1004).casts == 7 and (Log:SalvagerUp()) == false)
 
 buffs = { { name = secret, spellId = secret } }
 local okSecret = pcall(Log.CheckSalvager, Log)
@@ -462,7 +471,7 @@ C_UnitAuras = savedAuras
 local p2 = #printed
 Log._Report("")
 check("/bts delog prints the buffs at the last disenchant", Said("buffs at the last disenchant", p2 + 1) ~= nil)
-check("and the Salvager count", Said("Salvager: 6 recorded apart", p2 + 1) ~= nil)
+check("and the Salvager count", Said("Salvager: 7 recorded apart", p2 + 1) ~= nil)
 
 settings.salvagerApart = nil
 ns.Config = nil

@@ -3858,7 +3858,11 @@ in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
   disenchant, on `ZONE_CHANGED_NEW_AREA`, at logout (never saved) or from
   Stop; a buff mode ends when the buff is gone. One `C_Timer.After` clears
   the purple line after the idle time, no ticker.
-- The buff's name is not yet known. `/bts delog` prints the player's buffs
+- The buff is "Boosted Disenchanting" (spell 1283701, seen in game
+  2026-11-24); it is matched by spell or name. Placing the Salvager did not
+  show as spell 1263056, so a cast is also matched by a name holding
+  "Salvager", and `/bts salvager on|off` sets the mode by hand.
+- Before the buff was known: `/bts delog` prints the player's buffs
   at the last disenchant (`DisenchantLog.lastAuras`, read in a pcall) and
   the Salvager count, so the first disenchant at a Salvager names it.
 - `Disenchant:GetSalvagerOutcomes(itemID)` and `GetSalvagerValue`: the
