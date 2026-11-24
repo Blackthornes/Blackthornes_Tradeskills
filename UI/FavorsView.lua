@@ -116,6 +116,14 @@ end
 function FavorsView.Kind(step)
     if not step or step.crate then return "search" end
     if not Util.HasFunction("C_AuctionHouse.StartCommoditiesPurchase") then return "search" end
+    -- Forever's GetItemCommodityStatus takes an item in the bags and raises
+    -- for an item ID, so the scanner's memory is asked first.
+    local scanner = ns.Scanner
+    if scanner and scanner.GetCommodityStatus then
+        local ok, known = pcall(scanner.GetCommodityStatus, scanner, step.itemID)
+        if ok and known == false then return "search" end
+        if ok and known == true then return "buy" end
+    end
     if Util.HasFunction("C_AuctionHouse.GetItemCommodityStatus") then
         local ok, status = pcall(function()
             local value = C_AuctionHouse.GetItemCommodityStatus(step.itemID)
