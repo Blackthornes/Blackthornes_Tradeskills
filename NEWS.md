@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.45.0
+
+- Buy One buys the next listing as soon as you click it again.
+- The Sales tab keeps 60 days of sales, up to 2,000.
+
+Fixes and changes:
+- Various bug fixes.
+
 ## 1.44.0
 
 - The Craft queue has an Upgrades Only box that lists only crafts that make an upgrade for you.
