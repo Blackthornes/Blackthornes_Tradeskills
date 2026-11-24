@@ -148,6 +148,51 @@ handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 77 })
 assert(Q:Click() == false and #bids == 3 and #printed == 1)
 print("ok: short of money buys nothing")
 
+-- 7. Gear (seen in game 2026-11-24: 17 shoulders at 5s, the button still
+-- said Search). The game files an armor piece's listings under a key with
+-- its item level, and a key made from the item ID alone reads none. The
+-- event's own key, or the key on the item's browse row, is the one to read.
+money = 1000000
+listings = { { auctionID = 31, buyoutAmount = 500, quantity = 1 } }
+local function SameKey(key) return type(key) == "table" and key.itemID == 88 and key.itemLevel == 22 end
+C_AuctionHouse.GetNumItemSearchResults = function(key) return SameKey(key) and #listings or 0 end
+C_AuctionHouse.GetItemSearchResultInfo = function(key, i) return SameKey(key) and listings[i] or nil end
+C_AuctionHouse.HasFullItemSearchResults = function(key) return SameKey(key) end
+Q:Start({ itemID = 88, net = 1000 })
+requests["de-quickbuy"].send()
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 88, itemLevel = 22 })
+assert(Q:StateFor(88) == "ready", "gear reads under the event's key, got " .. tostring(Q:StateFor(88)))
+print("ok: gear is read under the key the game gave")
+
+-- The browse row's key is the one searched for.
+local searched
+C_AuctionHouse.SendSearchQuery = function(key) searched = key; return true end
+C_AuctionHouse.GetBrowseResults = function() return { { itemKey = { itemID = 88, itemLevel = 22 } } } end
+Q:Start({ itemID = 88, net = 1000 })
+requests["de-quickbuy"].send()
+assert(SameKey(searched), "searched with the browse row's key")
+
+-- No event at all: the results still land in the game's list, and a look
+-- a moment later reads them. A look never buys.
+timers = {}
+Q:Start({ itemID = 88, net = 1000 })
+requests["de-quickbuy"].send()
+assert(Q:StateFor(88) == "asking")
+RunTimers()
+assert(Q:StateFor(88) == "ready", "a look after the search reads the list, got " .. tostring(Q:StateFor(88)))
+assert(#bids == 3, "looking never buys")
+print("ok: the list is read even when no update comes")
+
+-- Nothing comes back at all: the button goes back to Search.
+listings = {}
+C_AuctionHouse.HasFullItemSearchResults = function() return false end
+timers = {}
+Q:Start({ itemID = 88, net = 1000 })
+requests["de-quickbuy"].send()
+for _ = 1, 6 do RunTimers() end
+assert(Q:StateFor(88) == nil, "no answer lets it go, got " .. tostring(Q:StateFor(88)))
+print("ok: no answer gives the Search button back")
+
 C_Timer = savedTimer
 C_AuctionHouse, GetMoney = nil, nil
 print("disenchant quick buy: all passed")
