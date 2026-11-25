@@ -2279,6 +2279,25 @@ local function TipIdentity(entry)
     return entry.itemID or entry.recipeID or entry.key or entry
 end
 
+--- True while a window up the line from `frame` is folded into its round
+--- button (UI/FoldWindow.lua). Forever lets the mouse reach rows inside a
+--- folded window, so they must not show tooltips or take clicks (a
+--- player's recording, 2026-11-24).
+function Widgets.InFoldedWindow(frame)
+    local current = frame
+    for _ = 1, 30 do
+        if type(current) ~= "table" then return false end
+        local fold = rawget(current, "blackthornesFold")
+        if type(fold) == "table" and fold.folded == true then return true end
+        local getParent = current.GetParent
+        if type(getParent) ~= "function" then return false end
+        local ok, parent = pcall(getParent, current)
+        if not ok then return false end
+        current = parent
+    end
+    return false
+end
+
 --- Whether the game's tooltip is showing for `frame` now.
 local function OwnsTooltip(frame)
     if type(GameTooltip) ~= "table" or type(GameTooltip.IsOwned) ~= "function" then return false end
@@ -2717,7 +2736,7 @@ function Widgets.CreateScrollList(parent, opts)
         row:SetScript("OnEnter", function(self)
             Motion:Blend(self, "hover", 1, 0.1, Light)
             self.hoverEdge:Show()
-            if opts.onEnter and self.data then
+            if opts.onEnter and self.data and not Widgets.InFoldedWindow(self) then
                 self.tipFor = TipIdentity(self.data)
                 opts.onEnter(self, self.data)
                 Widgets.AddClickHint(self, opts.clickHint, self.data)
@@ -2732,6 +2751,7 @@ function Widgets.CreateScrollList(parent, opts)
         end)
 
         row:SetScript("OnClick", function(self, mouseButton)
+            if Widgets.InFoldedWindow(self) then return end
             -- Shift-click any item row with the auction house open and the
             -- house searches for it (2026-10-04). Right-click stays
             -- what each list already made it.

@@ -1175,6 +1175,22 @@ do
   check("beside the window while the one window holds Crafting, it takes no clicks",
     O and O(Pane(true, 1), false, nil, true), true)
   check("beside the window on its own, it takes clicks", O and O(Pane(true, 1), false, nil, false), false)
+  -- A player's recording (2026-11-24): the one window folded into its round
+  -- button while crafting, and the Crafting list's tooltips still came up
+  -- under the mouse where it had been. Forever let the rows answer.
+  -- The real test from UI/Widgets.lua, which the pane asks.
+  do
+    local wns = { Theme = {} }
+    assert(loadfile(lfs_cwd .. "/UI/Widgets.lua"))("Blackthornes_TS", wns)
+    ns.Widgets.InFoldedWindow = wns.Widgets.InFoldedWindow
+  end
+  local one = { blackthornesFold = { folded = true }, GetParent = function() return nil end }
+  local tab = { GetParent = function() return one end }
+  local folded = Pane(true, 1)
+  folded.GetParent = function() return tab end
+  check("in a folded one window, the pane takes no clicks or tooltips", O and O(folded, true, "crafting", true), true)
+  one.blackthornesFold.folded = false
+  check("opened again, it does", O and O(folded, true, "crafting", true), false)
 
   local oldQueue, oldFront, oldFrame, oldInOne = ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame, CraftPanel.inOne
   local oldUI, oldTabs = ns.UI, ns.TSTabs
