@@ -420,10 +420,23 @@ do
   ns.Prices.LowestListed = module.LowestListed
 end
 
--- As Summarise records a book of 200, 1900, 1900: the 200 is ignored.
+-- As Summarise records a book of 200, 1900, 1900: the value leaves the 200
+-- out, but the lowest posting is the lowest posting (a player's report,
+-- 2026-11-22: an earring listed at 20s and 4.83g said 4.83g for both).
 RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 1900, ignoredLow = 200 }
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
-check("a lone low listing is left out", lines[2][2], "<1900>")
+check("a lone low listing is still the lowest posting", lines[2][2], "<200>")
+
+-- Once that one is bought, its price is gone with it, though min still
+-- holds it until the next look.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 1900 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("a bought lone listing is not shown", lines[2][2], "<1900>")
+
+-- A browse row far under the usual price (Prices.BrowseLow) shows too.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, ignoredLow = 200 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("a lone low browse row is the lowest posting", lines[2][2], "<200>")
 
 -- Two low ones are a real price and count.
 RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 200 }
