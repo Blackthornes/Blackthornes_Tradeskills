@@ -280,6 +280,15 @@ function RoadView:Build(view)
     widgets.pickByLabel:SetPoint("RIGHT", widgets.pickBy, "LEFT", -6, 0)
     widgets.pickByLabel:SetText(L["Pick By:"])
 
+    -- The specialty line (2026-11-25): shown only while the character has
+    -- no specialty yet and the road left a specialty's recipes off.
+    widgets.toolbar = toolbar
+    widgets.note = Theme.CreateLabel(view, "small", "muted")
+    widgets.note:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -6)
+    widgets.note:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -6)
+    widgets.note:SetWordWrap(true)
+    widgets.note:Hide()
+
     -- The meter: one piece a step, gold up to the step to do now.
     local meter = CreateFrame("Frame", nil, view)
     meter:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -6)
@@ -385,6 +394,7 @@ function RoadView:Refresh()
 
     if not profession then
         self.plan = nil
+        RoadView:PlaceNote(nil)
         widgets.heading:SetText("")
         widgets.stepOf:SetText("")
         widgets.list:SetData({})
@@ -414,6 +424,7 @@ function RoadView:Refresh()
         return
     end
 
+    RoadView:PlaceNote(ns.RoadPlan.SpecialtyNote and ns.RoadPlan.SpecialtyNote(profession.line))
     widgets.list:SetData(ns.RoadPlan.Listed(plan))
     if plan.current then
         widgets.stepOf:SetText(L.Format("Step %d of %d", plan.current, #plan.steps))
@@ -437,6 +448,19 @@ function RoadView:Refresh()
     local skipped = #ns.RoadPlan:SkippedOn(profession.line)
     widgets.saved:SetText(RoadView.FootText(plan, skipped))
     self:PlaceShowAll(skipped)
+end
+
+--- The specialty line under the header, or none; the meter moves down
+--- under it while it shows.
+function RoadView:PlaceNote(text)
+    local note, meter, toolbar = widgets.note, widgets.meter, widgets.toolbar
+    if not (note and meter and toolbar) then return end
+    note:SetText(text or "")
+    note:SetShown(text ~= nil)
+    meter:ClearAllPoints()
+    local above = text and note or toolbar
+    meter:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -6)
+    meter:SetPoint("TOPRIGHT", above, "BOTTOMRIGHT", 0, -6)
 end
 
 --- Show All shows only while this road has a skipped recipe; the footer's

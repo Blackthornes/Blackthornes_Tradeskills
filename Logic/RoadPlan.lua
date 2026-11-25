@@ -287,9 +287,11 @@ end
 --------------------------------------------------------------------------------
 
 RoadPlan.standingVersion = 0
+RoadPlan.specialtyOff = {}  -- [line] = recipes left off for a specialty, last worked out
 RoadPlan.STANDINGS = { "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
 
 local needsRead = {}  -- [itemID] = { faction, standing, red } or false, this session
+local specRead = {}   -- [itemID] = the specialty its tooltip asks for, or false
 local loading = {}    -- [itemID] = true while the client fetches it
 local sawNeed = false -- a recipe on a road needed a standing this session
 
@@ -351,13 +353,17 @@ function RoadPlan.ItemNeeds(itemID)
             if loading[itemID] then return nil end
         end
     end
-    local found = false
+    local found, specialty = false, false
     local ok = pcall(function()
         local data = tips.GetItemByID(itemID)
         if type(data) ~= "table" or type(data.lines) ~= "table" then return end
         local pattern, factionAt = RequiresPattern()
+        local learn = ns.LearnNext
         for _, line in ipairs(data.lines) do
             local text = TipText(line)
+            if text and learn and learn.SpecialtyIn then
+                specialty = learn.SpecialtyIn(text) or specialty
+            end
             local a, b = nil, nil
             if text then a, b = text:match(pattern) end
             if a and b then
@@ -366,9 +372,18 @@ function RoadPlan.ItemNeeds(itemID)
             end
         end
     end)
-    if not ok then found = false end
+    if not ok then found, specialty = false, false end
     needsRead[itemID] = found
+    specRead[itemID] = specialty
     return found
+end
+
+--- The specialty a recipe item's tooltip asks for ("Requires
+--- Armorsmith"), or nil; read with its standing, in the same pass.
+function RoadPlan.ItemSpecialty(itemID)
+    if type(itemID) ~= "number" then return nil end
+    if specRead[itemID] == nil then RoadPlan.ItemNeeds(itemID) end
+    return specRead[itemID] or nil
 end
 
 --- A standing's place, 1 (Hated) to 8 (Exalted), by the game's own words
@@ -461,6 +476,7 @@ function RoadPlan.OnItemInfo(itemID, success)
     if not (itemID and loading[itemID]) then return end
     loading[itemID] = nil
     needsRead[itemID] = nil
+    specRead[itemID] = nil
     if success == false then needsRead[itemID] = false end
     StandingsMoved()
 end
@@ -498,6 +514,8 @@ function RoadPlan:Candidates(line)
             remade[record.name:lower()] = true
         end
     end
+    local learn = ns.LearnNext
+    local leftOff = 0
     for _, record in pairs(all) do
         if LineOf(record, memo) == line and record.yellow and record.grey
             and record.reagents and #record.reagents > 0
@@ -515,6 +533,11 @@ function RoadPlan:Candidates(line)
                 and RoadPlan.NeedsStanding(place.itemID) ~= false then
                 place = nil
             end
+            -- It needs a specialty the character doesn't have: off the road.
+            if not known and place and learn and learn.WrongSpecialty and learn.WrongSpecialty(record) then
+                place = nil
+                leftOff = leftOff + 1
+            end
             if known or place then
                 -- The game's own colour wins over the book's when a window
                 -- showed it.
@@ -524,7 +547,17 @@ function RoadPlan:Candidates(line)
         end
     end
     table.sort(list, function(a, b) return a.record.recipeID < b.record.recipeID end)
+    RoadPlan.specialtyOff[line] = leftOff
     return list
+end
+
+--- The line under the road's header while the character has no specialty
+--- yet and the road left a specialty's recipes off; nil otherwise.
+function RoadPlan.SpecialtyNote(line)
+    local learn = ns.LearnNext
+    if not (learn and learn.HasAnySpecialty) or (RoadPlan.specialtyOff[line] or 0) == 0 then return nil end
+    if learn.HasAnySpecialty(line) then return nil end
+    return L["Recipes for a specialty stay off until you learn one."]
 end
 
 --------------------------------------------------------------------------------
@@ -994,6 +1027,7 @@ local function Key(profession, level)
         tostring(RoadPlan.skipVersion),
         tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
         tostring(RoadPlan.standingVersion),
+        tostring(ns.LearnNext and ns.LearnNext.specialtyVersion or 0),
         tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
         profession.line == RoadPlan.FISHING and tostring(RoadPlan.FarmerPaceVersion()) or "",

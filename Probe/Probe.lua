@@ -406,6 +406,12 @@ function Probe:PrintReport()
     end
     -- Learn next's Show the way (2026-10-12).
     if ns.Waypoints then Line("show the way", ns.Waypoints:ProbeText()) end
+    -- Specialties (2026-11-25): their names in the client and which this
+    -- character has, for Road to 300 and Learn Next.
+    if ns.LearnNext and ns.LearnNext.SpecialtyProbe then
+        local ok, text = pcall(ns.LearnNext.SpecialtyProbe)
+        Line("specialties", ok and text or "error")
+    end
     if ns.EnchantWindow and ns.EnchantWindow.ProbeLines then
         for _, line in ipairs(ns.EnchantWindow:ProbeLines()) do Line(line[1], line[2]) end
     end

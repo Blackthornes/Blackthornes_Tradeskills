@@ -750,6 +750,25 @@ one, since every kill can raise a standing). Known recipes and trainer
 steps are untouched; Learn Next still lists them. Nothing saved. Tested in
 `tools/test_roadto300.lua`.
 
+Specialties (players' reports, the owner said build it from a mockup and
+approved its words, 2026-11-25): a recipe that needs a specialty the
+character playing doesn't have is left off Road to 300
+(`RoadPlan:Candidates`) and Learn Next (`LearnNext:GetRows`). A known
+recipe stays. `LearnNext.SPECIALTIES` lists the ten (Armorsmith,
+Weaponsmith, the three master smiths, which count as Weaponsmith too, the
+three leatherworking ones, Gnomish and Goblin); `LearnNext.HasSpecialty`
+reads the game, never saved, and a client that won't say means none.
+`LearnNext.NeedsSpecialty` takes the specialists' own trainer recipes
+(`WEAPON_CRAFTS`, `ARMOR_CRAFTS`), the trainer line's `needs` in
+`trainerRecipes` (`TrainerRecipes.SpecialtyReq`; never rename it), and the
+recipe item's tooltip (`RoadPlan.ItemSpecialty`, read with its standing).
+`SPELLS_CHANGED` bumps `LearnNext.specialtyVersion` (in the road's key)
+only when a specialty changed. With none yet and something left off, the
+road shows "Recipes for a specialty stay off until you learn one." under
+its header (`RoadPlan.SpecialtyNote`, `RoadView:PlaceNote`). The probe's
+"specialties" line shows what the game says. Tested in
+`tools/test_roadto300.lua` and `tools/test_trainerrecipes.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first

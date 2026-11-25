@@ -19,7 +19,7 @@
 --   8. The list shows the steps left first, the done ones after.
 
 local GLOBALS = { "time", "GetTime", "UnitFactionGroup", "GetRealZoneText", "GetLocale",
-  "UnitLevel", "C_Timer", "C_Map", "C_QuestLog", "GetProfessions", "GetProfessionInfo" }
+  "UnitLevel", "C_Timer", "C_Map", "C_QuestLog", "GetProfessions", "GetProfessionInfo", "IsPlayerSpell" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -978,6 +978,99 @@ cached[waitItem] = true
 Road.OnItemInfo(waitItem, true)
 check("the road is worked out again", Road.standingVersion > version, true)
 check("on the road once it arrives", HasCandidate(64), true)
+
+print("\nno recipes for a specialty you don't have")
+-- Players' reports (2026-11-25): the Blacksmithing road mixed Armorsmith and
+-- Weaponsmith recipes, and Learn Next listed recipes the specialty can't
+-- learn. A recipe that needs a specialty the character doesn't have is left
+-- off; with none yet, a line says why.
+local Learn = ns.LearnNext
+local spells = {}
+IsPlayerSpell = function(id) return spells[id] == true end
+local function Learned(...)
+  spells = {}
+  for _, id in ipairs({ ... }) do spells[id] = true end
+  Learn.OnSpellsChanged()
+end
+ns.RECIPE_BOOK.RECIPES[71] = { 164, 40, 8011, 1, 1, { BAR, 2 }, "The Shatterer", t = 100 }
+ns.RECIPE_BOOK.RECIPES[72] = { 164, 40, 8012, 1, 1, { BAR, 2 }, "Truesilver Gauntlets", t = 100 }
+ns.RECIPE_BOOK.RECIPES[73] = { 164, 40, 8013, 1, 1, { BAR, 2 }, "Trainer Says Armorsmith", t = 100 }
+ns.RECIPE_BOOK.RECIPES[74] = { 164, 40, 8014, 1, 1, { BAR, 2 }, "Plans Say Weaponsmith" }
+ns.RECIPE_BOOK.RECIPES[75] = { 164, 40, 8015, 1, 1, { BAR, 2 }, "Plain Trainer Plate", t = 100 }
+for id = 71, 75 do ns.LEARN_SPOTS.SKILLS[id] = { 40, 60, 80 } end
+local WEAPON_PLANS = 7011
+ns.RECIPE_BOOK.ITEMS[WEAPON_PLANS] = { 74, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+cached[WEAPON_PLANS] = true
+tipLines[WEAPON_PLANS] = { { leftText = "Plans: Plans Say Weaponsmith" },
+  { leftText = "Requires Weaponsmith", leftColor = { r = 1, g = 0.13, b = 0.13 } } }
+local hadTrainer = ns.TrainerRecipes
+ns.TrainerRecipes = { version = 0, Get = function(_, id)
+  if id == 73 then return { cost = 100, skill = 40, at = 1, needs = "armor" } end
+end }
+ns.RecipeBook.merged = nil
+Road:Forget()
+
+check("the tooltip names the specialty", Road.ItemSpecialty(WEAPON_PLANS), "weapon")
+check("no specialty on a plain pattern", Road.ItemSpecialty(PLAIN), nil)
+check("a tooltip line, by the game's words", Learn.SpecialtyIn("Requires Dragonscale Leatherworking"), "dragonscale")
+check("a skill line is not a specialty", Learn.SpecialtyIn("Requires Blacksmithing (40)"), nil)
+
+Learned(9787) -- Weaponsmith
+check("a Weaponsmith's own recipe stays", HasCandidate(71), true)
+check("weapon plans stay for a Weaponsmith", HasCandidate(74), true)
+check("not an Armorsmith recipe for a Weaponsmith", HasCandidate(72), false)
+check("not one the trainer said needs Armorsmith", HasCandidate(73), false)
+check("a plain recipe stays", HasCandidate(75), true)
+check("no line for a Weaponsmith", Road.SpecialtyNote(164), nil)
+
+Learned(9788) -- Armorsmith
+check("an Armorsmith's own recipe stays", HasCandidate(72), true)
+check("the trainer's word counts", HasCandidate(73), true)
+check("not a Weaponsmith recipe for an Armorsmith", HasCandidate(71), false)
+check("not weapon plans for an Armorsmith", HasCandidate(74), false)
+
+Learned(17039) -- Master Swordsmith, a Weaponsmith too
+check("a master smith keeps Weaponsmith recipes", HasCandidate(71), true)
+check("but not Armorsmith ones", HasCandidate(72), false)
+
+Learned() -- none yet
+check("no specialty: none of theirs", HasCandidate(71) or HasCandidate(72) or HasCandidate(73) or HasCandidate(74), false)
+check("no specialty: a plain one stays", HasCandidate(75), true)
+check("the line says why", Road.SpecialtyNote(164), "Recipes for a specialty stay off until you learn one.")
+check("no line for a profession with no specialties", Road.SpecialtyNote(171), nil)
+
+-- A recipe already known always stays.
+local accountWide = ns.Recipes.GetAccountWide
+ns.Recipes.GetAccountWide = function()
+  local all = accountWide()
+  all[72] = { knownBy = { "me" } }
+  return all
+end
+ns.RecipeBook.known = nil
+check("a known recipe stays whatever the specialty", HasCandidate(72), true)
+ns.Recipes.GetAccountWide = accountWide
+ns.RecipeBook.known = nil
+
+-- The road is worked out again only when a specialty changed.
+local before = Learn.specialtyVersion
+Learn.OnSpellsChanged()
+check("other spell changes keep the road", Learn.specialtyVersion, before)
+Learned(9787)
+check("a new specialty moves the road", Learn.specialtyVersion > before, true)
+
+-- Learn Next leaves them off too.
+local rows = Learn:GetRows({ skills = { [164] = 45 } })
+local listed = {}
+for _, row in ipairs(rows) do listed[row.recipeID or row.id or (row.record and row.record.recipeID) or -1] = true end
+local names = {}
+for _, row in ipairs(rows) do names[row.name or ""] = true end
+check("Learn Next lists a Weaponsmith's own recipe", names["The Shatterer"] == true, true)
+check("Learn Next leaves an Armorsmith recipe off", names["Truesilver Gauntlets"] == nil, true)
+check("Learn Next leaves the trainer's Armorsmith recipe off", names["Trainer Says Armorsmith"] == nil, true)
+
+spells = {}
+Learn.OnSpellsChanged()
+ns.TrainerRecipes = hadTrainer
 
 C_TooltipInfo, C_Item, C_Reputation = nil, nil, nil
 ns.VendorPins = nil
