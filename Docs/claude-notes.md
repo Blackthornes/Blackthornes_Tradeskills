@@ -3982,6 +3982,18 @@ in `ns.db.salvagerLog` (never rename it; bands, items, recent, shaped like
 - Tested in `tools/test_delog.lua` (at an Arcane Salvager) and
   `tools/test_disenchantingbags.lua`.
 
+Old plain results (a player asked, the owner said build it from a mockup,
+2026-11-25): disenchants from before this came in all sit in the plain
+record, Salvager ones too. The record is a tally, not a dated list, so the
+player picks. Settings, under Keep Salvager Results Apart, "Plain
+Disenchant Results:" with Move to Salvager (`DisenchantLog:MovePlainToSalvager`,
+merges bands, items and recent into `salvagerLog`) and Clear
+(`DisenchantLog:ClearPlain`). Each asks first in `UI/PostConfirm.lua`,
+which now takes `title`, `yes`, `no` and `noIcon`. Both grey out with
+nothing to move (`UI:RefreshSettingsPlain`). The Salvager record is only
+added to. Tested in `tools/test_delog.lua`, `tools/test_postconfirm.lua`
+and `tools/test_uifit.lua`.
+
 ## Any enchanter breaks any item
 
 A player with Enchanting 4 saw only low level deals on the Disenchanting tab

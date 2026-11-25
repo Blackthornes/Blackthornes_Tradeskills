@@ -490,6 +490,47 @@ Log._Report("")
 check("/bts delog prints the buffs at the last disenchant", Said("buffs at the last disenchant", p2 + 1) ~= nil)
 check("and the Salvager count", Said("Salvager: 9 recorded apart", p2 + 1) ~= nil)
 
+
+print("\nold plain results (Settings: Plain Disenchant Results)")
+do
+    local db = ns.db
+    local keepPlain, keepSalv = db.disenchantLog, db.salvagerLog
+    db.disenchantLog = {
+        bands = { ["2:weapon:25"] = { casts = 3, got = { [10940] = { times = 3, total = 7, min = 1, max = 4 } } } },
+        items = { [777] = { casts = 3, got = { [10940] = { times = 3, total = 7, min = 1, max = 4 } } } },
+        recent = { { itemID = 777, results = { [10940] = 2 }, at = 50 } },
+        missed = 1,
+    }
+    db.salvagerLog = {
+        bands = { ["2:weapon:25"] = { casts = 2, got = { [10940] = { times = 2, total = 6, min = 2, max = 5 },
+            [10938] = { times = 1, total = 1, min = 1, max = 1 } } } },
+        items = {},
+        recent = { { itemID = 778, results = { [10940] = 3 }, at = 60 } },
+    }
+    check("the plain count is every recorded cast", Log:PlainCount() == 3)
+    local v = Log.version or 0
+    check("move says how many it moved", Log:MovePlainToSalvager() == 3)
+    local band = db.salvagerLog.bands["2:weapon:25"]
+    check("casts add up in the Salvager record", band.casts == 5)
+    check("times and totals add up", band.got[10940].times == 5 and band.got[10940].total == 13)
+    check("lowest and highest counts join", band.got[10940].min == 1 and band.got[10940].max == 5)
+    check("a material only Salvager had stays", band.got[10938].times == 1)
+    check("per item results move too", db.salvagerLog.items[777].casts == 3)
+    check("recent lists join, newest first", db.salvagerLog.recent[1].at == 60 and db.salvagerLog.recent[2].at == 50)
+    check("the plain record is empty after", db.disenchantLog == nil and Log:PlainCount() == 0)
+    check("prices are worked out again", (Log.version or 0) > v)
+    check("with nothing left, a second move does nothing", Log:MovePlainToSalvager() == 0
+        and db.salvagerLog.bands["2:weapon:25"].casts == 5)
+
+    db.disenchantLog = { bands = { a = { casts = 4, got = {} } }, items = {}, recent = {} }
+    check("clear says how many it cleared", Log:ClearPlain() == 4)
+    check("clear empties the plain record", db.disenchantLog == nil)
+    check("and leaves Salvager results alone", db.salvagerLog.bands["2:weapon:25"].casts == 5)
+    check("clear with nothing there does nothing", Log:ClearPlain() == 0)
+
+    db.disenchantLog, db.salvagerLog = keepPlain, keepSalv
+end
+
 settings.salvagerApart = nil
 ns.Config = nil
 

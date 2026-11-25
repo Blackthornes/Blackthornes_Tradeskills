@@ -3956,3 +3956,13 @@ L["Salvager mode is off."] = "Режим Salvager выключен."
 L["Your last spell: %s (%s)"] = "Твоё последнее заклинание: %s (%s)"
 L["Your buffs at the last disenchant: %s"] = "Твои эффекты при последнем распылении: %s"
 L["Profit for %d"] = "Прибыль за %d"
+
+-- Old plain disenchant results (2026-11-25)
+L["Plain Disenchant Results:"] = "Обычные итоги распыления:"
+L["If you did your old disenchants at an Arcane Salvager, move them there. Or clear them to start fresh. Your Salvager results stay as they are."] = "Если ты распылял старые вещи у Arcane Salvager, перенеси их туда. Или очисти, чтобы начать заново. Итоги Salvager останутся как есть."
+L["Move to Salvager"] = "В Salvager"
+L["Clear Plain Results"] = "Очистить обычные итоги"
+L["Move all %d plain disenchants into your Salvager results. Do this only if you did them at an Arcane Salvager."] = "Перенести все обычные распыления (%d) в итоги Salvager. Делай это, только если распылял у Arcane Salvager."
+L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "Очистить все обычные распыления (%d). Цены берутся из встроенной таблицы, пока ты не распылишь ещё. Отменить нельзя."
+L["Moved %d disenchants to your Salvager results."] = "Перенесено в итоги Salvager: %d."
+L["Your plain disenchant results are cleared."] = "Обычные итоги распыления очищены."

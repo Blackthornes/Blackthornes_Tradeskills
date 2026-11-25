@@ -3954,3 +3954,13 @@ L["Salvager mode is off."] = "Le mode Salvager est coupé."
 L["Your last spell: %s (%s)"] = "Ton dernier sort : %s (%s)"
 L["Your buffs at the last disenchant: %s"] = "Tes effets au dernier désenchantement : %s"
 L["Profit for %d"] = "Profit pour %d"
+
+-- Old plain disenchant results (2026-11-25)
+L["Plain Disenchant Results:"] = "Résultats de désenchantement normaux :"
+L["If you did your old disenchants at an Arcane Salvager, move them there. Or clear them to start fresh. Your Salvager results stay as they are."] = "Si tu as fait tes anciens désenchantements à un Arcane Salvager, déplace-les là-bas. Ou efface-les pour repartir de zéro. Tes résultats du Salvager restent tels quels."
+L["Move to Salvager"] = "Vers le Salvager"
+L["Clear Plain Results"] = "Effacer les résultats normaux"
+L["Move all %d plain disenchants into your Salvager results. Do this only if you did them at an Arcane Salvager."] = "Déplace tes %d désenchantements normaux vers tes résultats du Salvager. Fais-le seulement si tu les as faits à un Arcane Salvager."
+L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "Efface tes %d désenchantements normaux. Les valeurs viennent du tableau intégré jusqu'à ce que tu en fasses d'autres. Impossible d'annuler."
+L["Moved %d disenchants to your Salvager results."] = "%d désenchantements déplacés vers tes résultats du Salvager."
+L["Your plain disenchant results are cleared."] = "Tes résultats de désenchantement normaux sont effacés."

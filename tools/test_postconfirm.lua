@@ -130,6 +130,21 @@ Click(window.listIt)
 check("List It lists the newer one", listed[2], "f")
 check("only made once", #UISpecialFrames, 1)
 
+print("\nanother question in the same window")
+local moved = 0
+PostConfirm:Show({ text = "Move all 3.", title = "Move to Salvager", yes = "Confirm", no = "Cancel",
+    noIcon = true, accept = function() moved = moved + 1 end })
+check("its own buttons", window.listIt.label.text .. "/" .. window.skip.label.text, "Confirm/Cancel")
+check("no icon", window.icon.shown, false)
+check("the words start at the edge", window.text.width, PostConfirm.WIDTH - 40)
+Click(window.listIt)
+check("Confirm runs it once", moved, 1)
+Ask(2589, "g")
+check("a listing gets List It back", window.listIt.label.text, "List It")
+check("and Skip", window.skip.label.text, "Skip")
+check("and its icon", window.icon.shown, true)
+Click(window.skip)
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")

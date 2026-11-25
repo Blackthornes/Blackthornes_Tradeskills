@@ -1157,6 +1157,53 @@ do
     UI.ResetSettings = real
 end
 
+-- Plain Disenchant Results (the owner said build it, 2026-11-25): Move to
+-- Salvager and Clear, each through the Confirm window first.
+do
+    local buttonsOn = {}
+    for _, button in ipairs(allButtons) do
+        local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
+        if label and label.text == "Plain Disenchant Results:" then buttonsOn[#buttonsOn + 1] = button end
+    end
+    check("Plain Disenchant Results has two buttons", #buttonsOn, 2)
+    local move, clear = buttonsOn[1], buttonsOn[2]
+    check("Move to Salvager first", move and move.label.text, "Move to Salvager")
+    check("then Clear", clear and clear.label.text, "Clear")
+    check("sat beside Keep Salvager Results Apart", Holder(move) == Holder(Offered("Keep Salvager Results Apart:")), true)
+    local _, _, _, x = move:GetPoint(1)
+    check("both fit in the column", x + move.width + 4 + clear.width <= 400, true)
+
+    local count, moved, cleared, asked = 5, 0, 0, nil
+    local realLog, realAsk = ns.DisenchantLog, ns.PostConfirm
+    ns.DisenchantLog = {
+        PlainCount = function() return count end,
+        MovePlainToSalvager = function() moved = moved + 1; local n = count; count = 0; return n end,
+        ClearPlain = function() cleared = cleared + 1; local n = count; count = 0; return n end,
+    }
+    ns.PostConfirm = { Show = function(_, ask) asked = ask; return true end }
+    UI:RefreshSettingsPlain() -- as Settings does each time it opens
+    move:GetScript("OnClick")(move, "LeftButton")
+    check("Move asks first", asked and asked.title, "Move to Salvager")
+    check("with the count in the words", asked and asked.text:find("Move all 5 plain") ~= nil, true)
+    check("and Confirm and Cancel", asked and (asked.yes .. "/" .. asked.no), "Confirm/Cancel")
+    check("and moves nothing before Confirm", moved, 0)
+    asked.accept()
+    check("Confirm moves them", moved, 1)
+    check("then both buttons grey out", move.disabled and clear.disabled, true)
+    asked = nil
+    clear:GetScript("OnClick")(clear, "LeftButton")
+    check("with nothing left, Clear asks nothing", asked, nil)
+    count = 3
+    UI:RefreshSettingsPlain()
+    check("with results again, they light up", not move.disabled and not clear.disabled, true)
+    clear:GetScript("OnClick")(clear, "LeftButton")
+    check("Clear asks first too", asked and asked.title, "Clear Plain Results")
+    asked.accept()
+    check("Confirm clears them", cleared, 1)
+    ns.DisenchantLog, ns.PostConfirm = realLog, realAsk
+    UI:RefreshSettingsPlain()
+end
+
 --- The box on the row whose label says `text`.
 local function RowDropdown(text)
     for _, box in ipairs(made.CreateDropdown) do
