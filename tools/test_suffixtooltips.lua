@@ -160,6 +160,64 @@ do
     check("Sell hands the card the copy's link", handed and handed.link, MAGIC_LINK)
 end
 
+-- After 1.43.0 (the same player, 2026-11-24): the drawer's card still read
+-- "Captain's Breastplate". Drawn from a link, the game puts the plain name on
+-- top and draws the card again from that link a moment later, so a name put
+-- on top by hand does not stay. The bag copy itself names its suffix, so the
+-- card comes from the bag slot while that slot still holds the item.
+do
+    local ns = NewNs()
+    ns.Theme = setmetatable({ sizes = { tiny = 10, small = 11, normal = 12 },
+        Unpack = function() return 1, 1, 1 end, MeasureText = function(_, t) return #t * 6 end },
+        { __index = function() return function() return Frame() end end })
+    ns.Util = { FormatMoney = function(c) return tostring(c) end }
+    ns.Config = { Get = noop, Set = noop }
+    ns.Collapse = { IsCollapsed = function() return false end }
+    assert(loadfile(lfs_cwd .. "/UI/Widgets.lua"))("Blackthornes_TS", ns)
+    ns.Widgets.CreateButton = function() return Frame() end
+    assert(loadfile(lfs_cwd .. "/UI/PostPanel.lua"))("Blackthornes_TS", ns)
+
+    -- Forever: a link draws the plain name; the bag slot draws the copy.
+    local bagItems = { ["0:3"] = { itemID = CAPTAIN, name = "Captain's Breastplate of Magic" } }
+    local source
+    local savedHyper, savedContainer = GameTooltip.SetHyperlink, _G.C_Container
+    GameTooltip.SetHyperlink = function(self, link)
+        source = { kind = "link", id = tonumber(link:match("item:(%d+)")) }
+        title.text = BASE[source.id]; self.lines = 3
+    end
+    GameTooltip.SetBagItem = function(self, bag, slot)
+        local held = bagItems[bag .. ":" .. slot]
+        if not held then return end
+        source = { kind = "bag", held = held }
+        title.text = held.name; self.lines = 3
+    end
+    -- The game drawing the card again from where it came from.
+    local function Redraw()
+        if not source then return end
+        title.text = source.kind == "bag" and source.held.name or BASE[source.id]
+    end
+    _G.C_Container = { GetContainerItemInfo = function(bag, slot)
+        local held = bagItems[bag .. ":" .. slot]
+        return held and { itemID = held.itemID } or nil
+    end }
+
+    local line = { itemID = CAPTAIN, link = MAGIC_LINK, label = MAGIC_LINK, bag = 0, slot = 3,
+        unitPrice = 20987, postQuantity = 1 }
+    source = nil
+    pcall(ns.PostPanel._ShowRowTooltip, Frame(), line)
+    Redraw()
+    check("the drawer's card names the suffix, and keeps it", title.text, "Captain's Breastplate of Magic")
+
+    -- The copy moved: the slot holds something else now, so the link is used.
+    bagItems["0:3"] = { itemID = 2589, name = "Linen Cloth" }
+    source = nil
+    pcall(ns.PostPanel._ShowRowTooltip, Frame(), line)
+    check("a slot holding another item is not shown", source and source.kind, "link")
+    check("the full name still goes on top", title.text, "Captain's Breastplate of Magic")
+
+    GameTooltip.SetHyperlink, GameTooltip.SetBagItem, _G.C_Container = savedHyper, nil, savedContainer
+end
+
 do
     local ns = NewNs()
     ns.Theme = setmetatable({}, { __index = function() return function() return Frame() end end })

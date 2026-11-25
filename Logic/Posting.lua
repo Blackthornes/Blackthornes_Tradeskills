@@ -1497,6 +1497,9 @@ function Posting:GetPostable(opts)
                     -- The copy itself when it has a random suffix: the item
                     -- ID alone names only "Lead Band".
                     link = held and Util.LinkSuffix(held.link) and held.link or nil,
+                    -- Where that copy sits, for its card (UI/PostPanel.lua).
+                    bag = held and held.bag or nil,
+                    slot = held and held.slot or nil,
                     label = held and Util.LinkSuffix(held.link) and held.link
                         or Util.GetItemLabel(itemID),
                     -- The list whose rules it follows, for the row's tag,
