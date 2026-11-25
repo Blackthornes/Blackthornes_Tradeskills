@@ -6,7 +6,8 @@
 -- added). Each line the trainer lists, learned or not, is kept by recipe
 -- ID with its price and the skill it asks for:
 --
---   ns.db.trainerRecipes[recipeID] = { cost = copper, skill = N, at = time }
+--   ns.db.trainerRecipes[recipeID] = { cost = copper, skill = N, at = time,
+--     needs = a specialty's key (LearnNext.SPECIALTIES) the line asks for }
 --
 -- account wide (never rename it). The owner's saves fold into the shipped
 -- table at each release (Data/ForeverTrainerRecipes.lua, written by
@@ -111,6 +112,19 @@ function TrainerRecipes.SkillReq(index)
     return Number(second) or Number(first)
 end
 
+--- The specialty a trainer's line asks for ("Requires Weaponsmith"), as
+--- LearnNext's key, or nil (2026-11-25).
+function TrainerRecipes.SpecialtyReq(index)
+    local learn = ns.LearnNext
+    if not (learn and learn.SpecialtyNamed) then return nil end
+    local count = Number(Call("GetTrainerServiceNumAbilityReq", index)) or 0
+    for req = 1, count do
+        local key = learn.SpecialtyNamed(Plain((Call("GetTrainerServiceAbilityReq", index, req))))
+        if key then return key end
+    end
+    return nil
+end
+
 --- Read the open trainer, if it teaches a profession. Lines the trainer
 --- hides until the skill is high enough are read with its filter flipped
 --- on and then put back, as the Wishlist does.
@@ -143,12 +157,14 @@ function TrainerRecipes:Read()
                 local recipeID = record and Number(record.recipeID)
                 local cost = Number((Call("GetTrainerServiceCost", index)))
                 local skill = TrainerRecipes.SkillReq(index)
+                local needs = TrainerRecipes.SpecialtyReq(index)
                 if recipeID and (cost or skill) then
                     local had = store[recipeID]
-                    if type(had) ~= "table" or had.cost ~= cost or had.skill ~= skill then
+                    if type(had) ~= "table" or had.cost ~= cost or had.skill ~= skill or had.needs ~= needs then
                         changed = changed + 1
                     end
-                    store[recipeID] = { cost = cost, skill = skill and skill > 0 and skill or nil, at = time() }
+                    store[recipeID] = { cost = cost, skill = skill and skill > 0 and skill or nil, at = time(),
+                        needs = needs }
                 end
             end
         end

@@ -588,3 +588,19 @@ Read from saved links and saved suffix prices, not from a probe.
   Disenchanting" (spell 1283701); a campfire gives "Campfire Nearby"
   (1283391). Placing it did not fire spell 1263056 as the player's
   UNIT_SPELLCAST_SUCCEEDED; the buff is what Salvager mode reads now.
+
+## Crafting specialties (2026-11-25)
+
+- Road to 300 and Learn Next read the character's specialty by Classic's
+  spell numbers (Armorsmith 9788, Weaponsmith 9787, Master Swordsmith
+  17039, Hammersmith 17040, Axesmith 17041, Dragonscale 10656, Elemental
+  10658, Tribal 10660, Gnomish 20219, Goblin 20222) through
+  `IsPlayerSpell`, `IsSpellKnown` and `C_SpellBook.IsSpellKnown`, then by
+  name through `C_Spell.GetSpellInfo`.
+- Which recipes need one: a recipe item's tooltip ("Requires Armorsmith",
+  `ITEM_REQ_SKILL`) and a trainer line's `GetTrainerServiceAbilityReq`
+  (ability name first, then whether it is met).
+- The probe's "specialties" line shows each name in the client and
+  whether the character has it. Still to see: that Forever keeps these
+  spell numbers and that its trainers list the specialty as an ability
+  requirement.

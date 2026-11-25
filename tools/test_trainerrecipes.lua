@@ -14,7 +14,8 @@
 local GLOBALS = { "time", "GetTime", "UnitFactionGroup", "GetRealZoneText", "GetLocale", "UnitLevel",
   "C_Timer", "C_Map", "C_TooltipInfo", "IsTradeskillTrainer", "GetNumTrainerServices",
   "GetTrainerServiceInfo", "GetTrainerServiceCost", "GetTrainerServiceSkillReq",
-  "GetTrainerServiceTypeFilter", "SetTrainerServiceTypeFilter" }
+  "GetTrainerServiceTypeFilter", "SetTrainerServiceTypeFilter", "GetTrainerServiceNumAbilityReq",
+  "GetTrainerServiceAbilityReq", "IsPlayerSpell" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -208,6 +209,33 @@ local rugged = ns5.RecipeBook:Get(RUGGED)
 check("the book takes 225", rugged.skill, 225)
 check("no point from it at 211", ns5.RoadPlan.Chance(rugged, 211), 0)
 check("a point from it at 225", ns5.RoadPlan.Chance(rugged, 225) > 0, true)
+
+print("\na specialty the trainer asks for (players' reports, 2026-11-25)")
+-- The trainer's line says "Requires Armorsmith": kept with the recipe, and a
+-- Weaponsmith's Learn Next and road leave it off.
+local ns6 = Fresh()
+local BREASTPLATE = 9974
+IsTradeskillTrainer = function() return true end
+GetNumTrainerServices = function() return 1 end
+GetTrainerServiceInfo = function() return "Truesilver Breastplate", nil, "unavailable" end
+GetTrainerServiceCost = function() return 10000 end
+GetTrainerServiceSkillReq = function() return "Blacksmithing", 245, true end
+GetTrainerServiceTypeFilter = function() return true end
+GetTrainerServiceNumAbilityReq = function() return 1 end
+GetTrainerServiceAbilityReq = function() return "Armorsmith", false end
+C_TooltipInfo = { GetTrainerService = function() return { id = BREASTPLATE } end }
+check("the line is read", ns6.TrainerRecipes:Read(), 1)
+check("with the specialty it asks", ns6.db.trainerRecipes[BREASTPLATE].needs, "armor")
+local breastplate = ns6.RecipeBook:Get(BREASTPLATE)
+IsPlayerSpell = function(id) return id == 9787 end -- Weaponsmith
+ns6.LearnNext.OnSpellsChanged()
+check("a Weaponsmith can't learn it", ns6.LearnNext.WrongSpecialty(breastplate), true)
+IsPlayerSpell = function(id) return id == 9788 end -- Armorsmith
+ns6.LearnNext.OnSpellsChanged()
+check("an Armorsmith can", ns6.LearnNext.WrongSpecialty(breastplate), false)
+check("read straight from the line", ns6.TrainerRecipes.SpecialtyReq(1), "armor")
+GetTrainerServiceNumAbilityReq = function() return 0 end
+check("none asked, none kept", ns6.TrainerRecipes.SpecialtyReq(1), nil)
 
 print("\nonly a profession trainer")
 local ns3 = Fresh()

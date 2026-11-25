@@ -265,6 +265,207 @@ LearnNext.SPECIALISTS = {
               ["Nixx Sprocketspring"] = false, ["Vazario Linkgrease"] = false },
 }
 
+--------------------------------------------------------------------------------
+-- Specialties (a player's report, the owner said build it, 2026-11-25): the
+-- road and Learn Next listed Armorsmith recipes for a Weaponsmith, and
+-- Dragonscale patterns for a Tribal leatherworker. A recipe that needs a
+-- specialty the character playing doesn't have is left off both, like a
+-- recipe that needs a standing (Logic/RoadPlan.lua). Which recipes need one:
+-- the specialists' own trainer recipes above, what a recipe item's tooltip
+-- says ("Requires Armorsmith"), and what a trainer's window said
+-- (`needs` on its line in `trainerRecipes`). The character's own specialty
+-- is read from the game, never saved. When the game won't say, the
+-- character has none, so the recipe stays off. A known recipe always stays.
+--------------------------------------------------------------------------------
+
+-- [key] = { Classic skill line, spell, the game's English name, the
+-- specialty it builds on }
+LearnNext.SPECIALTIES = {
+    armor = { 164, 9788, "Armorsmith" },
+    weapon = { 164, 9787, "Weaponsmith" },
+    sword = { 164, 17039, "Master Swordsmith", "weapon" },
+    hammer = { 164, 17040, "Master Hammersmith", "weapon" },
+    axe = { 164, 17041, "Master Axesmith", "weapon" },
+    dragonscale = { 165, 10656, "Dragonscale Leatherworking" },
+    elemental = { 165, 10658, "Elemental Leatherworking" },
+    tribal = { 165, 10660, "Tribal Leatherworking" },
+    gnomish = { 202, 20219, "Gnomish Engineer" },
+    goblin = { 202, 20222, "Goblin Engineer" },
+}
+
+-- Bumped when the character's spells change, so a kept road is worked out
+-- again (RoadPlan's key).
+LearnNext.specialtyVersion = 0
+
+-- The specialists' own trainer recipes, by name.
+local OWN_SPECIALTY = {}
+for name in pairs(WEAPON_CRAFTS) do OWN_SPECIALTY[name] = "weapon" end
+for name in pairs(ARMOR_CRAFTS) do OWN_SPECIALTY[name] = "armor" end
+
+local hasMemo   -- [key] = true/false, until the spells change
+local nameMemo  -- [key] = the specialty's name in the client's language
+
+--- A specialty's name in the client's language, else the English.
+function LearnNext.SpecialtyName(key)
+    local row = LearnNext.SPECIALTIES[key]
+    if not row then return nil end
+    nameMemo = nameMemo or {}
+    if nameMemo[key] then return nameMemo[key] end
+    local found
+    pcall(function()
+        local spell = rawget(_G, "C_Spell")
+        local name
+        if type(spell) == "table" and type(spell.GetSpellName) == "function" then
+            name = spell.GetSpellName(row[2])
+        end
+        local info = rawget(_G, "GetSpellInfo")
+        if (type(name) ~= "string" or name == "") and type(info) == "function" then
+            name = info(row[2])
+        end
+        if type(name) == "string" and name ~= "" then found = name .. "" end
+    end)
+    nameMemo[key] = found or row[3]
+    return nameMemo[key]
+end
+
+local function KnowsSpell(spellID, name)
+    local known = false
+    for _, fn in ipairs({ "IsPlayerSpell", "IsSpellKnown" }) do
+        local call = rawget(_G, fn)
+        if not known and type(call) == "function" then
+            local ok, yes = pcall(call, spellID)
+            if ok and yes then known = true end
+        end
+    end
+    if known then return true end
+    pcall(function()
+        local book = rawget(_G, "C_SpellBook")
+        if type(book) == "table" and type(book.IsSpellKnown) == "function" and book.IsSpellKnown(spellID) then
+            known = true
+        end
+    end)
+    if known then return true end
+    -- By name, for a client whose spell numbers differ: the game finds a
+    -- spell by name only in the character's own spellbook.
+    pcall(function()
+        local spell = rawget(_G, "C_Spell")
+        if type(spell) == "table" and type(spell.GetSpellInfo) == "function" then
+            local info = spell.GetSpellInfo(name)
+            if type(info) == "table" and info.name == name then known = true end
+        end
+    end)
+    return known
+end
+
+--- Does the character playing have this specialty? A master smith has
+--- Weaponsmith too.
+function LearnNext.HasSpecialty(key)
+    local row = LearnNext.SPECIALTIES[key]
+    if not row then return true end
+    hasMemo = hasMemo or {}
+    if hasMemo[key] == nil then
+        local has = KnowsSpell(row[2], row[3])
+        if not has then
+            for other, more in pairs(LearnNext.SPECIALTIES) do
+                if more[4] == key and KnowsSpell(more[2], more[3]) then has = true end
+            end
+        end
+        hasMemo[key] = has
+    end
+    return hasMemo[key]
+end
+
+--- Has the character playing any specialty of this Classic skill line?
+--- true for a line with none to pick.
+function LearnNext.HasAnySpecialty(line)
+    local any = false
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        if row[1] == line then
+            if LearnNext.HasSpecialty(key) then return true end
+            any = true
+        end
+    end
+    return not any
+end
+
+--- The specialty by its name, in the client's language or English, or nil.
+function LearnNext.SpecialtyNamed(name)
+    if type(name) ~= "string" then return nil end
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        if name == row[3] or name == LearnNext.SpecialtyName(key) then return key end
+    end
+    return nil
+end
+
+--- The specialty a tooltip line names ("Requires Armorsmith"), or nil.
+function LearnNext.SpecialtyIn(text)
+    if type(text) ~= "string" then return nil end
+    local format = rawget(_G, "ITEM_REQ_SKILL")
+    if type(format) ~= "string" or not format:find("%s", 1, true) then format = "Requires %s" end
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        local name = LearnNext.SpecialtyName(key)
+        local ok, want = pcall(string.format, format, name)
+        if (ok and text == want) or text == "Requires " .. row[3] then return key end
+    end
+    return nil
+end
+
+--- The specialty a recipe needs, or nil.
+function LearnNext.NeedsSpecialty(record)
+    if type(record) ~= "table" then return nil end
+    if type(record.name) == "string" and OWN_SPECIALTY[record.name] then return OWN_SPECIALTY[record.name] end
+    local trained = ns.TrainerRecipes and ns.TrainerRecipes.Get and record.recipeID
+        and ns.TrainerRecipes:Get(record.recipeID)
+    if type(trained) == "table" and LearnNext.SPECIALTIES[trained.needs or ""] then return trained.needs end
+    local road = ns.RoadPlan
+    if road and road.ItemSpecialty then
+        for _, itemID in ipairs(record.recipeItems or {}) do
+            local key = road.ItemSpecialty(itemID)
+            if key then return key end
+        end
+    end
+    return nil
+end
+
+--- Is a recipe left off because it needs a specialty the character
+--- playing doesn't have?
+function LearnNext.WrongSpecialty(record)
+    local key = LearnNext.NeedsSpecialty(record)
+    return key ~= nil and not LearnNext.HasSpecialty(key)
+end
+
+local function Signature()
+    local parts = {}
+    for _, key in ipairs({ "armor", "weapon", "sword", "hammer", "axe", "dragonscale",
+        "elemental", "tribal", "gnomish", "goblin" }) do
+        parts[#parts + 1] = LearnNext.HasSpecialty(key) and key or ""
+    end
+    return table.concat(parts, ",")
+end
+
+--- The character's spells changed: read the specialties again. The game
+--- sends this often, so a kept road moves only when a specialty did.
+function LearnNext.OnSpellsChanged()
+    local before = hasMemo and Signature()
+    hasMemo = nil
+    if before ~= Signature() then LearnNext.specialtyVersion = LearnNext.specialtyVersion + 1 end
+end
+
+--- For the probe: each specialty, its name in the client and whether the
+--- character has it.
+function LearnNext.SpecialtyProbe()
+    local parts = {}
+    for _, key in ipairs({ "armor", "weapon", "sword", "hammer", "axe", "dragonscale",
+        "elemental", "tribal", "gnomish", "goblin" }) do
+        parts[#parts + 1] = ("%s=%s"):format(LearnNext.SpecialtyName(key), LearnNext.HasSpecialty(key) and "yes" or "no")
+    end
+    return table.concat(parts, ", ")
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(LearnNext, "SPELLS_CHANGED", function() LearnNext.OnSpellsChanged() end)
+end
+
 --- A trainer row as a place to go: its spot where the game saw it stand,
 --- else the data's; a dungeon's trainer carries `inside`.
 local function TrainerPlace(row)
@@ -561,7 +762,8 @@ function LearnNext:GetRows(opts)
             and (record.trainerCost or record.recipeItems)
             and needs <= skill + LearnNext.REACH
             and (not needle or (record.name or ""):lower():find(needle, 1, true))
-            and not ns.RecipeBook:KnowsIt(record) then
+            and not ns.RecipeBook:KnowsIt(record)
+            and not LearnNext.WrongSpecialty(record) then
             local tier = LearnNext.Tier(record, math.max(skill, needs))
             -- With no yellow and grey known, a recipe this far below the
             -- skill is grey all the same: Classic's go grey within this.
