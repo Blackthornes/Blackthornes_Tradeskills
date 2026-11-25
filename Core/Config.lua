@@ -920,12 +920,82 @@ local function SavedRealm(value)
     return value
 end
 
+--- The server part of a character's key ("Player-<server>-<id>"), or nil.
+--- On Forever one account's characters on one realm share it, and the
+--- realm's name (the server behind it) goes with it one to one.
+local function ServerOf(guid)
+    return type(guid) == "string" and guid:match("^Player%-([^%-]+)%-") or nil
+end
+
+--- Each saved realm name's home server: the server most of this account's
+--- own characters naming that realm are on. A tie is no home (it cannot be
+--- told). Characters from a linked account never count.
+local function RealmHomes(characters)
+    local counts = {}
+    for key, entry in pairs(characters) do
+        local server = ServerOf(key)
+        local realm = server and type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+        if realm then
+            counts[realm] = counts[realm] or {}
+            counts[realm][server] = (counts[realm][server] or 0) + 1
+        end
+    end
+    local homes = {}
+    for realm, servers in pairs(counts) do
+        local best, bestCount, tied = nil, 0, false
+        for server, count in pairs(servers) do
+            if count > bestCount then
+                best, bestCount, tied = server, count, false
+            elseif count == bestCount then
+                tied = true
+            end
+        end
+        if not tied then homes[realm] = best end
+    end
+    return homes
+end
+
+--- A saved realm name that may be trusted for this character: not one
+--- whose home is another server. 1.35.4 to 1.45.0 gave a new character
+--- the realm most of the account was on, even one made on another realm
+--- (a player's PvP and RP characters all read "Realm 3 PvE", 2026-11-25).
+local function TrustedRealm(homes, guid, realm)
+    realm = SavedRealm(realm)
+    if not realm then return nil end
+    local home, server = homes[realm], ServerOf(guid)
+    if home and server and home ~= server then return nil end
+    return realm
+end
+
+--- The realm most of this account's own characters on this server name,
+--- leaving out the character itself and any name it cannot be trusted with.
+local function SameServerRealm(characters, homes, guid)
+    local server = ServerOf(guid)
+    if not server then return nil end
+    local counts, best, bestCount = {}, nil, 0
+    for key, entry in pairs(characters) do
+        if key ~= guid and ServerOf(key) == server and type(entry) == "table" and not entry.linkedFrom then
+            local realm = TrustedRealm(homes, key, entry.realm)
+            if realm then
+                counts[realm] = (counts[realm] or 0) + 1
+                local count = counts[realm]
+                if count > bestCount or (count == bestCount and realm < best) then
+                    best, bestCount = realm, count
+                end
+            end
+        end
+    end
+    return best
+end
+
 --- The realm this character played on last time the client said, when it
 --- will not say now. Forever 1.60.1 hands back an empty realm name for
 --- good, and every price, sale and gold line is filed under the realm: a
 --- new name would hide them all. In order: the character's own file, its
---- record, then the realm most of this account's characters are on (a
---- new character on the account). Nothing is moved or renamed.
+--- record (unless that name is another server's), then the realm this
+--- account's characters on the same server are on (a new character). A
+--- character on a server none of the others are on gets none: a guess
+--- from another realm is worse than none. Nothing is moved or renamed.
 local function RememberedRealm()
     local charDb = type(ns.charDb) == "table" and ns.charDb or nil
     local own = charDb and SavedRealm(charDb.realmName)
@@ -936,22 +1006,38 @@ local function RememberedRealm()
     if not characters then return nil end
 
     local guid = Config.characterKey or (charDb and type(charDb.guid) == "string" and charDb.guid) or nil
+    if not guid then guid = PlainString(UnitGUID, "player") end
+    local homes = RealmHomes(characters)
     local record = guid and characters[guid]
-    local mine = type(record) == "table" and SavedRealm(record.realm)
+    local mine = type(record) == "table" and TrustedRealm(homes, guid, record.realm)
     if mine then return mine end
 
-    local counts, best, bestCount = {}, nil, 0
-    for _, entry in pairs(characters) do
-        local realm = type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
-        if realm then
-            counts[realm] = (counts[realm] or 0) + 1
-            local count = counts[realm]
-            if count > bestCount or (count == bestCount and realm < best) then
-                best, bestCount = realm, count
-            end
+    return SameServerRealm(characters, homes, guid)
+end
+
+--- Put right the realm names 1.35.4 to 1.45.0 guessed from another server
+--- (see TrustedRealm), on every own character: the name its server's other
+--- characters carry, else "?" (no realm known). The guess is kept beside
+--- it as `realmGuessed` (never rename it). Run while the client gives no
+--- realm name. Returns how many records were put right.
+function Config:MendGuessedRealms()
+    local db = type(ns.db) == "table" and ns.db or nil
+    local characters = db and type(db.characters) == "table" and db.characters or nil
+    if not characters then return 0 end
+    local homes = RealmHomes(characters)
+    local wrong = {}
+    for key, entry in pairs(characters) do
+        if type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+            and not TrustedRealm(homes, key, entry.realm) then
+            wrong[#wrong + 1] = key
         end
     end
-    return best
+    for _, key in ipairs(wrong) do
+        local entry = characters[key]
+        entry.realmGuessed = entry.realmGuessed or entry.realm
+        entry.realm = SameServerRealm(characters, homes, key) or "?"
+    end
+    return #wrong
 end
 
 local function SafeRealmName()
@@ -1186,13 +1272,28 @@ function Config:BlankRealmHome(strandedKey)
     local characters = type(ns.db) == "table" and type(ns.db.characters) == "table" and ns.db.characters
     if not side or not characters then return nil end
 
+    -- A character on a server none with a realm is on (made after the
+    -- realm went blank, on another realm) may own the bucket: then it
+    -- cannot be told.
+    local named = {}
+    for key, entry in pairs(characters) do
+        if ServerOf(key) and type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm) then
+            named[ServerOf(key)] = true
+        end
+    end
+
     local function OnlyRealm(sameSide)
         local found
-        for _, entry in pairs(characters) do
-            local realm = type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
-            if realm and (not sameSide or entry.faction == side) then
-                if found and found ~= realm then return nil, true end
-                found = realm
+        for key, entry in pairs(characters) do
+            if type(entry) == "table" and not entry.linkedFrom and (not sameSide or entry.faction == side) then
+                local realm = SavedRealm(entry.realm)
+                if not realm and ServerOf(key) and next(named) and not named[ServerOf(key)] then
+                    return nil, true
+                end
+                if realm then
+                    if found and found ~= realm then return nil, true end
+                    found = realm
+                end
             end
         end
         return found
@@ -1673,6 +1774,10 @@ function Config:Bootstrap()
     -- Before any module reads prices or sales, so nothing caches the realm
     -- without them. Inside a pcall: a save it does not expect must never
     -- stop the addon loading.
+    if not (type(GetRealmName) == "function" and PlainString(GetRealmName)) then
+        local mended, mendErr = pcall(self.MendGuessedRealms, self)
+        if not mended then ns.Debug("guessed realms:", tostring(mendErr)) end
+    end
     local ok, err = pcall(self.FoldBlankRealm, self)
     if not ok then ns.Debug("blank realm fold:", tostring(err)) end
 end
