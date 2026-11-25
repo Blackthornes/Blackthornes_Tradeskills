@@ -9,8 +9,10 @@
 --   1. While the client still names the realm, nothing changes, and the
 --      name is remembered in the character's own file.
 --   2. With a blank realm, the key is the realm this character was on: its
---      own file, then its record, then the realm most of this account's
---      characters are on (a character from a linked account never counts).
+--      own file, then its record, then the realm this account's characters
+--      on the same server are on (a character from a linked account never
+--      counts). A character on a server none of the others are on gets no
+--      realm rather than another realm's.
 --   3. Nothing saved is moved, renamed or deleted.
 --   4. A new character's record takes the remembered realm, not "?".
 --   5. Your own listings stay yours with a blank realm.
@@ -259,6 +261,110 @@ do
     local src = io.open(lfs_cwd .. "/Core/Config.lua"):read("*a")
     local boot = src:match("function Config:Bootstrap%(%).-\nend\n")
     Check("Bootstrap folds the blank realm", boot and boot:find("FoldBlankRealm", 1, true) ~= nil)
+end
+
+-- 7. A character made on another realm after the realm went blank is not
+--    given the account's realm (a player's PvP and RP characters all read
+--    "Realm 3 PvE", 2026-11-25). The server in the character's key tells
+--    realms apart: one account's characters on one realm share it.
+print("realm blank: a new character on another server gets no other realm")
+do
+    realmName = ""
+    playerGUID = "Player-7000-Z"
+    local db = { characters = {
+        ["Player-6933-B"] = { name = "Bo", realm = "CAMWOW US2 Realm 3 PvE" },
+        ["Player-6933-C"] = { name = "Cy", realm = "CAMWOW US2 Realm 3 PvE" },
+    } }
+    local ns = Load(db, {})
+    Check("no realm is guessed", ns.Config:RealmName() == nil, ns.Config:RealmName())
+    Check("the key is not the other realm's", ns.Config:GetRealmKey() == "UnknownRealm-Alliance",
+        ns.Config:GetRealmKey())
+    local record = ns.Recipes:GetCharacterRecord(true)
+    Check("the new record does not take the other realm", record and record.realm == "?", record and record.realm)
+    playerGUID = "Player-6933-A"
+end
+
+print("realm blank: a new character takes its own server's realm")
+do
+    realmName = ""
+    playerGUID = "Player-7000-Z"
+    local db = { characters = {
+        ["Player-6933-B"] = { name = "Bo", realm = "CAMWOW US2 Realm 3 PvE" },
+        ["Player-6933-C"] = { name = "Cy", realm = "CAMWOW US2 Realm 3 PvE" },
+        ["Player-7000-D"] = { name = "Di", realm = "CAMWOW US2 Realm 5 PvP" },
+    } }
+    local ns = Load(db, {})
+    Check("the realm of a character on the same server", ns.Config:RealmName() == "CAMWOW US2 Realm 5 PvP",
+        ns.Config:RealmName())
+    playerGUID = "Player-6933-A"
+end
+
+print("realm blank: realms guessed from another server are put right")
+do
+    realmName = ""
+    local P = "CAMWOW US2 Realm 3 PvE"
+    local db = { characters = {
+        ["Player-6933-A"] = { name = "Ana", realm = P },
+        ["Player-6933-B"] = { name = "Bo", realm = P },
+        ["Player-6933-C"] = { name = "Cy", realm = P },
+        ["Player-7000-D"] = { name = "Di", realm = P },
+        ["Player-7000-E"] = { name = "Ed", realm = "CAMWOW US2 Realm 5 PvP" },
+        ["Player-7100-F"] = { name = "Fi", realm = P },
+        ["Player-6929-G"] = { name = "Gu", realm = P, linkedFrom = "Gu" },
+    } }
+    playerGUID = "Player-7100-F"
+    local ns = Load(db, { guid = playerGUID })
+    Check("playing one: the guessed realm is not used", ns.Config:RealmName() == nil, ns.Config:RealmName())
+    Check("two guesses are put right", ns.Config:MendGuessedRealms() == 2)
+    local c = db.characters
+    Check("one on a server with a realm takes it", c["Player-7000-D"].realm == "CAMWOW US2 Realm 5 PvP",
+        c["Player-7000-D"].realm)
+    Check("one on a server with none reads no realm", c["Player-7100-F"].realm == "?", c["Player-7100-F"].realm)
+    Check("the guess is kept beside it", c["Player-7100-F"].realmGuessed == P)
+    Check("the realm's own characters keep it", c["Player-6933-A"].realm == P and c["Player-6933-C"].realm == P
+        and c["Player-6933-A"].realmGuessed == nil)
+    Check("a linked account's character is left alone", c["Player-6929-G"].realm == P
+        and c["Player-6929-G"].realmGuessed == nil)
+    local after = Copy(db)
+    Check("a second run changes nothing", ns.Config:MendGuessedRealms() == 0 and Same(after, db))
+    playerGUID = "Player-6933-A"
+end
+
+print("realm blank: one each, nothing is changed")
+do
+    realmName = ""
+    local db = { characters = {
+        ["Player-6933-A"] = { name = "Ana", realm = "Forever PvE" },
+        ["Player-7000-B"] = { name = "Bo", realm = "Forever PvE" },
+    } }
+    local before = Copy(db)
+    local ns = Load(db, { guid = "Player-6933-A" })
+    Check("a tie cannot be told", ns.Config:MendGuessedRealms() == 0 and Same(before, db))
+end
+
+print("realm blank: a stranded bucket a new realm's character may own stays put")
+do
+    realmName = ""
+    local U = "UnknownRealm-Alliance"
+    local db = {
+        characters = {
+            ["Player-6933-A"] = { name = "Ana", realm = "Forever PvE", faction = "Alliance" },
+            ["Player-7000-B"] = { name = "Bo", realm = "?", faction = "Alliance" },
+        },
+        prices = { ["Forever PvE-Alliance"] = {}, [U] = { [4306] = { market = 300 } } },
+    }
+    local before = Copy(db)
+    local ns = Load(db, { guid = "Player-6933-A" })
+    Check("no home can be told", ns.Config:BlankRealmHome(U) == nil, ns.Config:BlankRealmHome(U))
+    ns.Config:FoldBlankRealm()
+    Check("nothing saved changed", Same(before, db))
+end
+
+print("realm blank: guessed realms are put right as the addon loads")
+do
+    local src = io.open(lfs_cwd .. "/Core/Config.lua"):read("*a")
+    local boot = src:match("function Config:Bootstrap%(%).-\nend\n")
+    Check("Bootstrap mends guessed realms", boot and boot:find("MendGuessedRealms", 1, true) ~= nil)
 end
 
 realmName = "Forever PvE"
