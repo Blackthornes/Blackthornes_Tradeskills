@@ -668,3 +668,8 @@ unless unticked, never rename it), "Waiting: N" and Sell All Waiting sit in
 a strip under the summary, shown only while something waits. Without
 Butler nothing waits. Tested in `tools/test_butlerwait.lua`. If Butler
 changes those calls, change `Logic/SisterKeeps.lua` too.
+
+Butler also reads `_G.BlackthornesTS.Prices.changes` (with rawget, no
+call) and judges again when it moves, so its Wait prices follow a new
+scan (Butler's `Verdicts:PricesMoved`, 2026-11-25). Keep `Prices.changes`
+a number that grows with every price written; never rename it.
