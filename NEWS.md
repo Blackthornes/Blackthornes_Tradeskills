@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.47.0
+
+- Profit Now on the item tooltip uses what one costs to make today, and shows for any item a recipe makes.
+- Hovering a craft's profit in the Craft queue shows the profit for one craft.
+
 ## 1.46.2
 
 Fixes and changes:

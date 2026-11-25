@@ -5,15 +5,15 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.47.0", lines = {
+        "Profit Now on the item tooltip uses what one costs to make today, and shows for any item a recipe makes.",
+        "Hovering a craft's profit in the Craft queue shows the profit for one craft.",
+    } },
     { version = "1.46.0", lines = {
         "The Stats page lists suffixes under each item.",
     } },
     { version = "1.45.0", lines = {
         "Buy One buys the next listing as soon as you click it again.",
         "The Sales tab keeps 60 days of sales, up to 2,000.",
-    } },
-    { version = "1.44.0", lines = {
-        "The Craft queue has an Upgrades Only box that lists only crafts that make an upgrade for you.",
-        "Your Way There is now a small see-through box with only your current step and a dial that points the way.",
     } },
 }
