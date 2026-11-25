@@ -100,22 +100,25 @@ function PriceGraph.Series(itemID, windowKey, now, suffix)
     if #points >= 2 then return points, "hourly", tracked end
 
     if suffix then
+        -- Its own readings also stand in while a kept item's hourly line
+        -- has under two points, as when it was starred after its scans (a
+        -- player's report, 2026-11-25: such suffixes showed no data).
         local entry = ns.Prices and ns.Prices.GetSuffixEntry and ns.Prices:GetSuffixEntry(itemID, suffix)
-        if not tracked then
-            local market = {}
-            for _, t, m in EachReading(entry and entry.history) do
-                if type(t) == "number" and type(m) == "number" and t > now - window.seconds then
-                    market[#market + 1] = { t = t, p = m }
-                end
+        local market = {}
+        for _, t, m in EachReading(entry and entry.history) do
+            if type(t) == "number" and type(m) == "number" and t > now - window.seconds then
+                market[#market + 1] = { t = t, p = m }
             end
-            if #market >= 2 then return market, "market", tracked end
         end
+        if #market >= 2 then return market, "market", tracked end
         return points, nil, tracked
     end
 
     -- An item with no hourly prices still has the price table's last few
     -- scans of its market value. Better a short line than an empty well.
-    if not tracked then
+    -- A kept item with under two hourly prices (starred after its scans)
+    -- draws them too.
+    do
         local record = ns.Prices and ns.Prices:Get(itemID)
         local market = {}
         for _, t, m in EachReading(record and record.history) do
