@@ -215,6 +215,29 @@ local function LocateInBags(itemID)
     end
 end
 
+--- Every item ID in the carried bags, as a set, or nil when they can't be read.
+--
+-- A quick scan asks about thousands of items, almost none of them held.
+-- Looking once and handing the set to IsCommodity spares a walk of every
+-- bag slot for each item that isn't there.
+function Scanner.HeldItems()
+    if type(_G.ItemLocation) ~= "table" or not (ns.Inventory and ns.Inventory.GetCarriedBags) then
+        return nil
+    end
+
+    local held = {}
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+        if slotsOk and slots then
+            for slot = 1, slots do
+                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+                if infoOk and info and info.itemID then held[info.itemID] = true end
+            end
+        end
+    end
+    return held
+end
+
 --- Does the auction house sell this by the stack rather than as one listing?
 --
 -- This decides whether posting uses PostCommodity or PostItem, and getting it
@@ -223,8 +246,8 @@ end
 -- On this client GetItemCommodityStatus takes an ItemLocation. An item ID, an
 -- item link and an item key are all rejected with "bad argument #1", which a
 -- pcall turns into a silent "not a commodity" for everything.
-function Scanner:IsCommodity(itemID, location)
-    return self:GetCommodityStatus(itemID, location) == true
+function Scanner:IsCommodity(itemID, location, held)
+    return self:GetCommodityStatus(itemID, location, held) == true
 end
 
 --- Commodity or not, or nil when nobody has been able to say yet.
@@ -236,7 +259,9 @@ end
 -- @param location  optional ItemLocation the caller already holds, as the
 --   posting path does. It is asked about directly, so a listing never
 --   depends on the bag memo below being fresh.
-function Scanner:GetCommodityStatus(itemID, location)
+-- @param held  optional set from Scanner.HeldItems: an item not in it is
+--   not looked for in the bags.
+function Scanner:GetCommodityStatus(itemID, location, held)
     if not itemID then return nil end
 
     local known = CommodityStore()[itemID]
@@ -249,6 +274,7 @@ function Scanner:GetCommodityStatus(itemID, location)
     if not location then
         local missedAt = notHeld[itemID]
         if missedAt and (GetTime() - missedAt) < NOT_HELD_SECONDS then return nil end
+        if held and not held[itemID] then return nil end
 
         location = LocateInBags(itemID)
         if not location then
@@ -1200,6 +1226,45 @@ function Scanner:ReadReplicateResults(numItems, reread)
     local suffixObservations = {}
     local suffixGear = {}
 
+    -- What each item, seller and stack size turned out to be, asked once a
+    -- read. A big auction house has thousands of rows of the same few
+    -- thousand items, and asking again for every row (with a walk of the
+    -- bags for each item not held) made the read take minutes.
+    local held = Scanner.HeldItems()
+    local commodityOf, stackOf, ownBy = {}, {}, {}
+
+    local function RowIsCommodity(itemID)
+        local known = commodityOf[itemID]
+        if known == nil then
+            known = self:IsCommodity(itemID, nil, held) == true
+            commodityOf[itemID] = known
+        end
+        return known
+    end
+
+    local function StackOf(itemID)
+        local stack = stackOf[itemID]
+        if stack == nil then
+            stack = Util.GetMaxStackSize(itemID) or false
+            stackOf[itemID] = stack
+        end
+        return stack or nil
+    end
+
+    local function RowIsOwn(owner, ownerFullName)
+        if (owner ~= nil and type(owner) ~= "string")
+            or (ownerFullName ~= nil and type(ownerFullName) ~= "string") then
+            return self:IsOwnAuction(owner, ownerFullName)
+        end
+        local key = (owner or "") .. "\1" .. (ownerFullName or "")
+        local own = ownBy[key]
+        if own == nil then
+            own = self:IsOwnAuction(owner, ownerFullName) == true
+            ownBy[key] = own
+        end
+        return own
+    end
+
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
     for i = 0, numItems - 1 do
@@ -1357,8 +1422,8 @@ function Scanner:ReadReplicateResults(numItems, reread)
             -- stack-size guard kept its whole price as the price of one, and
             -- Wool Cloth at 1s each was stored at 40s.
             local unitPrice
-            if self:IsCommodity(itemID)
-                or (quantity > 1 and quantity > (Util.GetMaxStackSize(itemID) or quantity)) then
+            if RowIsCommodity(itemID)
+                or (quantity > 1 and quantity > (StackOf(itemID) or quantity)) then
                 commodities[itemID] = true
                 if quantity > 1 and buyoutPrice >= quantity then
                     unitPrice = math.floor(buyoutPrice / quantity + 0.5)
@@ -1366,7 +1431,7 @@ function Scanner:ReadReplicateResults(numItems, reread)
                     unitPrice = buyoutPrice
                 end
             else
-                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity)
+                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity, StackOf(itemID) or false)
             end
 
             -- A price nothing can pay is not a market observation, so it is
@@ -1394,7 +1459,7 @@ function Scanner:ReadReplicateResults(numItems, reread)
             local listing = {
                 unitPrice = unitPrice,
                 quantity = quantity,
-                isOwn = self:IsOwnAuction(owner, ownerFullName),
+                isOwn = RowIsOwn(owner, ownerFullName),
                 -- Only counted, for the Stats tab's sellers (Data/StatsLog.lua).
                 seller = type(owner) == "string" and owner or nil,
             }

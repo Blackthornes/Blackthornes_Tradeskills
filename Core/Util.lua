@@ -540,11 +540,15 @@ end
 -- When the stack size is not cached the old behaviour stands and the division
 -- happens. That is the case worth watching, which is why `/bts listings`
 -- prints the stack size it managed to read.
-function Util.UnitPriceFromStack(itemID, totalPrice, quantity)
+--
+-- @param maxStack optional stack size the caller already read; false for
+--   one it asked about and the client didn't know.
+function Util.UnitPriceFromStack(itemID, totalPrice, quantity, maxStack)
     if not quantity or quantity <= 1 then return totalPrice end
     if totalPrice < quantity then return totalPrice end
 
-    local maxStack = Util.GetMaxStackSize(itemID)
+    if maxStack == nil then maxStack = Util.GetMaxStackSize(itemID) end
+    maxStack = maxStack or nil
     if maxStack and quantity > maxStack then return totalPrice end
 
     return math.floor(totalPrice / quantity)
