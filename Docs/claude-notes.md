@@ -110,6 +110,23 @@ the copy's suffix. A suffix row with none of its own shows empty boxes and
 "Not set, the item's price is used". Tested in `tools/test_myprices.lua`
 and `tools/test_uifit.lua`.
 
+Suffix rows on the Stats tab (a player's report, the owner said build it
+from a mockup, 2026-11-25): the Stats list works like the Prices tab. An
+item with recent suffix prices shows "N suffixes" and a gold + or -
+before its icon; open, each suffix is its own row under it (`kid = true`,
+its full name and worth; `StatsUI.AddSuffixRows`). Open while a search
+finds `AUTO_OPEN_MOST` (30) or fewer items, else closed; a click is kept in
+`state.open[itemID]` (session only). Picking a suffix row shows that
+suffix's stats (`Select(itemID, suffix)`, `StatsUI.IsPicked`); the item's
+own row is still the plain item. Its hover draws `Prices.SuffixLink` when
+the bonus is known, else its full name on top. Same fix day: a kept item
+(crafted, a material or starred) with under two hourly prices draws its
+own last scans (`PriceGraph.Series`), so an item starred after its scans
+no longer shows an empty graph; and the Sell list draws a suffix copy's
+card from its bag slot (`line.bag`, `line.slot`), since a card drawn from
+a link was drawn again with the plain name. Tested in
+`tools/test_suffixdetails.lua` and `tools/test_suffixtooltips.lua`.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
