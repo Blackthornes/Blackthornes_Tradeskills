@@ -1797,6 +1797,42 @@ local function Build(outer)
     end, true)
     widgets.salvagerApart:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Old plain results (a player asked, the owner said build it,
+    -- 2026-11-25): disenchants from before Keep Salvager Results Apart all
+    -- sit in the plain record. Move them into the Salvager one, or clear
+    -- them, each after a Confirm. Logic/DisenchantLog.lua does the work.
+    local plainRow = CreateRow(pages.tooltips, 2, L["Plain Disenchant Results:"],
+        L["If you did your old disenchants at an Arcane Salvager, move them there. Or clear them to start fresh. Your Salvager results stay as they are."])
+    local function AskPlain(title, text, act, done)
+        local log = ns.DisenchantLog
+        local count = log and log:PlainCount() or 0
+        if count == 0 or not ns.PostConfirm then return end
+        ns.PostConfirm:Show({
+            title = title, text = L.Format(text, count), yes = L["Confirm"], no = L["Cancel"], noIcon = true,
+            accept = function()
+                local n = log[act](log)
+                if n > 0 then ns.Print(done(n)) end
+                UI:RefreshSettingsPlain()
+            end,
+        })
+    end
+    widgets.plainMove = Widgets.CreateButton(plainRow, L["Move to Salvager"], function()
+        AskPlain(L["Move to Salvager"],
+            L["Move all %d plain disenchants into your Salvager results. Do this only if you did them at an Arcane Salvager."],
+            "MovePlainToSalvager",
+            function(n) return L.Format(L["Moved %d disenchants to your Salvager results."], n) end)
+    end, { width = 60, height = 20 })
+    widgets.plainMove:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(widgets.plainMove)
+    widgets.plainClear = Widgets.CreateButton(plainRow, L["Clear"], function()
+        AskPlain(L["Clear Plain Results"],
+            L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."],
+            "ClearPlain",
+            function() return L["Your plain disenchant results are cleared."] end)
+    end, { width = 40, height = 20 })
+    widgets.plainClear:SetPoint("LEFT", widgets.plainMove, "RIGHT", 4, 0)
+    FitButton(widgets.plainClear)
+
     -- The "made 1 of X, 4 left" lines while crafting from the queue (a
     -- player asked, the owner said build it, 2026-11-17).
     local craftChatRow = CreateRow(pages.tooltips, 2, L["Craft Messages:"],
@@ -3362,6 +3398,7 @@ local function Refresh()
     if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     if widgets.disenchantChat then widgets.disenchantChat:SetChecked(Config:Get("disenchantChat") ~= false) end
     if widgets.salvagerApart then widgets.salvagerApart:SetChecked(Config:Get("salvagerApart") == true) end
+    UI:RefreshSettingsPlain()
     if widgets.craftChat then widgets.craftChat:SetChecked(Config:Get("craftChat") ~= false) end
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
@@ -3522,6 +3559,14 @@ end
 
 --- How long the red Confirm waits for the second click, in seconds.
 UI.RESTORE_CONFIRM_SECONDS = 4
+
+--- Grey the old disenchant results buttons when there is nothing to move.
+function UI:RefreshSettingsPlain()
+    local any = ns.DisenchantLog ~= nil and ns.DisenchantLog:PlainCount() > 0
+    for _, button in ipairs({ widgets.plainMove, widgets.plainClear }) do
+        if button and button.SetEnabledState then button:SetEnabledState(any) end
+    end
+end
 
 --- True when the typed words are "confirm".
 local function Confirmed(args)

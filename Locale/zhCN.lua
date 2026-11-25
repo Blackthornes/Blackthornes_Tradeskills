@@ -3952,3 +3952,13 @@ L["Salvager mode is off."] = "Salvager 模式已关闭。"
 L["Your last spell: %s (%s)"] = "你最后施放的法术：%s（%s）"
 L["Your buffs at the last disenchant: %s"] = "上次分解时你身上的增益：%s"
 L["Profit for %d"] = "%d 件的利润"
+
+-- Old plain disenchant results (2026-11-25)
+L["Plain Disenchant Results:"] = "普通分解结果："
+L["If you did your old disenchants at an Arcane Salvager, move them there. Or clear them to start fresh. Your Salvager results stay as they are."] = "如果你以前的分解都是在 Arcane Salvager 旁做的，就把它们移过去。或者清除它们，重新开始。你的 Salvager 结果不会变。"
+L["Move to Salvager"] = "移到 Salvager"
+L["Clear Plain Results"] = "清除普通结果"
+L["Move all %d plain disenchants into your Salvager results. Do this only if you did them at an Arcane Salvager."] = "把全部 %d 次普通分解移到你的 Salvager 结果里。只有在 Arcane Salvager 旁分解的才这样做。"
+L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "清除全部 %d 次普通分解。在你再分解之前，数值用内置表。这无法撤销。"
+L["Moved %d disenchants to your Salvager results."] = "已把 %d 次分解移到你的 Salvager 结果里。"
+L["Your plain disenchant results are cleared."] = "你的普通分解结果已清除。"

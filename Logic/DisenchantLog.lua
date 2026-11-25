@@ -478,6 +478,84 @@ local function Refresh()
     if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
 end
 
+--------------------------------------------------------------------------------
+-- Old plain results (a player asked, the owner said build it, 2026-11-25)
+--------------------------------------------------------------------------------
+-- Before Keep Salvager Results Apart came in, every disenchant went in the
+-- plain record, Salvager ones too. The record keeps a tally per item and
+-- row, not a dated list, so only the player knows which were which. The
+-- Settings row "Plain Disenchant Results:" lets them move the whole plain
+-- record into the Salvager one, or clear it, each after a Confirm. The
+-- Salvager record is only ever added to.
+
+--- How many disenchants the plain record holds.
+function DisenchantLog:PlainCount()
+    local log = ns.db and ns.db.disenchantLog
+    if type(log) ~= "table" or type(log.bands) ~= "table" then return 0 end
+    local total = 0
+    for _, band in pairs(log.bands) do total = total + (tonumber(band.casts) or 0) end
+    return total
+end
+
+--- Add one { casts, got } record into another.
+local function MergeRecord(into, from)
+    into.casts = (into.casts or 0) + (tonumber(from.casts) or 0)
+    into.got = into.got or {}
+    for materialID, got in pairs(from.got or {}) do
+        local mine = into.got[materialID]
+        if not mine then
+            into.got[materialID] = { times = got.times or 0, total = got.total or 0, min = got.min, max = got.max }
+        else
+            mine.times = (mine.times or 0) + (got.times or 0)
+            mine.total = (mine.total or 0) + (got.total or 0)
+            if got.min then mine.min = mine.min and math.min(mine.min, got.min) or got.min end
+            if got.max then mine.max = mine.max and math.max(mine.max, got.max) or got.max end
+        end
+    end
+end
+
+local function MergeRecords(into, from)
+    for key, record in pairs(from or {}) do
+        if type(record) == "table" then
+            into[key] = into[key] or { casts = 0, got = {} }
+            MergeRecord(into[key], record)
+        end
+    end
+end
+
+local function Changed()
+    DisenchantLog.version = (DisenchantLog.version or 0) + 1
+    Refresh()
+end
+
+--- Move every plain result into the Salvager record. Returns how many.
+function DisenchantLog:MovePlainToSalvager()
+    local count = self:PlainCount()
+    if count == 0 then return 0 end
+
+    local plain = self:GetTable()
+    local log = self:GetSalvagerTable()
+    MergeRecords(log.bands, plain.bands)
+    MergeRecords(log.items, plain.items)
+
+    for _, entry in ipairs(plain.recent) do log.recent[#log.recent + 1] = entry end
+    table.sort(log.recent, function(a, b) return (a.at or 0) > (b.at or 0) end)
+    while #log.recent > RECENT_KEPT do table.remove(log.recent) end
+
+    ns.db.disenchantLog = nil
+    Changed()
+    return count
+end
+
+--- Clear the plain record. The Salvager one stays. Returns how many.
+function DisenchantLog:ClearPlain()
+    local count = self:PlainCount()
+    if count == 0 then return 0 end
+    ns.db.disenchantLog = nil
+    Changed()
+    return count
+end
+
 --- One check a little after the idle time, so the purple line goes away by
 --- itself. A single timer, not a ticker.
 local function WatchIdle()

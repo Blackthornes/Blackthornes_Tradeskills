@@ -48,7 +48,7 @@ local function Build()
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     window.top = titan and -34 or -PAD
     if titan then
-        titan:Dress(window, { title = L["Auction House"], close = function() PostConfirm:Skip() end })
+        window.trim = titan:Dress(window, { title = L["Auction House"], close = function() PostConfirm:Skip() end })
     else
         Theme.TopSheen(window, 0.08)
     end
@@ -88,8 +88,11 @@ local function Height(region)
     return ok and tonumber(height) or 0
 end
 
---- Ask about one listing.
+--- Ask about one listing, or another yes or no question.
 --- ask = { text, itemID, data, accept = fn(data), skip = fn(data) }
+--- Other questions (the Settings row for old disenchant results, 2026-11-25)
+--- may add title, yes and no (the words on the plate and the two buttons)
+--- and noIcon. Left out, they are the listing's as before.
 --- Returns the window, or nil when it could not be made.
 function PostConfirm:Show(ask)
     if type(ask) ~= "table" then return nil end
@@ -107,11 +110,25 @@ function PostConfirm:Show(ask)
     self.ask = ask
 
     window.text:SetText(ask.text or "")
-    local icon = ask.itemID and ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(ask.itemID)
-    window.icon:SetTexture(icon or self.UNKNOWN_ICON)
-    window.icon:Show()
+    local plate = window.trim and window.trim.plate
+    if plate and plate.SetTitle then pcall(plate.SetTitle, plate, ask.title or L["Auction House"]) end
+    window.listIt:SetText(ask.yes or L["List It"])
+    window.skip:SetText(ask.no or L["Skip"])
 
-    local body = math.max(self.ICON, Height(window.text))
+    local left = PAD + self.ICON + GAP
+    if ask.noIcon then
+        window.icon:Hide()
+        left = PAD
+    else
+        local icon = ask.itemID and ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(ask.itemID)
+        window.icon:SetTexture(icon or self.UNKNOWN_ICON)
+        window.icon:Show()
+    end
+    window.text:ClearAllPoints()
+    window.text:SetPoint("TOPLEFT", window, "TOPLEFT", left, window.top)
+    window.text:SetWidth(self.WIDTH - left - PAD)
+
+    local body = math.max(ask.noIcon and 0 or self.ICON, Height(window.text))
     window:SetHeight(-window.top + body + GAP + BUTTON_HEIGHT + 14 + 6)
 
     window:ClearAllPoints()
