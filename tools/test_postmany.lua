@@ -178,6 +178,8 @@ check("a commodity is untouched", LineFor(LINEN), nil)
 
 check("the link names a suffix", ns.Util.LinkSuffix(bags[0][6].link) ~= nil, true)
 check("random suffix gear goes one at a time", LineFor(BAND).maxQuantity, 1)
+check("the line knows the copy's bag, for its card", LineFor(BAND).bag, 0)
+check("and its slot", LineFor(BAND).slot, 6)
 
 print("")
 print("when the auction house takes only one")

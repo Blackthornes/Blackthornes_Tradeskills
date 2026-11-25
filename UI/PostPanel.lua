@@ -608,9 +608,31 @@ local function AddCraftedLines(line)
     end
 end
 
+--- The card drawn from the bag copy itself, while its slot still holds the
+--- item. Drawn from a link, Forever puts the plain name on top and draws the
+--- card again a moment later, so "of Magic" did not stay (a player's report,
+--- 2026-11-24). True when drawn.
+local function ShowBagCopy(row, line)
+    if not (line.bag and line.slot and GameTooltip.SetBagItem) then return false end
+    local api = _G.C_Container
+    if not (type(api) == "table" and api.GetContainerItemInfo) then return false end
+    local ok, info = pcall(api.GetContainerItemInfo, line.bag, line.slot)
+    if not (ok and type(info) == "table" and info.itemID == line.itemID) then return false end
+
+    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
+    if not pcall(GameTooltip.SetBagItem, GameTooltip, line.bag, line.slot) then return false end
+    local counted, count = pcall(GameTooltip.NumLines, GameTooltip)
+    if not counted or (tonumber(count) or 0) == 0 then return false end
+    if ns.Widgets.TakeFullName then ns.Widgets.TakeFullName(line.label) end
+    return true
+end
+
 local function ShowRowTooltip(row, line)
-    -- The copy's own link, so a random suffix shows as itself.
-    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label, line.link)
+    -- The copy in the bags, else its own link, so a random suffix shows as
+    -- itself.
+    if not (line.link and ShowBagCopy(row, line)) then
+        ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label, line.link)
+    end
     GameTooltip:AddLine(" ")
 
     -- Another Blackthornes addon wants it kept (Logic/SisterKeeps.lua).

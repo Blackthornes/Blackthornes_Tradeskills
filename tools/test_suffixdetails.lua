@@ -118,6 +118,24 @@ series, kind = G.Series(PLAIN, "day", now, BEAR)
 check("it falls back to the suffix's readings", kind, "market")
 check("which are the suffix's prices", series[1] and series[1].p, 7001)
 
+-- Starred after its scans (a player's report, 2026-11-25: "several suffixes
+-- show no data"): kept from now on, but with under two hourly prices yet.
+-- Its own readings still draw until the hourly line has two points.
+local STARRED = 8888
+P:Record(STARRED, 600, 500, 3, now - 3 * HOUR)
+P:Record(STARRED, 620, 510, 3, now - 2 * HOUR)
+for i = 1, 3 do P:RecordSuffix(STARRED, BEAR, 5000 + i, 5000, 5000, 1, now - (4 - i) * HOUR) end
+ns.db.favouritePrices[STARRED] = "Starred Band"
+H:Retrack()
+P:RecordSuffix(STARRED, BEAR, 5100, 5000, 5000, 1, now)
+check("starred now, one hourly suffix price so far", #H:GetPoints(STARRED, nil, now, BEAR), 1)
+series, kind = G.Series(STARRED, "day", now, BEAR)
+check("a suffix starred late still draws its readings", kind, "market")
+check("its own prices", series[1] and series[1].p, 5001)
+series, kind = G.Series(STARRED, "day", now)
+check("so does the item starred late", kind, "market")
+check("with the item's prices", series[1] and series[1].p, 600)
+
 print("Stats builds for the suffix")
 local stats = ns.ItemStats:Build(CHEST, now, WRATH)
 check("it knows the suffix", stats.suffix, WRATH)
