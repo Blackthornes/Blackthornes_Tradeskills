@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.47.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Plain Disenchant Results.** Move to Salvager and Clear on the Tooltips page of Settings. Move to Salvager adds your old plain disenchants to your Salvager results. Clear removes them. Each asks you to confirm first.
+
 ## 1.47.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
