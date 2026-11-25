@@ -91,5 +91,15 @@ if type(Tip) == "table" then
   check("5. nothing for no info", #Tip.Lines(nil), 0)
 end
 
+-- The hover on a row's profit shows it for one craft (the owner,
+-- 2026-11-25): -8g 74s 52c for 3 circlets is -2g 91s 51c each.
+local Each = ns.QueueProfitTip and ns.QueueProfitTip.Each
+check("6. the profit hover loaded", type(Each) == "function", true)
+if type(Each) == "function" then
+  check("6. a loss for 3, each", Each(-87452, 3), -29151)
+  check("6. a profit for 2, each", Each(14767, 2), 7384)
+  check("6. no count, no each", Each(500, 0), nil)
+end
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 if failures > 0 then error(failures .. " check(s) failed") end

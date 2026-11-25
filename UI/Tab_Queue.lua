@@ -58,6 +58,17 @@ end
 
 local widgets = {}
 
+-- The profit for one craft from a row's total, for the hover on its
+-- profit (the owner, 2026-11-25): the number the item's tooltip calls
+-- Profit Now. nil for no count.
+local QueueProfitTip = {}
+ns.QueueProfitTip = QueueProfitTip
+
+function QueueProfitTip.Each(total, count)
+    if type(total) ~= "number" or type(count) ~= "number" or count <= 0 then return nil end
+    return math.floor(total / count + 0.5)
+end
+
 --------------------------------------------------------------------------------
 -- Crafting Time hover (2026-11-12), shared with the craft pane's footer
 --------------------------------------------------------------------------------
@@ -215,6 +226,30 @@ local function CreateCraftRow(row)
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.profit:SetPoint("RIGHT", -114, 0)
     row.profit:SetWidth(80)
+
+    -- Hovering the profit shows it for one craft, the number the item's
+    -- tooltip calls Profit Now (the owner, 2026-11-25). Clicks still reach
+    -- the row, and the row stays lit.
+    row.profitHover = CreateFrame("Frame", nil, row)
+    row.profitHover:SetAllPoints(row.profit)
+    row.profitHover:EnableMouse(true)
+    if row.profitHover.SetMouseClickEnabled then row.profitHover:SetMouseClickEnabled(false) end
+    row.profitHover:SetScript("OnEnter", function(self)
+        local enter = row:GetScript("OnEnter")
+        if enter then enter(row) end
+        if not row.profitEach then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.Format("Profit for %d", row.profitCount or 1), 1, 1, 1)
+        GameTooltip:AddDoubleLine(L["Each:"], Util.FormatMoney(row.profitEach, { short = true }),
+            1, 0.82, 0)
+        GameTooltip:Show()
+    end)
+    row.profitHover:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+        local script = row:GetScript(row:IsMouseOver() and "OnEnter" or "OnLeave")
+        if script then script(row) end
+    end)
+    row.profitHover:Hide()
 
     -- Quantity stepper: - and + either side of a box you can type the
     -- amount into. 0 takes the craft off the queue, as - does at 1.
@@ -486,6 +521,7 @@ local function UpdateCraftRow(row, entry)
     row.profit:SetShown(not kept)
     if kept then row.buyInstead.tooltipText = BuyInsteadTooltip(entry) end
 
+    row.profitEach, row.profitCount = nil, nil
     if entry.isDependency then
         -- Made to go into another craft, not sold, so it earns nothing of
         -- its own. The footer already counts it that way; a sale profit here
@@ -497,10 +533,13 @@ local function UpdateCraftRow(row, entry)
         local total = priced and priced.profit or (analysis.profit * entry.quantity)
         row.profit:SetText(Util.FormatMoney(total, { short = true }))
         row.profit:SetTextColor(Theme.ProfitColor(total))
+        row.profitEach = QueueProfitTip.Each(total, entry.quantity)
+        row.profitCount = row.profitEach and entry.quantity or nil
     else
         row.profit:SetText("--")
         row.profit:SetTextColor(Theme.Unpack("dim"))
     end
+    row.profitHover:SetShown(row.profitEach ~= nil and not kept)
 end
 
 --------------------------------------------------------------------------------

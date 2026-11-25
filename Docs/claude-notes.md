@@ -4069,3 +4069,25 @@ shadowed. While it shows, each arrow's `ArrowUI.Words` asks
 `TravelCard:Words(state)` and keeps only its name. `travelCardScale` is no
 longer read (left in saves). Tested in `tools/test_stepbox.lua` (the same in
 all five). Not yet seen in game.
+
+## Profit Now at today's prices (2026-11-25)
+
+A player's report: the craft queue said -8g 74s for 3 Dreamweave Circlets,
+while the item tooltip said "Profit Now: +62s", worked out from Made For
+(what the last one cost, 3 hours before). The owner: Profit Now always
+shows the current amount.
+
+- `CraftedCost:CostNow(itemID)` is what one costs to make today:
+  `Cost:GetCraftCost` for the recipe from `Cost:FindAnyRecipeForItem`, with
+  no options, so it follows "Charge for Own Materials" as the queue does.
+  Nil for gear that binds when made, or an unpriced material.
+- `CraftedCost:Lines` puts Profit Now on `ProfitNowAt` (sale after the cut
+  minus `CostNow`), for any item a recipe makes, crafted before or not.
+  Made For and Last Posted stay, from the last craft. `ProfitAt` and the
+  "Never below what I paid" guard still use the last craft's cost.
+- The queue row keeps its total; hovering the number shows "Profit for N"
+  and "Each:" (`QueueProfitTip.Each`). The queue buys up the listings for
+  every craft, so with thin listings its "each" can read worse than the
+  tooltip's one.
+
+Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.

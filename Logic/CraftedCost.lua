@@ -273,28 +273,61 @@ function CraftedCost:RefusalText(itemID, price, cost, net)
         Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(cost), Util.FormatMoney(net))
 end
 
---- Lines for a tooltip, each { label, value, color }: what it cost to make,
---- what it last went up at, and what listing it now makes over that cost.
---- Nothing for an item never crafted since this was added.
+--- What one costs to make today, at today's material prices and the
+--- player's own "Charge for Own Materials" choice, as the craft queue
+--- prices a craft: copper each, or nil when no character's recipe makes it,
+--- it binds when made, or a material has no price.
+function CraftedCost:CostNow(itemID)
+    if not (itemID and ns.Cost and ns.Cost.GetCraftCost) then return nil end
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(itemID) then return nil end
+    local find = ns.Cost.FindAnyRecipeForItem or ns.Cost.FindRecipeForItem
+    local recipeID = find and find(ns.Cost, itemID)
+    if not recipeID then return nil end
+    local ok, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID)
+    if not ok or type(cost) ~= "table" or not cost.priceable then return nil end
+    local each = cost.perUnit
+    if type(each) ~= "number" or each <= 0 then return nil end
+    return math.floor(each + 0.5)
+end
+
+--- What one sale at `price` makes over what one costs to make today, after
+--- the cut. The owner (2026-11-25): Profit Now always shows the current
+--- amount, so it agrees with the craft queue, not with the last craft.
+-- @return profit (copper, negative for a loss), or nil when either is unknown
+function CraftedCost:ProfitNowAt(itemID, price)
+    if type(price) ~= "number" then return nil end
+    local cost = self:CostNow(itemID)
+    if not cost then return nil end
+    return self:NetOf(price) - cost
+end
+
+--- Lines for a tooltip, each { label, value, color }: what it cost the last
+--- time you made one, what it last went up at, and what a listing now makes
+--- over what one costs to make today. The first two only for an item
+--- crafted since this was kept; the profit for anything a recipe makes.
 --
 -- @param price  what it would list at now; looked up when not given
 function CraftedCost:Lines(itemID, price)
     local lines = {}
 
     local record = self:Get(itemID)
-    if not record then return lines end
 
     local function Ago(at)
         if type(at) ~= "number" then return "" end
         return "  (" .. Util.FormatAgeAgo(math.max(0, time() - at)) .. ")"
     end
 
-    lines[#lines + 1] = { L["Made for"], Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
+    if record then
+        lines[#lines + 1] = { L["Made for"], Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
 
-    local posted = self:GetLastPosted(itemID)
-    if posted then
-        lines[#lines + 1] = { L["Last posted"], Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
+        local posted = self:GetLastPosted(itemID)
+        if posted then
+            lines[#lines + 1] = { L["Last posted"], Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
+        end
     end
+
+    -- Nothing to make it from today: no profit line, and no price looked up.
+    if not self:CostNow(itemID) then return lines end
 
     -- An estimate from the materials is not a price anyone pays, so no
     -- profit is worked out on it.
@@ -316,7 +349,7 @@ function CraftedCost:Lines(itemID, price)
         end
     end
 
-    local profit = price and self:ProfitAt(itemID, price)
+    local profit = price and self:ProfitNowAt(itemID, price)
     if profit then
         local sign = profit > 0 and "+" or (profit < 0 and "-" or "")
         lines[#lines + 1] = {
