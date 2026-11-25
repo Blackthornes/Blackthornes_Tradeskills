@@ -4,19 +4,19 @@
 -- only the step you are on, in one dark glass row. The row's first line is
 -- the step, the second its small line and how far, the third "Step 2 of 4"
 -- and about how long the rest takes. A small dial at the row's end turns
--- with the big arrow; on a step with no way to point (a Hearthstone, a
--- ride) it shows a still gold dot. Stop and Show on Map show while the
+-- with the arrow (the same gold chevron, turned with SetRotation); on a step
+-- with no way to point (a Hearthstone, a ride) it shows a still gold dot. Stop and Show on Map show while the
 -- mouse is on the box.
 --
 -- Where it hangs, in this order:
 --   under the addon's own panel, when it gives one and it shows
 --     (`Travel.Host.Hang`, Equipment's small panel), as wide as it;
---   under the big arrow's dial (`Travel.Host.Dial`), with the red close gem
+--   under the arrow's pill (`Travel.Host.Dial`), with the red close gem
 --     in its corner;
 --   else where it was dragged (`travelCardX`/`travelCardY`, account wide,
 --     never rename them) or on the right shelf, with the close gem.
--- While the box shows, the big arrow keeps only its name: the box says the
--- step (`TravelCard:Words`).
+-- While the box shows, the arrow keeps only its name and how far: the box
+-- says the step (`TravelCard:Words`).
 --
 -- It is always see-through (the owner, 2026-11-24): the glass is thin so the
 -- world shows, every word has an outline and a black shadow so it reads on
@@ -25,7 +25,7 @@
 -- The close gem only puts the box away for this place (`TravelCard:Close`):
 -- the arrow still leads the way, and the box comes back when the arrow is
 -- aimed somewhere else. Stop ends the trip. Words are drawn again only when
--- they change, and the small dial only when its art frame changes.
+-- they change, and the small dial only when it turns a whole step.
 --
 -- The same file in every addon whose arrow takes trips (a fix to it belongs
 -- in all of them); the addon's own parts come through Travel.Host.
@@ -55,9 +55,8 @@ TravelCard.GLASS_SOLID = 0.94
 local LOOK = 0.1
 
 local MEDIA = ([[Interface\AddOns\%s\Media\Arrow\]]):format(tostring(addonName))
--- The big arrow's art: 64 turns, 8 to a row.
-local TURNS = 64
-local COLUMNS = 8
+-- The chevron turns in steps of 2 degrees, as on the arrow.
+local TURNS = 180
 
 --- How tall a wrapped label stands at a width, never less than its lines
 --- by measure (German runs about 30% longer, so a step's words can take
@@ -77,7 +76,7 @@ function TravelCard.Tall(label, size, width)
     return math.ceil(math.max(tall, real))
 end
 
---- The art frame nearest `turn` (radians, anticlockwise from ahead).
+--- The step of 2 degrees nearest `turn` (radians, anticlockwise from ahead).
 function TravelCard.FrameFor(turn)
     return math.floor(turn / (2 * math.pi) * TURNS + 0.5) % TURNS
 end
@@ -136,18 +135,23 @@ function TravelCard:Build()
     dial:SetSize(DIAL, DIAL)
     dial:SetPoint("TOPRIGHT", -PAD, -PAD)
     self.dial = dial
-    local ring = dial:CreateTexture(nil, "BORDER")
-    ring:SetAllPoints()
-    ring:SetTexture(MEDIA .. "Ring")
+    local well = dial:CreateTexture(nil, "BORDER")
+    well:SetAllPoints()
+    well:SetTexture(MEDIA .. "Well")
+    local rim = dial:CreateTexture(nil, "BORDER", nil, 1)
+    rim:SetAllPoints()
+    rim:SetTexture(MEDIA .. "WellEdge")
+    rim:SetVertexColor(0.61, 0.45, 0.15)
     self.blade = dial:CreateTexture(nil, "ARTWORK")
     self.blade:SetPoint("CENTER")
-    self.blade:SetSize(DIAL - 4, DIAL - 4)
-    self.blade:SetTexture(MEDIA .. "Blade")
+    self.blade:SetSize(DIAL - 8, DIAL - 8)
+    self.blade:SetTexture(MEDIA .. "Chevron")
     self.dot = dial:CreateTexture(nil, "ARTWORK")
     self.dot:SetPoint("CENTER")
-    self.dot:SetSize(10, 10)
-    self.dot:SetTexture(MEDIA .. "Ring")
-    self.dot:SetVertexColor(Theme.Unpack("accentHi"))
+    self.dot:SetSize(12, 12)
+    self.dot:SetTexture(MEDIA .. "Dot")
+    pcall(self.dot.SetBlendMode, self.dot, "ADD")
+    self.dot:SetVertexColor(0.95, 0.76, 0.31)
     self.dot:Hide()
 
     self.title = Readable(Theme.CreateLabel(frame, "normal", "accentHi"))
@@ -378,7 +382,7 @@ function TravelCard:Update(state)
         self:Fit()
     end
 
-    -- The small dial turns with the big one; a still gold dot when there
+    -- The small dial turns with the arrow; a still gold dot when there
     -- is no way to point.
     local pointing = state.mode == "point" and type(state.turn) == "number"
     self.blade:SetShown(pointing)
@@ -387,17 +391,13 @@ function TravelCard:Update(state)
         local index = TravelCard.FrameFor(state.turn)
         if index ~= self.shownFrame then
             self.shownFrame = index
-            local column = index % COLUMNS
-            local row = math.floor(index / COLUMNS)
-            local rows = TURNS / COLUMNS
-            pcall(self.blade.SetTexCoord, self.blade,
-                column / COLUMNS, (column + 1) / COLUMNS, row / rows, (row + 1) / rows)
+            pcall(self.blade.SetRotation, self.blade, index / TURNS * 2 * math.pi)
         end
     end
     frame:Show()
 end
 
---- The big arrow's words while the box shows: only its name stays, since the
+--- The arrow's words while the box shows: only its name stays, since the
 --- box says the step. Nil when the arrow should say them itself.
 function TravelCard:Words(state)
     if type(state) ~= "table" or not state.trip then return nil end
