@@ -164,6 +164,74 @@ ns.StatsUI:Pick(CHEST)
 picked, suffix = ns.UI._StatsPicked()
 check("the plain item clears the suffix", suffix, nil)
 
+-- Stats lists each suffix (a player's report, 2026-11-25: "the Stats page
+-- doesn't show suffixes"), the way the Prices tab does.
+print("Stats lists each suffix")
+local function Kids(rows)
+    local kids = {}
+    for _, row in ipairs(rows) do if row.kid then kids[#kids + 1] = row end end
+    return kids
+end
+local rows = ns.UI._StatsList("cabalist")
+check("a short search finds the item", rows[1] and rows[1].itemID, CHEST)
+check("and says how many suffixes it has", rows[1] and rows[1].suffixCount, 2)
+local kids = Kids(rows)
+check("each suffix is its own row under it", #kids, 2)
+check("the dearest suffix first", kids[1] and kids[1].suffix, WRATH)
+check("with its own worth", kids[1] and kids[1].worth, wrath.market)
+check("a suffix row is the same item", kids[1] and kids[1].itemID, CHEST)
+check("no search: closed", #Kids(ns.UI._StatsList("")), 0)
+
+ns.StatsUI.ToggleSuffixes(rows[1])
+check("closed by a click, it stays closed while searching", #Kids(ns.UI._StatsList("cabalist")), 0)
+local plainRows = ns.UI._StatsList("")
+for _, row in ipairs(plainRows) do
+    if row.itemID == CHEST then ns.StatsUI.ToggleSuffixes(row) end
+end
+check("opened by a click, it shows with no search", #Kids(ns.UI._StatsList("")), 2)
+
+-- Drawn: the item says how many, with a + or -; a suffix row has no icon
+-- and its full name.
+do
+    local function Fake()
+        local f = { shown = true, text = "" }
+        return setmetatable(f, { __index = function(_, k)
+            if k == "SetShown" then return function(self, v) self.shown = v and true or false end end
+            if k == "Hide" then return function(self) self.shown = false end end
+            if k == "SetText" then return function(self, t) self.text = t end end
+            return function() end
+        end })
+    end
+    -- The tab keeps the Theme table it loaded with: fill that one.
+    local savedCreate = CreateFrame
+    ns.Theme.SetRowName = function(label, text) label.text = text end
+    ns.Theme.CreateLabel = function() return Fake() end
+    ns.Theme.CreateItemIcon = function() return Fake() end
+    ns.Theme.SetItemIcon = function() end
+    ns.Theme.SetMoneyText = function() end
+    CreateFrame = function() return Fake() end
+    local draw = ns.UI._StatsRow
+    local row = Fake()
+    draw.create(row)
+    local item = { itemID = CHEST, worth = 100, suffixCount = 2, open = true }
+    draw.update(row, item)
+    check("the item row shows its + or -", row.fold.shown, true)
+    check("open, it reads -", row.fold.text.text, "-")
+    check("and counts its suffixes", (row.name.text:find("2 suffixes", 1, true)) ~= nil, true)
+    draw.update(row, { kid = true, itemID = CHEST, suffix = WRATH, name = "Cabalist Chestpiece of Arcane Wrath", worth = 90 })
+    check("a suffix row has no + or -", row.fold.shown, false)
+    check("nor an icon", row.icon.shown, false)
+    check("and shows its full name", (row.name.text:find("of Arcane Wrath", 1, true)) ~= nil, true)
+    CreateFrame = savedCreate
+end
+
+ns.StatsUI:Pick(CHEST, BEAR)
+check("the suffix picked is the row lit", ns.StatsUI.IsPicked({ kid = true, itemID = CHEST, suffix = BEAR }), true)
+check("not its item's row", ns.StatsUI.IsPicked({ itemID = CHEST }), false)
+check("nor another suffix", ns.StatsUI.IsPicked({ kid = true, itemID = CHEST, suffix = WRATH }), false)
+ns.StatsUI:Pick(CHEST)
+check("the plain item lights its own row", ns.StatsUI.IsPicked({ itemID = CHEST }), true)
+
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/Tab_Prices.lua"))("Blackthornes_TS", ns)
 local id, kidSuffix = ns.PricesUI.Subject({ itemID = CHEST, kid = true, suffix = WRATH })
