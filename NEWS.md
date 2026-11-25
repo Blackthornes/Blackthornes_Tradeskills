@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.46.0
+
+- The Stats page lists suffixes under each item.
+
+Fixes and changes:
+- Quick scan reads big auction houses much faster.
+- Road to 300 and Learn Next leave out recipes for a specialty you do not have.
+- Road to 300 leaves out cooldown crafts such as Mooncloth.
+- The sell drawer hover shows the suffix name, and suffix graphs show the scans they have.
+- Various bug fixes.
+
 ## 1.45.0
 
 - Buy One buys the next listing as soon as you click it again.
