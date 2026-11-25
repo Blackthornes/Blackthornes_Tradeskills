@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.46.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Quick Scan.** Quick scan reads big auction houses much faster.
+- **Specialties.** Road to 300 and Learn Next leave out recipes for a specialty you do not have.
+- **Road to 300.** Road to 300 leaves out cooldown crafts such as Mooncloth.
+- **Suffixes.** The sell drawer hover shows the suffix name. Suffix graphs show the scans they have. The Stats page lists suffixes under each item.
+- Various bug fixes for Tradeskills.
+
 ## 1.45.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
