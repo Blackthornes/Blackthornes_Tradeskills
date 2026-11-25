@@ -786,6 +786,17 @@ its header (`RoadPlan.SpecialtyNote`, `RoadView:PlaceNote`). The probe's
 "specialties" line shows what the game says. Tested in
 `tools/test_roadto300.lua` and `tools/test_trainerrecipes.lua`.
 
+Cooldown crafts (a player's report, the owner said leave them off,
+2026-11-25): Tailoring's road asked for about 40 Mooncloth, one every 4
+days. A craft with a cooldown (`Cooldowns:HasCooldown`: Classic's
+transmutes and Mooncloth in `Cooldowns.KNOWN`, plus any craft a character
+was seen waiting on) is never a road step (`RoadPlan.OnCooldown` in
+`RoadPlan:Candidates`), known or not; the road takes the next best recipe
+at each step. Not counted as skipped and no note on the road. The Profit,
+Queue and Level Up tabs still show them. `Cooldowns.seenVersion` (in the
+road's key) moves only when a craft is first seen waiting. Tested in
+`tools/test_roadto300.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first

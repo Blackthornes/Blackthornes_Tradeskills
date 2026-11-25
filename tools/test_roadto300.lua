@@ -730,6 +730,34 @@ check("offered again", HasCandidate(3), true)
 check("nothing skipped after", Road:IsSkipped(3), false)
 check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
 
+print("\ncooldown crafts stay off the road")
+-- A player's report (2026-11-25): Tailoring's road asked for about 40
+-- Mooncloth, one every 4 days. A craft with a cooldown is never a step;
+-- the road picks the next best recipe.
+local savedCooldowns = ns.Cooldowns
+local onCooldown = {}
+ns.Cooldowns = { seenVersion = 0, HasCooldown = function(_, id) return onCooldown[id] == true end }
+check("the belt is offered", HasCandidate(3), true)
+local freePlan = Road:Get(professions[1])
+onCooldown[3] = true
+ns.Cooldowns.seenVersion = 1
+check("a cooldown craft is left out", HasCandidate(3), false)
+check("Road.OnCooldown says so", Road.OnCooldown(3), true)
+check("another craft is not", Road.OnCooldown(4), false)
+local coolPlan = Road:Get(professions[1])
+check("the plan is worked out again", coolPlan ~= freePlan, true)
+local coolLeft = false
+for _, step in ipairs(coolPlan.steps) do
+  if step.kind == "craft" and step.recipeID == 3 then coolLeft = true end
+end
+check("no step for it", coolLeft, false)
+check("not counted as skipped", #Road:SkippedOn(164), 0)
+ns.Cooldowns = { HasCooldown = function() error("broken") end }
+check("a broken check leaves it on", Road.OnCooldown(3), false)
+ns.Cooldowns = nil
+check("no cooldown module leaves it on", HasCandidate(3), true)
+ns.Cooldowns = savedCooldowns
+
 print("\nno shopping row before the steps")
 -- A player's report (2026-11-17): Alchemy's road listed each step's herbs
 -- and vials on its own step. They gathered and bought for step one, then
