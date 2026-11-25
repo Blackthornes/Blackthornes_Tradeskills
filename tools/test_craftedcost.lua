@@ -42,11 +42,17 @@ ns.Recipes = {
 
 local costs = { [1] = { priceable = true, perUnit = 1000 }, [2] = { priceable = false } ,
                 [3] = { priceable = true, perUnit = 50 } }
+-- What one costs to make today (no options: the player's own choice, as
+-- the craft queue prices it), apart from what the last craft cost.
+local costsNow = {}
+local recipeFor = { [BOLT] = 1, [SHIRT] = 2, [SWORD] = 3 }
 ns.Cost = {
   GetCraftCost = function(_, recipeID, _, _, opts)
-    assert(opts and opts.valueOwned, "materials are valued at worth")
+    if opts == nil then return costsNow[recipeID] end
+    assert(opts.valueOwned, "materials are valued at worth")
     return costs[recipeID]
   end,
+  FindAnyRecipeForItem = function(_, itemID) return recipeFor[itemID] end,
 }
 
 local postPrice = {}
@@ -115,6 +121,10 @@ settings.neverBelowCraftedCost = false
 
 print("\ntooltip lines")
 check("nothing for an item never crafted", #CC:Lines(SHIRT), 0)
+-- Profit Now is what one makes at today's material prices (the owner,
+-- 2026-11-25, after a player's report: the queue said -8g 74s for 3
+-- circlets, the tooltip +62s off one made 3 hours earlier for less).
+costsNow[1] = { priceable = true, perUnit = 1200 }
 postPrice[BOLT] = { 2000, "undercut" }
 local lines = CC:Lines(BOLT)
 check("three lines", #lines, 3)
@@ -140,6 +150,28 @@ check("profit at what it sold for, not the markup", lines[3][2], "-155c at 1100c
 check("a loss in red", lines[3].color, "loss")
 marketValue[BOLT] = nil
 check("no market value either: no profit line", #CC:Lines(BOLT), 2)
+
+print("\nprofit now at today's prices")
+postPrice[BOLT] = { 2000, "undercut" }
+costsNow[1] = { priceable = true, perUnit = 2500.4 }
+lines = CC:Lines(BOLT)
+check("made for still shows the last craft", lines[1][2], "1200c  (0s ago)")
+check("profit uses today's cost, not the last craft", lines[3][2], "-600c at 2000c")
+check("a loss today is red", lines[3].color, "loss")
+check("ProfitNowAt agrees", CC:ProfitNowAt(BOLT, 2000), -600)
+costsNow[1] = { priceable = false }
+check("today's cost unknown: no profit line", #CC:Lines(BOLT), 2)
+costsNow[2] = { priceable = true, perUnit = 100 }
+postPrice[SHIRT] = { 300, "undercut" }
+lines = CC:Lines(SHIRT)
+check("never made here: profit now alone", #lines, 1)
+check("its profit after the cut", lines[1][2], "+185c at 300c")
+costsNow[3] = { priceable = true, perUnit = 10 }
+postPrice[SWORD] = { 300, "undercut" }
+check("soulbound when made: nothing", #CC:Lines(SWORD), 0)
+check("no recipe makes it: nothing", CC:CostNow(12345), nil)
+costsNow[1] = { priceable = true, perUnit = 1200 }
+costsNow[2], postPrice[SHIRT], postPrice[SWORD] = nil, nil, nil
 
 print("\nwhat a sale made")
 -- BOLT was last made for 1200 at `now`.
