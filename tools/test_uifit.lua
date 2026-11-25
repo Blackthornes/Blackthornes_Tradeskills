@@ -669,6 +669,40 @@ row.mouseOver = false
 list.scripts.OnMouseWheel(list, 1)
 check("after the mouse leaves, nothing is drawn", #entered, drawn)
 
+-- A player's recording (2026-11-24): with the one window folded into its
+-- round button, the mouse over where its lists had been still showed their
+-- rows' tooltips. Forever lets the mouse reach those rows, so a row on a
+-- folded window shows nothing.
+local foldHost = Region()
+local clicked = 0
+local foldList = Widgets.CreateScrollList(foldHost, {
+    rowHeight = 20,
+    onEnter = function(row, entry)
+        entered[#entered + 1] = entry.itemID
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:SetText("item " .. entry.itemID)
+        GameTooltip:Show()
+    end,
+    onClick = function() clicked = clicked + 1 end,
+})
+foldList.height = 100
+foldList:SetData(Items(20))
+foldHost.blackthornesFold = { folded = true }
+local foldRow = foldList.rows[1]
+foldRow.scripts.OnClick(foldRow, "RightButton")
+check("and takes no clicks", clicked, 0)
+local before = #entered
+foldRow.mouseOver = true
+foldRow.scripts.OnEnter(foldRow)
+check("a row on a folded window shows no tooltip", #entered, before)
+foldHost.blackthornesFold.folded = false
+foldRow.scripts.OnEnter(foldRow)
+check("opened again, it does", entered[#entered], 101)
+foldRow.scripts.OnClick(foldRow, "LeftButton")
+check("and takes clicks", clicked, 1)
+foldRow.scripts.OnLeave(foldRow)
+foldRow.mouseOver = false
+
 --------------------------------------------------------------------------------
 print("")
 print("buttons")

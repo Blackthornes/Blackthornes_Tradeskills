@@ -1064,6 +1064,8 @@ function CraftPanel.OutOfSight(pane, inOne, activeTab, docked)
     if Read(pane, "IsVisible") == false then return true end
     local alpha = tonumber(Read(pane, "GetEffectiveAlpha"))
     if alpha and alpha < 0.05 then return true end
+    -- Inside a window folded into its round button (2026-11-24).
+    if ns.Widgets and ns.Widgets.InFoldedWindow and ns.Widgets.InFoldedWindow(pane) then return true end
     if inOne then return activeTab ~= nil and activeTab ~= "crafting" end
     return docked == true
 end
