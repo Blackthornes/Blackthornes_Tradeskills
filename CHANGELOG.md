@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.47.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Profit Now.** Profit Now on the item tooltip uses what one costs to make today, and shows for any item a recipe makes.
+- **Craft queue.** Hovering a craft's profit shows the profit for one craft.
+
 ## 1.46.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
