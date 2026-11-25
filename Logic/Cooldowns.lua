@@ -86,6 +86,9 @@ Cooldowns.CLOCK_WRAP = 2 ^ 32 / 1000
 
 -- Moves whenever what is kept changes, for lists that show it.
 Cooldowns.version = 0
+-- Moves only when a craft is first seen to have a cooldown, for the road,
+-- which leaves those crafts off (RoadPlan.OnCooldown).
+Cooldowns.seenVersion = 0
 
 local function Now() return time() end
 
@@ -218,6 +221,7 @@ local function Note(characterKey, id, fields, left)
     end
     if long and not entry.seen then
         entry.seen = true
+        Cooldowns.seenVersion = Cooldowns.seenVersion + 1
         -- A craft first seen waiting stops being priced as a sub-craft
         -- (Cost:RebuildOutputIndex), from the next price read on.
         if ns.Cost and ns.Cost.InvalidateIndex then ns.Cost:InvalidateIndex() end

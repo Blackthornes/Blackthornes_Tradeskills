@@ -498,6 +498,17 @@ if ns.RegisterEvent then
     ns.RegisterEvent(RoadPlan, "UPDATE_FACTION", function() RoadPlan.OnFaction() end)
 end
 
+--- A craft with a cooldown (Mooncloth, transmutes, any craft a character
+--- was seen waiting on) never levels a profession: one every few days is
+--- not a step (a player's report, the owner said leave them off, 2026-11-25).
+--- The Profit and Queue tabs still show them.
+function RoadPlan.OnCooldown(recipeID)
+    local cooldowns = ns.Cooldowns
+    if not (cooldowns and cooldowns.HasCooldown) then return false end
+    local ok, has = pcall(cooldowns.HasCooldown, cooldowns, recipeID)
+    return ok and has == true
+end
+
 --- The recipes that could level a profession: known, or taught by a trainer
 --- or vendor of the player's side. Each { record, known, place }.
 function RoadPlan:Candidates(line)
@@ -520,6 +531,7 @@ function RoadPlan:Candidates(line)
         if LineOf(record, memo) == line and record.yellow and record.grey
             and record.reagents and #record.reagents > 0
             and not RoadPlan:IsSkipped(record.recipeID)
+            and not RoadPlan.OnCooldown(record.recipeID)
             and not (not record.forever and record.name and remade[record.name:lower()]) then
             local known = record.starter or book:KnowsIt(record)
             local place
@@ -1027,6 +1039,7 @@ local function Key(profession, level)
         tostring(RoadPlan.skipVersion),
         tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
         tostring(RoadPlan.standingVersion),
+        tostring(ns.Cooldowns and ns.Cooldowns.seenVersion or 0),
         tostring(ns.LearnNext and ns.LearnNext.specialtyVersion or 0),
         tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
