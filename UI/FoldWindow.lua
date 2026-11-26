@@ -12,8 +12,8 @@
 -- button, opens it full next time.
 --
 -- Folded, the window is still shown but empty: everything on it hides, and
--- it takes no clicks, so the window's own code goes on as before. Escape
--- leaves it alone.
+-- it hears no mouse, not even passing over, so the window's own code goes on
+-- as before. Escape leaves it alone.
 --
 -- Panels that stay up while you play join with FoldWindow:Join (their own
 -- fold gem, from HouseKit), windows with a house frame with FoldWindow:Add.
@@ -511,6 +511,46 @@ local function HideFor(state, piece, isFrame)
     state.busy = false
 end
 
+-- Folded, the window hears no mouse at all, not even passing over it: the
+-- game's ping said "Can't ping this." over the whole empty window (a player,
+-- 2026-11-25). Clicks, the mouse passing over and the wheel are each turned
+-- off where the client has them, and the part of the window that hears the
+-- mouse shrinks to nothing. All are put back as they were when it opens.
+local function Deafen(state, frame)
+    local okMouse, mouse = Call(frame, "IsMouseEnabled")
+    local okWheel, wheel = Call(frame, "IsMouseWheelEnabled")
+    state.mouse = not okMouse or mouse ~= false
+    state.wheel = okWheel and wheel == true
+    local okClick, click = Call(frame, "IsMouseClickEnabled")
+    local okMotion, motion = Call(frame, "IsMouseMotionEnabled")
+    state.click, state.motion = nil, nil
+    if okClick and type(click) == "boolean" then state.click = click end
+    if okMotion and type(motion) == "boolean" then state.motion = motion end
+    local okInsets, left, right, top, bottom = Call(frame, "GetHitRectInsets")
+    state.insets = okInsets and type(left) == "number" and { left, right or 0, top or 0, bottom or 0 } or nil
+
+    Call(frame, "EnableMouse", false)
+    Call(frame, "SetMouseClickEnabled", false)
+    Call(frame, "SetMouseMotionEnabled", false)
+    Call(frame, "EnableMouseWheel", false)
+    local width, height = Number(frame, "GetWidth"), Number(frame, "GetHeight")
+    if width and height then Call(frame, "SetHitRectInsets", width, 0, height, 0) end
+end
+
+local function Hear(state, frame)
+    if state.mouse ~= false then Call(frame, "EnableMouse", true) end
+    if state.click ~= nil then Call(frame, "SetMouseClickEnabled", state.click) end
+    if state.motion ~= nil then Call(frame, "SetMouseMotionEnabled", state.motion) end
+    if state.wheel then Call(frame, "EnableMouseWheel", true) end
+    local insets = state.insets
+    if insets then
+        Call(frame, "SetHitRectInsets", insets[1], insets[2], insets[3], insets[4])
+    else
+        Call(frame, "SetHitRectInsets", 0, 0, 0, 0)
+    end
+    state.click, state.motion, state.insets = nil, nil, nil
+end
+
 -- Escape closes the game's open windows by name; a folded one is left out.
 local function Special(frame, keep)
     local ok, name = Call(frame, "GetName")
@@ -569,12 +609,7 @@ function FoldWindow:Fold(frame, opts)
     for _, child in ipairs(children) do HideFor(state, child, true) end
     state.folding = false
 
-    local okMouse, mouse = Call(frame, "IsMouseEnabled")
-    local okWheel, wheel = Call(frame, "IsMouseWheelEnabled")
-    state.mouse = not okMouse or mouse ~= false
-    state.wheel = okWheel and wheel == true
-    Call(frame, "EnableMouse", false)
-    Call(frame, "EnableMouseWheel", false)
+    Deafen(state, frame)
     state.special = Special(frame, true)
 
     state.folded = true
@@ -638,8 +673,7 @@ function FoldWindow:Unfold(frame, closing)
         Dropped(frame)
         state.busy = true
     end
-    if state.mouse ~= false then Call(frame, "EnableMouse", true) end
-    if state.wheel then Call(frame, "EnableMouseWheel", true) end
+    Hear(state, frame)
     if state.special and type(UISpecialFrames) == "table" then
         table.insert(UISpecialFrames, state.special)
     end
