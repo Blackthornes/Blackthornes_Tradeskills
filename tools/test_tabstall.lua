@@ -136,6 +136,64 @@ do
     check("and the plain list after it is the kept one still", built, before)
     check("with no stock history read along the way", read, 0)
 
+    -- A search or a post at the auction house moves a price or two. When
+    -- the prices say which items changed, only those rows are made again,
+    -- each put back where the sort would put it (2026-11-26: every row was
+    -- built and sorted again on the next pick).
+    local touchedSince
+    ns.Prices.TouchedSince = function() return touchedSince end
+    local function Order(list)
+        local ids = {}
+        for index, row in ipairs(list) do ids[index] = row.itemID end
+        return table.concat(ids, ",")
+    end
+    local function Change(itemID, market)
+        if market then prices[itemID] = prices[itemID] or { seen = clock }; prices[itemID].market = market
+        else prices[itemID] = nil end
+        ns.Prices.changes = ns.Prices.changes + 1
+        touchedSince = touchedSince or {}
+        touchedSince[itemID] = true
+    end
+    local function FullBuild()
+        ns.UI._PricesForget()
+        local order = Order(List(""))
+        return order
+    end
+
+    List("")
+    before = built
+    Change(40, 123456)     -- to the top
+    Change(250, 5)         -- to the bottom
+    Change(120, 1205)      -- a tie with item 120's neighbour is settled by item
+    Change(9100, 777)      -- a new item
+    Change(33, nil)        -- one pruned away
+    local patched = List("")
+    check("a few changed prices build only their rows", built - before, 4)
+    check("the dearest is on top", patched[1].itemID, 40)
+    check("the pruned one is gone", #patched, ITEMS)
+    local patchedOrder = Order(patched)
+    check("and the list is the one a full build gives", patchedOrder == FullBuild(), true)
+
+    -- Under a sort by age the changed rows find their place too.
+    touchedSince = nil
+    ns.UI._PricesSort("age")
+    List("")
+    prices[200].seen = clock
+    Change(200, 2000)
+    prices[10].seen = clock - 5000
+    Change(10, 100)
+    patchedOrder = Order(List(""))
+    check("the same under a sort by age", patchedOrder == FullBuild(), true)
+    ns.UI._PricesSort("market")
+
+    -- A change the prices cannot name (a guild's prices, a prune) builds all.
+    touchedSince = nil
+    List("")
+    before = built
+    ns.Prices.changes = ns.Prices.changes + 1
+    List("")
+    check("a change that names no item builds every row", built - before >= ITEMS, true)
+
     ns.UI._PricesForget()
 end
 
