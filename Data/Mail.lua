@@ -1652,18 +1652,32 @@ end
 -- own. Compared as written, a stack's sale never found its mail and said "gold
 -- waiting in the mail" for a month. Only for comparing: what is saved keeps
 -- the name it was written down with.
+-- A name always comes out the same, and the Sales tab asks for every
+-- ledger entry's on each draw, so answers are kept (false for none). The
+-- few thousand names a ledger holds; started over past PLAIN_KEPT_MOST.
+local plainKept, plainCount = {}, 0
+local PLAIN_KEPT_MOST = 20000
+
+local function Strip(name)
+    local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    t = t:match("|h%[(.-)%]|h") or t
+    t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
+    t = t:gsub("^%s+", ""):gsub("%s+$", "")
+    return t
+end
+
 function Mail.PlainName(name)
     if type(name) ~= "string" then return nil end
 
-    local ok, plain = pcall(function()
-        local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-        t = t:match("|h%[(.-)%]|h") or t
-        t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
-        t = t:gsub("^%s+", ""):gsub("%s+$", "")
-        return t
-    end)
+    local known = plainKept[name]
+    if known ~= nil then return known or nil end
 
-    if not ok or type(plain) ~= "string" or plain == "" then return nil end
+    local ok, plain = pcall(Strip, name)
+    if not ok or type(plain) ~= "string" or plain == "" then plain = nil end
+
+    if plainCount >= PLAIN_KEPT_MOST then plainKept, plainCount = {}, 0 end
+    plainKept[name] = plain or false
+    plainCount = plainCount + 1
     return plain
 end
 
