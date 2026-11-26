@@ -4302,6 +4302,17 @@ when docked. Each line kind has a box on the Windows page, saved as
 `todayHide_<kind>` (true hides it; never rename). Tested in
 `tools/test_today.lua`.
 
+Names (fixed 2026-11-26, the owner saw "item 5764 sold out"): a line's
+item name comes from `Today.ItemName(itemID, ...)`. When the game has not
+loaded the item yet it asks for it and shows a name the addon already
+holds (the recipe's, a link's, `Disenchant:KnownName`), "item N" only as
+a last resort. `GET_ITEM_INFO_RECEIVED` for an item a line waited on
+redraws the tab once (coalesced), and the line's key changes so its row
+draws again.
+
+The seven-tab grouping (PR 1506) was taken back out the same day: the
+owner wants the old bottom tabs, with Today kept first.
+
 ## A lighter save (2026-11-26)
 
 The owner said yes to the lighter save idea (ts-improve-4). The game reads
