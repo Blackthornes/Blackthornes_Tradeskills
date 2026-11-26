@@ -21,7 +21,8 @@
 -- or disenchant has a cost to be measured against.
 --
 -- A cost is the craft cost when the item was crafted (Logic/CraftedCost.lua),
--- else the average of what was paid for it on the auction house. An item
+-- or the average of what was paid for it on the auction house when it was
+-- bought there after its last craft (CraftedCost:SaleCost decides). An item
 -- with neither (loot) has no cost: it counts as all profit, and the figures
 -- say how many units that was.
 --
@@ -151,6 +152,32 @@ function MethodProfit:BuyCost(itemID)
     return math.floor(paid / units + 0.5)
 end
 
+--- The newest auction house buy of an item at or before `before`, and what
+--- one cost on average over the buys counted then (those within BUY_LIFE
+--- of it). nil when there is none.
+-- @return newest buy's time, each
+function MethodProfit:BuyBefore(itemID, before)
+    local list = itemID and self:GetLog().buys[itemID]
+    if type(list) ~= "table" then return nil end
+
+    before = tonumber(before) or Now()
+    local since = before - self.BUY_LIFE
+    local newest
+    local units, paid = 0, 0
+    for _, buy in ipairs(list) do
+        local n, cost, at = type(buy) == "table" and tonumber(buy.n),
+            type(buy) == "table" and tonumber(buy.paid), type(buy) == "table" and tonumber(buy.at)
+        if n and n > 0 and cost and cost > 0 and at and at >= since and at <= before then
+            units = units + n
+            paid = paid + cost
+            if not newest or at > newest then newest = at end
+        end
+    end
+
+    if not newest then return nil end
+    return newest, math.floor(paid / units + 0.5)
+end
+
 --- What you paid for an item on the auction house, for its tooltip (a
 --- player asked, 2026-11-12): the newest buy still counted, and the average
 --- over every buy still counted. nil when there are none.
@@ -227,7 +254,7 @@ function MethodProfit:KeepOlderSale(entry)
         t = t, id = entry.itemID, nm = (not entry.itemID) and entry.name or nil,
         n = tonumber(entry.quantity), net = tonumber(entry.net) or 0,
         dep = tonumber(entry.deposit), c = type(entry.cost) == "number" and entry.cost or nil,
-        b = entry.bought and true or nil, w = entry.who,
+        b = entry.bought and true or nil, w = entry.who, ma = tonumber(entry.madeAt),
     }
     while #sold > self.MAX_OLDER_SALES do table.remove(sold, 1) end
     self.version = (self.version or 0) + 1
@@ -237,7 +264,7 @@ end
 local function OlderEntry(sale)
     return {
         kind = "sold", t = sale.t, itemID = sale.id, name = sale.nm, quantity = sale.n,
-        net = sale.net, deposit = sale.dep, cost = sale.c, bought = sale.b, who = sale.w,
+        net = sale.net, deposit = sale.dep, cost = sale.c, bought = sale.b, who = sale.w, madeAt = sale.ma,
     }
 end
 
@@ -442,18 +469,16 @@ function MethodProfit:Summary(from, to, opts)
                 local income = math.max(0, (entry.net or 0) - (entry.deposit or 0))
                 local key, each = "other", nil
 
-                if entry.bought and type(entry.cost) == "number" then
+                -- Bought or made, whichever came last before the sale
+                -- (CraftedCost:SaleCost), so bought stock of something you
+                -- can craft counts as a flip at what you paid.
+                if ns.CraftedCost and ns.CraftedCost.SaleCost then
+                    local cost, source = ns.CraftedCost:SaleCost(entry, itemID, costs)
+                    if cost then key, each = source == "bought" and "flipped" or "crafted", cost end
+                elseif entry.bought and type(entry.cost) == "number" then
                     key, each = "flipped", entry.cost
                 elseif type(entry.cost) == "number" then
                     key, each = "crafted", entry.cost
-                elseif ns.CraftedCost then
-                    local est = ns.CraftedCost:SaleCost(entry, itemID, costs)
-                    if est then
-                        key, each = "crafted", est
-                    else
-                        local paid = itemID and self:BuyCost(itemID)
-                        if paid then key, each = "flipped", paid end
-                    end
                 end
 
                 -- No cost known, but you got it yourself: Farmed.

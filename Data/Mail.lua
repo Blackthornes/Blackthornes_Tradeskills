@@ -713,19 +713,12 @@ local function Describe(mail, kind, itemName, invoice)
         end
         if units and units > 1 then entry.quantity = units end
 
-        -- What one cost to make, as it stood when this sold, so a later craft
-        -- at a different price does not rewrite what this sale made.
-        local made = entry.itemID and ns.CraftedCost and ns.CraftedCost:Get(entry.itemID)
-        if made then
-            entry.cost = made.cost
-        elseif entry.itemID and ns.MethodProfit then
-            -- Not made by you: what it cost on the auction house, if you
-            -- bought it there. Kept as it stood, like a craft's cost.
-            local paid = ns.MethodProfit:BuyCost(entry.itemID)
-            if paid then
-                entry.cost = paid
-                entry.bought = true
-            end
+        -- What one cost, as it stood when this sold, so a later craft or
+        -- buy at a different price does not rewrite what this sale made:
+        -- the last craft, or what was paid on the auction house when that
+        -- came after it (CraftedCost:CostTheSale).
+        if entry.itemID and ns.CraftedCost and ns.CraftedCost.CostTheSale then
+            ns.CraftedCost:CostTheSale(entry)
         end
     else
         -- An expired or cancelled auction comes back as the item itself, so
@@ -1493,7 +1486,7 @@ function Mail:GetItems(from, to)
 
             if profit then
                 bucket.profit = bucket.profit + profit
-                if source == "made" then
+                if source == "made" or source == "bought" then
                     bucket.costed = bucket.costed + 1
                 else
                     bucket.guessed = bucket.guessed + 1

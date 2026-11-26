@@ -192,21 +192,92 @@ local function Estimate(cache, itemID)
     return each
 end
 
+--------------------------------------------------------------------------------
+-- Bought or made
+--------------------------------------------------------------------------------
+
+-- A player's report (2026-11-26): Medium Leather bought on the auction house
+-- at 1s 15c and sold at 1s 52c showed as a Leatherworking loss, costed at
+-- the 4s 60c of a craft made days before. Something you can make may also
+-- be bought, so whichever came last is what the stock in your bags cost:
+-- a buy after the last craft makes it bought stock, costed at what you paid.
+
+--- A sale written down before the craft's time was kept on it, from after
+--- a later craft: the craft behind its cost came at some unknown time before
+--- it. A buy this close before the sale is taken as the newer of the two.
+CraftedCost.FLIP_WINDOW = 3 * 86400
+
+--- What one cost on the auction house, when a buy of `itemID` at or before
+--- `at` came after the craft at `madeAt` (nil: never made). nil otherwise.
+function CraftedCost:BoughtCost(itemID, at, madeAt)
+    local profit = ns.MethodProfit
+    if not (itemID and profit and profit.BuyBefore) then return nil end
+    local boughtAt, each = profit:BuyBefore(itemID, at or time())
+    if not boughtAt then return nil end
+    if madeAt == nil or boughtAt > madeAt then return each end
+    return nil
+end
+
+--- The last craft of the stock you hold now: Get's record, or nil when the
+--- item was bought on the auction house since (or never made).
+function CraftedCost:ForStock(itemID)
+    local record = self:Get(itemID)
+    if not record then return nil end
+    if self:BoughtCost(itemID, time(), tonumber(record.at) or 0) then return nil end
+    return record
+end
+
+--- Write on a sale, as it is read from the mail, what one cost then: the
+--- last craft, or what was paid on the auction house when that came later
+--- (`bought` set). `madeAt` keeps the craft's time, so a later read agrees.
+function CraftedCost:CostTheSale(entry)
+    if type(entry) ~= "table" or not entry.itemID then return end
+    local made = self:Get(entry.itemID)
+    local paid = self:BoughtCost(entry.itemID, entry.t, made and (tonumber(made.at) or 0) or nil)
+    if paid then
+        entry.cost = paid
+        entry.bought = true
+    elseif made then
+        entry.cost = made.cost
+        entry.madeAt = tonumber(made.at)
+    end
+end
+
+--- When the craft behind a sale's written cost was made, as best known.
+local function MadeAtFor(self, entry, itemID)
+    if tonumber(entry.madeAt) then return tonumber(entry.madeAt) end
+    local record = self:Get(itemID)
+    local at, t = record and tonumber(record.at), tonumber(entry.t)
+    if not t then return at or 0 end
+    if at and at <= t then return at end
+    -- Crafted again since: the craft behind it is older than we can say.
+    return t - self.FLIP_WINDOW
+end
+
 --- What one of a sold item cost, and where that figure came from.
 -- @param itemID  the sale's item, resolved by the caller when the entry has none
--- @return each, source ("made" | "est"), or nil when it cannot be costed
+-- @return each, source ("made" | "bought" | "est"), or nil when it cannot be costed
 function CraftedCost:SaleCost(entry, itemID, cache)
     if type(entry) ~= "table" then return nil end
 
-    if type(entry.cost) == "number" then return entry.cost, "made" end
-
     itemID = itemID or entry.itemID
+
+    if type(entry.cost) == "number" then
+        if entry.bought then return entry.cost, "bought" end
+        -- Written down as a craft. A sale from before buys were weighed
+        -- against crafts may have been bought stock after all.
+        local paid = itemID and self:BoughtCost(itemID, entry.t, MadeAtFor(self, entry, itemID))
+        if paid then return paid, "bought" end
+        return entry.cost, "made"
+    end
+
     if not itemID then return nil end
 
     local record = self:Get(itemID)
-    if record and (not record.at or not entry.t or record.at <= entry.t) then
-        return record.cost, "made"
-    end
+    local usable = record and (not record.at or not entry.t or record.at <= entry.t)
+    local paid = self:BoughtCost(itemID, entry.t, usable and (tonumber(record.at) or 0) or nil)
+    if paid then return paid, "bought" end
+    if usable then return record.cost, "made" end
 
     local each = Estimate(cache or self:NewSaleCache(), itemID)
     if each then return each, "est" end
@@ -253,13 +324,15 @@ function CraftedCost:ProfitAt(itemID, price)
 end
 
 --- The last craft cost when the setting is on and `price` brings in less
---- than it after the cut; nil when the listing may go ahead.
+--- than it after the cut; nil when the listing may go ahead, or when the
+--- stock was bought on the auction house after it was last made.
 -- @return cost, net
 function CraftedCost:Refuses(itemID, price)
     if ns.Config:Get("neverBelowCraftedCost") ~= true then return nil end
     if type(price) ~= "number" then return nil end
 
-    local record = self:Get(itemID)
+    -- A craft guard: stock bought on the auction house since is no craft.
+    local record = self:ForStock(itemID)
     if not record then return nil end
 
     local net = self:NetOf(price)
