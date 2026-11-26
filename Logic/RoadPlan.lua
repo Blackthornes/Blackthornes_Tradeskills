@@ -115,6 +115,10 @@ RoadPlan.REAL_FLOOR = 0.2
 -- the road picks its recipes. It still counts this share of its price, so
 -- of two free crafts the one more likely to give a point wins.
 RoadPlan.OWNED_SHARE = 0.01
+-- Fewest Materials: the gold a craft costs only breaks a tie between two
+-- recipes that take as many materials (a craft under 1000g never outweighs
+-- one material).
+RoadPlan.FEWEST_TIE = 1e-7
 
 -- Recipes priced a frame while the plan is worked out.
 RoadPlan.BUDGET = 12
@@ -231,6 +235,8 @@ function RoadPlan.Price(record)
         reagents[#reagents + 1] = { itemID = line.itemID, quantity = line.quantity or 1, unit = unit }
         cost = cost + unit * (line.quantity or 1)
     end
+    local materials = 0
+    for _, reagent in ipairs(reagents) do materials = materials + reagent.quantity end
 
     local sells, back
     if ns.LevelUp and ns.LevelUp.GetReturns then
@@ -241,7 +247,38 @@ function RoadPlan.Price(record)
             back = returns.best
         end
     end
-    return { cost = cost, reagents = reagents, sells = sells, back = back }
+    return { cost = cost, reagents = reagents, sells = sells, back = back, materials = materials,
+        offAuction = RoadPlan.OffAuction(reagents) }
+end
+
+--- No Auction House (the owner said build it, 2026-11-26, from a mockup):
+--- a material comes without the auction house when a vendor sells it, the
+--- character can make it, or a disenchant gives it.
+function RoadPlan.WithoutAuction(itemID)
+    if type(itemID) ~= "number" then return false end
+    local vendor = ns.Vendor
+    if vendor and vendor.GetUnitPrice then
+        local ok, price = pcall(vendor.GetUnitPrice, vendor, itemID)
+        if ok and price ~= nil then return true end
+    end
+    local cost = ns.Cost
+    if cost and cost.FindRecipeForItem then
+        local ok, recipeID = pcall(cost.FindRecipeForItem, cost, itemID)
+        if ok and recipeID ~= nil then return true end
+    end
+    local disenchant = ns.Disenchant
+    for _, material in ipairs(disenchant and disenchant.MATERIALS or {}) do
+        if material.itemID == itemID then return true end
+    end
+    return false
+end
+
+--- True when every material of a recipe comes without the auction house.
+function RoadPlan.OffAuction(reagents)
+    for _, reagent in ipairs(reagents or {}) do
+        if not RoadPlan.WithoutAuction(reagent.itemID) then return false end
+    end
+    return true
 end
 
 -- The classic skill line for a profession's English name, for a line the
@@ -575,71 +612,157 @@ end
 --------------------------------------------------------------------------------
 -- Skipped recipes (a player asked, the owner said build it, 2026-11-12):
 -- right-click a step and Skip This Recipe, and the road picks the next one.
--- Kept account wide in `roadSkipped`, recipeID -> name (never rename it).
--- Only the road reads it; the queue and the other tabs are untouched.
+-- Only the road reads them; the queue and the other tabs are untouched.
+--
+-- Per character since 2026-11-26 (the owner said build it, from a mockup:
+-- a Skip button on each step, "Skipped: X. Bring Back" under the road):
+-- kept in `roadSkippedBy[GUID][recipeID] = name` (never rename it). A GUID
+-- the client won't read means nothing is written. Skips from before, kept
+-- account wide in `roadSkipped` (recipeID -> name, never rename it), stay
+-- readable and still count for every character until brought back.
 --------------------------------------------------------------------------------
 
 RoadPlan.skipVersion = 0
 
-local function Skipped()
+local function Me()
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if type(key) == "string" and key:find("^Player%-") then return key end
+    return nil
+end
+
+local function Mine(create)
+    local me = ns.db and Me()
+    if not me then return nil end
+    local by = ns.db.roadSkippedBy
+    if not by then
+        if not create then return nil end
+        by = {}
+        ns.db.roadSkippedBy = by
+    end
+    local mine = by[me]
+    if not mine and create then
+        mine = {}
+        by[me] = mine
+    end
+    return mine
+end
+
+local function Old()
     return ns.db and ns.db.roadSkipped
 end
 
 function RoadPlan:IsSkipped(recipeID)
-    local skipped = recipeID ~= nil and Skipped()
-    return skipped and skipped[recipeID] ~= nil or false
+    if recipeID == nil then return false end
+    local mine, old = Mine(false), Old()
+    return (mine and mine[recipeID] ~= nil) or (old and old[recipeID] ~= nil) or false
 end
 
---- Leave a recipe off the road. The road is worked out again.
+--- The name kept for a skipped recipe, or nil.
+function RoadPlan:SkippedName(recipeID)
+    local mine, old = Mine(false), Old()
+    return (mine and mine[recipeID]) or (old and old[recipeID]) or nil
+end
+
+--- Leave a recipe off this character's road. The road is worked out again.
 -- @return true when it was skipped
 function RoadPlan:Skip(recipeID, name)
-    if not ns.db or type(recipeID) ~= "number" then return false end
-    ns.db.roadSkipped = ns.db.roadSkipped or {}
+    if type(recipeID) ~= "number" then return false end
+    local mine = Mine(true)
+    if not mine then return false end
     local record = ns.RecipeBook and ns.RecipeBook.Get and ns.RecipeBook:Get(recipeID)
-    ns.db.roadSkipped[recipeID] = name or (record and record.name) or ("recipe " .. recipeID)
+    mine[recipeID] = name or (record and record.name) or ("recipe " .. recipeID)
     RoadPlan.skipVersion = RoadPlan.skipVersion + 1
     return true
 end
 
---- The skipped recipes of one profession, by its Classic line.
+--- The recipes skipped on one profession, by its Classic line.
 function RoadPlan:SkippedOn(line)
-    local list = {}
-    local skipped = Skipped()
-    if not skipped then return list end
+    local list, seen = {}, {}
     local book = ns.RecipeBook
     local memo = {}
-    for recipeID in pairs(skipped) do
-        local record = book and book.Get and book:Get(recipeID)
-        if record and LineOf(record, memo) == line then list[#list + 1] = recipeID end
+    for _, skipped in ipairs({ Mine(false) or {}, Old() or {} }) do
+        for recipeID in pairs(skipped) do
+            local record = not seen[recipeID] and book and book.Get and book:Get(recipeID)
+            if record and LineOf(record, memo) == line then
+                list[#list + 1] = recipeID
+                seen[recipeID] = true
+            end
+        end
     end
     table.sort(list)
     return list
 end
 
---- Show All: bring back every skipped recipe of one profession.
--- @return how many came back
-function RoadPlan:ShowAllOn(line)
-    local skipped = Skipped()
-    local list = self:SkippedOn(line)
-    for _, recipeID in ipairs(list) do skipped[recipeID] = nil end
-    if #list > 0 then RoadPlan.skipVersion = RoadPlan.skipVersion + 1 end
-    return #list
+--- Bring Back one recipe to this character's road.
+-- @return true when it came back
+function RoadPlan:BringBack(recipeID)
+    local mine, old = Mine(false), Old()
+    local back = false
+    if mine and mine[recipeID] ~= nil then mine[recipeID], back = nil, true end
+    if old and old[recipeID] ~= nil then old[recipeID], back = nil, true end
+    if back then RoadPlan.skipVersion = RoadPlan.skipVersion + 1 end
+    return back
 end
 
---- How the road picks its recipes: "lowest" (what the materials cost) or
---- "real" (less what one craft sells back for).
+--- Bring Back: every skipped recipe of one profession comes back.
+-- @return how many came back
+function RoadPlan:ShowAllOn(line)
+    local count = 0
+    for _, recipeID in ipairs(self:SkippedOn(line)) do
+        if self:BringBack(recipeID) then count = count + 1 end
+    end
+    return count
+end
+
+--- How the road picks its recipes: "lowest" (what the materials cost),
+--- "real" (less what one craft sells back for), "fewest" (the fewest
+--- materials a point) or "noah" (materials that need no auction house).
+RoadPlan.PICK_BY = { lowest = true, real = true, fewest = true, noah = true }
 function RoadPlan.PickBy()
     local ok, value = pcall(function() return ns.Config and ns.Config:Get("roadPickBy") end)
-    return (ok and value == "real") and "real" or "lowest"
+    return (ok and RoadPlan.PICK_BY[value]) and value or "lowest"
+end
+
+--- Stop At (the owner said build it, 2026-11-26, from a mockup): where the
+--- road ends, 150, 225 or 300. Kept account wide in `roadStopAt` (never
+--- rename it); 300, the whole road, unless picked.
+RoadPlan.STOPS = { 150, 225, 300 }
+function RoadPlan.StopAt()
+    local ok, value = pcall(function() return ns.Config and ns.Config:Get("roadStopAt") end)
+    value = ok and tonumber(value) or nil
+    for _, stop in ipairs(RoadPlan.STOPS) do
+        if value == stop then return stop end
+    end
+    return RoadPlan.TARGET
+end
+
+--- The stop the road walks to from a skill: a stop at or below the skill
+--- is passed, so the road goes on to the next one.
+function RoadPlan.StopFor(skill, stop)
+    stop = stop or RoadPlan.TARGET
+    if (skill or 0) < stop then return stop end
+    for _, next in ipairs(RoadPlan.STOPS) do
+        if next > (skill or 0) then return next end
+    end
+    return RoadPlan.TARGET
 end
 
 -- What a point costs with a recipe at a skill, with its learning price
 -- spread over the points it can still give.
 -- spare: what the character still owns, read by Spare(itemID), when owned
 -- materials are free; nil when they are charged.
-local function PointCost(candidate, skill, learned, real, spare)
+-- pick: PickBy's choice. Fewest Materials ranks by the materials a point,
+-- the gold only breaking a tie; No Auction House leaves out a recipe with
+-- a material only the auction house has, then ranks by cost.
+local function PointCost(candidate, skill, learned, pick, spare)
     local chance = RoadPlan.Chance(candidate.record, skill)
     if chance <= 0 or not candidate.price then return nil end
+    if pick == "noah" and not candidate.price.offAuction then return nil end
+    if pick == "fewest" then
+        local materials = candidate.price.materials or 0
+        return (materials + candidate.price.cost * RoadPlan.FEWEST_TIE) / chance
+    end
+    local real = pick == "real"
     local craft = candidate.price.cost
     if spare then
         craft = 0
@@ -668,10 +791,10 @@ end
 -- gives a point, so one is taken only when no orange or yellow craft is
 -- there (a player's report, 2026-11-18: they keep green for the last point
 -- or two).
-local function Best(candidates, skill, learned, real, spare)
+local function Best(candidates, skill, learned, pick, spare)
     local best, bestCost, green, greenCost
     for _, candidate in ipairs(candidates) do
-        local cost = PointCost(candidate, skill, learned, real, spare)
+        local cost = PointCost(candidate, skill, learned, pick, spare)
         if cost then
             if RoadPlan.Band(candidate.record, skill) == "easy" then
                 if not greenCost or cost < greenCost then green, greenCost = candidate, cost end
@@ -701,7 +824,10 @@ function RoadPlan:Plan(opts)
     local line, now = opts.line, opts.skill or 0
     local ranks = RoadPlan.RANKS[line] or {}
     local candidates = opts.candidates or {}
-    local real = opts.pickBy == "real"
+    local pick = RoadPlan.PICK_BY[opts.pickBy] and opts.pickBy or "lowest"
+    local real = pick == "real"
+    -- Stop At: the road ends there (a stop already passed goes on to the next).
+    local target = RoadPlan.StopFor(now, opts.stop)
     local learned = {}
     local steps = {}
     local stuck
@@ -765,6 +891,9 @@ function RoadPlan:Plan(opts)
         local p = from
         while p < to do
             local rank = NextRank(cap)
+            -- A rank the road to the stop doesn't need (Expert on the way
+            -- to 150) is left for later.
+            if rank and not done and cap >= to then rank = nil end
             if rank and p >= rank[1] and (not done or rank[4] <= (opts.max or 0)) then
                 steps[#steps + 1] = {
                     kind = "trainer", rank = rank, at = rank[1], cap = rank[4],
@@ -781,7 +910,7 @@ function RoadPlan:Plan(opts)
                 end
 
                 local sp = not done and spare or nil
-                local candidate = Best(candidates, p, learned, real, sp)
+                local candidate = Best(candidates, p, learned, pick, sp)
                 if not candidate then
                     if not done then stuck = p end
                     break
@@ -799,8 +928,8 @@ function RoadPlan:Plan(opts)
                     crafts = crafts + these
                     if sp then UseUp(candidate, these) end
                     q = q + 1
-                    local other, otherCost = Best(candidates, q, learned, real, sp)
-                    local mine = PointCost(candidate, q, learned, real, sp)
+                    local other, otherCost = Best(candidates, q, learned, pick, sp)
+                    local mine = PointCost(candidate, q, learned, pick, sp)
                     local switch = other and other ~= candidate and otherCost and mine
                         and otherCost < mine * RoadPlan.SWITCH
                 until q >= limit or switch
@@ -830,7 +959,7 @@ function RoadPlan:Plan(opts)
     for _, candidate in ipairs(candidates) do
         if candidate.known then learned[candidate.record.recipeID] = true end
     end
-    Walk(now, RoadPlan.TARGET, math.max(opts.max or 75, startCap), false)
+    Walk(now, target, math.max(opts.max or 75, startCap), false)
 
     -- What the character owns comes off once, step by step: bags, bank,
     -- then what the other characters it can mail hold.
@@ -844,11 +973,12 @@ function RoadPlan:Plan(opts)
         return have
     end
 
-    local total, saved, back, current = 0, 0, 0, nil
+    local total, saved, back, current, crafts = 0, 0, 0, nil, 0
     for index, step in ipairs(steps) do
         if not step.done then
             current = current or index
             if step.kind == "craft" then
+                crafts = crafts + step.crafts
                 step.needs = {}
                 local cost = (step.learn and step.learn.price) or 0
                 for _, reagent in ipairs(step.price and step.price.reagents or {}) do
@@ -897,7 +1027,7 @@ function RoadPlan:Plan(opts)
 
     return {
         steps = steps, current = current, total = total, saved = saved, back = back, stuck = stuck,
-        skill = now, max = opts.max, line = line, pickBy = real and "real" or "lowest",
+        skill = now, max = opts.max, line = line, pickBy = pick, stop = target, crafts = crafts,
     }
 end
 
@@ -1036,6 +1166,8 @@ local function Key(profession, level)
         tostring(ns.Prices and ns.Prices.scanCount or 0),
         tostring(ns.Queue and ns.Queue.version or 0),
         RoadPlan.PickBy(),
+        tostring(RoadPlan.StopAt()),
+        tostring(Me and Me() or ""),
         tostring(RoadPlan.skipVersion),
         tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
         tostring(RoadPlan.standingVersion),
@@ -1070,6 +1202,7 @@ function RoadPlan:Get(profession, onReady)
         local plan = self:Plan({
             line = profession.line, skill = profession.skill, max = profession.max,
             level = level, candidates = candidates, pickBy = RoadPlan.PickBy(),
+            stop = RoadPlan.StopAt(),
         })
         plan.professionName = profession.name
         kept[profession.line] = { key = key, plan = plan }
