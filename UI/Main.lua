@@ -1106,7 +1106,7 @@ function UI:Show()
     -- auction house, a profession or the mailbox, that place's own tab
     -- still opens; later openings keep the tab the player left.
     if opening and not self.todayOpened and self.tabs.today
-        and not TSTabs.atAuction and not TSTabs.atDock then
+        and not TSTabs.atAuction and not TSTabs.atDock and not self:AtAPlace() then
         self.todayOpened = true
         self.activeTab = "today"
     end
@@ -1185,6 +1185,20 @@ function UI:AtAuctionHouse()
     if not frame then return false end
     local ok, shown = pcall(frame.IsShown, frame)
     return ok and shown == true
+end
+
+--- True while the auction house, a profession window or the mailbox is
+--- open, where the window keeps that place's own tab.
+function UI:AtAPlace()
+    if self:AtAuctionHouse() then return true end
+    for _, name in ipairs({ "MailFrame", "ProfessionsFrame", "TradeSkillFrame" }) do
+        local frame = rawget(_G, name)
+        if type(frame) == "table" and frame.IsShown then
+            local ok, shown = pcall(frame.IsShown, frame)
+            if ok and shown == true then return true end
+        end
+    end
+    return false
 end
 
 --- The strip of addon controls at the top of the sell list.

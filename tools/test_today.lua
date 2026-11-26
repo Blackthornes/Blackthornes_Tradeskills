@@ -18,7 +18,7 @@
 --      what it drew.
 
 local GLOBALS = { "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
-    "UISpecialFrames", "tinsert", "GetTime", "time", "BlackthornesWindow" }
+    "UISpecialFrames", "tinsert", "GetTime", "time", "BlackthornesWindow", "MailFrame" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -374,6 +374,15 @@ do
     UI:Show()
     check("docked, it does not open on Today", UI.activeTab, "queue")
     ns.TSTabs.atAuction = false
+
+    -- Opened by itself at the mailbox (not docked): the mail's tab, not Today.
+    UI:Hide()
+    UI.todayOpened, UI.activeTab = nil, nil
+    _G.MailFrame = Region()
+    UI:Show()
+    check("at the mailbox, it does not open on Today", UI.activeTab, "queue")
+    check("and Today is still to come", UI.todayOpened, nil)
+    _G.MailFrame = saved.MailFrame
 
     local w = UI._TodayWidgets
     w.list.width, w.list.height = 600, 400
