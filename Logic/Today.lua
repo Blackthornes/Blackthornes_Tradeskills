@@ -116,6 +116,79 @@ function Today:Cards()
 end
 
 --------------------------------------------------------------------------------
+-- Item names
+--------------------------------------------------------------------------------
+
+-- Items whose name the game had not loaded when a line was made. When one
+-- comes in, the tab is told once (coalesced), so "item 5764" never stays.
+local unnamed = {}
+local onNamed          -- the tab's redraw, from the last Lines call
+local namedSoon = false
+
+local function NameFromLink(link)
+    if type(link) ~= "string" then return nil end
+    local name = link:match("|h%[(.-)%]|h")
+    if name and name ~= "" then return name end
+end
+
+--- An item's name in its colour, else a name the addon already holds (the
+--- recipe's, a link's, one saved before), else "item 1234". The second
+--- value is true when the game's own name was not ready yet.
+function Today.ItemName(itemID, ...)
+    local getInfo = (type(C_Item) == "table" and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
+    local name, quality
+    if itemID and type(getInfo) == "function" then
+        local ok, a, _, c = pcall(getInfo, itemID)
+        if ok then name, quality = a, c end
+    end
+    if type(name) == "string" and name ~= "" then
+        if ns.Util and ns.Util.ColorItemName then
+            local colored = Try(ns.Util.ColorItemName, itemID, name, quality)
+            if type(colored) == "string" and colored ~= "" then return colored, false end
+        end
+        return name, false
+    end
+    if itemID then
+        unnamed[itemID] = true
+        if type(C_Item) == "table" and type(C_Item.RequestLoadItemDataByID) == "function" then
+            Try(C_Item.RequestLoadItemDataByID, itemID)
+        end
+    end
+    for index = 1, select("#", ...) do
+        local known = select(index, ...)
+        if type(known) == "string" and known ~= "" then
+            return NameFromLink(known) or known, true
+        end
+    end
+    local disenchant = ns.Disenchant
+    if itemID and disenchant and disenchant.KnownName then
+        local known = Try(disenchant.KnownName, disenchant, itemID)
+        if type(known) == "string" and known ~= "" then return known, true end
+    end
+    return itemID and L.Format("item %d", itemID) or "?", true
+end
+
+--- The game sent an item's data: redraw once if a line was waiting on it.
+function Today.OnItemInfo(itemID)
+    if not (itemID and unnamed[itemID]) then return end
+    unnamed[itemID] = nil
+    if namedSoon or not onNamed then return end
+    namedSoon = true
+    local after = rawget(_G, "C_Timer") and C_Timer.After
+    local function Go()
+        namedSoon = false
+        if onNamed then pcall(onNamed) end
+    end
+    if type(after) == "function" then after(0.2, Go) else Go() end
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(Today, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
+        Today.OnItemInfo(itemID)
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- Lines
 --------------------------------------------------------------------------------
 
@@ -156,11 +229,11 @@ function builders.undercut(out)
         end
     end
     if count == 0 then return end
-    local name = ns.CraftProfit and ns.CraftProfit.ItemName and Try(ns.CraftProfit.ItemName, first.itemID)
+    local name, waiting = Today.ItemName(first.itemID, first.link)
     local detail = name
     if name and count > 1 then detail = name .. " " .. L.Format("and %d more", count - 1) end
     out[#out + 1] = {
-        kind = "undercut", key = ("undercut:%d:%s"):format(count, tostring(first.itemID)),
+        kind = "undercut", key = ("undercut:%d:%s:%s"):format(count, tostring(first.itemID), waiting and "?" or ""),
         itemID = first.itemID, link = first.link,
         text = (count == 1 and L["1 of your auctions was undercut"] or L.Format("%d of your auctions were undercut", count)),
         detail = detail,
@@ -191,15 +264,13 @@ function builders.ready(out)
     for _, entry in ipairs(list) do
         if shown >= Today.MOST_EACH then break end
         if Playing(entry.key) and entry.recipeID and not Queued(entry.recipeID) then
-            local name = entry.name
-            if entry.itemID and ns.CraftProfit and ns.CraftProfit.ItemName then
-                name = Try(ns.CraftProfit.ItemName, entry.itemID) or name
-            end
+            local name, waiting = entry.name, false
+            if entry.itemID then name, waiting = Today.ItemName(entry.itemID, entry.name) end
             if name then
                 shown = shown + 1
                 local each = ProfitEach(entry.recipeID)
                 out[#out + 1] = {
-                    kind = "ready", key = ("ready:%s:%s"):format(entry.recipeID, tostring(each)),
+                    kind = "ready", key = ("ready:%s:%s:%s"):format(entry.recipeID, tostring(each), waiting and "?" or ""),
                     itemID = entry.itemID, recipeID = entry.recipeID,
                     text = L.Format("%s is ready to make", name),
                     money = each, moneyFormat = L["%s each"], signed = true,
@@ -237,10 +308,11 @@ function builders.soldout(out)
     end)
     for index = 1, math.min(#found, Today.MOST_EACH) do
         local item = found[index]
-        local name = ns.CraftProfit and ns.CraftProfit.ItemName and Try(ns.CraftProfit.ItemName, item.itemID)
+        local recipe = type(item.recipe) == "table" and item.recipe or {}
+        local name, waiting = Today.ItemName(item.itemID, recipe.name)
         if name then
             out[#out + 1] = {
-                kind = "soldout", key = ("soldout:%d:%d:%s"):format(item.itemID, item.room, tostring(item.each)),
+                kind = "soldout", key = ("soldout:%d:%d:%s:%s"):format(item.itemID, item.room, tostring(item.each), waiting and "?" or ""),
                 itemID = item.itemID, recipeID = item.recipeID, recipe = item.recipe, room = item.room,
                 text = L.Format("%s sold out. You keep %d listed.", name, item.keep),
                 money = item.each, moneyFormat = L["%s each"], signed = true,
@@ -420,6 +492,7 @@ end
 --- Every line to show, in order. onReady is called when a slow part (the
 --- Profit ranking, a road plan) finishes, so the tab can draw again.
 function Today:Lines(onReady)
+    onNamed = onReady
     local out = {}
     for _, kind in ipairs(Today.KINDS) do
         if self:IsShown(kind) and builders[kind] then
