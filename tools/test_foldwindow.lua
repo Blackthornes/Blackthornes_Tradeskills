@@ -100,8 +100,31 @@ local function Object(parent, kind)
     function o:GetRegions() return unpack(self.regions) end
     function o:IsProtected() return self.protected == true end
     function o:GetName() return self.name end
-    function o:EnableMouse(on) self.mouse = on and true or false end
+    -- As the game has it: EnableMouse sets clicks and passing over at once,
+    -- and the part that hears the mouse is the frame less its insets.
+    function o:EnableMouse(on)
+        self.mouse = on and true or false
+        self.click, self.motion = self.mouse, self.mouse
+    end
     function o:IsMouseEnabled() return self.mouse ~= false end
+    function o:SetMouseClickEnabled(on) self.click = on and true or false end
+    function o:IsMouseClickEnabled() return self.click ~= false end
+    function o:SetMouseMotionEnabled(on) self.motion = on and true or false end
+    function o:IsMouseMotionEnabled() return self.motion ~= false end
+    function o:SetHitRectInsets(l, r, t, b) self.insets = { l, r, t, b } end
+    function o:GetHitRectInsets()
+        local i = self.insets or { 0, 0, 0, 0 }
+        return i[1], i[2], i[3], i[4]
+    end
+    -- Does the game's ping land on it ("Can't ping this.")? As players saw
+    -- it (2026-11-25), the ping stopped over a shown window with the mouse
+    -- turned off: only a window hidden or with no part left that hears the
+    -- mouse lets it through.
+    function o:Catches()
+        if not self.shown then return false end
+        local l, r, t, b = self:GetHitRectInsets()
+        return self.rect[3] - l - r > 0 and self.rect[4] - t - b > 0
+    end
     function o:EnableMouseWheel(on) self.wheel = on and true or false end
     function o:IsMouseWheelEnabled() return self.wheel == true end
     function o:GetScript(name) return self.scripts[name] end
@@ -212,6 +235,8 @@ for name, part in pairs(parts) do
     if name ~= "tab" then assert(not part.shown, "everything on it hides: " .. name) end
 end
 assert(frame.mouse == false and frame.wheel == false, "it takes no clicks or wheel")
+assert(frame.click == false and frame.motion == false, "nor the mouse passing over")
+assert(not frame:Catches(), "no part of the empty window catches the mouse (the game's ping)")
 assert(#UISpecialFrames == 0, "Escape leaves it alone")
 local round = FoldWindow.rounds[key]
 assert(round and round.button.shown, "the round button shows")
@@ -236,6 +261,7 @@ frame:SetHeight(360)
 -- 4. A click on the button opens it.
 round.button.scripts.OnClick(round.button)
 assert(not FoldWindow:IsFolded(frame))
+assert(frame.click ~= false and frame.motion ~= false and frame:Catches(), "open, it hears the mouse again")
 assert(frame:GetHeight() == 360 and frame:GetWidth() == 400, "the size the window asked for")
 assert(frame.points[1][1] == "CENTER" and frame.points[1][4] == 10, "left where it was")
 assert(parts.list.shown and parts.label.shown and parts.light.shown and parts.tab.shown
