@@ -4,7 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from measure_save import measure  # noqa: E402
+from measure_save import age_report, measure  # noqa: E402
 
 SAVE = '''
 BlackthornesTSDB = {
@@ -54,6 +54,16 @@ expect("an unknown key is hidden", db + ("Bobby",) in stats, False)
 expect("an unknown key is added up as *", stats[db + ("*",)][1], 1)
 expect("no realm name shown", any("Realm" in p for path in stats for p in path), False)
 expect("the whole save is measured", stats[db][0] <= len(SAVE), True)
+
+AGED = '''
+BlackthornesTSDB = {["prices"]={["R"]={[1]={["seen"]=1790000000,},[2]={["seen"]=1780000000,},},},}
+'''
+aged = []
+measure(AGED, SAFE | {"seen"}, aged)
+expect("two rows with a seen time", len(aged), 2)
+lines = age_report(aged, min_rows=1)
+expect("a new row and an old one land apart", len(lines), 2)
+expect("the old one is over 90 days", any("over a year" in line or "90 days" in line for line in lines), True)
 
 print(f"  measure_save: {checks} checks, {failures} failure(s)")
 sys.exit(1 if failures else 0)

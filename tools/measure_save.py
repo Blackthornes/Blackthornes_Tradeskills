@@ -1,6 +1,6 @@
 """Show which saved tables fill a Tradeskills save. Read only.
 
-Run: python tools/measure_save.py <path to Blackthornes_TS.lua> [--min 0.5] [--depth 6]
+Run: python tools/measure_save.py <path to Blackthornes_TS.lua> [--min 0.5] [--depth 6] [--ages]
 
 The game reads the whole save at every login and /reload, so its size is
 the wait Tradeskills adds there. This prints how many bytes each saved
@@ -76,8 +76,12 @@ def tokens(text):
         yield kind, t, m.end()
 
 
-def measure(text, safe):
-    """{path tuple: [bytes, entries]} for every table and value in `text`."""
+def measure(text, safe, aged=None):
+    """{path tuple: [bytes, entries]} for every table and value in `text`.
+
+    With `aged` (a list), each table that holds a `seen` number adds
+    (path, seen, bytes) to it, so rows can be added up by age.
+    """
     stats = {}
 
     def name(key, is_word):
@@ -119,6 +123,8 @@ def measure(text, safe):
                 continue
             stack.pop()
             add(frame["path"], end - frame["start"])
+            if aged is not None and frame.get("seen") is not None:
+                aged.append((frame["path"], frame["seen"], end - frame["start"]))
             last_end = end
             continue
 
@@ -155,8 +161,41 @@ def measure(text, safe):
             last_end = end
         else:
             add(path, end - entry_start)
+            if aged is not None and key == "seen" and kind == "num":
+                try:
+                    frame["seen"] = float(t)
+                except ValueError:
+                    pass
             last_end = end
     return stats
+
+
+AGES = ((14, "under 14 days"), (30, "14 to 30 days"), (90, "30 to 90 days"),
+        (365, "90 days to a year"), (None, "over a year"))
+
+
+def age_report(aged, min_rows=50):
+    """Rows that hold a `seen` time, added up by how old they are next to the
+    newest one in the save. Counts and sizes only."""
+    if not aged:
+        return []
+    newest = max(seen for _, seen, _ in aged)
+    buckets = {}
+    for path, seen, size in aged:
+        days = (newest - seen) / 86400.0
+        for limit, label in AGES:
+            if limit is None or days < limit:
+                break
+        row = buckets.setdefault((path, label), [0, 0])
+        row[0] += 1
+        row[1] += size
+    order = {label: i for i, (_, label) in enumerate(AGES)}
+    lines = []
+    for (path, label) in sorted(buckets, key=lambda k: (k[0], order[k[1]])):
+        count, size = buckets[(path, label)]
+        if count >= min_rows:
+            lines.append("%s %9d  %-18s %s" % (fmt_size(size), count, label, ".".join(path)))
+    return lines
 
 
 def fmt_size(n):
@@ -184,6 +223,7 @@ def main(argv=None):
     parser.add_argument("save", help="the saved variables file to measure (read only)")
     parser.add_argument("--min", type=float, default=0.5, help="hide rows under this share of the file, in percent")
     parser.add_argument("--depth", type=int, default=6, help="how deep to show")
+    parser.add_argument("--ages", action="store_true", help="also add up rows by how long since they were seen")
     args = parser.parse_args(argv)
 
     # Latin-1 keeps one character per byte, so sizes are true bytes.
@@ -191,11 +231,18 @@ def main(argv=None):
         text = f.read()
     total = len(text)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    stats = measure(text, code_words(root))
-    print("Whole file: %s" % fmt_size(total).strip())
+    aged = [] if args.ages else None
+    stats = measure(text, code_words(root), aged)
+    print("Whole file: %s in %d lines" % (fmt_size(total).strip(), text.count("\n") + 1))
     print("   size     share   entries  path")
     for line in report(stats, max(total, 1), args.min, args.depth):
         print(line)
+    if aged is not None:
+        print("")
+        print("Rows by age (next to the newest scan in the save):")
+        print("   size        rows  age                path")
+        for line in age_report(aged):
+            print(line)
     return 0
 
 
