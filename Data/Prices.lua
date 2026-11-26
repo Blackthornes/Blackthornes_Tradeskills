@@ -1626,18 +1626,23 @@ function Prices:SuffixRows(itemID)
 end
 
 --- How many suffixes of an item have a recent price: the rows SuffixRows
---- would give, counted without asking the client for any name.
+--- would give, counted without asking the client for any name. Second:
+--- the time until which that count holds, nil when none are counted.
 function Prices:SuffixCount(itemID)
     local record = itemID and self:GetTable()[itemID]
     local suffixes = type(record) == "table" and record.suffixes
     if type(suffixes) ~= "table" then return 0 end
-    local oldest, count = time() - Prices.SUFFIX_KEEP, 0
+    local oldest, count, first = time() - Prices.SUFFIX_KEEP, 0, nil
     for _, entry in pairs(suffixes) do
-        if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
+        local seen = tonumber(entry.seen) or 0
+        if type(entry) == "table" and tonumber(entry.market) and seen >= oldest then
             count = count + 1
+            if not first or seen < first then first = seen end
         end
     end
-    return count
+    -- Second: until when the count holds while the record stays as it is
+    -- (the day the first of the counted ones turns too old).
+    return count, first and first + Prices.SUFFIX_KEEP or nil
 end
 
 --- The suffix names known in the client's language, by suffix

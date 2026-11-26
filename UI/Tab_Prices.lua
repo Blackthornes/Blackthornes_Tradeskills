@@ -185,13 +185,26 @@ local function KeptKey(prices, trendDays)
     }, ":")
 end
 
---- The kept rows with what the clock moves read again, or nil.
+--- The kept rows with what the clock moves read again, or nil. An age is
+--- taken off the record the row holds, and a suffix count is counted again
+--- only once the first of its suffixes has turned too old (it walked every
+--- suffix of every item on each pick, 2026-11-26).
 local function KeptRows(key)
     if keptRows.key ~= key or not keptRows.rows then return nil end
+    local now = time()
+    local Prices = ns.Prices
     for _, row in ipairs(keptRows.rows) do
-        row.age = ns.Prices:GetAge(row.itemID) or math.huge
-        row.suffixCount = type(row.record.suffixes) == "table" and ns.Prices.SuffixCount
-            and ns.Prices:SuffixCount(row.itemID) or 0
+        local seen = row.record.seen
+        row.age = seen and now - seen or math.huge
+        local holds = row.suffixHolds
+        if holds == nil or now > holds then
+            if type(row.record.suffixes) == "table" and Prices.SuffixCount then
+                row.suffixCount, row.suffixHolds = Prices:SuffixCount(row.itemID)
+            else
+                row.suffixCount = 0
+            end
+            if not row.suffixHolds then row.suffixHolds = math.huge end
+        end
         row.open = nil
     end
     return keptRows.rows
@@ -238,6 +251,27 @@ local function BuildList()
     local needle = state.search ~= "" and state.search:lower() or nil
     local matcher
 
+    -- How fast an item moves and its trend are read when first asked for:
+    -- by the rows on screen, or by every row under a sort on that column.
+    -- Reading both for every priced item was most of the tab's first draw
+    -- after each scan (2026-11-26).
+    local lazy = { __index = function(row, key)
+        if key == "liquidity" then
+            if rawget(row, "readMoves") then return nil end
+            rawset(row, "readMoves", true)
+            local value = ns.Prices:GetSalesPerDay(row.itemID)
+            if value ~= nil then rawset(row, "liquidity", value) end
+            return value
+        elseif key == "trend" then
+            if rawget(row, "readTrend") then return nil end
+            rawset(row, "readTrend", true)
+            local value = ns.Prices.GetTrend and (ns.Prices:GetTrend(row.itemID, trendDays)) or nil
+            if value ~= nil then rawset(row, "trend", value) end
+            return value
+        end
+        return nil
+    end }
+
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
         if materials and not materials[itemID] then return end
@@ -246,8 +280,11 @@ local function BuildList()
 
         local name = wantNames and (PlainName(itemID) or stored[itemID]
             or ("~item %d"):format(itemID)) or ""
-        local suffixCount = type(record.suffixes) == "table" and ns.Prices.SuffixCount
-            and ns.Prices:SuffixCount(itemID) or 0
+        local suffixCount, suffixHolds = 0, nil
+        if type(record.suffixes) == "table" and ns.Prices.SuffixCount then
+            suffixCount, suffixHolds = ns.Prices:SuffixCount(itemID)
+            suffixCount = suffixCount or 0
+        end
         local onlySuffixes
         if needle and not name:lower():find(needle, 1, true) then
             -- "of the Bear" finds the item, showing only its Bear.
@@ -257,19 +294,18 @@ local function BuildList()
             if not onlySuffixes then return end
         end
 
-        rows[#rows + 1] = {
+        rows[#rows + 1] = setmetatable({
             itemID = itemID,
             record = record,
             market = record.market or 0,
             min = record.min or 0,
             quantity = record.quantity or 0,
             age = ns.Prices:GetAge(itemID) or math.huge,
-            liquidity = ns.Prices:GetSalesPerDay(itemID),
-            trend = ns.Prices.GetTrend and (ns.Prices:GetTrend(itemID, trendDays)) or nil,
             name = name,
             suffixCount = suffixCount,
+            suffixHolds = suffixHolds or math.huge,
             onlySuffixes = onlySuffixes,
-        }
+        }, lazy)
     end
 
     for itemID, record in pairs(prices) do
