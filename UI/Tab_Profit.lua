@@ -27,6 +27,14 @@ local MARK_GUTTER = 16
 local ICON_SIZE = 16
 local ICON_GUTTER = ICON_SIZE + 4
 
+-- The 7 Days line: at most this many steps, this tall.
+local TREND_POINTS = 12
+local TREND_HEIGHT = 10
+
+-- The three cards over the list.
+local CARDS_HEIGHT = 44
+local CARD_GAP = 8
+
 -- The columns, measured from the right edge of the list and laid out right
 -- to left. Money sits to the right, so its coins line up down the column;
 -- everything else is centred under its heading. `width` is the least each
@@ -60,6 +68,9 @@ local COLUMNS = {
     { key = "disenchant", label = L["DISENCHANT"], width = 62, money = true, disenchantOnly = true },
     { key = "sells",  label = L["SELLS"],  width = 70, money = true },
     { key = "cost",   label = L["COST"],   width = 70, money = true },
+    -- A small line of the price over the last 7 days (ts-improve-6), beside
+    -- the name: green when it rose, red when it fell.
+    { key = "trend",  label = L["7 DAYS"], width = 56, justify = "CENTER" },
 }
 
 -- Any column but the craft's name can be hidden as well (UI/Columns.lua).
@@ -133,7 +144,7 @@ end
 -- lasts, least needed first, so the name keeps NAME_MIN. Nothing saved: they
 -- come back once there is room. COST, SELLS, PROFIT, TIME and A DAY stay.
 local NAME_MIN = 160
-local SQUEEZE_ORDER = { "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
+local SQUEEZE_ORDER = { "trend", "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
 local squeezed = {}
 local squeezedKey = ""
 
@@ -177,9 +188,119 @@ local function ApplyRowLayout(row)
 
     -- The margin's bar sits centred under its number.
     row.marginBar:SetPoint("TOP", row.cells.margin, "BOTTOM", 0, -1)
+    -- So does how well it sells, under DEMAND.
+    if row.demandBar then row.demandBar:SetPoint("TOP", row.cells.demand, "BOTTOM", 0, -1) end
+    -- The 7 Days line fills its cell, a little in from each side.
+    if row.spark then
+        row.spark:ClearAllPoints()
+        row.spark:SetPoint("LEFT", row.cells.trend, "LEFT", 4, -TREND_HEIGHT / 2)
+        row.spark:SetPoint("RIGHT", row.cells.trend, "RIGHT", -4, 0)
+        row.spark:SetHeight(TREND_HEIGHT)
+        row.spark:SetShown(row.cells.trend:IsShown())
+        row.spark.key = false
+    end
 
     row.layoutVersion = layoutVersion
     row.columnsVersion = ns.Columns.version
+end
+
+--------------------------------------------------------------------------------
+-- 7 Days: a small line of the price (the owner said build it, 2026-11-26)
+--------------------------------------------------------------------------------
+
+
+-- An item's line, kept until a price changes or the hour turns, so a row
+-- redrawn with the same numbers draws nothing new.
+local trendKept = {}
+
+--- An item's price over the last 7 days, in at most TREND_POINTS steps,
+--- each 0 to 1 from its lowest to its highest, and which way it went
+--- ("up", "down" or "flat"). nil with under two readings.
+local function TrendFor(itemID)
+    if not itemID then return nil end
+    local stamp = tostring(ns.Prices and ns.Prices.changes or 0) .. ":" .. math.floor(time() / 3600)
+    local kept = trendKept[itemID]
+    if kept and kept.stamp == stamp then return kept.trend end
+
+    local trend
+    local graph = ns.PriceGraph
+    local ok, points = false, nil
+    if graph and graph.Series then ok, points = pcall(graph.Series, itemID, "week") end
+    if ok and type(points) == "table" and #points >= 2 then
+        -- Bucketed by time into even steps, each the average of its readings.
+        local first, last = points[1].t, points[#points].t
+        local span = math.max(1, last - first)
+        local sums, counts = {}, {}
+        for _, point in ipairs(points) do
+            local step = math.min(TREND_POINTS, math.floor((point.t - first) / span * (TREND_POINTS - 1)) + 1)
+            sums[step] = (sums[step] or 0) + point.p
+            counts[step] = (counts[step] or 0) + 1
+        end
+        local values = {}
+        for step = 1, TREND_POINTS do
+            if counts[step] then values[#values + 1] = sums[step] / counts[step] end
+        end
+        if #values >= 2 then
+            local low, high = math.huge, -math.huge
+            for _, value in ipairs(values) do
+                low, high = math.min(low, value), math.max(high, value)
+            end
+            local shape = {}
+            for index, value in ipairs(values) do
+                shape[index] = high > low and (value - low) / (high - low) or 0.5
+            end
+            local change = (values[#values] - values[1]) / math.max(1, values[1])
+            trend = {
+                shape = shape,
+                change = change,
+                way = change > 0.02 and "up" or change < -0.02 and "down" or "flat",
+            }
+        end
+    end
+    trendKept[itemID] = { stamp = stamp, trend = trend }
+    return trend
+end
+
+--- Draw an item's 7 Days line in a row's cell; the row keeps what it drew,
+--- so the same line is never drawn twice.
+local function DrawTrend(row, analysis, shown)
+    local spark = row.spark
+    if not spark then return end
+    local trend = shown and TrendFor(analysis.outputItemID) or nil
+    local key = trend and (tostring(analysis.outputItemID) .. ":" .. table.concat(trend.shape, ",")) or nil
+    if key == spark.key then return end
+    spark.key = key
+    for _, line in ipairs(spark.lines) do line:Hide() end
+    row.cells.trend:SetText(trend and "" or "--")
+    row.cells.trend:SetTextColor(Theme.Unpack("dim"))
+    if not trend or type(spark.CreateLine) ~= "function" then return end
+
+    local color = trend.way == "up" and "profit" or trend.way == "down" and "loss" or "muted"
+    local width = (spark.GetWidth and spark:GetWidth()) or 48
+    if type(width) ~= "number" or width <= 0 then width = 48 end
+    local count = #trend.shape
+    for index = 1, count - 1 do
+        local line = spark.lines[index]
+        if not line then
+            line = spark:CreateLine(nil, "ARTWORK")
+            line:SetThickness(1.2)
+            spark.lines[index] = line
+        end
+        local x1 = (index - 1) / (count - 1) * width
+        local x2 = index / (count - 1) * width
+        line:SetStartPoint("BOTTOMLEFT", spark, x1, trend.shape[index] * TREND_HEIGHT)
+        line:SetEndPoint("BOTTOMLEFT", spark, x2, trend.shape[index + 1] * TREND_HEIGHT)
+        line:SetColorTexture(Theme.Unpack(color))
+        line:Show()
+    end
+end
+
+--- What the How This Profit Adds Up card opens beside: the main window
+--- while it shows, else `fallback`.
+local function CardAnchor(fallback)
+    local window = _G.BlackthornesTSWindow
+    if window and window.IsShown and window:IsShown() then return window end
+    return fallback
 end
 
 local function CreateRow(row)
@@ -198,6 +319,29 @@ local function CreateRow(row)
     end
 
     row.marginBar = Theme.CreateBar(row, 40, 2)
+    row.demandBar = Theme.CreateBar(row, 40, 2)
+    row.spark = CreateFrame("Frame", nil, row)
+    row.spark.lines = {}
+
+    -- Hovering the profit says a click shows how it adds up (UI/ProfitCard.lua).
+    -- Clicks still reach the row, which opens the card when over the profit.
+    row.profitHover = CreateFrame("Frame", nil, row)
+    row.profitHover:SetAllPoints(row.cells.profit)
+    row.profitHover:EnableMouse(true)
+    if row.profitHover.SetMouseClickEnabled then row.profitHover:SetMouseClickEnabled(false) end
+    row.profitHover:SetScript("OnEnter", function()
+        local enter = row:GetScript("OnEnter")
+        if enter then enter(row) end
+        if row.data and row.data.priceable and ns.ProfitCard and GameTooltip:IsShown() then
+            ns.ProfitCard.AddHint(GameTooltip)
+            GameTooltip:Show()
+        end
+    end)
+    row.profitHover:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+        local script = row:GetScript(row:IsMouseOver() and "OnEnter" or "OnLeave")
+        if script then script(row) end
+    end)
 
     ApplyRowLayout(row)
 end
@@ -441,6 +585,7 @@ local function UpdateRow(row, analysis)
     Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
+    DrawTrend(row, analysis, row.cells.trend:IsShown())
 
     local cells = row.cells
 
@@ -470,9 +615,14 @@ local function UpdateRow(row, analysis)
     if reading then
         cells.demand:SetText(ns.Demand:Label(reading))
         cells.demand:SetTextColor(Theme.Unpack(ns.Demand:Color(reading)))
+        -- A small bar for how fast it sells: a third for Low, full for High.
+        local rank = ns.Demand.Rank and ns.Demand:Rank(reading) or 0
+        row.demandBar:Set(cells.demand:IsShown() and rank > 0 and math.min(1, math.floor(rank) / 3) or nil,
+            ns.Demand:Color(reading))
     else
         cells.demand:SetText("--")
         cells.demand:SetTextColor(Theme.Unpack("dim"))
+        row.demandBar:Set(nil)
     end
 
     -- Everything you already hold: listed, plus bags and bank.
@@ -522,6 +672,18 @@ local function UpdateRow(row, analysis)
 
     Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
+
+    -- Random rolls (of the Bear, of the Eagle...): each roll sells for its
+    -- own price, so Sells For says "by roll" and Profit gives the range,
+    -- cheapest roll to dearest (Profit:RollRange). Sorting stays on profit.
+    local low, high
+    if ns.Profit.RollRange then low, high = ns.Profit:RollRange(analysis) end
+    if low and ns.ProfitCard then
+        cells.sells:SetText(L["by roll"])
+        cells.sells:SetTextColor(Theme.Unpack("muted"))
+        Theme.FitText(cells.profit, { ns.ProfitCard.RangeText(low, high, 2), ns.ProfitCard.RangeText(low, high, 1) })
+        cells.profit:SetTextColor(Theme.Unpack("text"))
+    end
 
     cells.via:SetText(ns.Profit.WAY_LABELS and ns.Profit.WAY_LABELS[analysis.via] or "")
     cells.via:SetTextColor(Theme.Unpack(analysis.via == "disenchant" and "accent" or "muted"))
@@ -1020,6 +1182,27 @@ local function BuildDetail(parent)
     end)
     yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     detail.yieldHover = yieldHover
+
+    -- A click on the profit shows how it adds up (UI/ProfitCard.lua).
+    local profitClick = CreateFrame("Button", nil, summary)
+    profitClick:SetPoint("TOPLEFT", detail.summaryRows[7].label, "TOPLEFT", 0, 2)
+    profitClick:SetPoint("BOTTOMRIGHT", detail.profitValue, "BOTTOMRIGHT", 0, -2)
+    profitClick:SetScript("OnClick", function()
+        local selected = state.selected
+        if selected and ns.ProfitCard then
+            ns.ProfitCard:ShowRecipe(selected.recipeID,
+                CardAnchor(detail), Method())
+        end
+    end)
+    profitClick:SetScript("OnEnter", function(self)
+        if not (state.selected and state.selected.priceable and ns.ProfitCard) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["How This Profit Adds Up"], 1, 1, 1)
+        ns.ProfitCard.AddHint(GameTooltip)
+        GameTooltip:Show()
+    end)
+    profitClick:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.profitClick = profitClick
     for index = 13, 14 do
         detail.summaryRows[index].label:Hide()
         detail.summaryRows[index].value:Hide()
@@ -2125,8 +2308,58 @@ local function SearchChanged()
     Draw(Narrow(ns.Profit:RankAgain(last.results, RankOptions())))
 end
 
+--- The three cards over the list: the craft that pays most each, how many
+--- of the crafts in view pay, and how long ago prices were read.
+local function UpdateCards(data)
+    local panels = widgets.cardPanels
+    if not panels then return end
+
+    local best, paying = nil, 0
+    for _, analysis in ipairs(data) do
+        if analysis.priceable and (analysis.profit or 0) > 0 then
+            paying = paying + 1
+            local each = analysis.profitPerUnit or analysis.profit
+            if not best or each > (best.profitPerUnit or best.profit) then best = analysis end
+        end
+    end
+
+    local first = panels[1]
+    if best then
+        first.value:SetText(best.name or "")
+        Theme.SetItemNameColor(first.value, best.outputItemID, "text")
+        first.note:SetText(L.Format("%s each", "+" .. Util.FormatMoney(best.profitPerUnit or best.profit)))
+    else
+        first.value:SetText("--")
+        first.value:SetTextColor(Theme.Unpack("dim"))
+        first.note:SetText("")
+    end
+
+    -- Every craft in view, the ones with no price or a loss too.
+    local all = state.accountWide and ns.Recipes.GetAccountWide and ns.Recipes:GetAccountWide(true)
+        or ns.Recipes:GetAll() or {}
+    local total = 0
+    for _, recipe in pairs(all) do
+        if type(recipe) == "table" and recipe.outputItemID
+            and (not state.profession or recipe.skillLineID == state.profession) then
+            total = total + 1
+        end
+    end
+    local second = panels[2]
+    second.value:SetText(tostring(paying))
+    second.value:SetTextColor(Theme.Unpack(paying > 0 and "profit" or "dim"))
+    second.note:SetText(L.Format("of %d", math.max(total, #data)))
+
+    local third = panels[3]
+    local last = ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    third.value:SetText(last and Util.FormatAgeAgo(math.max(0, time() - last)) or L["never"])
+    local stale = not last or time() - last > (ns.Config:Get("staleAfterSeconds") or 172800)
+    third.value:SetTextColor(Theme.Unpack(stale and "warn" or "text"))
+    third.note:SetText("")
+end
+
 function Draw(data)
     state.drawn = true
+    UpdateCards(data)
 
     -- A clicked heading's order over the ranking's.
     if widgets.sorter then data = widgets.sorter:Sort(data) end
@@ -2167,7 +2400,7 @@ function Draw(data)
         if ns.Recipes:Count() == 0 then
             widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif ns.Prices:Count() == 0 then
-            widgets.emptyLabel:SetText(L["No auction data yet."])
+            widgets.emptyLabel:SetText(L["No prices yet. Visit an auctioneer and the list fills in by itself."])
             widgets.emptyScan:Show()
         else
             -- "Nothing matches these filters" is true and useless. A threshold
@@ -2398,10 +2631,49 @@ local function BuildCrafts(container)
     end, ns.Config:Get("profitShowsPerHour") == true)
     perHour:SetPoint("LEFT", showMaxed, "RIGHT", 12, 0)
 
+    -- Three cards over the list (ts-improve-6): the best craft now, how
+    -- many pay, and how old the prices are. Filled by Draw (UpdateCards).
+    local cards = CreateFrame("Frame", nil, container)
+    cards:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
+    cards:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
+    cards:SetHeight(CARDS_HEIGHT)
+    widgets.cards = cards
+    widgets.cardPanels = {}
+    for index, title in ipairs({ L["Best Right Now"], L["Crafts That Pay"], L["Prices Read"] }) do
+        local panel = Theme.CreatePanel(cards, "glass", "border")
+        panel:SetHeight(CARDS_HEIGHT)
+        panel.title = Theme.CreateLabel(panel, "tiny", "accent")
+        panel.title:SetPoint("TOPLEFT", 8, -6)
+        panel.title:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
+        panel.title:SetJustifyH("LEFT")
+        panel.title:SetText(title)
+        panel.value = Theme.CreateLabel(panel, "normal", "text")
+        panel.value:SetPoint("TOPLEFT", panel.title, "BOTTOMLEFT", 0, -3)
+        panel.value:SetJustifyH("LEFT")
+        panel.note = Theme.CreateLabel(panel, "small", "muted")
+        panel.note:SetPoint("LEFT", panel.value, "RIGHT", 6, 0)
+        panel.note:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
+        panel.note:SetJustifyH("LEFT")
+        widgets.cardPanels[index] = panel
+    end
+    local function PlaceCards()
+        local width = cards:GetWidth()
+        if type(width) ~= "number" or width <= 0 then return end
+        local each = (width - CARD_GAP * 2) / 3
+        for index, panel in ipairs(widgets.cardPanels) do
+            panel:ClearAllPoints()
+            panel:SetPoint("TOPLEFT", cards, "TOPLEFT", (index - 1) * (each + CARD_GAP), 0)
+            panel:SetWidth(each)
+            panel.value:SetWidth(math.max(40, each - 16 - 60))
+        end
+    end
+    cards:SetScript("OnSizeChanged", PlaceCards)
+    PlaceCards()
+
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
-    headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
-    headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
+    headings:SetPoint("TOPLEFT", cards, "BOTTOMLEFT", 0, -8)
+    headings:SetPoint("TOPRIGHT", cards, "BOTTOMRIGHT", 0, -8)
     headings:SetHeight(16)
     widgets.headingFrame = headings
 
@@ -2447,6 +2719,10 @@ local function BuildCrafts(container)
         demand = function(a)
             return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
         end,
+        trend = function(a)
+            local trend = TrendFor(a.outputItemID)
+            return trend and trend.change or nil
+        end,
     }, function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name", "who", "via" }) end
 
@@ -2468,7 +2744,7 @@ local function BuildCrafts(container)
     local list = Widgets.CreateScrollList(container, {
         -- The headings move in with the rows when the scrollbar takes its room.
         onScrollbarShown = function(shown)
-            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+            headings:SetPoint("TOPRIGHT", cards, "BOTTOMRIGHT", -(shown and 10 or 0), -8)
         end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
@@ -2498,11 +2774,18 @@ local function BuildCrafts(container)
             return state.selected ~= nil and entry.recipeID == state.selected.recipeID
         end,
 
-        onClick = function(analysis, _, mouseButton)
+        onClick = function(analysis, _, mouseButton, row)
             if mouseButton == "RightButton" then return end
 
             state.selected = analysis
-            UpdateDetail(ns.Profit:Analyse(analysis.recipeID, nil, Method()))
+            local fresh = ns.Profit:Analyse(analysis.recipeID, nil, Method())
+            UpdateDetail(fresh)
+
+            -- A click on the profit shows how it adds up.
+            local cell = row and row.cells and row.cells.profit
+            if cell and cell:IsShown() and cell:IsMouseOver() and ns.ProfitCard then
+                ns.ProfitCard:Show(fresh, CardAnchor(container))
+            end
         end,
     })
 
@@ -2668,6 +2951,8 @@ ns.ProfitTab = {
     RowMenu = RowMenu,
     StockLine = StockLine,
     WithYield = WithYield,
+    TrendFor = TrendFor,
+    UpdateCards = function(data) return UpdateCards(data) end,
     ShowRecipesToLearn = function(profession)
         if not (ns.UI and ns.UI.Show) then
             ns.Print(L["the window is not ready yet, try again in a moment"])

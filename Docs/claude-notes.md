@@ -1241,6 +1241,42 @@ in either order. Without Butler nothing changes. Tested in
 `tools/test_sharedwindow.lua` (all five) and Butler's `tools/test_onewindow.lua`.
 
 
+Window per place (ts-improve-2, the owner said "Do 1-10" on the
+mockups, 2026-11-26): "At The Auction House:", "At A Profession:" and
+"At The Mailbox:" on the Windows page, each Full Window, Slim Panel,
+Round Button or Stay Closed. Saved account wide as `windowAtAuction`,
+`windowAtProfession` and `windowAtMail` (never rename them), default
+"auto". `UI.WindowAt(place)` in `UI/Main.lua` answers for every caller:
+a pick wins; "auto" reads the older keys and never writes them
+(`openAtAuction` or `openAtProfessions` false is Stay Closed,
+`craftPaneBeside` true is Slim Panel, the mailbox is Slim Panel), else
+Full Window with the one window on and Slim Panel with it off. So nothing
+changes for a player who never picks. The rows took over the Auction House
+and Professions ticks of "Open By Itself At:" (now only a Vendors tick)
+and the "Small Craft Queue:" box.
+
+- Full Window: the one window opens docked, as before
+  (`TSTabs:AtAuctionHouse`, `TSTabs:AtDock`; the mailbox through
+  `UI:ArrivedAt("mail")` on MAIL_SHOW). With the one window off,
+  Tradeskills' own window opens beside the slim panel and closes with the
+  game's window (`UI.openedFor`, `CloseWithShop`).
+- Slim Panel: the drawer, craft pane or mail list beside the game's
+  window; the one window stays shut unless already open.
+- Round Button: as Full Window, then folded (`UI.FoldSoon`; the one window
+  folds through the drawing copy's `FoldWindow`, found by
+  `SharedWindow.Drawer().ns`). Opened by the player on that visit, it
+  opens full.
+- Stay Closed: nothing comes up; `/bts` or the minimap button opens it.
+  The mail list keeps out (`QueueMailPanel.StaysClosed`) unless the one
+  window is docked at the mailbox.
+
+The drawer beside the auction house has a Full Window button left of Scan
+(`UI:PlaceFullWindowButton`, `UI:OpenFullHere`), hidden while it is the
+one window's Auction House tab; `PostPanel:IntoOne`/`OutOfOne` place it
+again. `UI/SharedWindow.lua` is unchanged (FILE_VERSION 17). Tested in
+`tools/test_onewindow.lua` (parts 9 to 12), `tools/test_uifit.lua`,
+`tools/test_auctionbar.lua` and `tools/test_queuemaildock.lua`.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
@@ -4132,3 +4168,168 @@ shows the current amount.
   tooltip's one.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
+
+## Queue Sort By and Queue Done Sound (2026-11-26)
+
+The owner said do it (ts-improve-10 mockup). The Queue tab has "Sort By:"
+chips: My Order (the default, today's order and Craft Next rules), Profit,
+Gold per Hour and Frees Bag Space. Saved account wide as `queueSortBy`
+(never rename). `Queue:Ordered(list, costs)` lays out a copy, highest
+first, a part placed with the best craft it feeds and never below it
+(`Queue.LayOut`, shared with `ApplyOrder`); what can't be told goes last.
+The stored queue and `queueOrder` never move. `Crafting:PickNext` makes
+the first ready row in that order when Sort By isn't My Order. Move Up,
+Move Down and the row arrows are off outside My Order. Gold an hour is
+`Queue:EntryEarns`: the row's profit over its own casts (no sub-craft
+time), shown in a column only while Sort By is Gold per Hour. The craft
+pane's queued list follows the same order.
+
+When the last craft of this character's on the queue is made
+(`Crafting:NoteQueueMade`, from the bag walk), the tab's footer says
+"Queue done. N crafts made." until something new is queued, and with
+"Queue Done Sound:" ticked (`queueDoneSound`, off unless ticked, never
+rename) our own `Media/Sounds/queue-done.ogg` plays through
+`ns.PlaySoundFile` (Mute All Sounds). Made by `tools/make_sounds.py
+queue-done.ogg`, which writes only the files named. Emptying the queue by
+hand resets the count and stays quiet. The run chime (`craftDoneSound`)
+skips when the queue chime just played. The taskbar flash in the mockup is
+left out: `FlashClientIcon` has not been probed on Forever. The done
+line's Post Crafted button is left out too (it needs the auction house
+open, and `UI.POST_CRAFTED_BUTTON` is off). Tested in
+`tools/test_queuesort.lua` and the Queue part of `tools/test_uifit.lua`.
+
+
+## The Today tab
+
+The owner said build it (2026-11-26, from the mockup ts-improve-1-today):
+a new first tab, `today` (order 0), that lists what is worth doing now.
+`Logic/Today.lua` finds the lines, each read inside a pcall from what
+another part already knows: heard sales still in the mail
+(`Mail:SettleHeard`, the character playing's only), undercut auctions
+(`MyAuctions:Rows`), cooldown crafts up and not queued
+(`Cooldowns:ReadyList`), crafts with their own Keep in Stock number that
+have none left anywhere (`db.postLimits`, `Auctions:GetRoom`), the Profit
+list's count and best (`Profit:BeginRanked`/`RankOne`/`FinishRanked`, a
+few recipes a frame, kept until prices, queue, settings or recipes move),
+writs that pay back more than they cost and are not done
+(`Writs:GetRows`), and the next stretch of Road to 300 (`RoadPlan:Get`,
+`Today.NextStretch`). Buttons only open a tab or queue (`Today:Run`).
+`UI/Tab_Today.lua` draws four cards (Gold Today from `GoldLog`, Up For
+Sale and Sold Today from `AuctionTracker`, Prices Read from
+`Prices:GetLastScan`) and the dark glass Do Next list; a row whose line
+key did not change keeps what it drew. The window opens on Today the
+first time it is opened by hand in a session (`UI.todayOpened`), never
+when docked. Each line kind has a box on the Windows page, saved as
+`todayHide_<kind>` (true hides it; never rename). Tested in
+`tools/test_today.lua`.
+
+## A lighter save (2026-11-26)
+
+The owner said yes to the lighter save idea (ts-improve-4). The game reads
+the whole save at every login and /reload. His save measured 20.6 MB with
+`tools/measure_save.py` (read only; prints sizes and counts, every realm,
+character and item key shown as `*`; `--ages` adds rows up by how long
+since they were seen). Forever writes the save without spaces or line
+breaks, so key names and numbers are what cost. `prices` was 72% of it,
+and the random suffix rows in it (`record.suffixes`) 44%, half of that
+their readings.
+
+Step one, no setting: at logout (`Prices:PackAll` on PLAYER_LOGOUT) every
+price history, items' and suffixes', every realm, is saved as one string
+(`Prices.PackHistory`): `t,m,q;dt,m,q;...`, dt the seconds since the
+reading before, an empty field a missing value. A history is packed only
+when `Prices.UnpackHistory` gives back exactly what it held. It is
+unpacked in place the first time it is read or added to
+(`Prices.History(record)`); `HistoryCount`, `HistoryReading` and
+`EachReading` also read the string as it is. Read history only through
+those, never by index or with `type(record.history) == "table"`. A version
+from before reads a packed history as none and starts it again (only the
+twelve kept readings). Tested in `tools/test_packedhistory.lua`.
+
+Step two (the owner picked "build it as the mockup", 2026-11-26), on the
+Data page under Remove Old Prices: "Saved Data:" shows about how big the
+save is (`TidyUp:Measure`, added up over frames, measured again after ten
+minutes or a tidy) with a Tidy Up button, and "Keep Price History For:"
+(30 Days, 90 Days, A Year, Always; `keepPriceHistoryDays`, 0 is Always,
+never rename it). Logic/TidyUp.lua and UI/TidyUpBox.lua. Picking a period
+opens the Tidy Up window; only its Confirm saves the choice and removes
+anything; Cancel, the close gem and Escape put the choice back. Tidy Up is
+greyed while Always. A tidy removes, for items not yours, readings older
+than the period and suffix rows not seen for that long, on every realm,
+a slice of records a frame. Yours (`TidyUp:Yours`): crafted or used by a
+character and starred (`PriceHistory:GetTracked`), `myPrices`,
+`lastPosted`. An item's own price is never removed. While a period is
+kept, the tidy runs again `TidyUp.LOGIN_DELAY` seconds after login. The
+mockup's "Scans kept twice" row was left out: nothing in the save is
+kept twice. Because Prices:Prune already drops items not seen for 21
+days, a tidy frees little on a save that scans often. Tested in
+`tools/test_tidyup.lua`.
+## How This Profit Adds Up (one profit sum, 2026-11-26)
+
+The owner said build it (ts-improve-3). One sum everywhere:
+
+- `Profit:Counted(recipeID)` is `Analyse` with `Profit:CountedMethod()` (the
+  Profit tab's "Profit:" choice; Auction counts as the sale, max(auction,
+  vendor), as the craft pane always did). The Queue rows, the Queue's
+  totals and snapshots (`CountedProfit` in `Logic/Queue.lua` and
+  `UI/Tab_Queue.lua`, which falls back to `Analyse` for old test stubs) and
+  the craft pane (`PaneMethod`) read it.
+- The game's profession window (`Logic/CraftProfit.lua`) takes the same
+  number through `CraftProfit.TakeCounted`: Sells For is the counted profit
+  plus the materials, so Sells For less Mats Cost is the profit. A grey, or
+  a craft the sum can't price, keeps its own figures.
+- The tooltip's Profit Now (`CraftedCost:ProfitNowAt`, `:NetOfListing`)
+  counts the deposit through `Profit:NetFromListing`, and a vendor that
+  pays more is the sale, as `Analyse` with no method counts it.
+- `Profit:Sum(analysis)` lays out the parts for the side card
+  (`UI/ProfitCard.lua`, `windowSpots["ts.profitcard"]`): Sells For, Auction
+  Cut, Deposit, each material with where it comes from, Makes, Profit. It
+  adds no math; the cut takes what rounding leaves so the lines add to the
+  profit as shown. Opened by a click on a Profit tab row's profit, the
+  detail pane's Profit line, or a Queue row's profit.
+- `Profit:RollRange(analysis)`: for a craft sold at the AH whose output has
+  two or more priced random rolls, the same sum at each roll's lowest
+  posting. The Profit tab shows "by roll" under Sells For and the range in
+  Profit (sorting stays on profit); the card shows it under the profit.
+- Tested in `tools/test_profitsum.lua`.
+
+## Seven tabs in place of eleven
+
+The owner said build it (2026-11-26, from the mockup ts-improve-9). The
+usual row shows Today, Make, Sell, Learn, Prices, Characters, Settings.
+`UI.TAB_GROUPS` in `UI/Main.lua` names each group's tabs: Make is Queue,
+Profit, Disenchanting; Sell is Sales, Deals; Learn is Level Up, Gather.
+Prices already holds Stats as a view. Every tab keeps its own key and
+container, so `UI:SelectTab("queue")`, `/bts` commands, the sister addons'
+calls, `UI.MOVED_TABS` and the saved `lastTab` land as before:
+`UI:SelectTab` lights the group on the row (`UI:GroupOf`) and
+`UI:LayGroupRow` shows the group's own strip (`UI.groupStrips`) along the
+top of the content, moving the tab's container down `GROUP_STRIP_ROOM`.
+A group key ("make") opens the tab last picked in it (`UI.groupPicks`,
+session only). A group with one tab loaded shows that tab alone. The
+auction house, profession and mailbox rows (`ahTabStrip`, `dockStrips`)
+stay flat: there the group strip hides and the tab takes the whole room.
+Tested in `tools/test_seventabs.lua`.
+
+## Lists that read faster (the Profit list, 2026-11-26)
+
+The owner said build it (ts-improve-6), the Profit list first. Look only:
+the same rows, numbers, sorting and clicks.
+
+- 7 DAYS column (`trend`, beside the name): a small line of the price over
+  the last 7 days from `PriceGraph.Series(itemID, "week")`, bucketed into
+  `TREND_POINTS` steps, green when it rose over 2%, red when it fell
+  (`TrendFor`, kept per item until `Prices.changes` moves or the hour turns;
+  a row redraws its line only when the shape changes). First to be squeezed
+  out when the list is narrow. Sorts by the change.
+- DEMAND gets a small bar under it: a third for Low, two thirds for Some,
+  full for High, in the demand's colour.
+- Three cards over the headings (`UpdateCards`, run by `Draw`): Best Right
+  Now (the listed craft that makes most each), Crafts That Pay (listed
+  crafts with a profit, of every craft in view), Prices Read (the last
+  full scan's age, gold when stale).
+- No prices at all: "No prices yet. Visit an auctioneer and the list fills
+  in by itself." with Scan Auctions as before. The mockup's Show The Way
+  button waits: no auctioneer spots are kept to point the arrow at.
+- Icons with a rarity ring were already on every row (UI/ItemLook.lua).
+- Tested in `tools/test_profitdetail.lua`.

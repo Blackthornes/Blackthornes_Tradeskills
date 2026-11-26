@@ -192,7 +192,7 @@ function PriceTransfer:Import(code)
             record.rivalMin, record.ownMin, record.ignoredLow = nil, nil, nil
             record.ladder, record.ladderAt, record.quantity, record.odd = nil, nil, nil, nil
             record.scans = math.max(1, tonumber(record.scans) or 0)
-            if type(record.history) ~= "table" then record.history = {} end
+            if type(record.history) ~= "table" and type(record.history) ~= "string" then record.history = {} end
             updated = updated + 1
             ns.Prices:Touch(itemID)
         else

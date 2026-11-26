@@ -155,6 +155,30 @@ ns.Profit.Analyse = function() error("broken") end
 Butler:Forget()
 check("Profit raises: nil", Butler:CraftFor(WOOL), nil)
 
+print("\nwho can make an item (Butler's restock list)")
+ns.db.characters["Player-2"] = { name = "Ana", realm = "R", recipes = { [1] = { name = "Bolt of Woolen Cloth",
+  outputItemID = BOLT, quantityMin = 1 }, [3] = { name = "Wool Thing", outputItemID = OTHER, quantityMin = 2 } } }
+ns.db.characters["Player-3"] = { name = "Linked", realm = "R", recipes = { [1] = { outputItemID = BOLT } } }
+ns.db.characters[SELF].recipes = { [3] = { name = "Wool Thing", outputItemID = OTHER, quantityMin = 2 } }
+ns.Recipes.GetCharacters = function()
+  return { { key = SELF, name = "Mia", isCurrent = true }, { key = "Player-2", name = "Ana" },
+    { key = "Player-3", name = "Linked", linkedFrom = "other" } }
+end
+local bolt = Butler:MakersOf(BOLT)
+check("bolts: the recipe", bolt and bolt.recipeID, 1)
+check("bolts: only Ana, not the linked one", bolt and #bolt.makers, 1)
+check("bolts: Ana's short name", bolt and bolt.makers[1].short, "Ana")
+check("bolts: Ana isn't playing", bolt and bolt.makers[1].playing, false)
+local thing = Butler:MakersOf(OTHER)
+check("two can make the thing", thing and #thing.makers, 2)
+check("two a craft", thing and thing.per, 2)
+local playing = false
+for _, maker in ipairs(thing and thing.makers or {}) do playing = playing or maker.playing end
+check("one of them is playing", playing, true)
+check("nobody makes wool: nil", Butler:MakersOf(WOOL), nil)
+check("nonsense: nil", Butler:MakersOf("nope"), nil)
+ns.db.characters[SELF].recipes = nil
+
 print("\nqueueing")
 check("queues the crafts", Butler:QueueCraft(1, 4), true)
 check("as many as asked", queued[1], 4)

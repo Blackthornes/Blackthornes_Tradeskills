@@ -253,6 +253,14 @@ local function Shown(frame)
     return ok and shown and true or false
 end
 
+--- True when "At The Mailbox:" is Stay Closed.
+function QueueMailPanel.StaysClosed()
+    local UI = ns.UI
+    if not (UI and UI.WindowAt) then return false end
+    local ok, choice = pcall(UI.WindowAt, "mail")
+    return ok and choice == "closed"
+end
+
 --- The one window while it sits docked at the mailbox, else nil.
 local function DockedHere()
     local shared = ns.SharedWindow
@@ -334,6 +342,13 @@ end
 
 function QueueMailPanel:Draw()
     if self.dismissed or not self.MailboxOpen() then return end
+    -- "At The Mailbox:" Stay Closed (UI.WindowAt in UI/Main.lua): nothing
+    -- beside the mailbox. With the one window docked there by hand, the
+    -- list still fills its Mail tab.
+    if not self.inOne and not DockedHere() and QueueMailPanel.StaysClosed() then
+        if self.frame then self.frame:Hide() end
+        return
+    end
     if self.coveredByButler then
         if self.frame then self.frame:Hide() end
         return
