@@ -4064,3 +4064,10 @@ L["%s a craft"] = "每次制作 %s"
 L["The same number on the Queue, the tooltip and the profession window"] = "队列、鼠标提示和专业窗口里是同一个数字"
 L["by roll"] = "因属性而异"
 L["Click to see how it adds up."] = "点击查看它是怎么算的。"
+
+-- Lists that read faster (UI/Tab_Profit.lua cards, 7 Days)
+L["7 DAYS"] = "7 天"
+L["Best Right Now"] = "当前最佳"
+L["Crafts That Pay"] = "赚钱的配方"
+L["Prices Read"] = "价格读取于"
+L["No prices yet. Visit an auctioneer and the list fills in by itself."] = "还没有价格。去找拍卖师，列表会自己填好。"

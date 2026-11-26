@@ -4292,3 +4292,26 @@ The owner said build it (ts-improve-3). One sum everywhere:
   posting. The Profit tab shows "by roll" under Sells For and the range in
   Profit (sorting stays on profit); the card shows it under the profit.
 - Tested in `tools/test_profitsum.lua`.
+
+## Lists that read faster (the Profit list, 2026-11-26)
+
+The owner said build it (ts-improve-6), the Profit list first. Look only:
+the same rows, numbers, sorting and clicks.
+
+- 7 DAYS column (`trend`, beside the name): a small line of the price over
+  the last 7 days from `PriceGraph.Series(itemID, "week")`, bucketed into
+  `TREND_POINTS` steps, green when it rose over 2%, red when it fell
+  (`TrendFor`, kept per item until `Prices.changes` moves or the hour turns;
+  a row redraws its line only when the shape changes). First to be squeezed
+  out when the list is narrow. Sorts by the change.
+- DEMAND gets a small bar under it: a third for Low, two thirds for Some,
+  full for High, in the demand's colour.
+- Three cards over the headings (`UpdateCards`, run by `Draw`): Best Right
+  Now (the listed craft that makes most each), Crafts That Pay (listed
+  crafts with a profit, of every craft in view), Prices Read (the last
+  full scan's age, gold when stale).
+- No prices at all: "No prices yet. Visit an auctioneer and the list fills
+  in by itself." with Scan Auctions as before. The mockup's Show The Way
+  button waits: no auctioneer spots are kept to point the arrow at.
+- Icons with a rarity ring were already on every row (UI/ItemLook.lua).
+- Tested in `tools/test_profitdetail.lua`.

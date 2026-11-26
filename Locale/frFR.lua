@@ -4066,3 +4066,10 @@ L["%s a craft"] = "%s par fabrication"
 L["The same number on the Queue, the tooltip and the profession window"] = "Le même nombre dans la file, l'infobulle et la fenêtre de métier"
 L["by roll"] = "selon la variante"
 L["Click to see how it adds up."] = "Clique pour voir comment il s'additionne."
+
+-- Lists that read faster (UI/Tab_Profit.lua cards, 7 Days)
+L["7 DAYS"] = "7 JOURS"
+L["Best Right Now"] = "Le meilleur en ce moment"
+L["Crafts That Pay"] = "Recettes rentables"
+L["Prices Read"] = "Prix lus"
+L["No prices yet. Visit an auctioneer and the list fills in by itself."] = "Pas encore de prix. Va voir un commissaire-priseur et la liste se remplit toute seule."
