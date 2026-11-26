@@ -415,5 +415,40 @@ assert(not FoldWindow.SavedFolded("Blackthornes_Test:Eleven"))
 frame11:Show()
 assert(parts11.trim.shown and parts11.fill.shown, "shown again, it is full")
 
+-- 12. Fold Gem: Small Bar (the All Addons page's pick).
+local foldStyle = "bar"
+ns.SharedChoices = { Look = function(_, kind) if kind == "fold" then return foldStyle end end }
+assert(FoldWindow.Style() == "bar")
+local frame12, parts12 = Window()
+parts12.trim.plate = { label = { GetText = function() return "Test Window" end } }
+FoldWindow:Add(frame12, { key = "Twelve", pill = function() return "3 kills" end })
+for _, other in pairs(FoldWindow.rounds) do other.button.shown = false end   -- none in its way
+assert(FoldWindow:Fold(frame12), "it folds")
+local r12 = FoldWindow.rounds["Blackthornes_Test:Twelve"]
+assert(r12.bar and r12.button.shown, "into a small bar")
+local width12 = r12.width
+assert(width12 >= 110 and width12 <= 280, "sized to its words")
+local x12, y12 = Spot(r12)
+assert(x12 == 500 - width12 and y12 == 700, "along the window's top right corner")
+r12.button.scripts.OnEnter(r12.button)
+assert(tip.lines[1] == "Test Window", "the same tooltip")
+r12.button.scripts.OnDragStart(r12.button)
+r12.button.rect = { 200, 600 - FoldWindow.BAR_HEIGHT, width12, FoldWindow.BAR_HEIGHT }
+r12.button.scripts.OnDragStop(r12.button)
+r12.button.scripts.OnClick(r12.button)
+assert(FoldWindow:IsFolded(frame12), "letting go after a drag is not a click")
+r12.button.scripts.OnClick(r12.button)
+assert(not FoldWindow:IsFolded(frame12), "a click opens it")
+assert(frame12:GetLeft() + frame12:GetWidth() == 200 + width12 and frame12:GetTop() == 600,
+    "with its top right corner on the bar's")
+foldStyle = "round"
+FoldWindow:Fold(frame12)
+local back12 = FoldWindow.rounds["Blackthornes_Test:Twelve"]
+assert(back12 ~= r12 and not back12.bar and back12.button.shown, "the pick counts from the next fold")
+assert(not r12.button.shown, "the old bar stays put away")
+FoldWindow:Unfold(frame12)
+ns.SharedChoices = nil
+assert(FoldWindow.Style() == "round", "the round button when nothing is picked")
+
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_foldwindow: ok")

@@ -205,6 +205,45 @@ assert(ns.Muted() and BlackthornesSharedChoices.muteReaders.Bad == nil, "a broke
 other.SharedChoices:SetMute(false, 500)
 assert(not ns.Muted(), "unticked anywhere, sounds come back")
 
+-- 6c. Look choices: Font, Colors and Fold Gem, in every addon's save.
+local Look = ns.SharedChoices
+assert(Look:Look("font") == "house" and Look:Look("colors") == "warm" and Look:Look("fold") == "round",
+    "nothing changes until someone picks")
+assert(Look:Drawn("colors") == "warm" and Look.drawn.colors == nil, "before the save is in, nothing is kept")
+assert(Look:FontPath("HOUSE") == "HOUSE", "the house font until someone picks")
+ns.db, other.db = {}, {}
+local oldTime = time
+time = function() return 100 end
+heard = {}
+assert(not Look:SetLook("font", "comic"), "only the fonts on the list")
+assert(Look:SetLook("colors", "darker"), "Darker is taken")
+assert(ns.db.lookChoices.colors == "darker" and other.db.lookChoices.colors == "darker",
+    "written to every addon's save")
+assert(ns.db.lookChoices ~= other.db.lookChoices, "each save keeps its own copy")
+assert(heard[1] == "two:look=colors", "the others are told so their Settings show it")
+assert(other.SharedChoices:Look("colors") == "darker", "every addon reads the pick")
+ns.db.lookChoices = { font = "clear", colors = "warm", fold = "round", at = 1 }
+assert(Look:Look("colors") == "darker", "the newest save wins")
+assert(Look:Drawn("colors") == "darker" and Look:Drawn("font") == "house", "read once the save is in")
+local palette = { glass = { 0.09, 0.075, 0.055 }, accent = { 0.78, 0.64, 0.30 } }
+local kept = palette.glass
+assert(Look:Recolor(palette) and kept[1] == Look.DARKER.glass[1], "Darker goes into the palette in place")
+assert(palette.accent[1] == 0.78, "the gold stays")
+assert(not Look:Recolor(palette), "only once")
+Look:SetLook("font", "clear")
+assert(Look:NeedsReload("font") and Look:FontPath("HOUSE") == "HOUSE", "a font change waits for /reload")
+other.SharedChoices:SetLook("fold", "bar")
+assert(Look:Look("fold") == "bar" and Look:Look("font") == "clear", "a pick keeps the others")
+local fresh = MakeNs("Blackthornes_Three")
+fresh.db = {}
+assert(fresh.SharedChoices:Drawn("font") == "clear", "an addon loaded later reads the pick")
+assert(fresh.SharedChoices:FontPath("HOUSE"):find("Blackthornes_Three\\Media\\Fonts\\") ~= nil,
+    "Clear is the addon's own font file")
+GetLocale = function() return "zhCN" end
+assert(fresh.SharedChoices:FontPath("HOUSE") == "HOUSE", "Clear has no Chinese letters: the house font")
+GetLocale = nil
+time = oldTime
+
 -- 7. Panel gems.
 local header = Object(UIParent)
 local folds, closes = {}, 0

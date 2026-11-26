@@ -35,8 +35,28 @@
 --   ns.SharedChoices:SetMute(on)        the player changed it here
 --   ns.SharedChoices:Muted()            true while every sound is off
 --   ns.Muted()                          the same, for the play calls
+--
+-- Look choices (Discord asks, the owner said build it, 2026-11-26): Font
+-- (house, game or clear), Colors (warm or darker) and Fold Gem (round or
+-- bar), for every addon at once. Each starts on what players had before,
+-- so nothing changes until someone picks. They are kept in every loaded
+-- addon's own save as `lookChoices = { font, colors, fold, at }` (never
+-- rename it), the newest `at` winning, as One Window is. The font and
+-- colors are read once, the first time an addon draws after its save is
+-- in, so a change to them waits for /reload; the fold gem's pick counts
+-- from the next fold.
+--
+-- Clear is Liberation Sans (SIL Open Font License 1.1, Media/Fonts with
+-- its license beside it), which has Russian letters. It has no Chinese or
+-- Korean ones, so on those clients Clear draws the house font.
+--
+--   ns.SharedChoices:Look(kind)          what the player picked
+--   ns.SharedChoices:SetLook(kind, value)   the player picked it here
+--   ns.SharedChoices:Drawn(kind)         font or colors, as drawn now
+--   ns.SharedChoices:FontPath(house)     the font file to draw with
+--   ns.SharedChoices:Recolor(colors)     Darker, put into a palette
 
-local _, ns = ...
+local ADDON, ns = ...
 
 local Shared = {}
 ns.SharedChoices = Shared
@@ -44,7 +64,7 @@ ns.SharedChoices = Shared
 Shared.CHOICES = {
     textSize = true, windowStyle = true, effects = true,
     useTomTom = true, arrowRoute = true, arrowSize = true,
-    muteSounds = true,
+    muteSounds = true, look = true,
 }
 
 local board = rawget(_G, "BlackthornesSharedChoices")
@@ -55,6 +75,7 @@ end
 if type(board.members) ~= "table" then board.members = {} end
 if type(board.mute) ~= "table" then board.mute = { on = false, at = 0 } end
 if type(board.muteReaders) ~= "table" then board.muteReaders = {} end
+if type(board.lookSaves) ~= "table" then board.lookSaves = {} end
 Shared.board = board
 
 --- At login: what this addon's save says. The newest answer among the
@@ -128,6 +149,153 @@ function Shared:Changed(choice, value)
     end
     board.busy = false
     return count
+end
+
+--------------------------------------------------------------------------------
+-- Look choices
+--------------------------------------------------------------------------------
+
+-- Each kind's values, the first the one players had before.
+Shared.LOOKS = {
+    font = { "house", "game", "clear" },
+    colors = { "warm", "darker" },
+    fold = { "round", "bar" },
+}
+
+Shared.CLEAR_FONT = ([[Interface\AddOns\%s\Media\Fonts\LiberationSans-Regular.ttf]]):format(ADDON or "")
+
+-- Clients whose letters the clear font does not have.
+Shared.NO_CLEAR = { zhCN = true, zhTW = true, koKR = true }
+
+-- Darker (the mockup's cooler, deeper base): the same dark glass with the
+-- warm tint taken out. The gold rim, buttons and edges stay.
+Shared.DARKER = {
+    window      = { 0.035, 0.035, 0.043 },   -- #09090B
+    panel       = { 0.047, 0.047, 0.055 },   -- #0C0C0E
+    header      = { 0.075, 0.075, 0.086 },   -- #131316
+    row         = { 0.098, 0.098, 0.110 },   -- #19191C
+    rowAlt      = { 0.075, 0.075, 0.086 },   -- #131316
+    rowHover    = { 0.125, 0.125, 0.141 },   -- #202024
+    glass       = { 0.063, 0.063, 0.075 },   -- #101013
+    glassAlt    = { 0.031, 0.031, 0.039 },   -- #08080A, the well itself
+    glassHover  = { 0.098, 0.098, 0.114 },   -- #19191D
+    glassActive = { 0.122, 0.110, 0.071 },   -- #1F1C12, gold in the dark
+    well        = { 0.031, 0.031, 0.039 },   -- #08080A
+}
+
+-- This addon's save, nil until it loads.
+board.lookSaves[ADDON or "?"] = function()
+    local db = rawget(ns, "db")
+    if type(db) == "table" then return db end
+    return nil
+end
+
+local function Valid(kind, value)
+    for _, each in ipairs(Shared.LOOKS[kind] or {}) do
+        if each == value then return true end
+    end
+    return false
+end
+Shared.ValidLook = Valid
+
+local function EachSave(fn)
+    for _, read in pairs(board.lookSaves) do
+        local ok, db = pcall(read)
+        if ok and type(db) == "table" then fn(db) end
+    end
+end
+
+--- What the player picked: the newest pick any loaded save holds, else
+--- the look players had before.
+function Shared:Look(kind)
+    local best, at = nil, -1
+    EachSave(function(db)
+        local saved = rawget(db, "lookChoices")
+        if type(saved) == "table" and Valid(kind, saved[kind]) then
+            local when = tonumber(saved.at) or 0
+            if when > at then best, at = saved[kind], when end
+        end
+    end)
+    if best then return best end
+    return self.LOOKS[kind] and self.LOOKS[kind][1] or nil
+end
+
+--- The player picked `value` here: written to every loaded addon's save,
+--- and every other addon hears it so its Settings show it. Returns true
+--- when it was taken.
+function Shared:SetLook(kind, value)
+    if not Valid(kind, value) then return false end
+    local picks = {}
+    for each in pairs(self.LOOKS) do picks[each] = self:Look(each) end
+    picks[kind] = value
+    picks.at = (type(time) == "function" and time()) or 0
+    EachSave(function(db)
+        local copy = {}
+        for k, v in pairs(picks) do copy[k] = v end
+        db.lookChoices = copy
+    end)
+    self:Changed("look", kind)
+    return true
+end
+
+-- Font and colors as this addon draws them, read once its save is in.
+Shared.drawn = {}
+
+--- Font or colors as drawn now. Before this addon's save loads it answers
+--- the look players had before without keeping it.
+function Shared:Drawn(kind)
+    local kept = self.drawn[kind]
+    if kept then return kept end
+    local read = board.lookSaves[ADDON or "?"]
+    local ok, db = pcall(read)
+    if not (ok and db) then return self.LOOKS[kind] and self.LOOKS[kind][1] or nil end
+    kept = self:Look(kind)
+    self.drawn[kind] = kept
+    return kept
+end
+
+--- True when the pick differs from what is drawn, so Settings offer Reload.
+function Shared:NeedsReload(kind)
+    return self:Look(kind) ~= self:Drawn(kind)
+end
+
+--- True when this client's letters are all in the clear font.
+function Shared.ClearFits()
+    local ok, locale = pcall(function() return GetLocale and GetLocale() end)
+    return not (ok and Shared.NO_CLEAR[locale])
+end
+
+--- The font file to draw with. `house` is the font drawn before.
+function Shared:FontPath(house)
+    local pick = self:Drawn("font")
+    if pick == "game" then
+        local ok, path = pcall(function() return (ChatFontNormal:GetFont()) end)
+        if ok and type(path) == "string" and path ~= "" then return path end
+    elseif pick == "clear" and Shared.ClearFits() then
+        return Shared.CLEAR_FONT
+    end
+    return house
+end
+
+Shared.recolored = setmetatable({}, { __mode = "k" })
+
+--- Put Darker into `colors` (a Theme palette), once, in place, so tables
+--- other files kept see it too. Returns true when it changed anything.
+function Shared:Recolor(colors)
+    if type(colors) ~= "table" or self.recolored[colors] then return false end
+    if self:Drawn("colors") ~= "darker" then
+        -- Warm, kept for the session: nothing to do, ever.
+        if self.drawn.colors then self.recolored[colors] = true end
+        return false
+    end
+    for key, value in pairs(self.DARKER) do
+        local color = colors[key]
+        if type(color) == "table" then
+            color[1], color[2], color[3] = value[1], value[2], value[3]
+        end
+    end
+    self.recolored[colors] = true
+    return true
 end
 
 return Shared
