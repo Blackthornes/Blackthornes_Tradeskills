@@ -12,6 +12,9 @@
 --   5. A part that raises, or a tooltip whose item can't be read, costs its
 --      lines and never a Lua error.
 --   6. The newest copy's writer wins whatever order the copies load in.
+--   7. Lines shown only because Shift is held (`shift = true`) go after
+--      every other line, under a second gold line, so nothing above them
+--      moves when Shift goes down (2026-11-26).
 
 local failures = 0
 local function check(label, got, want)
@@ -163,6 +166,61 @@ check("only the hint", held.Write(tip2, { id = 1 }), "held")
 check("hint line", tip2.lines[3] and tip2.lines[3].left, "Hold Shift for more.")
 check("no blank row", #tip2.lines, 3)
 check("no gold line", #tip2.textures, 0)
+
+--------------------------------------------------------------------------------
+print("\nShift lines open at the bottom")
+--------------------------------------------------------------------------------
+
+_G.BlackthornesTooltipBlock = nil
+local low = Load("Blackthornes_Low")
+low:Provide("Tradeskills:price", "price", 1, function()
+  return { { "Auction Value:", "3g" }, { "Sold a Day:", "6", shift = true }, { "Costs Now:", "2g" } }
+end)
+low:Provide("Farmer:source", "source", 1, function()
+  return { { "Farm At:", "Westfall", shift = true } }
+end)
+low:Provide("Butler:advice", "advice", 1, function()
+  return { { "Butler Says:", "Keep" } }
+end)
+local tipS = FakeTooltip("FakeTipS")
+check("Shift lines: block added", low.Write(tipS, { id = 3 }), "added")
+local wantS = { "Linen Cloth", "Max Stack: 20", " ", "Auction Value:", "Costs Now:", "Butler Says:",
+  " ", "Sold a Day:", "Farm At:" }
+check("Shift lines: line count", #tipS.lines, #wantS)
+for i, left in ipairs(wantS) do check("Shift lines: line " .. i, tipS.lines[i] and tipS.lines[i].left, left) end
+check("Shift lines: two gold lines", #tipS.textures, 2)
+check("Shift lines: second gold line shown", tipS.textures[2].visible, true)
+check("Shift lines: second sits on its blank row", tipS.textures[2].points[1][2].line, 7)
+tipS:Clear()
+check("Shift lines: clear hides the second", tipS.textures[2].visible, false)
+
+-- Shift lines only: one gold line, no second blank row.
+_G.BlackthornesTooltipBlock = nil
+local only = Load("Blackthornes_OnlyShift")
+only:Provide("Farmer:source", "source", 1, function() return { { "Farm At:", "Westfall", shift = true } } end)
+local tipO = FakeTooltip("FakeTipO")
+only.Write(tipO, { id = 4 })
+check("Shift only: one blank row", #tipO.lines, 4)
+check("Shift only: line under the gold line", tipO.lines[4].left, "Farm At:")
+check("Shift only: one gold line", #tipO.textures, 1)
+
+-- A showing without Shift lines after one with them hides the second line.
+_G.BlackthornesTooltipBlock = nil
+local again = Load("Blackthornes_Again")
+local withShift = true
+again:Provide("Tradeskills:price", "price", 1, function()
+  local out = { { "Auction Value:", "3g" } }
+  if withShift then out[2] = { "Sold a Day:", "6", shift = true } end
+  return out
+end)
+local tipA = FakeTooltip("FakeTipA")
+again.Write(tipA, { id = 5 })
+check("again: second gold line on", tipA.textures[2] and tipA.textures[2].visible, true)
+withShift = false
+tipA.lines = {}
+tipA:AddLine("Linen Cloth", 1, 1, 1)
+again.Write(tipA, { id = 6 })
+check("again: second gold line hidden", tipA.textures[2].visible, false)
 
 --------------------------------------------------------------------------------
 print("\nnothing raises")

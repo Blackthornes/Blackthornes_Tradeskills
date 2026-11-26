@@ -155,6 +155,20 @@ function ItemTooltip.Shows(key)
     return ok and down == true
 end
 
+--- Is this line on Shift? Its lines that show then show only because Shift
+--- is held, so the tooltip block puts them at the bottom (2026-11-26).
+function ItemTooltip.OnShift(key)
+    local shift = ns.TooltipShift
+    if not (shift and shift.Read) then return false end
+    return shift.Read(key) and true or false
+end
+
+--- Mark lines `first` to the end as shown only while Shift is held.
+local function ShiftFrom(lines, first)
+    for i = first, #lines do lines[i].shift = true end
+end
+ItemTooltip.ShiftFrom = ShiftFrom
+
 --------------------------------------------------------------------------------
 -- Which item a tooltip is showing
 --------------------------------------------------------------------------------
@@ -431,7 +445,14 @@ end
 function ItemTooltip:BuildLinesFor(itemID, count, link)
     local lines = self:AllLinesFor(itemID, count, link)
     local valueOn = self:IsEnabled()
-    if valueOn and ItemTooltip.Shows("value") then return lines end
+    if valueOn and ItemTooltip.Shows("value") then
+        if ItemTooltip.OnShift("value") then
+            for i = 1, #lines do
+                if lines[i].value then lines[i].shift = true end
+            end
+        end
+        return lines
+    end
 
     local kept = { held = lines.held }
     for i = 1, #lines do
@@ -561,6 +582,7 @@ function ItemTooltip:AllLinesFor(itemID, count, link)
     local trend = self:TrendLine(itemID)
     if trend then
         if ItemTooltip.Shows("trend") then
+            if ItemTooltip.OnShift("trend") then trend.shift = true end
             lines[#lines + 1] = trend
         else
             lines.held = true
@@ -626,6 +648,8 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         lines.held = true
         return
     end
+    local first = #lines + 1
+    local onShift = ItemTooltip.OnShift("crate")
 
     local function Money(value) return Util.FormatMoney(value, { short = true }) end
     local best = row.best
@@ -644,12 +668,16 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         lines[#lines + 1] = { L["Each Favor"], Money(math.floor(row.perFavor + 0.5)), color = "accent" }
     end
 
+    if onShift then ShiftFrom(lines, first) end
+
     local shift = ns.TooltipShift
     if not (shift and shift.ShiftDown()) then
         lines.held = true
         self.crateHeld = true
         return
     end
+    -- The rest show only while Shift is held, whatever the crate's choice.
+    first = #lines + 1
     lines[#lines + 1] = { L["Crate on the AH"], row.cratePrice and Money(row.cratePrice) or L["none listed"] }
     if best then
         local have = favor.Owned(best.itemID)
@@ -663,6 +691,7 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         local name = favor.NameOf(next.itemID) or "?"
         lines[#lines + 1] = { L["Next Best"], L.Format("%d %s", next.count, name) }
     end
+    ShiftFrom(lines, first)
 end
 
 --- The market value now against its average over the picked period
@@ -710,8 +739,20 @@ function ItemTooltip:AddRecipeLines(lines, itemID)
         return
     end
 
-    for _, line in ipairs(recipe) do lines[#lines + 1] = line end
+    -- Copies, since the recipe book may keep its own.
+    local onShift = ItemTooltip.OnShift("recipe")
+    for _, line in ipairs(recipe) do
+        if onShift and type(line) == "table" then
+            local copy = {}
+            for k, v in pairs(line) do copy[k] = v end
+            copy.shift = true
+            line = copy
+        end
+        lines[#lines + 1] = line
+    end
+    local first = #lines + 1
     self:AddWishlistLine(lines, itemID)
+    if onShift then ShiftFrom(lines, first) end
 end
 
 --- "On your wishlist", one gold line on a recipe item that teaches a
@@ -764,7 +805,8 @@ function ItemTooltip:AddBoughtLines(lines, itemID)
         ago = "  (" .. Util.FormatAgeAgo(math.max(0, time() - bought.at)) .. ")"
     end
     lines[#lines + 1] = { L["Bought for"],
-        L.Format("%s each", Util.FormatMoney(bought.each, { short = true })) .. ago }
+        L.Format("%s each", Util.FormatMoney(bought.each, { short = true })) .. ago,
+        shift = ItemTooltip.OnShift("bought") or nil }
 
     -- One buy has no average worth saying.
     if (bought.buys or 0) < 2 then return end
@@ -777,7 +819,7 @@ function ItemTooltip:AddBoughtLines(lines, itemID)
     end
     lines[#lines + 1] = { L["Average paid"],
         Util.FormatMoney(bought.average, { short = true }) .. "  "
-            .. L.Format("(%d in %d buys)", bought.units, bought.buys) }
+            .. L.Format("(%d in %d buys)", bought.units, bought.buys), shift = true }
 end
 
 --- Which professions use a material (asked 2026-11-17, Logic/UsedIn.lua):
@@ -799,6 +841,7 @@ function ItemTooltip:AddUsedInLines(lines, itemID)
         return
     end
 
+    local first = #lines + 1
     local wrap = usedIn.Wrap
     local grey = not answer.mine or nil
     local function Add(label, text, muted)
@@ -814,6 +857,8 @@ function ItemTooltip:AddUsedInLines(lines, itemID)
         Add(" ", L["Your characters don't use it yet."], grey)
     end
 
+    if ItemTooltip.OnShift("usedin") then ShiftFrom(lines, first) end
+
     local shift = ns.TooltipShift
     if shift and not shift.ShiftDown() then
         lines.held = true
@@ -821,6 +866,8 @@ function ItemTooltip:AddUsedInLines(lines, itemID)
         return
     end
 
+    -- The rest show only while Shift is held.
+    first = #lines + 1
     if answer.mine then
         for _, profession in ipairs(answer.professions) do
             Add("   " .. profession[1], profession[2])
@@ -828,6 +875,7 @@ function ItemTooltip:AddUsedInLines(lines, itemID)
     elseif answer.example then
         Add(L["For example"], answer.example)
     end
+    ShiftFrom(lines, first)
 end
 
 --- How well it sells (Logic/Demand.lua), coloured by level. Nothing when
@@ -945,6 +993,7 @@ function ItemTooltip:AddDemandLines(lines, itemID)
         lines.held = true
         return
     end
+    local first = #lines + 1
 
     local prices = ns.Prices
 
@@ -1002,6 +1051,7 @@ function ItemTooltip:AddDemandLines(lines, itemID)
             lines[#lines + 1] = { INDENT .. L["You sold"], text }
         end
     end
+    if ItemTooltip.OnShift("sales") then ShiftFrom(lines, first) end
 end
 
 --- What one of the item is worth disenchanted, for anything that can be.
@@ -1060,6 +1110,7 @@ function ItemTooltip:AddDisenchantResults(lines, itemID)
         lines.held = true
         return
     end
+    local onShift = ItemTooltip.OnShift("disenchant") or nil
     for _, outcome in ipairs(outcomes) do
         local name = (ns.Disenchant.MaterialName and ns.Disenchant:MaterialName(outcome.itemID))
             or Util.GetItemLabel(outcome.itemID)
@@ -1075,7 +1126,7 @@ function ItemTooltip:AddDisenchantResults(lines, itemID)
         if okPrice and type(price) == "number" and price > 0 and Util.FormatMoney then
             right = right .. "   " .. L.Format("%s each", Util.FormatMoney(price, { short = true }))
         end
-        lines[#lines + 1] = { INDENT .. name, right }
+        lines[#lines + 1] = { INDENT .. name, right, shift = onShift }
     end
 end
 
@@ -1369,7 +1420,7 @@ function ItemTooltip.ToBlock(line)
     if right == "" then right = nil end
     local rightColor = (line.color and ToRGB(ns.COLORS[line.color]))
         or (line[3] and ToRGB(ns.COLORS[STALE_COLOR])) or nil
-    return { ItemTooltip.BlockLabel(line[1]), right, rightColor = rightColor }
+    return { ItemTooltip.BlockLabel(line[1]), right, rightColor = rightColor, shift = line.shift or nil }
 end
 
 --- The bag and slot a tooltip's owner is, when it is a bag slot: where
