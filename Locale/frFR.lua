@@ -3966,3 +3966,13 @@ L["Move all %d plain disenchants into your Salvager results. Do this only if you
 L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "Efface tes %d désenchantements normaux. Les valeurs viennent du tableau intégré jusqu'à ce que tu en fasses d'autres. Impossible d'annuler."
 L["Moved %d disenchants to your Salvager results."] = "%d désenchantements déplacés vers tes résultats du Salvager."
 L["Your plain disenchant results are cleared."] = "Tes résultats de désenchantement normaux sont effacés."
+
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "Trier par :"
+L["My Order"] = "Mon ordre"
+L["Gold per Hour"] = "Or par heure"
+L["Frees Bag Space"] = "Libère des places"
+L["Queue done. %d craft made."] = "File terminée. %d fabrication faite."
+L["Queue done. %d crafts made."] = "File terminée. %d fabrications faites."
+L["Queue Done Sound:"] = "Son de fin de file :"
+L["Plays a short sound when the last craft in the queue is made."] = "Joue un petit son quand la dernière fabrication de la file est faite."

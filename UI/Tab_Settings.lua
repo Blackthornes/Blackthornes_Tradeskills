@@ -2175,7 +2175,7 @@ local function Build(outer)
         local row = CreateRow(pages.sounds, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
-        end, true)
+        end, key ~= "queueDoneSound")
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.sounds[key] = box
 
@@ -2237,6 +2237,12 @@ local function Build(outer)
         L["The coins as the mail report counts up, and the fanfare on a new record."])
     SoundRow("craftDoneSound", L["Crafting Finishes:"],
         L["A chime when a run of two or more crafts is done."])
+    -- Our own chime at the queue's last craft (2026-11-26), off unless ticked.
+    SoundRow("queueDoneSound", L["Queue Done Sound:"],
+        L["Plays a short sound when the last craft in the queue is made."],
+        function()
+            if ns.Crafting then pcall(ns.PlaySoundFile, ns.Crafting.QUEUE_DONE_SOUND, "Master") end
+        end)
     SoundRow("bagsFullSound", L["Bags Are Full:"],
         L["A warning the moment your last free bag slot fills."])
     SoundRow("disenchantSound", L["Disenchant Finds:"],
@@ -3347,7 +3353,12 @@ local function Refresh()
     widgets.hideSaleChat:SetChecked(Config:Get("hideSaleChat") == true)
     widgets.goldAnHour:SetChecked(Config:Get("profitGoldAnHour") == true)
     for key, box in pairs(widgets.sounds) do
-        box:SetChecked(Config:Get(key) ~= false)
+        -- Queue Done Sound is off unless ticked; the rest on unless unticked.
+        if key == "queueDoneSound" then
+            box:SetChecked(Config:Get(key) == true)
+        else
+            box:SetChecked(Config:Get(key) ~= false)
+        end
     end
     widgets.muteSounds:SetChecked(ns.Muted and ns.Muted() or false)
     widgets.muteSoundsHere:SetChecked(ns.Muted and ns.Muted() or false)

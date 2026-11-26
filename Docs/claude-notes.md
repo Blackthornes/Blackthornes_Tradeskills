@@ -4132,3 +4132,32 @@ shows the current amount.
   tooltip's one.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
+
+## Queue Sort By and Queue Done Sound (2026-11-26)
+
+The owner said do it (ts-improve-10 mockup). The Queue tab has "Sort By:"
+chips: My Order (the default, today's order and Craft Next rules), Profit,
+Gold per Hour and Frees Bag Space. Saved account wide as `queueSortBy`
+(never rename). `Queue:Ordered(list, costs)` lays out a copy, highest
+first, a part placed with the best craft it feeds and never below it
+(`Queue.LayOut`, shared with `ApplyOrder`); what can't be told goes last.
+The stored queue and `queueOrder` never move. `Crafting:PickNext` makes
+the first ready row in that order when Sort By isn't My Order. Move Up,
+Move Down and the row arrows are off outside My Order. Gold an hour is
+`Queue:EntryEarns`: the row's profit over its own casts (no sub-craft
+time), shown in a column only while Sort By is Gold per Hour. The craft
+pane's queued list follows the same order.
+
+When the last craft of this character's on the queue is made
+(`Crafting:NoteQueueMade`, from the bag walk), the tab's footer says
+"Queue done. N crafts made." until something new is queued, and with
+"Queue Done Sound:" ticked (`queueDoneSound`, off unless ticked, never
+rename) our own `Media/Sounds/queue-done.ogg` plays through
+`ns.PlaySoundFile` (Mute All Sounds). Made by `tools/make_sounds.py
+queue-done.ogg`, which writes only the files named. Emptying the queue by
+hand resets the count and stays quiet. The run chime (`craftDoneSound`)
+skips when the queue chime just played. The taskbar flash in the mockup is
+left out: `FlashClientIcon` has not been probed on Forever. The done
+line's Post Crafted button is left out too (it needs the auction house
+open, and `UI.POST_CRAFTED_BUTTON` is off). Tested in
+`tools/test_queuesort.lua` and the Queue part of `tools/test_uifit.lua`.

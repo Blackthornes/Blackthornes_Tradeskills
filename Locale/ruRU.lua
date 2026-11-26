@@ -3968,3 +3968,13 @@ L["Move all %d plain disenchants into your Salvager results. Do this only if you
 L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "Очистить все обычные распыления (%d). Цены берутся из встроенной таблицы, пока ты не распылишь ещё. Отменить нельзя."
 L["Moved %d disenchants to your Salvager results."] = "Перенесено в итоги Salvager: %d."
 L["Your plain disenchant results are cleared."] = "Обычные итоги распыления очищены."
+
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "Сортировка:"
+L["My Order"] = "Мой порядок"
+L["Gold per Hour"] = "Золото в час"
+L["Frees Bag Space"] = "Освобождает сумки"
+L["Queue done. %d craft made."] = "Очередь готова. Создано: %d."
+L["Queue done. %d crafts made."] = "Очередь готова. Создано: %d."
+L["Queue Done Sound:"] = "Звук конца очереди:"
+L["Plays a short sound when the last craft in the queue is made."] = "Короткий звук, когда сделан последний предмет в очереди."

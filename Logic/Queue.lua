@@ -1395,8 +1395,15 @@ function Queue:ApplyOrder()
         end
     end
 
+    local ordered = Queue.LayOut(queue, pref)
+    for i, entry in ipairs(ordered) do queue[i] = entry end
+end
+
+--- The rows of `list` laid out lowest `pref[entry]` first, never a part
+--- below the craft it feeds (ApplyOrder and Ordered).
+function Queue.LayOut(list, pref)
     local left, ordered = {}, {}
-    for _, entry in ipairs(queue) do left[#left + 1] = entry end
+    for _, entry in ipairs(list) do left[#left + 1] = entry end
     while #left > 0 do
         local pick, pickAt
         for i, entry in ipairs(left) do
@@ -1414,7 +1421,111 @@ function Queue:ApplyOrder()
         end
         ordered[#ordered + 1] = table.remove(left, pick)
     end
-    for i, entry in ipairs(ordered) do queue[i] = entry end
+    return ordered
+end
+
+--------------------------------------------------------------------------------
+-- Sort By (the owner said do it, 2026-11-26, from the ts-improve-10 mockup)
+--------------------------------------------------------------------------------
+
+-- The Queue tab's Sort By: My Order (today's order, the default), Profit,
+-- Gold per Hour or Frees Bag Space. Saved account wide as `queueSortBy`
+-- (never rename it). It orders the rows shown and what Craft Next makes;
+-- the stored queue and the player's own order stay as they are. A part
+-- still never goes below the craft it feeds, and takes the place of the
+-- best craft it feeds.
+Queue.SORTS = { "mine", "profit", "perHour", "bags" }
+
+--- The Sort By picked: "mine", "profit", "perHour" or "bags".
+function Queue:SortBy()
+    local value = ns.Config and ns.Config:Get("queueSortBy")
+    for _, known in ipairs(Queue.SORTS) do
+        if value == known then return value end
+    end
+    return "mine"
+end
+
+function Queue:SetSortBy(value)
+    if not ns.Config then return end
+    local known = false
+    for _, sort in ipairs(Queue.SORTS) do
+        if value == sort then known = true end
+    end
+    ns.Config:Set("queueSortBy", known and value or "mine")
+    -- Only the drawing changes: nothing is sent or worked out again.
+    if ns.UI and ns.UI.OnQueueUpdated then ns.UI:OnQueueUpdated() end
+end
+
+--- What one queued craft earns: its profit for every time it is queued,
+--- and that over its own casting time, in copper an hour. Either is nil
+--- when it can't be told (no price, never cast, or a part).
+-- @param costs Queue:GetEntryCosts(), when the caller already has it
+function Queue:EntryEarns(entry, costs)
+    if not entry or entry.isDependency then return nil, nil end
+    local count = entry.quantity or 0
+    if count <= 0 then return nil, nil end
+    local priced = (costs or self:GetEntryCosts())[entry]
+    local profit = priced and priced.profit
+    if profit == nil and ns.Profit and ns.Profit.Analyse then
+        local analysis = ns.Profit:Analyse(entry.recipeID)
+        if analysis and analysis.priceable and analysis.profit then
+            profit = analysis.profit * count
+        end
+    end
+    if profit == nil then return nil, nil end
+    local cast = ns.CraftTime and ns.CraftTime:GetCast(entry.recipeID)
+    local perHour = (cast and cast > 0) and math.floor(profit / (cast * count) * 3600 + 0.5) or nil
+    return profit, perHour
+end
+
+--- `list` (the whole queue when nil) in the Sort By order, as a new list.
+--- My Order hands back the list as it is.
+function Queue:Ordered(list, costs)
+    list = list or self:GetAll()
+    local sort = self:SortBy()
+    if sort == "mine" or #list < 2 then return list end
+
+    local value = {}
+    if sort == "bags" then
+        for _, entry in ipairs(list) do
+            value[entry] = ns.Crafting and ns.Crafting.SlotsFreed and ns.Crafting:SlotsFreed(entry) or nil
+        end
+    else
+        costs = costs or self:GetEntryCosts()
+        for _, entry in ipairs(list) do
+            local profit, perHour = self:EntryEarns(entry, costs)
+            value[entry] = sort == "profit" and profit or perHour
+        end
+        -- A part counts as the best craft it feeds, so it comes just
+        -- before that craft.
+        for _, part in ipairs(list) do
+            if part.isDependency then
+                for _, entry in ipairs(list) do
+                    if value[entry] ~= nil and not entry.isDependency and self:Feeds(part, entry)
+                        and (value[part] == nil or value[entry] > value[part]) then
+                        value[part] = value[entry]
+                    end
+                end
+            end
+        end
+    end
+
+    -- Highest first; what can't be told goes last; ties keep their place.
+    local pref = {}
+    for i, entry in ipairs(list) do
+        local v = value[entry]
+        pref[entry] = v ~= nil and { 0, -v, i } or { 1, 0, i }
+    end
+    local rank, sorted = {}, {}
+    for i, entry in ipairs(list) do sorted[i] = entry end
+    table.sort(sorted, function(a, b)
+        local x, y = pref[a], pref[b]
+        if x[1] ~= y[1] then return x[1] < y[1] end
+        if x[2] ~= y[2] then return x[2] < y[2] end
+        return x[3] < y[3]
+    end)
+    for i, entry in ipairs(sorted) do rank[entry] = i end
+    return Queue.LayOut(list, rank)
 end
 
 --- Has the player set an order of their own?
