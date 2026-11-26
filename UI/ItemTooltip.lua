@@ -1318,6 +1318,7 @@ ItemTooltip.BLOCK_LABELS = {
     ["Disenchant value"] = "Disenchant Value:",
     ["Made for"] = "Made For:",
     ["Last posted"] = "Last Posted:",
+    ["Costs now"] = "Costs Now:",
     ["Profit now"] = "Profit Now:",
     ["Bought for"] = "Bought For:",
     ["Average paid"] = "Average Paid:",

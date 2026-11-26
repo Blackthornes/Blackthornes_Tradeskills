@@ -302,8 +302,8 @@ function CraftedCost:ProfitNowAt(itemID, price)
 end
 
 --- Lines for a tooltip, each { label, value, color }: what it cost the last
---- time you made one, what it last went up at, and what a listing now makes
---- over what one costs to make today. The first two only for an item
+--- time you made one, what it last went up at, what one costs to make today,
+--- and what a listing now makes over that. The first two only for an item
 --- crafted since this was kept; the profit for anything a recipe makes.
 --
 -- @param price  what it would list at now; looked up when not given
@@ -327,7 +327,8 @@ function CraftedCost:Lines(itemID, price)
     end
 
     -- Nothing to make it from today: no profit line, and no price looked up.
-    if not self:CostNow(itemID) then return lines end
+    local costNow = self:CostNow(itemID)
+    if not costNow then return lines end
 
     -- An estimate from the materials is not a price anyone pays, so no
     -- profit is worked out on it.
@@ -351,6 +352,10 @@ function CraftedCost:Lines(itemID, price)
 
     local profit = price and self:ProfitNowAt(itemID, price)
     if profit then
+        -- Today's cost on its own line, the one Profit Now takes off, so
+        -- the sum can be checked by eye (a player's report, 2026-11-26:
+        -- Made For under the price, yet Profit Now a loss).
+        lines[#lines + 1] = { L["Costs now"], Util.FormatMoney(costNow, { short = true }) }
         local sign = profit > 0 and "+" or (profit < 0 and "-" or "")
         lines[#lines + 1] = {
             L["Profit now"],
