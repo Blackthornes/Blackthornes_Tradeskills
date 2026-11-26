@@ -229,6 +229,19 @@ local function Say(text)
     if DisenchantLog:ChatOn() then ns.Print(text) end
 end
 
+--- A disenchant worth well over the usual: say so in chat, and on screen
+--- unless another note is showing. True when it was lucky.
+local function TellLucky(worth, usual, flash)
+    local lucky = worth and usual and usual > 0 and worth >= usual * LUCKY
+    if not lucky then return false end
+    Say(L.Format("%s That one was worth %s; about %s is usual.",
+        Colour("accent", L["Lucky:"]), Util.FormatMoney(worth), Util.FormatMoney(usual)))
+    if flash then
+        Flash(L.Format("Lucky disenchant: %s", Util.FormatMoney(worth, { noColor = true })))
+    end
+    return true
+end
+
 --- Say what that disenchant gave and what it taught.
 function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, item)
     local Disenchant = ns.Disenchant
@@ -300,14 +313,7 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
         Flash(L.Format("New find: %s", MaterialLabel(materialID)))
     end
 
-    local lucky = worth and usual and usual > 0 and worth >= usual * LUCKY
-    if lucky then
-        Say(L.Format("%s That one was worth %s; about %s is usual.",
-            Colour("accent", L["Lucky:"]), Util.FormatMoney(worth), Util.FormatMoney(usual)))
-        if #(newFinds or {}) == 0 then
-            Flash(L.Format("Lucky disenchant: %s", Util.FormatMoney(worth, { noColor = true })))
-        end
-    end
+    local lucky = TellLucky(worth, usual, #(newFinds or {}) == 0)
 
     if big then
         Chime(true)
@@ -317,7 +323,9 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
 end
 
 --- "Salvager: Dire Wand gave Greater Magic Essence x2, Soul Dust x2."
-function DisenchantLog:AnnounceSalvager(itemID, results)
+--- A lucky one says so too, with its sound (a Discord report, 2026-11-26:
+--- at a Salvager the lucky line and sound had stopped).
+function DisenchantLog:AnnounceSalvager(itemID, results, usual)
     local parts = {}
     for materialID, count in pairs(results) do
         parts[#parts + 1] = L.Format("%s x%d", MaterialLabel(materialID), count)
@@ -326,6 +334,8 @@ function DisenchantLog:AnnounceSalvager(itemID, results)
 
     Say(L.Format("%s %s gave %s.", Colour("accent", L["Salvager:"]), Util.GetItemLabel(itemID),
         table.concat(parts, ", ")))
+
+    if TellLucky(Worth(results), usual, true) then Chime(false) end
 end
 
 --- This session's running total, for the Disenchanting tab's bags list.
@@ -685,6 +695,10 @@ end
 
 --- Add one Salvager disenchant to its own record.
 function DisenchantLog:RecordSalvager(itemID, results, from, facts)
+    -- What one was expected to give here, before this one counts: the
+    -- Salvager's own value once there are enough, else the plain one.
+    local usual = ns.Disenchant:GetSalvagerValue(itemID) or ns.Disenchant:GetValue(itemID)
+
     local buys = ns.DisenchantBuys
     if buys and buys.Used then pcall(buys.Used, buys, itemID, 1) end
 
@@ -705,7 +719,7 @@ function DisenchantLog:RecordSalvager(itemID, results, from, facts)
 
     if ns.MethodProfit then pcall(ns.MethodProfit.NoteDisenchant, ns.MethodProfit, itemID, results) end
 
-    self:AnnounceSalvager(itemID, results)
+    self:AnnounceSalvager(itemID, results, usual)
     self:AddToSession(results)
 
     self.version = (self.version or 0) + 1
