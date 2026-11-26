@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.47.2
+
+Fixes and changes:
+- Snipe and Disenchant Quick Buy buy the item when you press Buy.
+- The Salvager tab shows the cut and profit from your Salvager value.
+- Various other bug fixes for Tradeskills.
+
 ## 1.47.1
 
 Fixes and changes:
