@@ -1241,6 +1241,42 @@ in either order. Without Butler nothing changes. Tested in
 `tools/test_sharedwindow.lua` (all five) and Butler's `tools/test_onewindow.lua`.
 
 
+Window per place (ts-improve-2, the owner said "Do 1-10" on the
+mockups, 2026-11-26): "At The Auction House:", "At A Profession:" and
+"At The Mailbox:" on the Windows page, each Full Window, Slim Panel,
+Round Button or Stay Closed. Saved account wide as `windowAtAuction`,
+`windowAtProfession` and `windowAtMail` (never rename them), default
+"auto". `UI.WindowAt(place)` in `UI/Main.lua` answers for every caller:
+a pick wins; "auto" reads the older keys and never writes them
+(`openAtAuction` or `openAtProfessions` false is Stay Closed,
+`craftPaneBeside` true is Slim Panel, the mailbox is Slim Panel), else
+Full Window with the one window on and Slim Panel with it off. So nothing
+changes for a player who never picks. The rows took over the Auction House
+and Professions ticks of "Open By Itself At:" (now only a Vendors tick)
+and the "Small Craft Queue:" box.
+
+- Full Window: the one window opens docked, as before
+  (`TSTabs:AtAuctionHouse`, `TSTabs:AtDock`; the mailbox through
+  `UI:ArrivedAt("mail")` on MAIL_SHOW). With the one window off,
+  Tradeskills' own window opens beside the slim panel and closes with the
+  game's window (`UI.openedFor`, `CloseWithShop`).
+- Slim Panel: the drawer, craft pane or mail list beside the game's
+  window; the one window stays shut unless already open.
+- Round Button: as Full Window, then folded (`UI.FoldSoon`; the one window
+  folds through the drawing copy's `FoldWindow`, found by
+  `SharedWindow.Drawer().ns`). Opened by the player on that visit, it
+  opens full.
+- Stay Closed: nothing comes up; `/bts` or the minimap button opens it.
+  The mail list keeps out (`QueueMailPanel.StaysClosed`) unless the one
+  window is docked at the mailbox.
+
+The drawer beside the auction house has a Full Window button left of Scan
+(`UI:PlaceFullWindowButton`, `UI:OpenFullHere`), hidden while it is the
+one window's Auction House tab; `PostPanel:IntoOne`/`OutOfOne` place it
+again. `UI/SharedWindow.lua` is unchanged (FILE_VERSION 17). Tested in
+`tools/test_onewindow.lua` (parts 9 to 12), `tools/test_uifit.lua`,
+`tools/test_auctionbar.lua` and `tools/test_queuemaildock.lua`.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
