@@ -244,7 +244,7 @@ UI:SelectTab("auctionhouse")
 SW.Left("auction")
 check("leaving hands the drawer back", not Tabs.atAuction and panel.outOf == 1)
 check("the usual tabs come back", UI.tabStrip:IsShown() and not UI.ahTabStrip:IsShown())
-check("on the tab picked before", UI.activeTab == "queue" and UI.tabStrip.selected == "queue")
+check("on the tab picked before", UI.activeTab == "queue" and UI.tabStrip.selected == "make")
 _G.AuctionHouseFrame = nil
 
 print("7. at the profession window and the mailbox")
