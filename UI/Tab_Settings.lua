@@ -1895,6 +1895,53 @@ local function Build(outer)
     ReloadUnder(textRow, widgets.textSize, widgets.textReload)
     widgets.textReload:Hide()
 
+    -- Look choices (the owner said build it, 2026-11-26): the same three
+    -- rows in every Blackthornes addon, picked once for all of them. Font
+    -- and Colors are read at login, so they wait for /reload. See
+    -- UI/SharedChoices.lua.
+    local Shared = ns.SharedChoices
+    -- "Clear" is a button's word elsewhere, so the font names carry
+    -- "##font" (as "Queue##sell"), shown without it where no translation.
+    local function FontWord(english, word)
+        if word:find("##", 1, true) then return english end
+        return word
+    end
+    widgets.look = {}
+    local LOOK_ROWS = {
+        { kind = "font", label = L["Font:"],
+          tip = L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."],
+          names = { house = FontWord("House", L["House##font"]), game = FontWord("Game", L["Game##font"]), clear = FontWord("Clear", L["Clear##font"]) } },
+        { kind = "colors", label = L["Colors:"],
+          tip = L["Warm is the look today. Darker takes the warm tint out of the glass."],
+          names = { warm = L["Warm"], darker = L["Darker"] } },
+        { kind = "fold", label = L["Fold Gem:"],
+          tip = L["What a folded window turns into: the round button, or a small bar with its title."],
+          names = { round = L["Round Button"], bar = L["Small Bar"] } },
+    }
+    for _, look in ipairs(Shared and Shared.LOOKS and LOOK_ROWS or {}) do
+        local kind = look.kind
+        local row = CreateRow(pages.all, 1, look.label, look.tip)
+        local items = {}
+        for _, value in ipairs(Shared.LOOKS[kind]) do
+            items[#items + 1] = { text = look.names[value], value = value }
+        end
+        local entry = {}
+        entry.dropdown = Widgets.CreateDropdown(row, items, function(value)
+            Shared:SetLook(kind, value)
+            if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
+        end, { width = 130 })
+        entry.dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        if kind ~= "fold" then
+            entry.reload = Widgets.CreateButton(row, L["Reload"], function()
+                if ReloadUI then ReloadUI() end
+            end, { width = 90, height = 20 })
+            FitButton(entry.reload)
+            ReloadUnder(row, entry.dropdown, entry.reload)
+            entry.reload:Hide()
+        end
+        widgets.look[kind] = entry
+    end
+
     -- A player's request (2026-10-07): the window was too big on a 4K
     -- screen. The grip below its bottom right corner does the same, to any
     -- size; one dragged to shows in the box as its percent.
@@ -3325,6 +3372,11 @@ local function Refresh()
     if Look then
         widgets.windowStyle:SetValue(Look.Wanted(), true)
         widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
+    end
+    local Shared = ns.SharedChoices
+    for kind, entry in pairs(widgets.look or {}) do
+        entry.dropdown:SetValue(Shared:Look(kind), true)
+        if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
     end
     widgets.combineButtons:SetChecked(not ns.SharedMinimap or ns.SharedMinimap.Combined())
     if widgets.rowSize then

@@ -3974,3 +3974,18 @@ L["Move all %d plain disenchants into your Salvager results. Do this only if you
 L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."] = "清除全部 %d 次普通分解。在你再分解之前，数值用内置表。这无法撤销。"
 L["Moved %d disenchants to your Salvager results."] = "已把 %d 次分解移到你的 Salvager 结果里。"
 L["Your plain disenchant results are cleared."] = "你的普通分解结果已清除。"
+
+-- Look choices (All Addons page)
+L["Font:"] = "字体："
+L["House##font"] = "默认"
+L["Game##font"] = "游戏"
+L["Clear##font"] = "清晰"
+L["Colors:"] = "颜色："
+L["Warm"] = "暖色"
+L["Darker"] = "更暗"
+L["Fold Gem:"] = "收起样式："
+L["Round Button"] = "圆形按钮"
+L["Small Bar"] = "小条"
+L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."] = "默认、游戏或清晰。清晰简洁易读，带有俄文字母。中文客户端上，清晰会显示默认字体。"
+L["Warm is the look today. Darker takes the warm tint out of the glass."] = "暖色是以前的样子。更暗会去掉玻璃的暖色调。"
+L["What a folded window turns into: the round button, or a small bar with its title."] = "折叠后的窗口会变成：圆形按钮，或带标题的小条。"

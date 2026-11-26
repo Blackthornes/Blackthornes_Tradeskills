@@ -239,9 +239,10 @@ fresh.db = {}
 assert(fresh.SharedChoices:Drawn("font") == "clear", "an addon loaded later reads the pick")
 assert(fresh.SharedChoices:FontPath("HOUSE"):find("Blackthornes_Three\\Media\\Fonts\\") ~= nil,
     "Clear is the addon's own font file")
+local oldLocale = GetLocale
 GetLocale = function() return "zhCN" end
 assert(fresh.SharedChoices:FontPath("HOUSE") == "HOUSE", "Clear has no Chinese letters: the house font")
-GetLocale = nil
+GetLocale = oldLocale
 time = oldTime
 
 -- 7. Panel gems.
