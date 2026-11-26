@@ -1166,6 +1166,8 @@ function PostPanel:IntoOne(container)
     if self.switch and self.switch.SetRoom then self.switch:SetRoom(width - 28) end
 
     frame:Show()
+    -- The Full Window button goes: this is the full window.
+    if ns.UI and ns.UI.AttachPostButton then pcall(ns.UI.AttachPostButton, ns.UI) end
     self:Refresh()
 end
 
@@ -1189,6 +1191,8 @@ function PostPanel:OutOfOne()
     ns.Collapse.Apply(frame)
     if self.switch and self.switch.SetRoom then self.switch:SetRoom(PANEL_WIDTH - 28) end
     self:PlaceBar()
+    -- On its own again: the Full Window button comes back.
+    if ns.UI and ns.UI.AttachPostButton then pcall(ns.UI.AttachPostButton, ns.UI) end
 end
 
 --- The close gem: put the drawer away until the auction house is opened

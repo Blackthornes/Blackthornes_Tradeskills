@@ -103,6 +103,7 @@ Logic\MailHaul.lua
 Logic\Demand.lua
 Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
+Logic\TidyUp.lua
 Logic\MerchantsFavor.lua
 Logic\Writs.lua
 Logic\Banks.lua
@@ -160,6 +161,8 @@ UI\ListRulesWindow.lua
 UI\KeepBox.lua
 UI\StockBox.lua
 UI\NeverMakeBox.lua
+UI\TidyUpBox.lua
+UI\ProfitCard.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\FavorsView.lua
@@ -189,6 +192,8 @@ UI\RecipeBookView.lua
 UI\YourTimeView.lua
 UI\ShuffleView.lua
 UI\AllRecipesView.lua
+Logic\Today.lua
+UI\Tab_Today.lua
 UI\Tab_Profit.lua
 UI\RoadView.lua
 UI\Tab_LevelUp.lua

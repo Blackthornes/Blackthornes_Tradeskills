@@ -8,6 +8,14 @@
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
+--- A craft's profit as the Profit tab counts it (Profit:Counted); a Profit
+--- without it (an older test stub) gives the plain sale.
+local function CountedProfit(recipeID)
+    local Profit = ns.Profit
+    if Profit.Counted then return Profit:Counted(recipeID) end
+    return Profit:Analyse(recipeID)
+end
+
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
@@ -51,6 +59,18 @@ local TIME_WIDTH = 48
 
 -- Disenchant next, left of Clear all, when Settings turns it on.
 local DE_NEXT_WIDTH = 230
+
+-- A craft's gold an hour on its row, "183g 84s" at the client's font,
+-- shown while Sort By is Gold per Hour (2026-11-26).
+local PER_HOUR_WIDTH = 74
+
+-- The Sort By chips over the list, in order (Queue.SORTS).
+local SORT_LABELS = {
+    mine = L["My Order"],
+    profit = L["Profit"],
+    perHour = L["Gold per Hour"],
+    bags = L["Frees Bag Space"],
+}
 
 local function InCombat()
     return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
@@ -147,7 +167,9 @@ local ARROW_TEXTURE = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_T
 local function ShowArrows(row, shown)
     if not row.up then return end
     local entry = row.data
-    if not shown or not entry then
+    -- Moving a row is for My Order; another Sort By sets the order itself.
+    local sorted = ns.Queue.SortBy and ns.Queue:SortBy() ~= "mine"
+    if not shown or not entry or sorted then
         row.up:Hide()
         row.down:Hide()
         return
@@ -190,6 +212,20 @@ local function CreateMoveArrow(row, way)
     return arrow
 end
 
+-- The name ends short of the time (and the gold an hour, when shown), so a
+-- long name never draws under them. Placed again only when that changes.
+local function PlaceNameAndTime(row, perHour)
+    if row.placedPerHour == perHour then return end
+    row.placedPerHour = perHour
+    local timeRight = 198 + ACTION_WIDTH + 6 + (perHour and (PER_HOUR_WIDTH + 6) or 0)
+    row.time:ClearAllPoints()
+    row.time:SetPoint("RIGHT", -timeRight, 0)
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", 42, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -(timeRight + TIME_WIDTH + 6), 0)
+    row.perHour:SetShown(perHour)
+end
+
 local function CreateCraftRow(row)
     row.up = CreateMoveArrow(row, "up")
     row.down = CreateMoveArrow(row, "down")
@@ -199,16 +235,18 @@ local function CreateCraftRow(row)
     row.icon:SetPoint("LEFT", 22, 0)
 
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 42, 0)
-    -- Ends short of the time and the action button, so a long name never
-    -- draws under them.
-    row.name:SetPoint("RIGHT", row, "RIGHT", -(198 + ACTION_WIDTH + 6 + TIME_WIDTH + 6), 0)
-
     -- How long this craft takes, its count times one cast (2026-11-12).
     -- A gold "?" until it has been cast once and the game gives no time.
     row.time = Theme.CreateLabel(row, "small", "text", "RIGHT")
-    row.time:SetPoint("RIGHT", -(198 + ACTION_WIDTH + 6), 0)
     row.time:SetWidth(TIME_WIDTH)
+
+    -- Gold an hour, between the time and the action button, while Sort By
+    -- is Gold per Hour (2026-11-26).
+    row.perHour = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    row.perHour:SetPoint("RIGHT", -(198 + ACTION_WIDTH + 6), 0)
+    row.perHour:SetWidth(PER_HOUR_WIDTH)
+    row.perHour:Hide()
+    PlaceNameAndTime(row, false)
 
     -- What the craft is for once made: AH, DE or Vendor. A click steps to
     -- the next, a right-click goes back to whichever pays most.
@@ -242,6 +280,7 @@ local function CreateCraftRow(row)
         GameTooltip:SetText(L.Format("Profit for %d", row.profitCount or 1), 1, 1, 1)
         GameTooltip:AddDoubleLine(L["Each:"], Util.FormatMoney(row.profitEach, { short = true }),
             1, 0.82, 0)
+        if ns.ProfitCard then ns.ProfitCard.AddHint(GameTooltip) end
         GameTooltip:Show()
     end)
     row.profitHover:SetScript("OnLeave", function()
@@ -391,7 +430,8 @@ end
 
 local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
-    local analysis = ns.Profit:Analyse(entry.recipeID)
+    -- The same sum as the Profit tab and the craft pane (Profit:Counted).
+    local analysis = CountedProfit(entry.recipeID)
 
     local plain = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     local label = plain
@@ -514,6 +554,20 @@ local function UpdateCraftRow(row, entry)
     else
         row.time:SetText("?")
         row.time:SetTextColor(Theme.Unpack("accent"))
+    end
+
+    -- Gold an hour: its profit over its own casting time (Queue:EntryEarns).
+    local showPerHour = ns.Queue.SortBy and ns.Queue:SortBy() == "perHour" or false
+    PlaceNameAndTime(row, showPerHour)
+    if showPerHour then
+        local _, perHour = ns.Queue:EntryEarns(entry, entryCosts)
+        if perHour then
+            row.perHour:SetText(Util.FormatMoney(perHour, { short = true }))
+            row.perHour:SetTextColor(Theme.ProfitColor(perHour))
+        else
+            row.perHour:SetText(entry.isDependency and "" or "--")
+            row.perHour:SetTextColor(Theme.Unpack("dim"))
+        end
     end
 
     local kept = entry.isDependency and entry.buyCheaper == true
@@ -1084,19 +1138,28 @@ local function UpdateDisenchantNext()
     ns.Disenchanter:Arm(button, itemID, bag, slot)
 end
 
+-- The Sort By chip picked is lit.
+local function UpdateSortChips()
+    if not widgets.sortChips then return end
+    local sort = ns.Queue.SortBy and ns.Queue:SortBy() or "mine"
+    for key, chip in pairs(widgets.sortChips) do chip:SetSelected(key == sort) end
+end
+
 local function Refresh()
     if not widgets.craftList then return end
 
     -- With "Only My Crafts:" ticked, only this character's crafts.
     local queue = ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll()
 
-    -- Copy so sorting for display never reorders the stored queue.
+    entryCosts = ns.Queue:GetEntryCosts()
+
+    -- Copy so sorting for display never reorders the stored queue. Sort By
+    -- (2026-11-26) lays the copy out; My Order keeps the queue's order.
     local entries = {}
-    for index, entry in ipairs(queue) do
+    for index, entry in ipairs(ns.Queue.Ordered and ns.Queue:Ordered(queue, entryCosts) or queue) do
         entries[index] = entry
     end
-
-    entryCosts = ns.Queue:GetEntryCosts()
+    UpdateSortChips()
     -- The row Craft Next makes next says "Next up."
     widgets.nextEntry = nil
     if #entries > 0 and not ns.Crafting:IsBusy() then
@@ -1125,7 +1188,8 @@ local function Refresh()
 
     if #entries == 0 then
         widgets.craftTime = nil
-        widgets.summaryLabel:SetText("")
+        -- "Queue done. 20 crafts made." until something new is queued.
+        widgets.summaryLabel:SetText(ns.Crafting.QueueDoneText and ns.Crafting:QueueDoneText() or "")
         -- Nothing queued, but gear may still be on the list to buy.
         widgets.shoppingLabel:SetText(#shopping > 0 and (unknown > 0
             and L.Format("To buy: %s  (+%d unpriced)", Util.FormatMoney(shoppingCost, { short = true }), unknown)
@@ -1238,9 +1302,30 @@ local function Build(container)
     deNext:Hide()
     widgets.deNext = deNext
 
+    -- Sort By (the owner said do it, 2026-11-26): the order the rows show
+    -- and Craft Next makes them in. My Order is the queue's own order.
+    local sortLabel = Theme.CreateLabel(container, "small", "muted")
+    sortLabel:SetPoint("TOPLEFT", 10, -32)
+    sortLabel:SetText(L["Sort By:"])
+    widgets.sortChips = {}
+    local chips = {}
+    for _, key in ipairs(ns.Queue.SORTS or { "mine" }) do
+        local chip = Widgets.CreateChip(container, SORT_LABELS[key] or key, function()
+            ns.Queue:SetSortBy(key)
+        end)
+        widgets.sortChips[key] = chip
+        chips[#chips + 1] = chip
+    end
+    local sortWidth = (sortLabel.GetStringWidth and sortLabel:GetStringWidth()) or 44
+    if type(sortWidth) ~= "number" or sortWidth <= 0 then sortWidth = 44 end
+    if ns.HouseKit and ns.HouseKit.RowOfChips then
+        ns.HouseKit.RowOfChips(chips, sortLabel, math.ceil(sortWidth) + 8, 4)
+    end
+    UpdateSortChips()
+
     local divider = Theme.CreateDivider(container)
-    divider:SetPoint("TOPLEFT", 8, -26)
-    divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -26)
+    divider:SetPoint("TOPLEFT", 8, -46)
+    divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -46)
     -- Kept as the list's anchor, but the heading carries the house rule now,
     -- running from the words to the Clear all button, like MATERIALS NEEDED.
     divider:Hide()
@@ -1290,16 +1375,24 @@ local function Build(container)
 
         -- Right-click: move, pause or take it off (2026-11-14).
         onClick = function(entry, _, mouseButton, row)
+            -- A click on the profit shows how one craft's profit adds up.
+            if mouseButton ~= "RightButton" and row and row.profitHover and row.profitHover:IsShown()
+                and row.profit:IsMouseOver() and ns.ProfitCard and not entry.isDependency then
+                ns.ProfitCard:ShowRecipe(entry.recipeID, _G.BlackthornesTSWindow)
+                return
+            end
             if mouseButton ~= "RightButton" or not ns.RowMenu then return end
             local Queue = ns.Queue
             local recipe = ns.Recipes:GetAny(entry.recipeID)
             local held, byPart = Queue:Held(entry)
+            -- Moving a row is for My Order; another Sort By sets the order.
+            local sorted = Queue.SortBy and Queue:SortBy() ~= "mine"
             local lines = {
-                { text = L["Move to Top"], disabled = not Queue:CanMoveTop(entry),
+                { text = L["Move to Top"], disabled = sorted or not Queue:CanMoveTop(entry),
                     run = function() Queue:Move(entry, "top") end },
-                { text = L["Move Up"], disabled = not Queue:CanMoveUp(entry),
+                { text = L["Move Up"], disabled = sorted or not Queue:CanMoveUp(entry),
                     run = function() Queue:Move(entry, "up") end },
-                { text = L["Move Down"], disabled = not Queue:CanMoveDown(entry),
+                { text = L["Move Down"], disabled = sorted or not Queue:CanMoveDown(entry),
                     run = function() Queue:Move(entry, "down") end },
             }
             -- A craft waiting only on a paused part has nothing of its own to resume.

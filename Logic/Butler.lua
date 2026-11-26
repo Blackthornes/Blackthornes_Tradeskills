@@ -73,6 +73,11 @@
 --   crafted        true for a green some recipe makes, asked only while
 --                  `youDisenchant` is true; nil otherwise.
 --
+-- Butler's Set Up Butler card (2026-11-26) reads and types the disenchanter:
+--
+--   _G.BlackthornesTS.Butler:Disenchanter()        -- the typed name, or nil
+--   _G.BlackthornesTS.Butler:SetDisenchanter(name) -- true, or false
+--
 -- Butler's right-click menu marks or unmarks one (2026-10-11):
 --
 --   _G.BlackthornesTS.Butler:SetBoughtToDisenchant(itemID, on, count)
@@ -948,6 +953,46 @@ function Butler:CraftFor(item, carried)
     return nil
 end
 
+--- Who on this account can craft an item, for Butler's restock list
+-- (2026-11-26): { recipeID, name, per, makers = { { key, name, short,
+-- playing } } }, the recipe known by the most of them, or nil. Only this
+-- account's own characters (not linked ones). Read only; never raises.
+function Butler:MakersOf(item)
+    local itemID = tonumber(item)
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local recipes = ns.Recipes
+        if not (recipes and recipes.GetCharacters) then return nil end
+        local records = Characters()
+        local byRecipe, best = {}, nil
+        for _, character in ipairs(recipes:GetCharacters()) do
+            local record = records[character.key]
+            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table" then
+                for recipeID, recipe in pairs(record.recipes) do
+                    if type(recipe) == "table" and recipe.outputItemID == itemID
+                        and not (recipes.IsDropped and recipes:IsDropped(recipe, character.key)) then
+                        local found = byRecipe[recipeID]
+                        if not found then
+                            found = { recipeID = recipeID, name = recipe.name,
+                                per = math.max(1, math.floor(tonumber(recipe.quantityMin) or 1)), makers = {} }
+                            byRecipe[recipeID] = found
+                        end
+                        found.makers[#found.makers + 1] = {
+                            key = character.key, name = character.name, short = ShortName(character.key),
+                            playing = character.isCurrent == true
+                                or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
+                        }
+                        if not best or #found.makers > #best.makers then best = found end
+                    end
+                end
+            end
+        end
+        return best
+    end)
+    if ok then return answer end
+    return nil
+end
+
 --- Queue at least `crafts` of a recipe, from Butler's Queue button.
 -- @return true, or false and why; never raises
 function Butler:QueueCraft(recipeID, crafts)
@@ -971,6 +1016,36 @@ function Butler:SetBoughtToDisenchant(itemID, on, count)
         else
             buys:Unmark(itemID)
         end
+    end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
+--- The disenchanter typed on the Mail page (its whole name, trimmed), or
+--- nil while the box is empty. For Butler's Set Up Butler card
+--- (2026-11-26), which shows only when nobody is typed there. Never raises.
+function Butler:Disenchanter()
+    local ok, typed = pcall(function() return ns.Config:Get("disenchanterName") end)
+    if not ok or type(typed) ~= "string" then return nil end
+    typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+    return typed ~= "" and typed or nil
+end
+
+--- Type the disenchanter, as the Mail page's box does (`disenchanterName`).
+--- nil or "" empties the box. The character playing is refused (one key
+--- per character). Never raises.
+-- @return true, or false (refused) and maybe an error
+function Butler:SetDisenchanter(name)
+    if name ~= nil and type(name) ~= "string" then return false end
+    local trimmed = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local mail = ns.QueueMail
+    if trimmed ~= "" and mail and mail.IsPlayingName then
+        local okPlaying, playing = pcall(mail.IsPlayingName, mail, trimmed)
+        if okPlaying and playing then return false end
+    end
+    local ok, err = pcall(function()
+        ns.Config:Set("disenchanterName", trimmed)
+        if ns.QueueMailPanel and ns.QueueMailPanel.Refresh then ns.QueueMailPanel:Refresh() end
     end)
     if not ok then return false, tostring(err) end
     return true
@@ -1004,11 +1079,37 @@ local function LiveBags()
     return nil
 end
 
+--- What each character has up for sale at the auction houses of this
+--- realm, from its last reading (Auctions:GetListings), for Butler's
+--- search (2026-11-26). A listing that has ended since (sold or back in
+--- the mail) is left out. { [key] = { [itemID] = count } } and when each
+--- was read; empty without the Auctions module.
+local function Listed()
+    local counts, at = {}, {}
+    local auctions = ns.Auctions
+    if not (auctions and auctions.GetListings) then return counts, at end
+    local ok, listings = pcall(auctions.GetListings, auctions)
+    if not ok or type(listings) ~= "table" then return counts, at end
+    for _, listing in ipairs(listings) do
+        local who, itemID, quantity = listing.who, listing.itemID, listing.quantity
+        if type(who) == "string" and type(itemID) == "number" and listing.ended ~= true
+            and type(quantity) == "number" and quantity > 0 then
+            counts[who] = counts[who] or {}
+            counts[who][itemID] = (counts[who][itemID] or 0) + quantity
+            if type(listing.readAt) == "number" and listing.readAt > (at[who] or 0) then
+                at[who] = listing.readAt
+            end
+        end
+    end
+    return counts, at
+end
+
 local function Holdings()
     local list = {}
     local records = Characters()
     local recipes = ns.Recipes
     if not (recipes and recipes.GetCharacters) then return list end
+    local listed, listedAt = Listed()
 
     for _, character in ipairs(recipes:GetCharacters()) do
         local record = records[character.key]
@@ -1032,6 +1133,9 @@ local function Holdings()
                 mailAt = Stamp(record.mailAt),
                 mailMoney = Stamp(record.mailMoney),
                 clearedAt = Stamp(record.clearedAt),
+                -- Up for sale at the auction house, as last read there.
+                auctions = Counts(listed[character.key]),
+                auctionsAt = Stamp(listedAt[character.key]),
             }
             local expiry = record.mailExpiry
             if type(expiry) == "table" then

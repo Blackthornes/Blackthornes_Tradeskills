@@ -338,6 +338,7 @@ end
 -- @return "best", "vendor", "disenchant", or nil for the sale alone
 local function PaneMethod()
     local Profit = ns.Profit
+    if Profit and Profit.CountedMethod then return Profit:CountedMethod() end
     local method = Profit and Profit.GetMethod and Profit:GetMethod() or nil
     if method == "auction" then return nil end
     return method
@@ -2794,6 +2795,8 @@ function CraftPanel:RefreshQueued()
 
     -- With "Only My Crafts:" ticked, only this character's crafts.
     local entries = wanted and (ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll())
+    -- In the Queue tab's Sort By order (2026-11-26).
+    if entries and ns.Queue.Ordered then entries = ns.Queue:Ordered(entries) end
     if not entries or #entries == 0 then
         if self.queuedFrame then self.queuedFrame:Hide() end
         if container then self:LayOutInOne(false) end
@@ -3051,6 +3054,13 @@ end
 
 --- True unless "Open at Professions:" on the Queue page is unticked.
 function CraftPanel.OpensWithProfession()
+    -- "At A Profession:" Stay Closed (UI.WindowAt in UI/Main.lua), which
+    -- an unticked openAtProfessions still reads as.
+    local UI = ns.UI
+    if UI and UI.WindowAt then
+        local ok, choice = pcall(UI.WindowAt, "profession")
+        if ok and choice then return choice ~= "closed" end
+    end
     return ns.Config:Get("openAtProfessions") ~= false
 end
 
@@ -3063,6 +3073,9 @@ function CraftPanel:OnEnable()
         -- request, 2026-11-05): the pane waits for /bts pane.
         if not CraftPanel.OpensWithProfession() then return end
         CraftPanel:Attach()
+        -- With the one window off, Full Window or Round Button opens
+        -- Tradeskills' own window too (UI:ArrivedAt).
+        if ns.UI and ns.UI.ArrivedAt then pcall(ns.UI.ArrivedAt, ns.UI, "profession") end
 
         C_Timer.After(0.5, function()
             if ns.Crafting and ns.Crafting.isTradeSkillOpen then

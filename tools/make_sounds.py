@@ -11,12 +11,19 @@ Farmer's sounds are made.
   opens after collecting mail.
 - mail-record.ogg: a short brass fanfare, when that visit beats your best
   haul or holds your best sale ever.
+- queue-done.ogg: three soft bells rising to a held chord, when the last
+  craft in the queue is made (Queue Done Sound, 2026-11-26).
+
+    python tools/make_sounds.py queue-done.ogg
+
+writes only the files named, so the others stay byte for byte.
 
 Run it again only to change them. The game needs a full restart to pick up a
 new or changed sound file.
 """
 
 import os
+import sys
 
 import numpy as np
 import soundfile as sf
@@ -72,7 +79,12 @@ def reverb(x, mix=0.25):
     return out
 
 
+WANTED = set(sys.argv[1:])
+
+
 def finish(x, name, peak_db):
+    if WANTED and name not in WANTED:
+        return
     x = x - np.mean(x)
     thresh = np.max(np.abs(x)) * 10 ** (-60 / 20)
     last = np.max(np.nonzero(np.abs(x) > thresh)) + 1
@@ -106,3 +118,11 @@ for i in range(8):
 for i, f in enumerate((2093.0, 2637.0, 3136.0, 4186.0)):
     place(buf, 0.3 * bell(f, 1.0, 0.3), 0.6 + i * 0.07)
 finish(reverb(buf, 0.4), "mail-record.ogg", -3)
+
+# The queue is done: three soft bells rising, then a warm held chord.
+buf = np.zeros(int(SR * 2.2))
+for i, f in enumerate((784.0, 987.77, 1174.66)):
+    place(buf, 0.55 * bell(f, 1.2, 0.35), i * 0.14)
+for f in (784.0, 987.77, 1174.66, 1568.0):
+    place(buf, 0.22 * bell(f, 1.8, 0.7), 0.44)
+finish(reverb(buf, 0.35), "queue-done.ogg", -6)

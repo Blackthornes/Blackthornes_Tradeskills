@@ -65,5 +65,26 @@ _G.OpenMailFrame.shown = false
 Panel:Place()
 assert(panel.point.anchor == _G.MailFrame, "without the one window, beside the mailbox")
 
+-- "At The Mailbox:" Stay Closed (ts-improve-2, 2026-11-26): nothing beside
+-- the mailbox, even with something to mail. Docked there by hand, the list
+-- still fills the one window's Mail tab.
+local choice = "closed"
+ns.UI = { WindowAt = function() return choice end }
+local hidden = 0
+function panel:Hide() hidden = hidden + 1 end
+local asked = 0
+Panel.GetDeliveries = function() asked = asked + 1; return {} end
+assert(Panel.StaysClosed(), "Stay Closed is read")
+Panel:Draw()
+assert(hidden == 1 and asked == 0, "Stay Closed: the list stays shut beside the mailbox")
+Panel.inOne = true
+Panel:Draw()
+assert(asked == 1, "in the one window it still draws")
+Panel.inOne = false
+choice = "slim"
+Panel:Draw()
+assert(asked == 2, "Slim Panel: it draws as before")
+ns.UI = nil
+
 _G.MailFrame, _G.OpenMailFrame = oldMail, oldOpen
 print("test_queuemaildock: ok")
