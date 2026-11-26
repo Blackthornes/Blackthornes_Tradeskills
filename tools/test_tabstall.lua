@@ -55,7 +55,7 @@ do
             HasFunction = function() return false end,
             Count = function(tbl) local n = 0; for _ in pairs(tbl) do n = n + 1 end; return n end,
         },
-        UI = { RegisterTab = noop },
+        UI = { tabs = {}, RegisterTab = function(self, tab) self.tabs[tab.key] = tab end },
         Config = { changes = 0 },
         Mail = { GetLedger = function() return { entries = {} } end },
         db = { characters = {} },
@@ -193,6 +193,171 @@ do
     ns.Prices.changes = ns.Prices.changes + 1
     List("")
     check("a change that names no item builds every row", built - before >= ITEMS, true)
+
+    -- Picked after such a change (a full scan), the tab built and sorted
+    -- every row in the pick's own frame (2026-11-26). Once rows are kept, it
+    -- leaves them up, builds a few a frame, and then draws the list an
+    -- at-once build gives.
+    do
+        local function Loose()
+            return setmetatable({}, { __index = function(self, key)
+                if key == "values" or key == "labels" then return {} end
+                if key == "graph" then return nil end
+                local child = Loose()
+                rawset(self, key, child)
+                return child
+            end, __call = function() return nil end })
+        end
+        local widgets = ns.UI._PricesWidgets()
+        local list = { sets = 0 }
+        function list:SetData(data) self.data = data; self.sets = self.sets + 1 end
+        widgets.list, widgets.emptyLabel, widgets.countLabel, widgets.detail = list, Loose(), Loose(), Loose()
+        ns.Util.Comma = tostring
+        ns.Prices.Count = function() return ITEMS end
+        ns.UI.activeTab = "prices"
+
+        -- A worker that does PER_FRAME items each time the test steps a frame.
+        local PER_FRAME, workers = 40, {}
+        ns.Util.NewWorker = function(opts)
+            local worker = { index = 0, running = false }
+            function worker:Start(items)
+                self.items, self.index, self.running = items, 0, true
+                workers[#workers + 1] = self
+                return self
+            end
+            function worker:Cancel() self.running = false end
+            function worker:Step()
+                local done = 0
+                while self.running and self.index < #self.items and done < PER_FRAME do
+                    self.index = self.index + 1
+                    done = done + 1
+                    opts.onItem(self.items[self.index], self.index, self)
+                end
+                if self.running and self.index >= #self.items then
+                    self.running = false
+                    if opts.onDone then opts.onDone(self) end
+                end
+            end
+            return worker
+        end
+        local function Frame()
+            local stepped = false
+            for _, worker in ipairs(workers) do
+                if worker.running then worker:Step(); stepped = true end
+            end
+            return stepped
+        end
+        local function Frames()
+            local count = 0
+            while Frame() do count = count + 1 end
+            return count
+        end
+        local Pick = ns.UI._PricesPicked
+        local function Unnamed() touchedSince = nil; ns.Prices.changes = ns.Prices.changes + 1 end
+
+        -- Enough items for several sorted runs to merge.
+        local MANY = 2600
+        for itemID = ITEMS + 1, MANY do
+            prices[itemID] = { market = (itemID * 7919) % 1000, seen = clock - (itemID % 50) }
+        end
+        prices[9100] = nil
+
+        ns.UI._PricesForget()
+        before = built
+        Pick()
+        check("the first pick draws at once, never an empty list", #(list.data or {}), MANY - 1)
+        check("every row built in that frame", built - before, MANY - 1)
+        check("with no build left under way", ns.UI._PricesBuilding(), false)
+        local firstRows = list.data
+
+        before = built
+        Pick()
+        check("picked with nothing changed, it draws the kept rows at once", built - before, 0)
+        check("and no build is under way", ns.UI._PricesBuilding(), false)
+
+        Unnamed()
+        prices[77].market = 999999
+        stars[9200] = true
+        before = built
+        local sets = list.sets
+        Pick()
+        check("picked after a full scan, the pick itself builds no row", built - before, 0)
+        check("and the rows it had stay up", list.sets == sets and list.data == firstRows, true)
+        Frame()
+        check("a frame later a few rows are built", built - before, PER_FRAME)
+        check("the old rows still up", list.sets, sets)
+        check("done over many frames", Frames() > 10, true)
+        check("every priced item built once, and the starred one with no price", built - before, MANY)
+        check("then the list is drawn", list.sets, sets + 1)
+        check("the new price on top", list.data[1].itemID, 77)
+        check("the starred one in it", #list.data, MANY)
+        local spread = Order(list.data)
+        check("the list is the one a full build gives", spread == FullBuild(), true)
+        before = built
+        Pick()
+        check("and its rows are kept for the next pick", built - before, 0)
+
+        -- Under a sort by age, with the clock ticking over while it builds:
+        -- two rows of one scan must not swap.
+        ns.UI._PricesSort("age")
+        Pick()
+        Unnamed()
+        Pick()
+        for _ = 1, 20 do Frame(); clock = clock + 1 end
+        Frames()
+        check("the same under a sort by age, as seconds pass", Order(list.data) == FullBuild(), true)
+        ns.UI._PricesSort("market")
+        Pick()
+
+        -- A click or an event redraws while a build is under way.
+        Unnamed()
+        prices[78].market = 888888
+        Pick()
+        Frame()
+        sets = list.sets
+        ns.UI.tabs.prices.refresh()
+        check("a refresh under way answers at once", list.sets, sets + 1)
+        check("with what is true now", list.data[2].itemID, 78)
+        before = built
+        check("and the build under way is dropped", Frames(), 0)
+        check("building nothing more", built - before, 0)
+
+        -- Another tab picked before the build is done.
+        Unnamed()
+        prices[79].market = 777777
+        Pick()
+        Frame()
+        sets, before = list.sets, built
+        ns.UI.activeTab = "queue"
+        Frames()
+        check("leaving the tab stops the build", built - before, 0)
+        check("and draws nothing behind the other tab", list.sets, sets)
+        ns.UI.activeTab = "prices"
+        Pick()
+        Frames()
+        check("coming back builds afresh", list.data[3].itemID, 79)
+
+        -- A price that moves while the rows build is mended in the draw.
+        Unnamed()
+        Pick()
+        Frame()
+        touchedSince = nil
+        Change(80, 666666)
+        Frames()
+        check("a price that moved while it built is in the list drawn", list.data[4].itemID, 80)
+        check("which is the one a full build gives", Order(list.data) == FullBuild(), true)
+
+        -- A search wants names and is never kept: at once, as before.
+        Pick()
+        Unnamed()
+        local found = List("item 12")
+        check("a search builds at once", #found > 0, true)
+        ns.UI._PricesList("")
+
+        stars[9200] = nil
+        widgets.list, widgets.emptyLabel, widgets.countLabel, widgets.detail = nil, nil, nil, nil
+        ns.UI.activeTab = nil
+    end
 
     ns.UI._PricesForget()
 end

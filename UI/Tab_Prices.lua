@@ -158,7 +158,7 @@ local function AnyMine(itemID)
     return Mine(itemID) ~= nil
 end
 
-local SortRows, SuffixMatcher, AddSuffixRows
+local SortRows, SuffixMatcher, AddSuffixRows, Refresh
 
 -- Picking the tab built a row for every priced item (thousands after a
 -- scan), read each one's stock history and trend, and sorted them all, in
@@ -223,7 +223,60 @@ function UI._PricesSort(sortBy) state.sortBy = sortBy end
 
 local RowBefore
 
-local function BuildList()
+-- Picked after a change that names no item (a full scan), the tab built and
+-- sorted every row in that one frame. Once rows are kept, such a pick leaves
+-- the rows it had up and builds a few a frame, then draws the list an
+-- at-once build gives. The rows are sorted in runs as they are built and the
+-- runs merged two at a time in later frames: the sort has no ties (RowBefore
+-- ends on the item), so the order is table.sort's. Any other refresh (a click, a filter, a
+-- search) still answers at once and drops a build under way, and so does the
+-- first draw, so the list never opens empty. The same way Level Up and
+-- Profit build when picked (2026-11-26).
+local SLICE_MS = 4
+local RUN = 1000
+-- A step of the build that merges two runs, where the others add an item.
+local MERGE = {}
+local spreadNext = false
+local building = nil
+-- Still on this tab's list; set once the views are made.
+local StillShowing = function() return true end
+
+local function StopBuilding()
+    local worker = building
+    building = nil
+    if worker then worker:Cancel() end
+end
+
+--- Two sorted runs as one.
+local function MergeTwo(a, b, Before)
+    local out, x, y, n = {}, 1, 1, 0
+    local countA, countB = #a, #b
+    while x <= countA and y <= countB do
+        n = n + 1
+        if Before(b[y], a[x]) then
+            out[n] = b[y]
+            y = y + 1
+        else
+            out[n] = a[x]
+            x = x + 1
+        end
+    end
+    for i = x, countA do n = n + 1; out[n] = a[i] end
+    for i = y, countB do n = n + 1; out[n] = b[i] end
+    return out
+end
+
+--- Merge the two oldest runs, the smallest there are. False with one left.
+local function MergeOnce(runs, Before)
+    if #runs < 2 then return false end
+    local a, b = table.remove(runs, 1), table.remove(runs, 1)
+    runs[#runs + 1] = MergeTwo(a, b, Before)
+    return true
+end
+
+--- The list to draw, or nil when `spread` was asked and the rows are being
+--- built over frames: they draw themselves when done.
+local function BuildList(spread)
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
     local favourites = ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {}
@@ -355,32 +408,105 @@ local function BuildList()
         end
     end
 
+    local function AddUnpriced()
+        -- A starred item with no price yet (never scanned, or pruned for age)
+        -- still shows, with dashes, so it never quietly drops off the list.
+        local added = {}
+        for itemID in pairs(favourites) do
+            if type(itemID) == "number" and not prices[itemID] then
+                Add(itemID, {})
+                added[itemID] = true
+            end
+        end
+
+        -- So does an item given its own price.
+        for itemID in pairs(mine) do
+            if type(itemID) == "number" and not prices[itemID] and not added[itemID] and AnyMine(itemID) then
+                Add(itemID, {})
+                added[itemID] = true
+            end
+        end
+
+        -- And, with Enchanting materials ticked, a material never scanned.
+        for itemID in pairs(materials or {}) do
+            if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
+        end
+    end
+
+    if spread and keepKey and keptRows.rows and type(Util.NewWorker) == "function" then
+        -- Every priced item, then a step for each merge its runs can need.
+        local ids = {}
+        for itemID in pairs(prices) do ids[#ids + 1] = itemID end
+        for _ = 1, math.floor(#ids / RUN) + 3 do ids[#ids + 1] = MERGE end
+
+        -- One clock for every row's age, so a second ticking over between
+        -- frames cannot put two rows of one scan out of order.
+        local now = time()
+        local Before = RowBefore(state.sortBy)
+        local runs = {}
+        local function CloseRun()
+            if #rows == 0 then return end
+            for _, row in ipairs(rows) do
+                local seen = row.record.seen
+                row.age = seen and now - seen or math.huge
+            end
+            table.sort(rows, Before)
+            runs[#runs + 1] = rows
+            rows = {}
+        end
+
+        local allAdded = false
+        local function Merge()
+            if not allAdded then
+                allAdded = true
+                AddUnpriced()
+                CloseRun()
+            end
+            MergeOnce(runs, Before)
+        end
+
+        local worker
+        worker = Util.NewWorker({
+            budgetMs = SLICE_MS,
+            onItem = function(itemID)
+                if building ~= worker then return end
+                -- Another tab or view was picked, or the window shut: the
+                -- next time this one shows it builds afresh.
+                if not StillShowing() then
+                    StopBuilding()
+                    return
+                end
+                if itemID == MERGE then return Merge() end
+                local record = prices[itemID]
+                if record then Add(itemID, record) end
+                if #rows >= RUN then CloseRun() end
+            end,
+            onDone = function()
+                if building ~= worker then return end
+                building = nil
+                if not StillShowing() then return end
+
+                repeat Merge() until #runs < 2
+                local sorted = runs[1] or {}
+                -- A clicked heading's order over the menu's.
+                if widgets.sorter then sorted = widgets.sorter:Sort(sorted) end
+
+                -- Kept as of when the build began. The draw then mends
+                -- whatever moved since, as it does for any kept rows: the
+                -- items named, or a fresh build at once.
+                keptRows.key, keptRows.changes, keptRows.rows = keepKey, changes, sorted
+                Refresh()
+            end,
+        })
+        building = worker
+        worker:Start(ids)
+        return nil
+    end
+
     for itemID, record in pairs(prices) do
         Add(itemID, record)
     end
-
-    -- A starred item with no price yet (never scanned, or pruned for age)
-    -- still shows, with dashes, so it never quietly drops off the list.
-    local added = {}
-    for itemID in pairs(favourites) do
-        if type(itemID) == "number" and not prices[itemID] then
-            Add(itemID, {})
-            added[itemID] = true
-        end
-    end
-
-    -- So does an item given its own price.
-    for itemID in pairs(mine) do
-        if type(itemID) == "number" and not prices[itemID] and not added[itemID] and AnyMine(itemID) then
-            Add(itemID, {})
-            added[itemID] = true
-        end
-    end
-
-    -- And, with Enchanting materials ticked, a material never scanned.
-    for itemID in pairs(materials or {}) do
-        if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
-    end
+    AddUnpriced()
 
     rows = SortRows(rows)
     if keepKey then keptRows.key, keptRows.changes, keptRows.rows = keepKey, changes, rows end
@@ -563,7 +689,6 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
-local Refresh
 local BuildMyPrice
 
 --- The favourite star: a gold star when the item is starred, a grey one when
@@ -1463,7 +1588,11 @@ end
 function Refresh()
     if not widgets.list then return end
 
-    local data = BuildList()
+    StopBuilding()
+    local spread = spreadNext
+    spreadNext = false
+    local data = BuildList(spread)
+    if not data then return end
     widgets.list:SetData(data)
 
     widgets.emptyLabel:SetShown(#data == 0)
@@ -1866,12 +1995,31 @@ local function RefreshShown()
     end
 end
 
+StillShowing = function()
+    if UI.activeTab ~= "prices" or PricesUI.view == "stats" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- The tab was picked (UI:SelectTab): a list that must be built whole again
+--- builds a few rows a frame.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(RefreshShown)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
+--- Pick the tab, and whether a build is under way (for the tests).
+function UI._PricesPicked() RefreshPicked() end
+function UI._PricesBuilding() return building ~= nil end
+
 UI:RegisterTab({
     key = "prices",
     text = L["Prices"],
     order = 8,
     build = Build,
     refresh = RefreshShown,
+    refreshPicked = RefreshPicked,
     onShow = function()
         if PricesUI.view == "stats" and StatsView() and StatsView().onShow then StatsView().onShow() end
     end,

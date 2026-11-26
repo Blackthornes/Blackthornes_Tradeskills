@@ -4455,9 +4455,27 @@ a player sees changed: every row, column and sort is as before.
 - **Five seconds after login.** `Mail:ResolveItemName` asked
   `Recipes:GetAccountWide`, which copies every recipe, for each name not
   matched. It asks `GetAccountWideOutputs`, which copies nothing.
-- Still one slow frame each: the first Disenchanting pick after the item
-  facts or the auction house's open state change (about 35 to 50 ms), and
-  a Prices pick after a change that names no item, a full scan say (about
-  45 ms). Both could build over frames the way Level Up now does.
-- Tested in `tools/test_tidyup.lua`, `test_tabstall.lua`,
+- **Disenchanting and Prices, picked when the whole list must be built
+  again** (the follow-up, same day). Once rows are kept, such a pick
+  (`refreshPicked`) leaves them up and builds over frames of 4 ms, then
+  draws the list an at-once build gives. Disenchanting walks a few scanned
+  items a frame (`Disenchant:BeginAuctionRows`, `AuctionRowStep`,
+  `FinishAuctionRows`, the steps `GetAuctionRows` takes; `BuildInSlices` in
+  the tab); a step holds `materialPrices` only while it runs. Prices builds
+  a few rows a frame, sorts them in runs of `RUN` (1000) as it goes and
+  merges two runs a step (`MERGE`, `MergeTwo`): `RowBefore` has no ties, so
+  the order is `table.sort`'s. Every row's age comes off one clock, so a
+  second ticking over between frames cannot swap two rows of one scan. Both
+  keep what they built as of when the build began, then call their plain
+  refresh, which mends what moved since the way it does for any kept list
+  (the items `Prices:TouchedSince` names, else a fresh build at once). Any
+  other refresh is at once and drops a build under way; leaving the tab
+  drops it too. The first draw of a session is still at once (about 50 ms
+  for Disenchanting and 30 ms for Prices with 7,500 priced items), so a
+  list never opens empty.
+- The timing was done in a loose fake game, not kept in the repo: every
+  file in the TOC loaded with a stand-in for each widget, the real save
+  staged read only, the login events fired, then `UI:SelectTab` timed and
+  each frame's timers and OnUpdates timed after it.
+- Tested in `tools/test_tidyup.lua`, `test_tabstall.lua`, `test_disenchantdeals.lua`,
   `test_learnfilters.lua`, `test_levelup.lua` and `test_mailslots.lua`.
