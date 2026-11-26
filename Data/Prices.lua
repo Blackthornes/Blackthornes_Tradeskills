@@ -936,6 +936,45 @@ function Prices:ListedCounts(itemID, price)
     return Prices.CountAtOrBelow(record, price), total
 end
 
+--- Equipment's auction house upgrades (the owner said build it,
+--- 2026-11-26): what was listed at this realm and side's recent scans, read
+--- only, so Equipment never scans on its own. Each item seen listed within
+--- `staleAfterSeconds` (48 hours): { price = the cheapest posting, count =
+--- how many were up, seen = when, rolls = { { link, price, count } } for
+--- random suffixes with a link of their own }. Second: when the last scan
+--- was (GetLastScan), or nil before any.
+-- Keep stable: Equipment's Logic/AuctionGear.lua reads it inside a pcall.
+function Prices:OnSale()
+    local out = {}
+    local last = self:GetLastScan()
+    if not last then return out, nil end
+    local keep = ns.Config and ns.Config.Get and ns.Config:Get("staleAfterSeconds") or 172800
+    local oldest = time() - keep
+    for itemID, record in pairs(self:GetTable()) do
+        if type(itemID) == "number" and type(record) == "table" and (tonumber(record.seen) or 0) >= oldest
+            and (tonumber(record.quantity) or 0) > 0 then
+            local price = Prices.LowestListed(record) or record.ignoredLow
+            if price then
+                local entry = { price = price, count = record.quantity, seen = record.seen }
+                if type(record.suffixes) == "table" then
+                    for suffix, roll in pairs(record.suffixes) do
+                        local cost = type(roll) == "table" and (tonumber(roll.min) or tonumber(roll.rival))
+                        if cost and (tonumber(roll.seen) or 0) >= oldest and (tonumber(roll.quantity) or 1) > 0 then
+                            local link = Prices.SuffixLink(itemID, suffix)
+                            if link then
+                                entry.rolls = entry.rolls or {}
+                                entry.rolls[#entry.rolls + 1] = { link = link, price = cost, count = roll.quantity }
+                            end
+                        end
+                    end
+                end
+                out[itemID] = entry
+            end
+        end
+    end
+    return out, last
+end
+
 -- One of TSM's or Auctionator's modules for a price, counted when used.
 local function AskOther(source, itemID, which)
     if not (source and source.GetValue) then return nil end
