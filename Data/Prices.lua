@@ -143,8 +143,116 @@ local function IsFlat(history)
     return type(history[1]) ~= "table"
 end
 
---- How many readings a history holds, in either layout.
+--------------------------------------------------------------------------------
+-- The packed layout (2026-11-26, a lighter save). The game reads the whole
+-- save at every login and /reload, and price readings were a third of it:
+-- every number on a line of its own. So at logout each history is saved as
+-- one string, "t,m,q;dt,m,q;..." (dt is the time since the reading before;
+-- an empty field is a missing value). Every number is kept, and a history
+-- is packed only when unpacking it gives back exactly what it held. A
+-- history is unpacked into a table the first time it is read or added to
+-- (Prices.History), so nothing that reads it sees the string.
+--------------------------------------------------------------------------------
+
+local function PackNumber(v)
+    if v == false then return "" end
+    if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then return nil end
+    if v == math.floor(v) and v > -1e15 and v < 1e15 then return ("%d"):format(v) end
+    return ("%.17g"):format(v)
+end
+
+--- A flat history as one string, or nil when it holds anything that can't
+--- be packed and read back the same (it then stays a table).
+function Prices.PackHistory(flat)
+    if type(flat) ~= "table" or type(flat[1]) == "table" or #flat % 3 ~= 0 then return nil end
+    local parts, lastT = {}, nil
+    for base = 0, #flat - 3, 3 do
+        local t, m, q = flat[base + 1], flat[base + 2], flat[base + 3]
+        local tt = t
+        if type(t) == "number" and lastT then tt = t - lastT end
+        local a, b, c = PackNumber(tt), PackNumber(m), PackNumber(q)
+        if not (a and b and c) then return nil end
+        parts[#parts + 1] = a .. "," .. b .. "," .. c
+        if type(t) == "number" then lastT = t end
+    end
+    return table.concat(parts, ";")
+end
+
+local function UnpackNumber(text)
+    if text == "" then return false end
+    return tonumber(text)
+end
+
+--- A packed history back as a new flat table.
+function Prices.UnpackHistory(text)
+    local flat, lastT = {}, nil
+    if type(text) ~= "string" or text == "" then return flat end
+    for a, b, c in (text .. ";"):gmatch("([^,;]*),([^,;]*),([^,;]*);") do
+        local t = UnpackNumber(a)
+        if type(t) == "number" and lastT then t = t + lastT end
+        if type(t) == "number" then lastT = t end
+        local n = #flat
+        flat[n + 1], flat[n + 2], flat[n + 3] = t, UnpackNumber(b), UnpackNumber(c)
+    end
+    return flat
+end
+
+local function SameFlat(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+--- Pack one record's history (an item's or a suffix's) in place. True when
+--- it was packed; a history that would not read back the same is left as
+--- it is.
+function Prices.PackRecord(record)
+    if type(record) ~= "table" or type(record.history) ~= "table" then return false end
+    if type(record.history[1]) == "table" then Prices.FlattenHistory(record) end
+    local text = Prices.PackHistory(record.history)
+    if not text or not SameFlat(Prices.UnpackHistory(text), record.history) then return false end
+    record.history = text
+    return true
+end
+
+--- A record's history as a table, unpacked in place the first time. Read
+--- and add to history through this or the readers below, never by index.
+function Prices.History(record)
+    if type(record) ~= "table" then return nil end
+    if type(record.history) == "string" then
+        record.history = Prices.UnpackHistory(record.history)
+    end
+    return type(record.history) == "table" and record.history or nil
+end
+
+--- Pack every history in the save, every realm's, items and suffixes. Run
+--- at logout, so the game writes the short form. Returns how many.
+function Prices:PackAll()
+    local db = ns.db
+    if type(db) ~= "table" or type(db.prices) ~= "table" then return 0 end
+    local packed = 0
+    for _, realm in pairs(db.prices) do
+        if type(realm) == "table" then
+            for _, record in pairs(realm) do
+                if type(record) == "table" then
+                    if Prices.PackRecord(record) then packed = packed + 1 end
+                    if type(record.suffixes) == "table" then
+                        for _, entry in pairs(record.suffixes) do
+                            if Prices.PackRecord(entry) then packed = packed + 1 end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return packed
+end
+
+--- How many readings a history holds, in any layout.
 function Prices.HistoryCount(history)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     if type(history) ~= "table" then return 0 end
     if IsFlat(history) then return math.floor(#history / 3) end
     return #history
@@ -163,6 +271,7 @@ end
 
 --- Reading i (1 is the oldest): t, m, q. Missing values come back nil.
 function Prices.HistoryReading(history, i)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     if type(history) ~= "table" then return nil end
     if IsFlat(history) then
         local base = (i - 1) * 3
@@ -175,6 +284,7 @@ end
 
 --- Every reading, oldest first: for i, t, m, q in Prices.EachReading(history).
 function Prices.EachReading(history)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     local count = Prices.HistoryCount(history)
     local i = 0
     return function()
@@ -188,6 +298,10 @@ end
 -- kept; an entry that is not a reading table (never written by us) is left
 -- out only if it holds nothing at all. Returns true when it changed.
 function Prices.FlattenHistory(record)
+    if type(record) == "table" and type(record.history) == "string" then
+        Prices.History(record)
+        return true
+    end
     local history = type(record) == "table" and record.history
     if type(history) ~= "table" or IsFlat(history) then return false end
     local flat = {}
@@ -208,6 +322,7 @@ end
 
 --- Adds a reading at the end and keeps the newest MAX_HISTORY (or `most`).
 function Prices.AddReading(record, t, m, q, most)
+    Prices.History(record)
     if type(record.history) ~= "table" then record.history = {} end
     Prices.FlattenHistory(record)
     local history = record.history
@@ -1667,7 +1782,7 @@ end
 -- is only ever presented as a confidence hint, never as a sale rate.
 function Prices:GetLiquidity(itemID)
     local record = self:GetTable()[itemID]
-    local history = record and record.history
+    local history = Prices.History(record)
     local count = Prices.HistoryCount(history)
     if count < 2 then
         return nil
@@ -1722,10 +1837,11 @@ Prices.SALES_MIN_SPAN = SALES_MIN_SPAN
 --- The stock's movement over the kept readings: listings gone, the average
 -- stock, and the days the readings span. nil when there is too little to go on.
 local function StockMovement(record)
-    if not record or type(record.history) ~= "table" then return nil end
+    local history = Prices.History(record)
+    if not history then return nil end
 
     local kept = {}
-    for _, t, _, q in Prices.EachReading(record.history) do
+    for _, t, _, q in Prices.EachReading(history) do
         if type(t) == "number" and type(q) == "number" and q > 0 then
             local last = kept[#kept]
             if not last or t - last.t >= SALES_GAP then
@@ -2371,6 +2487,10 @@ function Prices:OnEnable()
     self:Scrub()
     self:Prune()
     self:FlattenSoon()
+    -- Last thing before the game writes the save: the short form.
+    ns.RegisterEvent(self, "PLAYER_LOGOUT", function()
+        pcall(Prices.PackAll, Prices)
+    end)
 end
 
 --------------------------------------------------------------------------------
