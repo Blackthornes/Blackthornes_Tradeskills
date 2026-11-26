@@ -4,6 +4,14 @@
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
+--- A craft's profit as the Profit tab counts it (Profit:Counted); a Profit
+--- without it (an older test stub) gives the plain sale.
+local function CountedProfit(recipeID)
+    local Profit = ns.Profit
+    if Profit.Counted then return Profit:Counted(recipeID) end
+    return Profit:Analyse(recipeID)
+end
+
 --- One key for a realm name, the same on every account of one player.
 --- Forever's GetRealmName names the server behind the realm, and each of a
 --- player's accounts can sit on a different one ("CAMWOW US2 Realm 7 PvE"
@@ -1081,7 +1089,9 @@ function Queue:Add(recipeID, quantity, options)
     local recipe = ns.Recipes:GetAny(recipeID)
     if not recipe then return false end
 
-    local analysis = ns.Profit:Analyse(recipeID)
+    -- Counted as the Profit tab counts it (Profit:Counted), so the
+    -- snapshot matches the row's profit.
+    local analysis = CountedProfit(recipeID)
 
     -- Queued to make: whatever was on the list to buy for it now comes from
     -- the craft's own materials.
@@ -1141,7 +1151,7 @@ function Queue:AddUpToLimit(analyses)
                     if existing then
                         existing.quantity = existing.quantity + count
                     else
-                        local current = ns.Profit:Analyse(analysis.recipeID)
+                        local current = CountedProfit(analysis.recipeID)
                         queue[#queue + 1] = {
                             recipeID = analysis.recipeID,
                             quantity = count,
@@ -2014,7 +2024,7 @@ function Queue:BuildEntryCosts()
     end
 
     for _, entry in ipairs(self:GetAll()) do
-        local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
+        local analysis = not entry.isDependency and CountedProfit(entry.recipeID)
         local count = entry.quantity
         local cost
 
