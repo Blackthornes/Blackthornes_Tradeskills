@@ -550,8 +550,14 @@ function Mail:ResolveItemName(name)
     local wanted = Mail.PlainName(name) or name
     local found
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     -- Each output once.
     local outputs, seen = {}, {}
@@ -609,8 +615,14 @@ end
 function Mail:OutputSet()
     if self.outputSet then return self.outputSet end
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     local set = {}
     for _, recipe in pairs(source) do
