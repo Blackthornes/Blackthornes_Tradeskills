@@ -2344,6 +2344,30 @@ local function Build(outer)
     ns.Columns.onAnyChange = PaintHiddenCount
     PaintHiddenCount()
 
+    -- The Today tab's lines (the owner said build it, 2026-11-26): a box
+    -- for each kind, ticked unless the player turned it off
+    -- (Logic/Today.lua, todayHide_<kind>).
+    CreateSection(pages.windows, 2, L["TODAY"])
+    local todayBoxes = {
+        { kind = "mail", text = L["Sales in Mail"] },
+        { kind = "undercut", text = L["Undercut"] },
+        { kind = "ready", text = L["Ready to Make"] },
+        { kind = "soldout", text = L["Sold Out"] },
+        { kind = "profit", text = L["Crafts That Pay"] },
+        { kind = "writs", text = L["Writs"] },
+        { kind = "road", text = L["Road to 300"] },
+    }
+    widgets.todayBoxes = {}
+    for index, entry in ipairs(todayBoxes) do
+        local row = CreateRow(pages.windows, 2, index == 1 and L["Today Tab:"] or "",
+            index == 1 and L["Which lines the Today tab shows."] or nil)
+        local box = Widgets.CreateCheckbox(row, entry.text, function(checked)
+            if ns.Today then ns.Today:SetShown(entry.kind, checked) end
+        end, not ns.Today or ns.Today:IsShown(entry.kind))
+        box:SetPoint("TOPLEFT", CONTROL_X, -2)
+        widgets.todayBoxes[entry.kind] = box
+    end
+
     -- Debug, the client check and the speed check are typed only (/bts
     -- debug, probe, perf; the owner, 2026-10-23): players don't need them.
 
@@ -3280,6 +3304,9 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
+    for kind, box in pairs(widgets.todayBoxes or {}) do
+        box:SetChecked(not ns.Today or ns.Today:IsShown(kind))
+    end
     do
         local learn = Config:Get("learnStockFromSales") ~= false
         local raise = Config:Get("raiseStockOnSellOut") == true
