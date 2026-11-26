@@ -73,6 +73,11 @@
 --   crafted        true for a green some recipe makes, asked only while
 --                  `youDisenchant` is true; nil otherwise.
 --
+-- Butler's Set Up Butler card (2026-11-26) reads and types the disenchanter:
+--
+--   _G.BlackthornesTS.Butler:Disenchanter()        -- the typed name, or nil
+--   _G.BlackthornesTS.Butler:SetDisenchanter(name) -- true, or false
+--
 -- Butler's right-click menu marks or unmarks one (2026-10-11):
 --
 --   _G.BlackthornesTS.Butler:SetBoughtToDisenchant(itemID, on, count)
@@ -971,6 +976,36 @@ function Butler:SetBoughtToDisenchant(itemID, on, count)
         else
             buys:Unmark(itemID)
         end
+    end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
+--- The disenchanter typed on the Mail page (its whole name, trimmed), or
+--- nil while the box is empty. For Butler's Set Up Butler card
+--- (2026-11-26), which shows only when nobody is typed there. Never raises.
+function Butler:Disenchanter()
+    local ok, typed = pcall(function() return ns.Config:Get("disenchanterName") end)
+    if not ok or type(typed) ~= "string" then return nil end
+    typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+    return typed ~= "" and typed or nil
+end
+
+--- Type the disenchanter, as the Mail page's box does (`disenchanterName`).
+--- nil or "" empties the box. The character playing is refused (one key
+--- per character). Never raises.
+-- @return true, or false (refused) and maybe an error
+function Butler:SetDisenchanter(name)
+    if name ~= nil and type(name) ~= "string" then return false end
+    local trimmed = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local mail = ns.QueueMail
+    if trimmed ~= "" and mail and mail.IsPlayingName then
+        local okPlaying, playing = pcall(mail.IsPlayingName, mail, trimmed)
+        if okPlaying and playing then return false end
+    end
+    local ok, err = pcall(function()
+        ns.Config:Set("disenchanterName", trimmed)
+        if ns.QueueMailPanel and ns.QueueMailPanel.Refresh then ns.QueueMailPanel:Refresh() end
     end)
     if not ok then return false, tostring(err) end
     return true
