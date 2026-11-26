@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.48.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Bartering.** Vendor prices count the Bartering perk from the Legacy perks you have spent points on.
+- **Costs Now.** The item tooltip shows a Costs Now line above Profit Now.
+- **Bought stock.** Items you bought at the auction house are costed at what you paid, and their sales show under Flipped in Profit by Method.
+- **Arcane Salvager.** The Lucky line and its sound are back for lucky disenchants.
+- Various other bug fixes for Tradeskills.
+
 ## 1.47.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
