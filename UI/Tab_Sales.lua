@@ -1943,15 +1943,6 @@ ns.SalesTab = {
         state.view = "visits"
         if widgets.view then widgets.view:Select("visits") end
     end,
-    -- The Today tab's Show Them: Recent sales, or Still listed.
-    ShowView = function(view)
-        local known = false
-        for _, entry in ipairs(VIEWS) do known = known or entry.value == view end
-        if not known then return end
-        state.view = view
-        if widgets.view then widgets.view:Select(view) end
-        if widgets.list then Refresh() end
-    end,
 }
 
 UI:RegisterTab({
