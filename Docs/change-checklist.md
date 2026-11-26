@@ -223,3 +223,14 @@ Why: The gamepad cursor left our Upgrades Only box as the profession window
   closed, our code ran inside the game's close steps, and the game blocked
   its next one 14 times ("SetPreferredGamepadInteractTarget()"); the
   gamepad stopped working right (2026-11-22).
+
+## An auction house buy event
+Lines: COMMODITY_PURCHASE_(SUCCEEDED|FAILED)|COMMODITY_PRICE_(UPDATED|UNAVAILABLE)|AUCTION_HOUSE_PURCHASE_COMPLETED|AHBuys[.:]Record
+Check: These come for every buy at the auction house, the player's own
+  too. A handler acts only while its own buy waits on that answer (Snipe:
+  `OwnStackBuy`; My Lists: the row is `buying`). Nothing but AHBuys writes
+  a buy down as waiting in the mail: it hooks `PlaceBid` and
+  `ConfirmCommoditiesPurchase` itself.
+Why: Snipe took any stack buy going through as its own readied buy, and
+  wrote its own stack buys down a second time, so My Lists counted twice
+  what was on the way (2026-11-26).
