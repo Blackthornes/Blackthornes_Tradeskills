@@ -92,10 +92,45 @@ end
 -- Finding and removing
 --------------------------------------------------------------------------------
 
+-- How many characters a number takes in the save. Whole numbers are
+-- counted without making a string: a big save holds millions of them.
 local function NumberSize(v)
-    if type(v) == "number" then return #tostring(v) end
+    if type(v) == "number" then
+        if v >= 0 and v < 1e9 and v % 1 == 0 then
+            if v < 10 then return 1 end
+            if v < 100 then return 2 end
+            if v < 1000 then return 3 end
+            if v < 10000 then return 4 end
+            if v < 100000 then return 5 end
+            if v < 1000000 then return 6 end
+            if v < 10000000 then return 7 end
+            if v < 100000000 then return 8 end
+            return 9
+        end
+        return #tostring(v)
+    end
     if v == false then return 5 end
     return 3
+end
+TidyUp.NumberSize = NumberSize
+
+-- How long one frame's share of a long job may take (ms), and how many
+-- values a frame when the client has no clock to ask.
+TidyUp.FRAME_MS = 3
+TidyUp.VALUES = 400
+
+-- `Over()` says when this frame's share is spent. The clock is asked once
+-- every few values, since asking it costs more than adding a value up.
+local function Share()
+    local clock = ns.Perf and ns.Perf.Clock
+    local started = clock and clock()
+    local count = 0
+    return function()
+        count = count + 1
+        if not started then return count >= TidyUp.VALUES end
+        if count % 25 ~= 0 then return false end
+        return clock() - started >= TidyUp.FRAME_MS
+    end
 end
 
 -- A guess at what one table costs in the save, the way the game writes it.
@@ -196,8 +231,9 @@ local function TidyRecord(record, cutoff, apply, tally)
     end
 end
 
--- Find or remove, a slice of records a frame. `done(tally)` at the end;
--- with no timer (tests) it all runs at once.
+-- Find or remove, a frame's share of records at a time (FRAME_MS, and
+-- never more than BUDGET records). `done(tally)` at the end; with no timer
+-- (tests) it all runs at once.
 local function Run(days, now, apply, done)
     local tally = { readings = 0, rows = 0, bytes = 0 }
     days = TidyUp.Valid(days) or 0
@@ -211,8 +247,12 @@ local function Run(days, now, apply, done)
     local timer = type(C_Timer) == "table" and C_Timer.After
     local function Step()
         local stop = timer and math.min(#list, at + TidyUp.BUDGET) or #list
-        for i = at + 1, stop do TidyRecord(list[i], cutoff, apply, tally) end
-        at = stop
+        local Over = timer and Share()
+        while at < stop do
+            at = at + 1
+            TidyRecord(list[at], cutoff, apply, tally)
+            if Over and Over() then break end
+        end
         if at < #list then
             C_Timer.After(0, Step)
             return
@@ -241,9 +281,54 @@ end
 -- How big the save is
 --------------------------------------------------------------------------------
 
+--- Walks the save one value at a time, so it can stop anywhere and go on
+--- next frame. `Step(Over)` adds values up until `Over()` says stop;
+--- true and the size once the whole save is counted. The sum is the one
+--- Size gives: each top table from depth 1, and the price table realm by
+--- realm, each record from depth 1.
+local function Walker(db)
+    local stack = { { tbl = db, depth = 1, root = true } }
+    local total = 32
+    return function(Over)
+        while #stack > 0 do
+            local top = stack[#stack]
+            -- A table changed under the walk (a scan saved a price): its
+            -- rest is left out. The size is a guess either way.
+            local ok, key, value = pcall(next, top.tbl, top.key)
+            if not ok or key == nil then
+                stack[#stack] = nil
+            else
+                top.key = key
+                if top.root and key == "prices" and type(value) == "table" then
+                    stack[#stack + 1] = { tbl = value, realms = true }
+                elseif top.realms then
+                    if type(value) == "table" then
+                        total = total + Size(key, 99) + 8
+                        stack[#stack + 1] = { tbl = value, depth = 1 }
+                    end
+                else
+                    total = total + Size(key, 99) + 4 + LINE
+                    if type(value) ~= "table" then
+                        total = total + Size(value, 0)
+                    elseif top.depth > 6 then
+                        total = total + 16
+                    else
+                        total = total + 2
+                        stack[#stack + 1] = { tbl = value, depth = top.depth + 1 }
+                    end
+                end
+            end
+            if Over and Over() then return false end
+        end
+        return true, total
+    end
+end
+
 --- About how many bytes the account save takes, worked out over frames so
---- a big save never stalls the game. `done(bytes)` is called at the end.
---- A measure already under way is not started twice.
+--- a big save never stalls the game: each frame adds values up for
+--- FRAME_MS and no longer. `done(bytes)` is called at the end. A measure
+--- already under way is not started twice. With no timer (tests) it all
+--- runs at once.
 function TidyUp:Measure(done)
     self.waiting = self.waiting or {}
     if done then self.waiting[#self.waiting + 1] = done end
@@ -252,53 +337,13 @@ function TidyUp:Measure(done)
     if type(db) ~= "table" then return end
     self.measuring = true
 
-    -- Each top table is added up on its own, a few per frame; the big
-    -- price table goes realm by realm, a slice of records at a time.
-    local jobs = {}
-    for key, value in pairs(db) do
-        if key == "prices" and type(value) == "table" then
-            for realmKey, realm in pairs(value) do
-                if type(realm) == "table" then
-                    local ids = {}
-                    for id in pairs(realm) do ids[#ids + 1] = id end
-                    local at = 0
-                    jobs[#jobs + 1] = function()
-                        local stop = math.min(#ids, at + TidyUp.BUDGET)
-                        local size = 0
-                        if at == 0 then size = Size(realmKey, 99) + 8 end
-                        for i = at + 1, stop do
-                            local id = ids[i]
-                            if realm[id] ~= nil then size = size + Size(id, 99) + 4 + Size(realm[id], 1) + LINE end
-                        end
-                        at = stop
-                        return size, at >= #ids
-                    end
-                end
-            end
-        else
-            jobs[#jobs + 1] = function()
-                return Size(key, 99) + 4 + Size(value, 1) + LINE, true
-            end
-        end
-    end
-
-    local total, index = 32, 1
+    local Walk = Walker(db)
+    local timer = type(C_Timer) == "table" and C_Timer.After
     local function Step()
-        local spent = 0
-        while index <= #jobs and spent < 4 do
-            local size, finished = jobs[index]()
-            total = total + size
-            if finished then index = index + 1 end
-            spent = spent + 1
-        end
-        if index <= #jobs and type(C_Timer) == "table" and C_Timer.After then
+        local finished, total = Walk(timer and Share() or nil)
+        if not finished then
             C_Timer.After(0, Step)
             return
-        end
-        while index <= #jobs do
-            local size, finished = jobs[index]()
-            total = total + size
-            if finished then index = index + 1 end
         end
         TidyUp.measuring = false
         TidyUp.bytes, TidyUp.measuredAt = total, time()

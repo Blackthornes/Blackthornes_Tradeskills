@@ -222,15 +222,58 @@ while #queued > 0 do table.remove(queued, 1)() end
 check("tidied", Count(7000), 1)
 
 print("\nthe save's size")
+-- Opening Settings measured the save a whole top table at a time: frames of
+-- 200 ms on a 20 MB save (2026-11-26). Now a frame adds up a few values and
+-- stops, wherever it is.
+local function AtOnce()
+    local total = 32
+    for key, value in pairs(ns.db) do
+        if key == "prices" then
+            for realmKey, realm in pairs(value) do
+                total = total + TidyUp.Size(realmKey, 99) + 8
+                for id, record in pairs(realm) do
+                    total = total + TidyUp.Size(id, 99) + 4 + TidyUp.Size(record, 1) + 4
+                end
+            end
+        else
+            total = total + TidyUp.Size(key, 99) + 4 + TidyUp.Size(value, 1) + 4
+        end
+    end
+    return total
+end
 local size
 TidyUp.bytes = nil
+TidyUp.VALUES = 20
+-- One big table that is not prices, as the item facts are.
+ns.db.itemFacts = {}
+for id = 1, 3000 do ns.db.itemFacts[id] = { level = id, name = "Item" } end
 TidyUp:Measure(function(bytes) size = bytes end)
 check("not in one frame", size, nil)
 local frames = 0
 while #queued > 0 do table.remove(queued, 1)(); frames = frames + 1 end
 check("measured", type(size), "number")
+check("a big table takes many frames, not one", frames > 300, true)
 check("about the size of the data", size > 200, true)
+check("the same sum as adding it up at once", size, AtOnce())
 check("kept for the page", TidyUp.bytes, size)
+
+-- With a clock, a frame's share ends when its time is up.
+local asked = 0
+ns.Perf = { Clock = function() asked = asked + 1; return asked * 2 end }
+TidyUp.VALUES = 1000000
+local timed
+TidyUp:Measure(function(bytes) timed = bytes end)
+check("stops when the frame's time is up", timed, nil)
+while #queued > 0 do table.remove(queued, 1)() end
+check("and still gets the same sum", timed, size)
+ns.Perf = nil
+
+print("\nwhole numbers are counted without making a string")
+for _, n in ipairs({ 0, 7, 10, 99, 100, 12345, 999999, 1795728346, 123456789, 1e9, -5, 0.5, 46.25, 1e15 }) do
+    check(tostring(n), TidyUp.NumberSize(n), #tostring(n))
+end
+check("false", TidyUp.NumberSize(false), 5)
+
 check("reads in MB", TidyUp.FormatSize(21.4 * 1024 * 1024), "21 MB")
 check("reads small sizes", TidyUp.FormatSize(3.2 * 1024 * 1024), "3.2 MB")
 check("reads KB", TidyUp.FormatSize(2048), "2 KB")

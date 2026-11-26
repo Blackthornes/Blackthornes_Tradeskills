@@ -46,7 +46,9 @@ do
     local prices = {}
     for itemID = 1, ITEMS do prices[itemID] = { market = itemID * 10, seen = clock - itemID } end
 
-    local read, stars = 0, {}
+    -- built: rows built (each asks its age once). read: stock histories
+    -- read for How fast it moves.
+    local built, read, stars = 0, 0, {}
     local ns = {
         Theme = {}, Widgets = {},
         Util = {
@@ -61,7 +63,10 @@ do
     ns.Prices = {
         changes = 0,
         GetTable = function() return prices end,
-        GetAge = function(_, itemID) return prices[itemID] and clock - prices[itemID].seen or nil end,
+        GetAge = function(_, itemID)
+            built = built + 1
+            return prices[itemID] and clock - prices[itemID].seen or nil
+        end,
         GetSalesPerDay = function() read = read + 1; return nil end,
         GetFavourites = function() return stars end,
     }
@@ -71,13 +76,22 @@ do
     local List = ns.UI._PricesList
 
     local first = List("")
-    check("the first pick reads every item", read, ITEMS)
+    check("the first pick builds every row", built, ITEMS)
+    -- Reading every item's stock history and trend was most of the first
+    -- draw after a scan on a big auction house (2026-11-26). A row reads
+    -- its own when it is first asked: on screen, or under a sort on it.
+    check("and reads no item's stock history yet", read, 0)
+    check("a row on screen reads its own", first[1].liquidity, nil)
+    check("that one read", read, 1)
+    local _ = first[1].liquidity
+    check("and only once", read, 1)
+    read = 0
     check("and lists them all", #first, ITEMS)
     check("dearest first", first[1].itemID, ITEMS)
 
     clock = clock + 60
     local again = List("")
-    check("a second pick reads none again", read, ITEMS)
+    check("a second pick builds none again", built, ITEMS)
     check("and gives the same rows in the same order", again[1] == first[1] and again[ITEMS] == first[ITEMS], true)
     check("with their age read again", again[1].age, ITEMS + 60)
 
@@ -85,7 +99,7 @@ do
     prices[7].market = 99999
     ns.Prices.changes = ns.Prices.changes + 1
     local scanned = List("")
-    check("a new price builds the list again", read, ITEMS * 2)
+    check("a new price builds the list again", built, ITEMS * 2)
     check("and the item moves to the top", scanned[1].itemID, 7)
 
     -- A starred item with no price shows with dashes.
@@ -96,31 +110,89 @@ do
     check("a star gone without a count still drops it", #List(""), ITEMS)
 
     -- A setting (the trend's days) and the day itself.
-    local before = read
+    local before = built
     ns.Config.changes = ns.Config.changes + 1
     List("")
-    check("a changed setting builds again", read > before, true)
-    before = read
+    check("a changed setting builds again", built > before, true)
+    before = built
     clock = clock + 86400
     List("")
-    check("so does a new day", read > before, true)
+    check("so does a new day", built > before, true)
 
     -- Searching wants names, which arrive late from the game: never kept.
-    before = read
+    before = built
     List("zzz")
     List("zzz")
-    check("a search that matches nothing reads no item's history", read, before)
+    check("a search that matches nothing builds no row", built, before)
     -- Names here are "~item N" (the game has none yet), so "item 12" finds
     -- 12 and 120 to 129, and only those rows are built, each time.
     List("item 12")
     List("item 12")
-    check("a search is built each time, only the rows it finds", read, before + 11 * 2)
+    check("a search is built each time, only the rows it finds", built, before + 11 * 2)
     check("and finds them", #List("item 12"), 11)
-    read = before
 
-    before = read
+    before = built
     List("")
-    check("and the plain list after it is the kept one still", read, before)
+    check("and the plain list after it is the kept one still", built, before)
+    check("with no stock history read along the way", read, 0)
+
+    -- A search or a post at the auction house moves a price or two. When
+    -- the prices say which items changed, only those rows are made again,
+    -- each put back where the sort would put it (2026-11-26: every row was
+    -- built and sorted again on the next pick).
+    local touchedSince
+    ns.Prices.TouchedSince = function() return touchedSince end
+    local function Order(list)
+        local ids = {}
+        for index, row in ipairs(list) do ids[index] = row.itemID end
+        return table.concat(ids, ",")
+    end
+    local function Change(itemID, market)
+        if market then prices[itemID] = prices[itemID] or { seen = clock }; prices[itemID].market = market
+        else prices[itemID] = nil end
+        ns.Prices.changes = ns.Prices.changes + 1
+        touchedSince = touchedSince or {}
+        touchedSince[itemID] = true
+    end
+    local function FullBuild()
+        ns.UI._PricesForget()
+        local order = Order(List(""))
+        return order
+    end
+
+    List("")
+    before = built
+    Change(40, 123456)     -- to the top
+    Change(250, 5)         -- to the bottom
+    Change(120, 1205)      -- a tie with item 120's neighbour is settled by item
+    Change(9100, 777)      -- a new item
+    Change(33, nil)        -- one pruned away
+    local patched = List("")
+    check("a few changed prices build only their rows", built - before, 4)
+    check("the dearest is on top", patched[1].itemID, 40)
+    check("the pruned one is gone", #patched, ITEMS)
+    local patchedOrder = Order(patched)
+    check("and the list is the one a full build gives", patchedOrder == FullBuild(), true)
+
+    -- Under a sort by age the changed rows find their place too.
+    touchedSince = nil
+    ns.UI._PricesSort("age")
+    List("")
+    prices[200].seen = clock
+    Change(200, 2000)
+    prices[10].seen = clock - 5000
+    Change(10, 100)
+    patchedOrder = Order(List(""))
+    check("the same under a sort by age", patchedOrder == FullBuild(), true)
+    ns.UI._PricesSort("market")
+
+    -- A change the prices cannot name (a guild's prices, a prune) builds all.
+    touchedSince = nil
+    List("")
+    before = built
+    ns.Prices.changes = ns.Prices.changes + 1
+    List("")
+    check("a change that names no item builds every row", built - before >= ITEMS, true)
 
     ns.UI._PricesForget()
 end

@@ -716,8 +716,18 @@ end
 --- (2026-09-27: "based on DE mat's lowest posting value disregarding
 --- outliers"), since that is what the materials would sell for today.
 function Disenchant:GetMaterialPrice(itemID)
+    -- While GetAuctionRows walks every scanned item, each material is
+    -- priced once: the same few dusts, essences and shards were priced
+    -- again for every item, a third of the build.
+    local kept = self.materialPrices
+    if kept then
+        local known = kept[itemID]
+        if known ~= nil then return known or nil end
+    end
+
     local value = ns.Prices and ns.Prices:GetValue(itemID, "lowest")
-    if not value or value <= 0 then return nil end
+    if not value or value <= 0 then value = nil end
+    if kept then kept[itemID] = value or false end
     return value
 end
 
@@ -1279,17 +1289,25 @@ function Disenchant:GetAuctionRows(opts)
     local prices = ns.Prices and ns.Prices:GetTable() or {}
     local ctx = self:AuctionContext(opts)
 
-    for itemID, record in pairs(prices) do
-        local place, row = self:AuctionRow(itemID, record, ctx)
-        places[itemID] = place
-        if place == "row" then
-            rows[#rows + 1] = row
-        elseif place == "hidden" then
-            hidden = hidden + 1
-        elseif place == "pending" then
-            pending = pending + 1
+    -- Nothing prices an item while this walks, so a material's price is
+    -- kept for the walk (GetMaterialPrice) and let go after it, even when
+    -- a row raises.
+    self.materialPrices = {}
+    local ok, err = pcall(function()
+        for itemID, record in pairs(prices) do
+            local place, row = self:AuctionRow(itemID, record, ctx)
+            places[itemID] = place
+            if place == "row" then
+                rows[#rows + 1] = row
+            elseif place == "hidden" then
+                hidden = hidden + 1
+            elseif place == "pending" then
+                pending = pending + 1
+            end
         end
-    end
+    end)
+    self.materialPrices = nil
+    if not ok then error(err, 0) end
 
     table.sort(rows, BestFirst)
 

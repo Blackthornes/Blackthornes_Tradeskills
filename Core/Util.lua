@@ -304,12 +304,15 @@ end
 
 --- Existence check for a dotted API path, e.g. "C_AuctionHouse.SendBrowseQuery".
 -- Returns the value and true when every segment resolves.
+local function Index(tbl, key) return tbl[key] end
+
 function Util.ResolvePath(path)
     local current = _G
     for segment in path:gmatch("[^%.]+") do
         if type(current) ~= "table" then return nil, false end
 
-        local ok, value = pcall(function() return current[segment] end)
+        -- No function made for each segment: lists ask this for every row.
+        local ok, value = pcall(Index, current, segment)
         if not ok or value == nil then return nil, false end
 
         current = value

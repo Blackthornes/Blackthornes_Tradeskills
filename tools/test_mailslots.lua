@@ -263,6 +263,24 @@ check("the name cannot be resolved yet",        Mail:ResolveItemName("Crystal Vi
 itemNames[VIAL] = vialName
 check("and is resolved once the client has it", Mail:ResolveItemName("Crystal Vial"), VIAL)
 
+-- A name is matched against each recipe's output. The list that copies
+-- every recipe of every character was asked for each name not yet matched:
+-- a slow frame five seconds after login (2026-11-26).
+do
+    local copied, looked = 0, 0
+    local realWide, realOutputs = ns.Recipes.GetAccountWide, ns.Recipes.GetAccountWideOutputs
+    ns.Recipes.GetAccountWide = function(...) copied = copied + 1; return realWide and realWide(...) or {} end
+    ns.Recipes.GetAccountWideOutputs = function() looked = looked + 1; return { { outputItemID = VIAL } } end
+    Mail.nameCache = nil
+    itemNames[VIAL] = vialName
+    check("a crafted item is found by its name",    Mail:ResolveItemName("Crystal Vial"), VIAL)
+    Mail:ResolveItemName("No Such Thing")
+    check("from the list that copies nothing",      looked, 2)
+    check("and no recipe is copied for it",         copied, 0)
+    ns.Recipes.GetAccountWide, ns.Recipes.GetAccountWideOutputs = realWide, realOutputs
+    Mail.nameCache = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("a sale filed by name gets its item when the game loads it")

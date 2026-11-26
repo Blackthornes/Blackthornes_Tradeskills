@@ -550,8 +550,14 @@ function Mail:ResolveItemName(name)
     local wanted = Mail.PlainName(name) or name
     local found
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     -- Each output once.
     local outputs, seen = {}, {}
@@ -609,8 +615,14 @@ end
 function Mail:OutputSet()
     if self.outputSet then return self.outputSet end
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     local set = {}
     for _, recipe in pairs(source) do
@@ -1652,18 +1664,32 @@ end
 -- own. Compared as written, a stack's sale never found its mail and said "gold
 -- waiting in the mail" for a month. Only for comparing: what is saved keeps
 -- the name it was written down with.
+-- A name always comes out the same, and the Sales tab asks for every
+-- ledger entry's on each draw, so answers are kept (false for none). The
+-- few thousand names a ledger holds; started over past PLAIN_KEPT_MOST.
+local plainKept, plainCount = {}, 0
+local PLAIN_KEPT_MOST = 20000
+
+local function Strip(name)
+    local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    t = t:match("|h%[(.-)%]|h") or t
+    t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
+    t = t:gsub("^%s+", ""):gsub("%s+$", "")
+    return t
+end
+
 function Mail.PlainName(name)
     if type(name) ~= "string" then return nil end
 
-    local ok, plain = pcall(function()
-        local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-        t = t:match("|h%[(.-)%]|h") or t
-        t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
-        t = t:gsub("^%s+", ""):gsub("%s+$", "")
-        return t
-    end)
+    local known = plainKept[name]
+    if known ~= nil then return known or nil end
 
-    if not ok or type(plain) ~= "string" or plain == "" then return nil end
+    local ok, plain = pcall(Strip, name)
+    if not ok or type(plain) ~= "string" or plain == "" then plain = nil end
+
+    if plainCount >= PLAIN_KEPT_MOST then plainKept, plainCount = {}, 0 end
+    plainKept[name] = plain or false
+    plainCount = plainCount + 1
     return plain
 end
 

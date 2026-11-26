@@ -170,12 +170,17 @@ local SortRows, SuffixMatcher, AddSuffixRows
 -- since those move with the clock. Not kept while names are wanted (a
 -- search or a sort by name: names arrive late from the game) or under
 -- Reagents Only (it follows the recipes).
-local keptRows = { key = nil, rows = nil }
+--
+-- A price or two changing (a search or a post at the auction house) built
+-- and sorted every row again on the next pick. When the prices say which
+-- items changed (Prices:TouchedSince) and no heading is clicked, only those
+-- items' rows are taken out and put back in their sorted place (2026-11-26).
+local keptRows = { key = nil, changes = nil, rows = nil }
 
 local function KeptKey(prices, trendDays)
     local sorter = widgets.sorter
     return table.concat({
-        tostring(prices), tostring(ns.Prices.changes or 0),
+        tostring(prices),
         tostring(ns.Config and ns.Config.changes or 0),
         tostring(math.floor(time() / 86400)), tostring(trendDays),
         tostring(state.sortBy), tostring(sorter and sorter.key), tostring(sorter and sorter.ascending),
@@ -185,20 +190,38 @@ local function KeptKey(prices, trendDays)
     }, ":")
 end
 
---- The kept rows with what the clock moves read again, or nil.
-local function KeptRows(key)
-    if keptRows.key ~= key or not keptRows.rows then return nil end
+--- The kept rows with what the clock moves read again, or nil. An age is
+--- taken off the record the row holds, and a suffix count is counted again
+--- only once the first of its suffixes has turned too old (it walked every
+--- suffix of every item on each pick, 2026-11-26).
+local function KeptRows(key, changes)
+    if keptRows.key ~= key or keptRows.changes ~= changes or not keptRows.rows then return nil end
+    local now = time()
+    local Prices = ns.Prices
     for _, row in ipairs(keptRows.rows) do
-        row.age = ns.Prices:GetAge(row.itemID) or math.huge
-        row.suffixCount = type(row.record.suffixes) == "table" and ns.Prices.SuffixCount
-            and ns.Prices:SuffixCount(row.itemID) or 0
+        local seen = row.record.seen
+        row.age = seen and now - seen or math.huge
+        local holds = row.suffixHolds
+        if holds == nil or now > holds then
+            if type(row.record.suffixes) == "table" and Prices.SuffixCount then
+                row.suffixCount, row.suffixHolds = Prices:SuffixCount(row.itemID)
+            else
+                row.suffixCount = 0
+            end
+            if not row.suffixHolds then row.suffixHolds = math.huge end
+        end
         row.open = nil
     end
     return keptRows.rows
 end
 
 --- Forget the kept rows (for the tests, whose pretend prices change).
-function UI._PricesForget() keptRows.key, keptRows.rows = nil, nil end
+function UI._PricesForget() keptRows.key, keptRows.changes, keptRows.rows = nil, nil, nil end
+
+--- Pick the menu's sort (for the tests).
+function UI._PricesSort(sortBy) state.sortBy = sortBy end
+
+local RowBefore
 
 local function BuildList()
     local rows = {}
@@ -216,7 +239,8 @@ local function BuildList()
 
     local keepKey = not wantNames and not reagents and type(time) == "function"
         and Util and Util.Count and KeptKey(prices, trendDays) or nil
-    local kept = keepKey and KeptRows(keepKey)
+    local changes = ns.Prices.changes or 0
+    local kept = keepKey and KeptRows(keepKey, changes)
     if kept then return AddSuffixRows(kept) end
 
     -- The Enchanting tab's materials list lives here now
@@ -238,6 +262,27 @@ local function BuildList()
     local needle = state.search ~= "" and state.search:lower() or nil
     local matcher
 
+    -- How fast an item moves and its trend are read when first asked for:
+    -- by the rows on screen, or by every row under a sort on that column.
+    -- Reading both for every priced item was most of the tab's first draw
+    -- after each scan (2026-11-26).
+    local lazy = { __index = function(row, key)
+        if key == "liquidity" then
+            if rawget(row, "readMoves") then return nil end
+            rawset(row, "readMoves", true)
+            local value = ns.Prices:GetSalesPerDay(row.itemID)
+            if value ~= nil then rawset(row, "liquidity", value) end
+            return value
+        elseif key == "trend" then
+            if rawget(row, "readTrend") then return nil end
+            rawset(row, "readTrend", true)
+            local value = ns.Prices.GetTrend and (ns.Prices:GetTrend(row.itemID, trendDays)) or nil
+            if value ~= nil then rawset(row, "trend", value) end
+            return value
+        end
+        return nil
+    end }
+
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
         if materials and not materials[itemID] then return end
@@ -246,8 +291,11 @@ local function BuildList()
 
         local name = wantNames and (PlainName(itemID) or stored[itemID]
             or ("~item %d"):format(itemID)) or ""
-        local suffixCount = type(record.suffixes) == "table" and ns.Prices.SuffixCount
-            and ns.Prices:SuffixCount(itemID) or 0
+        local suffixCount, suffixHolds = 0, nil
+        if type(record.suffixes) == "table" and ns.Prices.SuffixCount then
+            suffixCount, suffixHolds = ns.Prices:SuffixCount(itemID)
+            suffixCount = suffixCount or 0
+        end
         local onlySuffixes
         if needle and not name:lower():find(needle, 1, true) then
             -- "of the Bear" finds the item, showing only its Bear.
@@ -257,19 +305,54 @@ local function BuildList()
             if not onlySuffixes then return end
         end
 
-        rows[#rows + 1] = {
+        rows[#rows + 1] = setmetatable({
             itemID = itemID,
             record = record,
             market = record.market or 0,
             min = record.min or 0,
             quantity = record.quantity or 0,
             age = ns.Prices:GetAge(itemID) or math.huge,
-            liquidity = ns.Prices:GetSalesPerDay(itemID),
-            trend = ns.Prices.GetTrend and (ns.Prices:GetTrend(itemID, trendDays)) or nil,
             name = name,
             suffixCount = suffixCount,
+            suffixHolds = suffixHolds or math.huge,
             onlySuffixes = onlySuffixes,
-        }
+        }, lazy)
+    end
+
+    -- Only a few items' prices moved since the kept rows were built: their
+    -- rows alone are made again. Each goes back where the sort would put
+    -- it, so the list is the one a full build gives.
+    local mine = ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}
+    if keepKey and keptRows.key == keepKey and keptRows.rows
+        and not (widgets.sorter and widgets.sorter.key) and ns.Prices.TouchedSince then
+        local touched = ns.Prices:TouchedSince(keptRows.changes)
+        if touched then
+            local old, stay = keptRows.rows, {}
+            for _, row in ipairs(old) do
+                if not touched[row.itemID] then stay[#stay + 1] = row end
+            end
+            for itemID in pairs(touched) do
+                local record = prices[itemID]
+                if type(itemID) == "number" and not record and (favourites[itemID] ~= nil
+                    or (mine[itemID] ~= nil and AnyMine(itemID))
+                    or (materials and materials[itemID])) then
+                    record = {}
+                end
+                if record then Add(itemID, record) end
+            end
+            local Before = RowBefore(state.sortBy)
+            for _, row in ipairs(rows) do
+                -- The first row this one goes before.
+                local low, high = 1, #stay + 1
+                while low < high do
+                    local middle = math.floor((low + high) / 2)
+                    if Before(row, stay[middle]) then high = middle else low = middle + 1 end
+                end
+                table.insert(stay, low, row)
+            end
+            keptRows.rows, keptRows.changes = stay, changes
+            return AddSuffixRows(KeptRows(keepKey, changes))
+        end
     end
 
     for itemID, record in pairs(prices) do
@@ -287,7 +370,7 @@ local function BuildList()
     end
 
     -- So does an item given its own price.
-    for itemID in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
+    for itemID in pairs(mine) do
         if type(itemID) == "number" and not prices[itemID] and not added[itemID] and AnyMine(itemID) then
             Add(itemID, {})
             added[itemID] = true
@@ -300,15 +383,13 @@ local function BuildList()
     end
 
     rows = SortRows(rows)
-    if keepKey then keptRows.key, keptRows.rows = keepKey, rows end
+    if keepKey then keptRows.key, keptRows.changes, keptRows.rows = keepKey, changes, rows end
     return AddSuffixRows(rows)
 end
 
---- Sort item rows, or one item's suffix rows, by the picked column.
-function SortRows(rows)
-    local sortBy = state.sortBy
-
-    table.sort(rows, function(a, b)
+--- Whether row a goes before row b under the menu's sort.
+function RowBefore(sortBy)
+    return function(a, b)
         -- Age sorts ascending: freshest first is the useful direction.
         if sortBy == "age" then
             -- One scan prices many items at once; ties go by item so those
@@ -330,7 +411,12 @@ function SortRows(rows)
             return (tonumber(a.suffix) or 0) < (tonumber(b.suffix) or 0)
         end
         return left > right
-    end)
+    end
+end
+
+--- Sort item rows, or one item's suffix rows, by the picked column.
+function SortRows(rows)
+    table.sort(rows, RowBefore(state.sortBy))
 
     -- A clicked heading's order over the menu's.
     if widgets.sorter then rows = widgets.sorter:Sort(rows) end
