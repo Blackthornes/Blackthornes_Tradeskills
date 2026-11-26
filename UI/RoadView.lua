@@ -18,7 +18,8 @@ local Widgets = ns.Widgets
 local Util = ns.Util
 
 local ROW_HEIGHT = 46
-local RIGHT_WIDTH = 220
+-- Room on the right of a row for its buttons: Skip, Show the Way, Queue Step.
+local RIGHT_WIDTH = 290
 local METER_HEIGHT = 6
 
 local state = { line = nil }
@@ -73,7 +74,8 @@ local Fit = RoadView.Fit
 function RoadView.PickByWidth()
     local width = 120
     if Theme.MeasureText then
-        for _, text in ipairs({ L["Lowest Cost"], L["Lowest After Selling"] }) do
+        for _, text in ipairs({ L["Lowest Cost"], L["Lowest After Selling"], L["Fewest Materials"],
+            L["No Auction House"] }) do
             local ok, measured = pcall(Theme.MeasureText, "small", text)
             if ok and type(measured) == "number" then width = math.max(width, math.ceil(measured + 30)) end
         end
@@ -100,7 +102,7 @@ local function CreateRow(row)
     row.chipBack:SetColorTexture(Theme.Unpack("glassActive"))
 
     row.range = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
-    row.range:SetPoint("TOPRIGHT", row, "TOPRIGHT", -RIGHT_WIDTH + 90, -7)
+    row.range:SetPoint("TOPRIGHT", row, "TOPRIGHT", -130, -7)
 
     row.cost = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.cost:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -6)
@@ -126,6 +128,12 @@ local function CreateRow(row)
         end
     end, { width = 80, height = 18 })
     Fit(row.way)
+
+    -- Skip (2026-11-26): off this character's road; the road picks the next.
+    row.skip = Widgets.CreateButton(row, L["Skip"], function()
+        if row.data then RoadView:SkipStep(row.data) end
+    end, { width = 44, height = 18 })
+    Fit(row.skip)
 end
 
 local function UpdateRow(row, step)
@@ -202,6 +210,22 @@ local function UpdateRow(row, step)
         row.way:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -22)
     end
     row.way:SetShown(place ~= nil and place ~= false)
+    RoadView.PlaceSkip(row, not step.done and step.kind == "craft" and step.recipeID ~= nil)
+end
+
+--- Skip sits left of the row's other buttons, on a craft step still to do.
+function RoadView.PlaceSkip(row, show)
+    local skip = row.skip
+    if not skip then return end
+    skip:ClearAllPoints()
+    skip:SetShown(show)
+    if not show then return end
+    local left = (row.way:IsShown() and row.way) or (row.queue:IsShown() and row.queue) or nil
+    if left then
+        skip:SetPoint("TOPRIGHT", left, "TOPLEFT", -6, 0)
+    else
+        skip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -22)
+    end
 end
 
 --- A step's right-click menu (the house row menu), the usual action
@@ -230,7 +254,7 @@ function RoadView:SkipStep(step)
     if ns.RoadPlan:Skip(step.recipeID, step.name) and self.built then self:Refresh() end
 end
 
---- Show All: every skipped recipe of the profession shown comes back.
+--- Bring Back: every skipped recipe of the profession shown comes back.
 function RoadView:ShowAll()
     local profession = Picked()
     if not profession then return end
@@ -238,11 +262,22 @@ function RoadView:ShowAll()
     if self.built then self:Refresh() end
 end
 
---- "1 recipe skipped." / "3 recipes skipped.", or nil with none.
-function RoadView.SkippedText(count)
-    if not count or count <= 0 then return nil end
-    if count == 1 then return L["1 recipe skipped."] end
-    return L.Format("%d recipes skipped.", count)
+--- "Skipped: Copper Chain Belt, Rough Boomstick.", or nil with none.
+-- @param names  the skipped recipes' names
+function RoadView.SkippedText(names)
+    if type(names) ~= "table" or #names == 0 then return nil end
+    return L.Format("Skipped: %s.", table.concat(names, ", "))
+end
+
+--- The names of the recipes skipped on a profession, by its Classic line.
+function RoadView.SkippedNames(line)
+    local names = {}
+    for _, recipeID in ipairs(ns.RoadPlan:SkippedOn(line)) do
+        local name = ns.RoadPlan.SkippedName and ns.RoadPlan:SkippedName(recipeID)
+        local record = ns.RecipeBook and ns.RecipeBook.Get and ns.RecipeBook:Get(recipeID)
+        names[#names + 1] = (record and record.name) or name or tostring(recipeID)
+    end
+    return names
 end
 
 --------------------------------------------------------------------------------
@@ -272,6 +307,8 @@ function RoadView:Build(view)
     widgets.pickBy = Widgets.CreateDropdown(toolbar, {
         { text = L["Lowest Cost"], value = "lowest" },
         { text = L["Lowest After Selling"], value = "real" },
+        { text = L["Fewest Materials"], value = "fewest" },
+        { text = L["No Auction House"], value = "noah" },
     }, function(value)
         RoadView:SetPickBy(value)
     end, { width = RoadView.PickByWidth() })
@@ -279,6 +316,29 @@ function RoadView:Build(view)
     widgets.pickByLabel = Theme.CreateLabel(toolbar, "small", "text", "RIGHT")
     widgets.pickByLabel:SetPoint("RIGHT", widgets.pickBy, "LEFT", -6, 0)
     widgets.pickByLabel:SetText(L["Pick By:"])
+
+    -- Stop At (2026-11-26): where the road ends. The stop picked is the
+    -- gold button; each stop has a plain and a gold one, one shown.
+    widgets.stops = {}
+    local right = widgets.pickByLabel
+    local stops = ns.RoadPlan and ns.RoadPlan.STOPS or { 150, 225, 300 }
+    for index = #stops, 1, -1 do
+        local stop = stops[index]
+        local pair = {}
+        for _, primary in ipairs({ false, true }) do
+            local button = Widgets.CreateButton(toolbar, tostring(stop), function()
+                RoadView:SetStopAt(stop)
+            end, { width = 38, height = 20, primary = primary })
+            button:SetPoint("RIGHT", right, "LEFT", index == #stops and -16 or -4, 0)
+            pair[primary and "on" or "off"] = button
+        end
+        pair.on:Hide()
+        widgets.stops[stop] = pair
+        right = pair.off
+    end
+    widgets.stopLabel = Theme.CreateLabel(toolbar, "small", "text", "RIGHT")
+    widgets.stopLabel:SetPoint("RIGHT", right, "LEFT", -6, 0)
+    widgets.stopLabel:SetText(L["Stop At:"])
 
     -- The specialty line (2026-11-25): shown only while the character has
     -- no specialty yet and the road left a specialty's recipes off.
@@ -302,7 +362,7 @@ function RoadView:Build(view)
     footer:SetPoint("BOTTOMRIGHT", -8, 8)
     footer:SetHeight(40)
 
-    widgets.queueAll = Widgets.CreateButton(footer, L["Queue All"], function()
+    widgets.queueAll = Widgets.CreateButton(footer, L.Format("Queue To %d", 300), function()
         local count = ns.RoadPlan:QueueAll(RoadView.plan)
         ns.Print(L.Format("%d queued", count))
     end, { width = 100, height = 24, primary = true })
@@ -315,8 +375,8 @@ function RoadView:Build(view)
     widgets.total = Theme.CreateLabel(footer, "normal", "text")
     widgets.total:SetPoint("LEFT", widgets.totalLabel, "RIGHT", 8, 0)
 
-    -- Show All brings back the recipes skipped on this road.
-    widgets.showAll = Widgets.CreateButton(footer, L["Show All"], function()
+    -- Bring Back brings back the recipes skipped on this road.
+    widgets.showAll = Widgets.CreateButton(footer, L["Bring Back"], function()
         RoadView:ShowAll()
     end, { width = 80, height = 24 })
     Fit(widgets.showAll)
@@ -402,6 +462,7 @@ function RoadView:Refresh()
         widgets.empty:Show()
         widgets.total:SetText("")
         widgets.saved:SetText("")
+        RoadView:ShowStops(nil)
         RoadView:PlaceShowAll(0)
         DrawMeter(nil)
         return
@@ -413,6 +474,8 @@ function RoadView:Refresh()
     widgets.pickBy:SetShown(not fishing)
     widgets.pickByLabel:SetShown(not fishing)
     widgets.queueAll:SetShown(not fishing)
+    RoadView:ShowStops(not fishing and ns.RoadPlan.StopFor(profession.skill, ns.RoadPlan.StopAt()) or nil,
+        profession.skill)
 
     local plan = ns.RoadPlan:Get(profession, function()
         if widgets.list and widgets.list:IsVisible() then RoadView:Refresh() end
@@ -441,13 +504,17 @@ function RoadView:Refresh()
     end
 
     if plan.fishing then
+        widgets.totalLabel:SetText(L["To 300:"])
         widgets.total:SetText(RoadView.FishFoot(plan))
     else
-        Theme.SetMoneyText(widgets.total, plan.total or 0, { short = true })
+        widgets.totalLabel:SetText(RoadView.TotalText(plan))
+        widgets.total:SetText("")
+        widgets.queueAll:SetText(L.Format("Queue To %d", plan.stop or 300))
+        Fit(widgets.queueAll)
     end
-    local skipped = #ns.RoadPlan:SkippedOn(profession.line)
-    widgets.saved:SetText(RoadView.FootText(plan, skipped))
-    self:PlaceShowAll(skipped)
+    local names = RoadView.SkippedNames(profession.line)
+    widgets.saved:SetText(RoadView.FootText(plan, names))
+    self:PlaceShowAll(#names)
 end
 
 --- The specialty line under the header, or none; the meter moves down
@@ -479,6 +546,33 @@ function RoadView:PlaceShowAll(skipped)
     end
 end
 
+--- The footer: "To 225: 14 crafts, about 4g 21s".
+function RoadView.TotalText(plan)
+    local money = Util.FormatMoney(plan.total or 0, { short = true })
+    if plan.crafts == 1 then return L.Format("To %d: 1 craft, about %s", plan.stop or 300, money) end
+    return L.Format("To %d: %d crafts, about %s", plan.stop or 300, plan.crafts or 0, money)
+end
+
+--- Stop At's buttons: the stop the road walks to in gold, a stop the skill
+--- has passed greyed out. nil hides them (fishing, no profession).
+function RoadView:ShowStops(stop, skill)
+    if not widgets.stops then return end
+    widgets.stopLabel:SetShown(stop ~= nil)
+    for value, pair in pairs(widgets.stops) do
+        local picked = stop ~= nil and value == stop
+        pair.on:SetShown(picked)
+        pair.off:SetShown(stop ~= nil and not picked)
+        if pair.off.SetEnabledState then pair.off:SetEnabledState((skill or 0) < value) end
+    end
+end
+
+--- Stop At: save the choice and work the road out again.
+function RoadView:SetStopAt(value)
+    value = tonumber(value)
+    if ns.Config then ns.Config:Set("roadStopAt", value) end
+    if self.built then self:Refresh() end
+end
+
 --- Fishing's footer: "about 4 hours of fishing, 1g 25s".
 function RoadView.FishFoot(plan)
     local hours = ns.RoadPlan.FishHours(plan)
@@ -508,7 +602,8 @@ end
 
 --- Pick By: save the choice and work the road out again.
 function RoadView:SetPickBy(value)
-    value = value == "real" and "real" or "lowest"
+    local known = ns.RoadPlan and ns.RoadPlan.PICK_BY or { lowest = true, real = true }
+    value = known[value] and value or "lowest"
     if ns.Config then ns.Config:Set("roadPickBy", value) end
     if self.built then self:Refresh() end
 end

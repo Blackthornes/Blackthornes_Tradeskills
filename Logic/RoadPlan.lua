@@ -26,6 +26,9 @@
 -- ranks recipes by what their materials cost, as before; "real" takes off
 -- what one craft sells back for (LevelUp:GetReturns), so a craft that pays
 -- some back can win. Kept account wide in `roadPickBy` (never rename it).
+-- Since 2026-11-26 also "fewest" (fewest materials a point) and "noah" (no
+-- auction house), and Stop At (`roadStopAt`): the road ends at 150, 225 or
+-- 300. Skips are kept per character (`roadSkippedBy`).
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
