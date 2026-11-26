@@ -398,6 +398,29 @@ check("chat starts with Salvager:", Said("Salvager:.-gave .-x2", p1 + 1) ~= nil
     and Said("Disenchanted", p1 + 1) == nil)
 check("it still counts toward this session", (Log:GetSession()) > 0)
 
+-- A Discord report, 2026-11-26: at a Salvager the lucky line and its sound
+-- had stopped. One worth well over the usual is still lucky there, on the
+-- plain value until there are enough Salvager disenchants to judge by.
+local function Copy(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do out[k] = Copy(v) end
+    return out
+end
+local salvagerSaved = Copy(ns.db.salvagerLog)
+local soundsBefore, flashedBefore = #sounds, #flashed
+p1 = #printed
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 }, { SMALL_GLIMMERING, 4 } } })
+check("a lucky Salvager disenchant says so in chat", Said("Lucky:", p1 + 1) ~= nil)
+check("and on screen", #flashed == flashedBefore + 1 and flashed[#flashed]:find("Lucky disenchant") ~= nil)
+check("with the soft sound", #sounds == soundsBefore + 1 and sounds[#sounds] == 31578)
+p1 = #printed
+soundsBefore = #sounds
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+check("an ordinary Salvager disenchant is not lucky", Said("Lucky:", p1 + 1) == nil
+    and #sounds == soundsBefore)
+ns.db.salvagerLog = salvagerSaved -- the counts below start from one
+
 local plainValue = Disenchant:GetValue(1004)
 local outcomes, sFacts = Disenchant:GetSalvagerOutcomes(1004)
 check("with one, there are too few to show chances", outcomes == nil and sFacts.need == 4
