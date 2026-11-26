@@ -3551,7 +3551,8 @@ local function Refresh()
         if ns.TidyUp.bytes and time() - (ns.TidyUp.measuredAt or 0) < 600 then
             ShowSize(ns.TidyUp.bytes)
         else
-            widgets.saveSize:SetText("...")
+            -- The last size stays up while it is measured again.
+            if ns.TidyUp.bytes then ShowSize(ns.TidyUp.bytes) else widgets.saveSize:SetText("...") end
             ns.TidyUp:Measure(ShowSize)
         end
     end
