@@ -1101,6 +1101,15 @@ function UI:Show()
     local last = ns.db and ns.db.lastTab
     last = last and (UI.MOVED_TABS[last] or last)
     if last and not self.tabs[last] then last = nil end
+    -- The Today tab first, the first time the window is opened by hand in
+    -- a session (the owner said build it, 2026-11-26). Docked at the
+    -- auction house, a profession or the mailbox, that place's own tab
+    -- still opens; later openings keep the tab the player left.
+    if opening and not self.todayOpened and self.tabs.today
+        and not TSTabs.atAuction and not TSTabs.atDock then
+        self.todayOpened = true
+        self.activeTab = "today"
+    end
     self:SelectTab(self.activeTab or last or self.tabOrder[1].key)
     self:UpdateHeader()
 
@@ -1168,6 +1177,14 @@ function UI:FindAuctionFrame()
             if ok then return frame, name end
         end
     end
+end
+
+--- True while the game's auction window is open.
+function UI:AtAuctionHouse()
+    local frame = self:FindAuctionFrame()
+    if not frame then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown == true
 end
 
 --- The strip of addon controls at the top of the sell list.
