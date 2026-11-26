@@ -162,6 +162,7 @@ UI\KeepBox.lua
 UI\StockBox.lua
 UI\NeverMakeBox.lua
 UI\TidyUpBox.lua
+UI\ProfitCard.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\FavorsView.lua
