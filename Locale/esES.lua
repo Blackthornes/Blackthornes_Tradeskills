@@ -3981,7 +3981,6 @@ L["Your plain disenchant results are cleared."] = "Tus resultados de desencantar
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Oro hoy:"
 L["Up For Sale:"] = "En venta:"
-L["Sold Today:"] = "Vendido hoy:"
 L["Prices Read:"] = "Precios leídos:"
 L["Do Next"] = "Lo siguiente"
 L["1 sale is waiting in your mail"] = "1 venta te espera en el correo"

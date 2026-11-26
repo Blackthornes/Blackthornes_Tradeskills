@@ -3982,7 +3982,6 @@ L["Your plain disenchant results are cleared."] = "Обычные итоги р�
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Золото сегодня:"
 L["Up For Sale:"] = "Выставлено:"
-L["Sold Today:"] = "Продано сегодня:"
 L["Prices Read:"] = "Цены прочитаны:"
 L["Do Next"] = "Что дальше"
 L["1 sale is waiting in your mail"] = "1 продажа ждёт на почте"

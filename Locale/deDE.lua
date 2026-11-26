@@ -3979,7 +3979,6 @@ L["Your plain disenchant results are cleared."] = "Deine normalen Entzauber-Erge
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Gold heute:"
 L["Up For Sale:"] = "Im Angebot:"
-L["Sold Today:"] = "Heute verkauft:"
 L["Prices Read:"] = "Preise gelesen:"
 L["Do Next"] = "Als Nächstes"
 L["1 sale is waiting in your mail"] = "1 Verkauf wartet in deiner Post"

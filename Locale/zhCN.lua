@@ -3978,7 +3978,6 @@ L["Your plain disenchant results are cleared."] = "你的普通分解结果已�
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "今日金币："
 L["Up For Sale:"] = "在售："
-L["Sold Today:"] = "今日售出："
 L["Prices Read:"] = "价格读取："
 L["Do Next"] = "接下来"
 L["1 sale is waiting in your mail"] = "1 笔销售在邮箱里等你"
