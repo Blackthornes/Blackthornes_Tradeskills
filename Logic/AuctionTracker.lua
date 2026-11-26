@@ -21,7 +21,10 @@
 --   * An auction that runs out leaves with no gold.
 --
 -- Saved, account wide, never renamed: `auctionTrackerSold[character key] =
--- { day, copper, count }`, today's sales, started again each day. The
+-- { day, copper, count, sales }`, today's sales, started again each day.
+-- `sales` (2026-11-26, the owner said build it from a mockup) keeps each
+-- sale so My Auctions can list it under Sold Today: { key, itemID, link,
+-- quantity, copper, at }, oldest first, at most SALES_KEPT. The
 -- settings are in Core/Config.lua. UI/AuctionTracker.lua draws it.
 
 local _, ns = ...
@@ -35,6 +38,8 @@ AuctionTracker.BAND_MOST = { [0] = 30 * 60, [1] = 2 * 3600, [2] = 12 * 3600, [3]
 -- Moved whenever the rows or Sold Today may have changed, so the window
 -- draws again only then.
 AuctionTracker.version = 0
+-- The most sales kept for one day; the oldest go first past it.
+AuctionTracker.SALES_KEPT = 100
 
 local function Now() return time() end
 
@@ -185,7 +190,7 @@ function AuctionTracker:SoldToday()
     return tonumber(entry.copper) or 0, tonumber(entry.count) or 0
 end
 
-local function AddToday(copper)
+local function AddToday(copper, row, sold)
     local db = ns.db
     if type(db) ~= "table" then return end
     db.auctionTrackerSold = type(db.auctionTrackerSold) == "table" and db.auctionTrackerSold or {}
@@ -198,6 +203,34 @@ local function AddToday(copper)
     end
     entry.copper = (tonumber(entry.copper) or 0) + copper
     entry.count = (tonumber(entry.count) or 0) + 1
+    if type(row) == "table" then
+        entry.sales = type(entry.sales) == "table" and entry.sales or {}
+        local sales = entry.sales
+        sales[#sales + 1] = {
+            key = row.key, itemID = row.itemID,
+            link = type(row.link) == "string" and row.link or nil,
+            quantity = sold or row.quantity or 1, copper = copper, at = Now(),
+        }
+        while #sales > AuctionTracker.SALES_KEPT do table.remove(sales, 1) end
+    end
+end
+
+--- Today's sales for the character playing, newest first: { key, itemID,
+--- link, quantity, copper, at }. Empty on a new day.
+function AuctionTracker:SalesToday()
+    local db = ns.db
+    if type(db) ~= "table" then return {} end
+    local all = db.auctionTrackerSold
+    local entry = type(all) == "table" and all[CharacterKey()] or nil
+    if type(entry) ~= "table" or entry.day ~= date("%Y-%m-%d") or type(entry.sales) ~= "table" then
+        return {}
+    end
+    local out = {}
+    for index = #entry.sales, 1, -1 do
+        local sale = entry.sales[index]
+        if type(sale) == "table" and sale.itemID then out[#out + 1] = sale end
+    end
+    return out
 end
 
 --- A sale was heard (SaleAlarm:LogHeard). Takes the row that sold off the
@@ -229,7 +262,7 @@ function AuctionTracker:Sold(item, itemID)
     end
 
     local net = self:Net(best.unit, sold)
-    if net > 0 then AddToday(net) end
+    if net > 0 then AddToday(net, best, sold) end
     self:Changed()
     if ns.AuctionTrackerUI and ns.AuctionTrackerUI.OnSold then
         pcall(ns.AuctionTrackerUI.OnSold, ns.AuctionTrackerUI, best, net, partial, sold)
