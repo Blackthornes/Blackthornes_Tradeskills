@@ -650,6 +650,16 @@ lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 
 
+### Who can make it (Butler's restock list, 2026-11-26)
+
+`Butler:MakersOf(itemID)` answers Butler's restock list: the recipe on
+this account that makes the item and is known by the most characters,
+`{ recipeID, name, per, makers = { { key, name, short, playing } } }`, or
+nil. Linked characters (another account) and dropped professions are left
+out. Read only, inside a pcall, never raises. Butler shows "NAME can make
+them." and a Queue button that calls `QueueCraft`. Tested in
+`tools/test_butlercraft.lua`.
+
 ## Butler Says Wait on the auction house drawer
 
 The owner said build it from a mockup (2026-11-14). Butler folds an item

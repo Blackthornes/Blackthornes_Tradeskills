@@ -948,6 +948,46 @@ function Butler:CraftFor(item, carried)
     return nil
 end
 
+--- Who on this account can craft an item, for Butler's restock list
+-- (2026-11-26): { recipeID, name, per, makers = { { key, name, short,
+-- playing } } }, the recipe known by the most of them, or nil. Only this
+-- account's own characters (not linked ones). Read only; never raises.
+function Butler:MakersOf(item)
+    local itemID = tonumber(item)
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local recipes = ns.Recipes
+        if not (recipes and recipes.GetCharacters) then return nil end
+        local records = Characters()
+        local byRecipe, best = {}, nil
+        for _, character in ipairs(recipes:GetCharacters()) do
+            local record = records[character.key]
+            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table" then
+                for recipeID, recipe in pairs(record.recipes) do
+                    if type(recipe) == "table" and recipe.outputItemID == itemID
+                        and not (recipes.IsDropped and recipes:IsDropped(recipe, character.key)) then
+                        local found = byRecipe[recipeID]
+                        if not found then
+                            found = { recipeID = recipeID, name = recipe.name,
+                                per = math.max(1, math.floor(tonumber(recipe.quantityMin) or 1)), makers = {} }
+                            byRecipe[recipeID] = found
+                        end
+                        found.makers[#found.makers + 1] = {
+                            key = character.key, name = character.name, short = ShortName(character.key),
+                            playing = character.isCurrent == true
+                                or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
+                        }
+                        if not best or #found.makers > #best.makers then best = found end
+                    end
+                end
+            end
+        end
+        return best
+    end)
+    if ok then return answer end
+    return nil
+end
+
 --- Queue at least `crafts` of a recipe, from Butler's Queue button.
 -- @return true, or false and why; never raises
 function Butler:QueueCraft(recipeID, crafts)
