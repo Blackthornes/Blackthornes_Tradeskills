@@ -68,6 +68,9 @@ jobs:
       - name: The change checklist reads, and every item is whole
         run: python tools/test_checklist_for_change.py
 
+      - name: The save measure reads a save and prints no names
+        run: python tools/test_measure_save.py
+
       - name: House rules on this change (warns only, never fails)
         continue-on-error: true
         run: |

@@ -1549,6 +1549,50 @@ local function Build(outer)
     pruneButton:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(pruneButton)
 
+    -- A lighter save (the owner said build it, 2026-11-26, from the
+    -- mockup): how big the save is, Tidy Up, and Keep Price History For.
+    -- Logic/TidyUp.lua and UI/TidyUpBox.lua; nothing is removed until the
+    -- Tidy Up window's Confirm.
+    local sizeRow = CreateRow(pages.data, 1, L["Saved Data:"],
+        L["A smaller save makes logging in and /reload faster."])
+    widgets.saveSize = Theme.CreateLabel(sizeRow, "small", "text")
+    widgets.saveSize:SetPoint("TOPLEFT", CONTROL_X, -5)
+    widgets.saveSize:SetText("...")
+    widgets.tidyUp = Widgets.CreateButton(sizeRow, L["Tidy Up"], function(self)
+        if self.disabled or not ns.TidyUpBox then return end
+        ns.TidyUpBox:Open(ns.TidyUp:Days(), nil, function()
+            if ns.TidyUp then ns.TidyUp:Measure() end
+            UI:RefreshActiveTab()
+        end)
+    end, { width = 80, height = 20 })
+    widgets.tidyUp:SetPoint("LEFT", widgets.saveSize, "RIGHT", 10, 0)
+    FitButton(widgets.tidyUp)
+
+    local keepRow = CreateRow(pages.data, 1, L["Keep Price History For:"],
+        L["For items you don't craft, star or sell. Yours are always kept in full."])
+    widgets.keepHistory = Widgets.CreateDropdown(keepRow, {
+        { text = L["30 Days"], value = 30 },
+        { text = L["90 Days"], value = 90 },
+        { text = L["A Year"], value = 365 },
+        { text = L["Always"], value = 0 },
+    }, function(days)
+        if not ns.TidyUp then return end
+        if days == 0 then
+            ns.TidyUp:KeepAlways()
+            UI:RefreshActiveTab()
+            return
+        end
+        -- Ask first: the choice is saved only by Confirm.
+        ns.TidyUpBox:Open(days, function()
+            widgets.keepHistory:SetValue(ns.TidyUp:Days())
+            UI:RefreshActiveTab()
+        end, function()
+            ns.TidyUp:Measure()
+            UI:RefreshActiveTab()
+        end)
+    end, { width = 110 })
+    widgets.keepHistory:SetPoint("TOPLEFT", CONTROL_X, 0)
+
     -- Clear price data and Reset to defaults are typed commands now (the
     -- owner, 2026-10-15): /bts clearprices confirm and /bts reset confirm.
     -- Settings never deletes data.
@@ -1895,6 +1939,53 @@ local function Build(outer)
     ReloadUnder(textRow, widgets.textSize, widgets.textReload)
     widgets.textReload:Hide()
 
+    -- Look choices (the owner said build it, 2026-11-26): the same three
+    -- rows in every Blackthornes addon, picked once for all of them. Font
+    -- and Colors are read at login, so they wait for /reload. See
+    -- UI/SharedChoices.lua.
+    local Shared = ns.SharedChoices
+    -- "Clear" is a button's word elsewhere, so the font names carry
+    -- "##font" (as "Queue##sell"), shown without it where no translation.
+    local function FontWord(english, word)
+        if word:find("##", 1, true) then return english end
+        return word
+    end
+    widgets.look = {}
+    local LOOK_ROWS = {
+        { kind = "font", label = L["Font:"],
+          tip = L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."],
+          names = { house = FontWord("House", L["House##font"]), game = FontWord("Game", L["Game##font"]), clear = FontWord("Clear", L["Clear##font"]) } },
+        { kind = "colors", label = L["Colors:"],
+          tip = L["Warm is the look today. Darker takes the warm tint out of the glass."],
+          names = { warm = L["Warm"], darker = L["Darker"] } },
+        { kind = "fold", label = L["Fold Gem:"],
+          tip = L["What a folded window turns into: the round button, or a small bar with its title."],
+          names = { round = L["Round Button"], bar = L["Small Bar"] } },
+    }
+    for _, look in ipairs(Shared and Shared.LOOKS and LOOK_ROWS or {}) do
+        local kind = look.kind
+        local row = CreateRow(pages.all, 1, look.label, look.tip)
+        local items = {}
+        for _, value in ipairs(Shared.LOOKS[kind]) do
+            items[#items + 1] = { text = look.names[value], value = value }
+        end
+        local entry = {}
+        entry.dropdown = Widgets.CreateDropdown(row, items, function(value)
+            Shared:SetLook(kind, value)
+            if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
+        end, { width = 130 })
+        entry.dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        if kind ~= "fold" then
+            entry.reload = Widgets.CreateButton(row, L["Reload"], function()
+                if ReloadUI then ReloadUI() end
+            end, { width = 90, height = 20 })
+            FitButton(entry.reload)
+            ReloadUnder(row, entry.dropdown, entry.reload)
+            entry.reload:Hide()
+        end
+        widgets.look[kind] = entry
+    end
+
     -- A player's request (2026-10-07): the window was too big on a 4K
     -- screen. The grip below its bottom right corner does the same, to any
     -- size; one dragged to shows in the box as its percent.
@@ -1954,34 +2045,42 @@ local function Build(outer)
     end, true)
     widgets.oneWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- What comes up by itself (a player's request, 2026-11-05), one row with a
-    -- tick for each place since 2026-11-16. Each tick is its own saved
-    -- setting, as before: openAtAuction, openWithShops, openAtProfessions.
+    -- How Tradeskills opens in each place (the owner said build it from a
+    -- mockup, 2026-11-26): Full Window, Slim Panel, Round Button or Stay
+    -- Closed. Each row shows what the older settings give until a choice
+    -- is picked (UI.WindowAt in UI/Main.lua). These took over the Auction
+    -- House and Professions ticks of "Open By Itself At:" and the "Small
+    -- Craft Queue:" box; their saved keys are still read, never changed.
+    local windowChoices = {
+        { text = L["Full Window"], value = "full" },
+        { text = L["Slim Panel"], value = "slim" },
+        { text = L["Round Button"], value = "button" },
+        { text = L["Stay Closed"], value = "closed" },
+    }
+    widgets.windowAt = {}
+    for _, place in ipairs({
+        { "auction", L["At The Auction House:"], L["What opens when you talk to an auctioneer."] },
+        { "profession", L["At A Profession:"], L["What opens with a profession window."] },
+        { "mail", L["At The Mailbox:"], L["What opens at a mailbox."] },
+    }) do
+        local key = UI.WINDOW_AT[place[1]]
+        local row = CreateRow(pages.windows, 1, place[2], place[3])
+        local dropdown = Widgets.CreateDropdown(row, windowChoices, function(value)
+            Config:Set(key, value)
+        end, { width = 150 })
+        dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        widgets.windowAt[place[1]] = dropdown
+    end
+
+    -- What comes up by itself (a player's request, 2026-11-05). The
+    -- auction house and professions moved to the rows above; vendors stay
+    -- here (`openWithShops`, off unless ticked).
     local openRow = CreateRow(pages.windows, 1, L["Open By Itself At:"],
         L["Opens Tradeskills by itself at each place you tick."])
-    widgets.openByItself = Widgets.CreateDropdown(openRow, {
-        { text = L["Auction House"], value = "openAtAuction" },
-        { text = L["Vendors"], value = "openWithShops" },
-        { text = L["Professions"], value = "openAtProfessions" },
-    }, function(set)
-        set = set or {}
-        for _, key in ipairs({ "openAtAuction", "openWithShops", "openAtProfessions" }) do
-            local on = set[key] == true
-            local was
-            if key == "openWithShops" then was = Config:Get(key) == true else was = Config:Get(key) ~= false end
-            if on ~= was then Config:Set(key, on) end
-        end
-    end, { width = 150, multi = true, placeholder = L["None"] })
-    widgets.openByItself:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    -- Only the small craft queue at the profession window, the one window
-    -- staying on everywhere else (a player's request, 2026-11-17).
-    local smallRow = CreateRow(pages.windows, 1, L["Small Craft Queue:"],
-        L["Shows the small craft queue beside your profession window, even when the One Window is on."])
-    widgets.craftPaneBeside = Widgets.CreateCheckbox(smallRow, L["On"], function(checked)
-        Config:Set("craftPaneBeside", checked and true or false)
+    widgets.openWithShops = Widgets.CreateCheckbox(openRow, L["Vendors"], function(checked)
+        Config:Set("openWithShops", checked and true or false)
     end, false)
-    widgets.craftPaneBeside:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
     local windowPlacesRow = CreateRow(pages.all, 1, L["Window Locations:"],
@@ -2175,7 +2274,7 @@ local function Build(outer)
         local row = CreateRow(pages.sounds, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
-        end, true)
+        end, key ~= "queueDoneSound")
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.sounds[key] = box
 
@@ -2237,6 +2336,12 @@ local function Build(outer)
         L["The coins as the mail report counts up, and the fanfare on a new record."])
     SoundRow("craftDoneSound", L["Crafting Finishes:"],
         L["A chime when a run of two or more crafts is done."])
+    -- Our own chime at the queue's last craft (2026-11-26), off unless ticked.
+    SoundRow("queueDoneSound", L["Queue Done Sound:"],
+        L["Plays a short sound when the last craft in the queue is made."],
+        function()
+            if ns.Crafting then pcall(ns.PlaySoundFile, ns.Crafting.QUEUE_DONE_SOUND, "Master") end
+        end)
     SoundRow("bagsFullSound", L["Bags Are Full:"],
         L["A warning the moment your last free bag slot fills."])
     SoundRow("disenchantSound", L["Disenchant Finds:"],
@@ -2291,6 +2396,30 @@ local function Build(outer)
     widgets.paintHiddenColumns = PaintHiddenCount
     ns.Columns.onAnyChange = PaintHiddenCount
     PaintHiddenCount()
+
+    -- The Today tab's lines (the owner said build it, 2026-11-26): a box
+    -- for each kind, ticked unless the player turned it off
+    -- (Logic/Today.lua, todayHide_<kind>).
+    CreateSection(pages.windows, 2, L["TODAY"])
+    local todayBoxes = {
+        { kind = "mail", text = L["Sales in Mail"] },
+        { kind = "undercut", text = L["Undercut"] },
+        { kind = "ready", text = L["Ready to Make"] },
+        { kind = "soldout", text = L["Sold Out"] },
+        { kind = "profit", text = L["Crafts That Pay"] },
+        { kind = "writs", text = L["Writs"] },
+        { kind = "road", text = L["Road to 300"] },
+    }
+    widgets.todayBoxes = {}
+    for index, entry in ipairs(todayBoxes) do
+        local row = CreateRow(pages.windows, 2, index == 1 and L["Today Tab:"] or "",
+            index == 1 and L["Which lines the Today tab shows."] or nil)
+        local box = Widgets.CreateCheckbox(row, entry.text, function(checked)
+            if ns.Today then ns.Today:SetShown(entry.kind, checked) end
+        end, not ns.Today or ns.Today:IsShown(entry.kind))
+        box:SetPoint("TOPLEFT", CONTROL_X, -2)
+        widgets.todayBoxes[entry.kind] = box
+    end
 
     -- Debug, the client check and the speed check are typed only (/bts
     -- debug, probe, perf; the owner, 2026-10-23): players don't need them.
@@ -3228,6 +3357,9 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
+    for kind, box in pairs(widgets.todayBoxes or {}) do
+        box:SetChecked(not ns.Today or ns.Today:IsShown(kind))
+    end
     do
         local learn = Config:Get("learnStockFromSales") ~= false
         local raise = Config:Get("raiseStockOnSellOut") == true
@@ -3305,12 +3437,10 @@ local function Refresh()
     ShowShiftMode(widgets.boughtTooltips)
     ShowShiftMode(widgets.usedInTooltips)
     ShowAllLinesMode()
-    widgets.openByItself:SetValue({
-        openAtAuction = Config:Get("openAtAuction") ~= false,
-        openWithShops = Config:Get("openWithShops") == true,
-        openAtProfessions = Config:Get("openAtProfessions") ~= false,
-    })
-    widgets.craftPaneBeside:SetChecked(Config:Get("craftPaneBeside") == true)
+    for place, dropdown in pairs(widgets.windowAt) do
+        dropdown:SetValue(UI.WindowAt(place))
+    end
+    widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
@@ -3319,6 +3449,11 @@ local function Refresh()
     if Look then
         widgets.windowStyle:SetValue(Look.Wanted(), true)
         widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
+    end
+    local Shared = ns.SharedChoices
+    for kind, entry in pairs(widgets.look or {}) do
+        entry.dropdown:SetValue(Shared:Look(kind), true)
+        if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
     end
     widgets.combineButtons:SetChecked(not ns.SharedMinimap or ns.SharedMinimap.Combined())
     if widgets.rowSize then
@@ -3347,7 +3482,12 @@ local function Refresh()
     widgets.hideSaleChat:SetChecked(Config:Get("hideSaleChat") == true)
     widgets.goldAnHour:SetChecked(Config:Get("profitGoldAnHour") == true)
     for key, box in pairs(widgets.sounds) do
-        box:SetChecked(Config:Get(key) ~= false)
+        -- Queue Done Sound is off unless ticked; the rest on unless unticked.
+        if key == "queueDoneSound" then
+            box:SetChecked(Config:Get(key) == true)
+        else
+            box:SetChecked(Config:Get(key) ~= false)
+        end
     end
     widgets.muteSounds:SetChecked(ns.Muted and ns.Muted() or false)
     widgets.muteSoundsHere:SetChecked(ns.Muted and ns.Muted() or false)
@@ -3426,6 +3566,22 @@ local function Refresh()
     widgets.auctionatorPrices:SetChecked(Config:Get("auctionatorPrices") ~= false)
     widgets.auctionatorStatus:SetText(ns.AuctionatorPrices and ns.AuctionatorPrices:Describe() or "")
     widgets.priceOrder:SetValue(Config:Get("priceOrder") == "auctionator" and "auctionator" or "tsm")
+
+    if widgets.keepHistory and ns.TidyUp then
+        local days = ns.TidyUp:Days()
+        widgets.keepHistory:SetValue(days)
+        widgets.tidyUp:SetEnabledState(days > 0)
+        widgets.tidyUp.tooltipText = days == 0 and L["Pick how long to keep price history first."] or nil
+        local function ShowSize(bytes)
+            widgets.saveSize:SetText(L.Format("%s on this account", ns.TidyUp.FormatSize(bytes)))
+        end
+        if ns.TidyUp.bytes and time() - (ns.TidyUp.measuredAt or 0) < 600 then
+            ShowSize(ns.TidyUp.bytes)
+        else
+            widgets.saveSize:SetText("...")
+            ns.TidyUp:Measure(ShowSize)
+        end
+    end
 
     local lastScan, capped = ns.Prices:GetLastScan()
 

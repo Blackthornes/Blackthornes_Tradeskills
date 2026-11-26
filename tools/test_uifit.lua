@@ -339,6 +339,7 @@ Load("/UI/TooltipShift.lua")
 Load("/UI/Theme.lua")
 Load("/UI/Widgets.lua")
 Load("/UI/HouseKit.lua")
+Load("/UI/SharedChoices.lua")
 Load("/UI/Columns.lua")
 Load("/UI/Collapse.lua")
 Load("/UI/PriceGraph.lua")
@@ -1237,21 +1238,37 @@ Pick(RowDropdown("Price Trend on Tooltips:"), 2)
 check("one line changed by hand", ns.db.tooltipShift.trend, true)
 check("makes All Lines say Mixed", allLines.strings[1].text, "Mixed")
 
--- Open at AH, Open at Professions and Open With AH and Vendors became one
--- row, each tick still its own saved setting.
-local openAt = RowDropdown("Open By Itself At:")
-check("one Open By Itself At row", openAt ~= nil, true)
-check("on Windows, with Window Size", Holder(openAt) == Holder(RowDropdown("Window Size:")), true)
+-- How Tradeskills opens in each place (ts-improve-2, 2026-11-26): a row
+-- for the auction house, a profession window and the mailbox. Until one is
+-- picked, each shows what the older settings give, and those are never
+-- written. Vendors keeps its tick under Open By Itself At.
+local atAH = RowDropdown("At The Auction House:")
+local atProfession = RowDropdown("At A Profession:")
+local atMail = RowDropdown("At The Mailbox:")
+check("a row for each place", atAH ~= nil and atProfession ~= nil and atMail ~= nil, true)
+check("on Windows, with Window Size", Holder(atAH) == Holder(RowDropdown("Window Size:")), true)
+check("Open By Itself At is only Vendors now", RowDropdown("Open By Itself At:"), nil)
+check("no Small Craft Queue box: At A Profession does it", Tick("Small Craft Queue:"), nil)
 settings.openAtAuction, settings.openWithShops, settings.openAtProfessions = nil, nil, nil
+settings.windowAtAuction, settings.windowAtProfession, settings.windowAtMail = nil, nil, nil
+settings.craftPaneBeside = true
 UI.tabs.settings.refresh()
-check("a new player's ticks", openAt:GetValue().openAtAuction == true and openAt:GetValue().openWithShops == nil
-    and openAt:GetValue().openAtProfessions == true, true)
-Pick(openAt, 2)
+check("a new player's mailbox: the slim list", atMail:GetValue(), "slim")
+check("Small Craft Queue ticked shows Slim Panel", atProfession:GetValue(), "slim")
+settings.openAtAuction = false
+UI.tabs.settings.refresh()
+check("Auction House unticked shows Stay Closed", atAH:GetValue(), "closed")
+Pick(atAH, 3)
+check("picking saves the place's choice", settings.windowAtAuction, "button")
+check("and leaves the older settings as they were", settings.openAtAuction == false
+    and settings.craftPaneBeside == true, true)
+settings.openAtAuction, settings.craftPaneBeside, settings.windowAtAuction = nil, nil, nil
+local vendors = Tick("Vendors")
+check("a Vendors tick", vendors ~= nil, true)
+vendors.scripts.OnClick(vendors)
 check("ticking Vendors saves Open With AH and Vendors", settings.openWithShops, true)
-check("and leaves the others unwritten", settings.openAtAuction == nil and settings.openAtProfessions == nil, true)
-Pick(openAt, 1)
-check("unticking Auction House saves it off", settings.openAtAuction, false)
-openAt.scripts.OnMouseDown(openAt)
+settings.openWithShops = nil
+atAH.scripts.OnMouseDown(atAH)
 
 -- Stock From Sales and Raise When Sold Out in one box: each keeps its key.
 local fromSales = RowDropdown("Stock From Sales:")
@@ -1682,6 +1699,46 @@ itemArrived()
 check("and colours it when it does", late.name.textColor[1], 0.64)
 
 ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After = savedQuality, savedRegister, savedAfter
+
+-- Sort By over the list and the gold an hour on each row (2026-11-26). The
+-- column shows only while Sort By is Gold per Hour, and the name gives it
+-- room.
+local sortBy, picked = "mine", nil
+local savedSorts, savedSortBy, savedSet, savedEarns =
+    ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns
+ns.Queue.SORTS = { "mine", "profit", "perHour", "bags" }
+ns.Queue.SortBy = function() return sortBy end
+ns.Queue.SetSortBy = function(_, value) picked = value end
+ns.Queue.EntryEarns = function(_, entry)
+    if entry.isDependency then return nil, nil end
+    return 10000, 1838400
+end
+local sortChips, realChip = {}, Widgets.CreateChip
+Widgets.CreateChip = function(...)
+    local chip = realChip(...)
+    sortChips[#sortChips + 1] = chip
+    return chip
+end
+listsBefore = #made.CreateScrollList
+UI.tabs.queue.build(Region(UI.window))
+craftList = made.CreateScrollList[listsBefore + 1]
+craftList.height = 200
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+local sortRow = craftList.rows[1]
+check("no gold an hour under My Order", sortRow.perHour:IsShown(), false)
+sortBy = "perHour"
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+check("Gold per Hour shows it on the row", sortRow.perHour:IsShown(), true)
+check("in gold and silver", sortRow.perHour.text ~= nil and sortRow.perHour.text:find("183") ~= nil, true)
+check("a part shows none", craftList.rows[2].perHour.text, "")
+Widgets.CreateChip = realChip
+check("four Sort By chips", #sortChips, 4)
+check("built under My Order, its chip is lit", sortChips[1]:IsSelected(), true)
+check("the others are not", sortChips[3]:IsSelected(), false)
+sortChips[4].scripts.OnClick(sortChips[4])
+check("a chip picks its Sort By", picked, "bags")
+ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns =
+    savedSorts, savedSortBy, savedSet, savedEarns
 
 --------------------------------------------------------------------------------
 

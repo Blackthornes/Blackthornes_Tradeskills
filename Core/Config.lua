@@ -332,6 +332,12 @@ local DEFAULTS = {
         priceTrendDays = 7,
         tooltipTrend = true,
 
+        -- Keep Price History For (2026-11-26, Logic/TidyUp.lua): days of
+        -- price readings kept for items you don't craft, star or sell. 0 is
+        -- Always, so nothing is removed until the player picks and confirms.
+        -- Never rename it.
+        keepPriceHistoryDays = 0,
+
         -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
         -- teaches, what one craft costs, sells and disenchants for, and how
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
@@ -538,9 +544,21 @@ local DEFAULTS = {
         -- profession window opens the small craft pane beside it, not the
         -- one window. Off unless ticked. Account wide; never rename it.
         craftPaneBeside = false,
+        -- How Tradeskills opens at the auction house, a profession window
+        -- and the mailbox: "full", "slim", "button" or "closed" (the owner
+        -- said build it, 2026-11-26). "auto" keeps what the three settings
+        -- above give (UI.WindowAt in UI/Main.lua). Account wide; never
+        -- rename them.
+        windowAtAuction = "auto",
+        windowAtProfession = "auto",
+        windowAtMail = "auto",
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
+        -- Our own chime when the last craft in the queue is made
+        -- (2026-11-26). Off unless ticked. See Crafting:QueueDone. Never
+        -- rename it.
+        queueDoneSound = false,
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
@@ -590,6 +608,11 @@ local DEFAULTS = {
         -- character makes (a player asked, 2026-11-17). The queue itself
         -- stays shared; nothing is taken off it. See Queue:Shown.
         queueOnlyMine = false,
+
+        -- The Queue tab's Sort By (2026-11-26): "mine" (today's order),
+        -- "profit", "perHour" or "bags". See Queue:SortBy. Account wide;
+        -- never rename it.
+        queueSortBy = "mine",
 
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so
