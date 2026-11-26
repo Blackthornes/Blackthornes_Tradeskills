@@ -4169,6 +4169,47 @@ shows the current amount.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
 
+## A lighter save (2026-11-26)
+
+The owner said yes to the lighter save idea (ts-improve-4). The game reads
+the whole save at every login and /reload. His save measured 20.6 MB with
+`tools/measure_save.py` (read only; prints sizes and counts, every realm,
+character and item key shown as `*`; `--ages` adds rows up by how long
+since they were seen). Forever writes the save without spaces or line
+breaks, so key names and numbers are what cost. `prices` was 72% of it,
+and the random suffix rows in it (`record.suffixes`) 44%, half of that
+their readings.
+
+Step one, no setting: at logout (`Prices:PackAll` on PLAYER_LOGOUT) every
+price history, items' and suffixes', every realm, is saved as one string
+(`Prices.PackHistory`): `t,m,q;dt,m,q;...`, dt the seconds since the
+reading before, an empty field a missing value. A history is packed only
+when `Prices.UnpackHistory` gives back exactly what it held. It is
+unpacked in place the first time it is read or added to
+(`Prices.History(record)`); `HistoryCount`, `HistoryReading` and
+`EachReading` also read the string as it is. Read history only through
+those, never by index or with `type(record.history) == "table"`. A version
+from before reads a packed history as none and starts it again (only the
+twelve kept readings). Tested in `tools/test_packedhistory.lua`.
+
+Step two (the owner picked "build it as the mockup", 2026-11-26), on the
+Data page under Remove Old Prices: "Saved Data:" shows about how big the
+save is (`TidyUp:Measure`, added up over frames, measured again after ten
+minutes or a tidy) with a Tidy Up button, and "Keep Price History For:"
+(30 Days, 90 Days, A Year, Always; `keepPriceHistoryDays`, 0 is Always,
+never rename it). Logic/TidyUp.lua and UI/TidyUpBox.lua. Picking a period
+opens the Tidy Up window; only its Confirm saves the choice and removes
+anything; Cancel, the close gem and Escape put the choice back. Tidy Up is
+greyed while Always. A tidy removes, for items not yours, readings older
+than the period and suffix rows not seen for that long, on every realm,
+a slice of records a frame. Yours (`TidyUp:Yours`): crafted or used by a
+character and starred (`PriceHistory:GetTracked`), `myPrices`,
+`lastPosted`. An item's own price is never removed. While a period is
+kept, the tidy runs again `TidyUp.LOGIN_DELAY` seconds after login. The
+mockup's "Scans kept twice" row was left out: nothing in the save is
+kept twice. Because Prices:Prune already drops items not seen for 21
+days, a tidy frees little on a save that scans often. Tested in
+`tools/test_tidyup.lua`.
 ## How This Profit Adds Up (one profit sum, 2026-11-26)
 
 The owner said build it (ts-improve-3). One sum everywhere:
