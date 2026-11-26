@@ -825,6 +825,37 @@ Queue and Level Up tabs still show them. `Cooldowns.seenVersion` (in the
 road's key) moves only when a craft is first seen waiting. Tested in
 `tools/test_roadto300.lua`.
 
+Road choices (players' asks, the owner said "Do 1-10" on the 2026-11-26
+improvement mockups, `ts-improve-5-road-choices`, which covers its words):
+- **Stop At: 150 / 225 / 300** on the road's bar (`RoadPlan.StopAt`,
+  `RoadPlan.STOPS`; `roadStopAt` account wide, 300 unless picked, never
+  rename it; in the plan's key). The road walks to `RoadPlan.StopFor(skill,
+  stop)`: a stop the skill has passed goes on to the next, and that button
+  shows grey. A rank the road to the stop doesn't need (Expert on the way
+  to 150) is left out, and the step isn't split at it. `plan.stop`,
+  `plan.crafts`. The footer reads "To %d: %d crafts, about %s" and the
+  button "Queue To %d" (`RoadView.TotalText`); it still runs
+  `RoadPlan:QueueAll`, whose steps add up per recipe by `queueCrafts`
+  (tested: two steps of one recipe either side of a trainer queue the sum).
+  Fishing keeps "To 300:" and shows no stops.
+- **Pick By** adds Fewest Materials (`fewest`: materials a point, the gold
+  only breaking a tie, `RoadPlan.FEWEST_TIE`) and No Auction House (`noah`:
+  a recipe whose every material a vendor sells, the character makes
+  (`Cost:FindRecipeForItem`) or a disenchant gives (`Disenchant.MATERIALS`),
+  `RoadPlan.WithoutAuction`, `OffAuction`, kept on `price.offAuction`; then
+  ranked by cost). Same `roadPickBy` key.
+- **Skip** button on each craft step still to do (`RoadView.PlaceSkip`,
+  left of Show the Way and Queue Step; the right-click Skip This Recipe
+  stays). Skips are per character since: `roadSkippedBy[GUID][recipeID] =
+  name` (never rename it); a GUID the client won't read writes nothing.
+  Old account wide `roadSkipped` entries still count for every character.
+  Under the road "Skipped: %s." names them, with Bring Back (was Show All;
+  `RoadPlan:ShowAllOn`, `RoadPlan:BringBack(recipeID)` clears both). The
+  plan's key carries the GUID.
+Defaults read as before. The standing rules hold: no reputation or
+specialty recipes, no cooldown crafts, no "Get everything" row. Tested in
+`tools/test_roadto300.lua` and `tools/test_roadviewfit.lua`.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first

@@ -487,8 +487,12 @@ local DEFAULTS = {
         recipeBookWishlistFirst = true,
         -- Road to 300's "Pick By:" (2026-10-27): "lowest" ranks recipes by
         -- what their materials cost, "real" takes off what a craft sells
-        -- back for. Never rename it.
+        -- back for; "fewest" the fewest materials a point; "noah" no
+        -- auction house (2026-11-26). Never rename it.
         roadPickBy = "lowest",
+        -- Road to 300's "Stop At:" (2026-11-26): 150, 225 or 300, where the
+        -- road ends. Never rename it.
+        roadStopAt = 300,
 
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
@@ -795,8 +799,13 @@ local DEFAULTS = {
     -- recipeID -> the craft's name: recipes the player skipped on Road to
     -- 300 (a player asked, 2026-11-12: a vendor's limited recipe was sold
     -- out), so the road picks the next one. Account wide; only the road
-    -- reads it; never rename it. See RoadPlan:Skip.
+    -- reads it; never rename it. See RoadPlan:Skip. Skips since
+    -- 2026-11-26 are per character in roadSkippedBy; these still count.
     roadSkipped = {},
+
+    -- GUID -> { recipeID -> the craft's name }: recipes each character
+    -- skipped on Road to 300 (2026-11-26). Never rename it.
+    roadSkippedBy = {},
 
     -- recipeID -> the craft's name: crafts always made to go into another
     -- craft, whatever buying costs (2026-10-13, Make on the Level Up tab).

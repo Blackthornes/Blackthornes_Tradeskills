@@ -437,6 +437,111 @@ settings.roadPickBy = "junk"
 check("anything else reads as lowest", Road.PickBy(), "lowest")
 settings.roadPickBy = nil
 
+print("\nFewest Materials and No Auction House")
+-- The owner said build it (2026-11-26, from a mockup).
+local many = { recipeID = 83, name = "Many", skill = 1, yellow = 40, grey = 80,
+  reagents = { { itemID = ROUGH, quantity = 5 } } }
+local function MorePlan(pickBy, offAuction)
+  return Road:Plan({
+    line = 164, skill = 10, max = 75, level = 15, pickBy = pickBy, owned = {},
+    candidates = {
+      { record = cheap, known = true, price = { cost = 20, back = 0, materials = 1, offAuction = false,
+        reagents = { { itemID = BAR, quantity = 1, unit = 20 } } } },
+      { record = many, known = true, price = { cost = 5, back = 0, materials = 5, offAuction = offAuction,
+        reagents = { { itemID = ROUGH, quantity = 5, unit = 1 } } } },
+    },
+  })
+end
+check("lowest cost takes the five cheap stones", FirstCraft(MorePlan("lowest", true)).recipeID, 83)
+local fewest = MorePlan("fewest", true)
+check("fewest materials is kept on the plan", fewest.pickBy, "fewest")
+check("fewest materials takes the one bar", FirstCraft(fewest).recipeID, 81)
+local noah = MorePlan("noah", false)
+check("no auction house is kept on the plan", noah.pickBy, "noah")
+check("nothing without the auction house: stuck", FirstCraft(noah), nil)
+check("says where it stops", noah.stuck, 10)
+local noahToo = MorePlan("noah", true)
+check("no auction house takes the vendor stones", FirstCraft(noahToo).recipeID, 83)
+settings.roadPickBy = "fewest"
+check("the setting reads fewest", Road.PickBy(), "fewest")
+settings.roadPickBy = "noah"
+check("the setting reads noah", Road.PickBy(), "noah")
+settings.roadPickBy = nil
+-- What comes without the auction house: a vendor's, one you make, a
+-- disenchant's.
+local savedVendor, savedCost, savedDisenchant = ns.Vendor, ns.Cost, ns.Disenchant
+ns.Vendor = { GetUnitPrice = function(_, id) if id == 1 then return 10 end end }
+ns.Cost = { FindRecipeForItem = function(_, id) if id == 2 then return 99 end end }
+ns.Disenchant = { MATERIALS = { { itemID = 3 } } }
+check("a vendor sells it", Road.WithoutAuction(1), true)
+check("you make it", Road.WithoutAuction(2), true)
+check("a disenchant gives it", Road.WithoutAuction(3), true)
+check("only the auction house has it", Road.WithoutAuction(4), false)
+check("all of a recipe's materials", Road.OffAuction({ { itemID = 1 }, { itemID = 3 } }), true)
+check("one from the auction house", Road.OffAuction({ { itemID = 1 }, { itemID = 4 } }), false)
+ns.Vendor = { GetUnitPrice = function() error("broken") end }
+check("a broken read is the auction house", Road.WithoutAuction(1), false)
+ns.Vendor, ns.Cost, ns.Disenchant = savedVendor, savedCost, savedDisenchant
+
+print("\nStop At")
+check("300 unless picked", Road.StopAt(), 300)
+settings.roadStopAt = 225
+check("225 once picked", Road.StopAt(), 225)
+settings.roadStopAt = 17
+check("anything else reads as 300", Road.StopAt(), 300)
+settings.roadStopAt = nil
+check("a stop ahead is kept", Road.StopFor(100, 150), 150)
+check("a stop passed goes on to the next", Road.StopFor(212, 150), 225)
+check("at 300 it stays 300", Road.StopFor(300, 225), 300)
+-- One recipe all the way, either side of Expert at 125.
+local long = { recipeID = 84, name = "Long", skill = 1, yellow = 260, grey = 280,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+local function StopPlan(stop, skill, max)
+  return Road:Plan({
+    line = 164, skill = skill, max = max, level = 30, owned = {}, stop = stop,
+    candidates = { { record = long, known = true, price = { cost = 10, back = 0, materials = 1,
+      reagents = { { itemID = BAR, quantity = 1, unit = 10 } } } } },
+  })
+end
+local to150 = StopPlan(150, 100, 150)
+local last, expert = 0, false
+for _, step in ipairs(to150.steps) do
+  if not step.done then last = math.max(last, step.to or 0) end
+  if not step.done and step.kind == "trainer" and step.cap == 225 then expert = true end
+end
+check("the road ends at the stop", last, 150)
+check("kept on the plan", to150.stop, 150)
+check("no Expert on the way to 150", expert, false)
+check("one step, not split at 125", #to150.steps - (function() local n = 0
+  for _, step in ipairs(to150.steps) do if step.done then n = n + 1 end end return n end)(), 1)
+check("crafts to the stop", to150.crafts, 50)
+local to225 = StopPlan(225, 100, 150)
+local trained = false
+for _, step in ipairs(to225.steps) do
+  if not step.done and step.kind == "trainer" and step.cap == 225 then trained = true end
+end
+check("Expert on the way to 225", trained, true)
+check("the default walks to 300", StopPlan(nil, 100, 150).stop, 300)
+
+print("\nQueue To adds the same recipe's steps together")
+-- A player's report (2026-11-23): two steps of one recipe, 3 and 14,
+-- must come out as 17 in the queue.
+local queued = {}
+local savedQueue2 = ns.Queue
+ns.Queue = {
+  Ensure = function(_, id, count) queued[id] = math.max(queued[id] or 0, count) return true end,
+  EnsureBuy = function() return true end,
+}
+local split = StopPlan(225, 100, 150)
+local parts = {}
+for _, step in ipairs(split.steps) do
+  if not step.done and step.kind == "craft" then parts[#parts + 1] = step.crafts end
+end
+check("two steps of the one recipe", #parts, 2)
+Road:QueueAll(split)
+check("the queue holds both", queued[84], parts[1] + parts[2])
+ns.Queue = savedQueue2
+
 print("\nReal cost: a craft that sells for more than it costs")
 -- Alchemy at 87: both early crafts pay. The road used to stay on the elixir
 -- to grey, 144 crafts for 100 to 120.
@@ -711,8 +816,14 @@ check("the belt is offered", HasCandidate(3), true)
 check("nothing skipped yet", #Road:SkippedOn(164), 0)
 local beforePlan = Road:Get(professions[1])
 check("skip needs a recipe ID", Road:Skip(nil), false)
+-- One key per character: a GUID the client won't read writes nothing.
+check("no GUID, nothing written", Road:Skip(3), false)
+check("still offered", HasCandidate(3), true)
+local playing = "Player-1-AAAA"
+ns.Config.GetCharacterKey = function() return playing end
 check("skip the belt", Road:Skip(3), true)
-check("kept by name", ns.db.roadSkipped[3], ns.RecipeBook:Get(3).name)
+check("kept by name for this character", ns.db.roadSkippedBy[playing][3], ns.RecipeBook:Get(3).name)
+check("not account wide", ns.db.roadSkipped and ns.db.roadSkipped[3], nil)
 check("it is skipped", Road:IsSkipped(3), true)
 check("another is not", Road:IsSkipped(4), false)
 check("the road leaves it out", HasCandidate(3), false)
@@ -725,10 +836,25 @@ end
 check("no step for it", beltLeft, false)
 check("listed for its profession", Road:SkippedOn(164)[1], 3)
 check("not for another", #Road:SkippedOn(185), 0)
-check("Show All brings it back", Road:ShowAllOn(164), 1)
+-- Another character still has it on the road.
+playing = "Player-1-BBBB"
+check("an alt still has it", Road:IsSkipped(3), false)
+check("offered to the alt", HasCandidate(3), true)
+check("the alt's plan has it again", Road:Get(professions[1]) ~= skippedPlan, true)
+playing = "Player-1-AAAA"
+check("Bring Back brings it back", Road:ShowAllOn(164), 1)
 check("offered again", HasCandidate(3), true)
 check("nothing skipped after", Road:IsSkipped(3), false)
-check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
+check("Bring Back with nothing skipped", Road:ShowAllOn(164), 0)
+-- An account wide skip from before still counts, and comes back.
+ns.db.roadSkipped = { [3] = "Copper Chain Belt" }
+check("an old skip still counts", Road:IsSkipped(3), true)
+check("listed once", #Road:SkippedOn(164), 1)
+check("its name", Road:SkippedName(3), "Copper Chain Belt")
+check("one Bring Back", Road:BringBack(3), true)
+check("gone after", Road:IsSkipped(3), false)
+check("nothing to bring back", Road:BringBack(3), false)
+ns.Config.GetCharacterKey = function() return "me" end
 
 print("\ncooldown crafts stay off the road")
 -- A player's report (2026-11-25): Tailoring's road asked for about 40
