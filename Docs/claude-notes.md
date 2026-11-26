@@ -381,8 +381,17 @@ have set"). Master Chef (found by its English name, or
 `MASTER_CHEF_NODE` once a probe shows its ID) raises a cooking recipe's
 yield in `Cost:GetCraftCost` by up to `MASTER_CHEF_MOST` (50% at its last
 rank), only for a recipe the character playing knows, so the Profit tab
-follows it. Bartering needs nothing: vendor prices come from the real
-merchant window. Nothing read, nothing changes. Nothing is saved and no
+follows it. Bartering (2026-11-26, the owner said yes): 5% off a rank,
+2 ranks, the gold price at every vendor (spell 1225459, found by spell ID
+or name; its node is not pinned). `Vendor:GetUnitPrice` takes today's
+discount off the shipped prices; a price seen at a merchant keeps the
+discount it was seen with as `off` (never rename) and is moved to today's,
+so it is never cut twice. A price seen before `off`, or before the perks
+are read (`Legacy:Known`), is left as seen. Shipped recipe prices on
+vendors follow it too (`RecipeBook:GetRecipePrice`). Vendor payouts do
+not change. `Legacy:CheckDiscount` throws the cost index away when the
+discount changes. Tested in `tools/test_bartering.lua`. Nothing read,
+nothing changes. Nothing is saved and no
 player words are new. `/bts probe` has "legacy" lines (the config, points
 left, each node's rank, Master Chef's yield, currencies 3485 and 3499).
 Since 2026-11-10 it also lists each perk's own words, read without
