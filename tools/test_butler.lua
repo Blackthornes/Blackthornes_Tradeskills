@@ -277,6 +277,15 @@ ns.Recipes.GetCharacters = function()
 end
 ns.db.characters[ALT].gold = 1234
 ns.db.characters[SELF].gold = 5
+local savedAuctions = ns.Auctions
+ns.Auctions = { GetListings = function()
+  return {
+    { itemID = 8, quantity = 20, who = ALT, readAt = 70 },
+    { itemID = 8, quantity = 5, who = ALT, readAt = 75 },
+    { itemID = 9, quantity = 3, who = ALT, readAt = 75, ended = true },
+    { itemID = 9, quantity = 2, who = SELF, readAt = 80 },
+  }
+end }
 local oldGetMoney = GetMoney
 GetMoney = function() return 99999 end
 local held = Butler:Holdings()
@@ -307,6 +316,15 @@ check("the character playing's purse is live", held[1].gold, 99999)
 check("gold waiting in an alt's mailbox", held[2].mailMoney, 700)
 check("when its items were cleared", held[2].clearedAt, 40)
 check("never read this way: no mail gold", held[3].mailMoney, nil)
+check("an alt's items on auction", held[2].auctions[8], 25)
+check("a listing that ended is left out", held[2].auctions[9], nil)
+check("when its auctions were read", held[2].auctionsAt, 75)
+check("the character playing's auctions", held[1].auctions[9], 2)
+check("never listed: nothing on auction", next(held[3].auctions), nil)
+check("never listed: no time", held[3].auctionsAt, nil)
+ns.Auctions = { GetListings = function() error("boom") end }
+check("auctions that raise leave the rest", #Butler:Holdings(), 3)
+ns.Auctions = savedAuctions
 held[2].bags[1] = 1000
 check("a copy: the save is untouched", ns.db.characters[ALT].inventory[1], 2)
 ns.Recipes.GetCharacters = function() error("boom") end
