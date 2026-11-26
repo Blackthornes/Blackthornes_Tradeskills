@@ -4405,3 +4405,12 @@ the same rows, numbers, sorting and clicks.
   button waits: no auctioneer spots are kept to point the arrow at.
 - Icons with a rarity ring were already on every row (UI/ItemLook.lua).
 - Tested in `tools/test_profitdetail.lua`.
+
+## The note stack's own spot (2026-11-26)
+
+`UI/Notice.lua` (shared by all five) reads `windowSpots["shared.notice"]`
+through `Notice.Spot`: the middle of the stack's top, in screen pixels.
+Farmer's Move Windows writes it when the player drags the Notes box. While
+it is set, every addon's notes stack there and leave the top shelf free.
+Window Locations: Set Default clears it with the other window spots. Never
+rename it.
