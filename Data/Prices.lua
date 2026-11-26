@@ -1634,8 +1634,8 @@ function Prices:SuffixCount(itemID)
     if type(suffixes) ~= "table" then return 0 end
     local oldest, count, first = time() - Prices.SUFFIX_KEEP, 0, nil
     for _, entry in pairs(suffixes) do
-        local seen = tonumber(entry.seen) or 0
-        if type(entry) == "table" and tonumber(entry.market) and seen >= oldest then
+        local seen = type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0)
+        if seen and seen >= oldest then
             count = count + 1
             if not first or seen < first then first = seen end
         end

@@ -4421,3 +4421,43 @@ Farmer's Move Windows writes it when the player drags the Notes box. While
 it is set, every addon's notes stack there and leave the top shelf free.
 Window Locations: Set Default clears it with the other window spots. Never
 rename it.
+
+## Tab picks that stalled (2026-11-26)
+
+The owner asked for a look at hitches when the window opens and a tab is
+picked. Each tab was timed with a save of about 7,500 priced items. Nothing
+a player sees changed: every row, column and sort is as before.
+
+- **Settings.** `TidyUp:Measure` added the save's size up a whole top
+  table at a time: two seconds of work in frames of up to 200 ms each time
+  the page opened. Now `Walker` goes value by value and each frame stops
+  after `TidyUp.FRAME_MS` (3 ms, `Share`); with no clock it does
+  `TidyUp.VALUES` a frame. The sum is the one `Size` gives. Whole numbers
+  are counted without making a string (`NumberSize`). The last size stays
+  up while it is measured again. Tidy Up's find and remove keep to the
+  same 3 ms.
+- **Prices.** A row reads How fast it moves and its trend when first asked
+  (the rows on screen, or every row under a sort on that column): the
+  rows' metatable in `BuildList`. A kept row takes its age off its record
+  and counts its suffixes again only once the first one turns too old
+  (`Prices:SuffixCount` gives that time second, `row.suffixHolds`). When
+  `Prices:TouchedSince` names the items that changed and no heading is
+  clicked, only their rows are made again and put back by `RowBefore`,
+  the sort's own test. `Prices.changes` is no longer in `KeptKey`; it is
+  kept beside it as `keptRows.changes`.
+- **Level Up.** Picked, it keeps its rows and builds a few a frame
+  (`LevelUp:BeginRanked`, `RankOne`, `FinishRanked`, the steps `GetRanked`
+  takes; `RankInSlices` and `refreshPicked` in the tab), as Profit does.
+  Any other refresh is at once and drops a build under way.
+- **Sales.** `Mail.PlainName` keeps each name's answer.
+- **Disenchanting.** One build of the deal rows prices each material once
+  (`Disenchant.materialPrices`, set only while `GetAuctionRows` runs).
+- **Five seconds after login.** `Mail:ResolveItemName` asked
+  `Recipes:GetAccountWide`, which copies every recipe, for each name not
+  matched. It asks `GetAccountWideOutputs`, which copies nothing.
+- Still one slow frame each: the first Disenchanting pick after the item
+  facts or the auction house's open state change (about 35 to 50 ms), and
+  a Prices pick after a change that names no item, a full scan say (about
+  45 ms). Both could build over frames the way Level Up now does.
+- Tested in `tools/test_tidyup.lua`, `test_tabstall.lua`,
+  `test_learnfilters.lua`, `test_levelup.lua` and `test_mailslots.lua`.
