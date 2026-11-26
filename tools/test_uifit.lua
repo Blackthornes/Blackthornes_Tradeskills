@@ -1469,6 +1469,26 @@ do
     state.selected = nil
 end
 
+-- Price History on the auction house Sell list (2026-11-26) opens the
+-- Prices tab with its item picked and its row scrolled into sight.
+do
+    local widgets, state = UI._PricesWidgets()
+    UI:SelectTab("settings")
+    ns.PricesUI:ShowItem(1018)
+    check("Price History opens the Prices tab", UI.activeTab, "prices")
+    check("on Details", ns.PricesUI.view, "details")
+    check("with the item picked", state.selected and state.selected.itemID, 1018)
+    check("its row in sight", pricesList.rows[1].data and pricesList.rows[1].data.itemID ~= nil, true)
+    local lit = false
+    for _, row in ipairs(pricesList.rows) do
+        if row.data and row.data.itemID == 1018 then lit = true end
+    end
+    check("its row on screen", lit, true)
+    ns.PricesUI:ShowItem(424242)
+    check("an item with no price still shows in the details", state.selected and state.selected.itemID, 424242)
+    state.selected = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("Characters")

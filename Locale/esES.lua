@@ -3566,6 +3566,8 @@ L["PRICE"] = "PRECIO"
 L["Set Default"] = "Por defecto"
 L["Sold Effects:"] = "Efectos de venta:"
 L["Sold Today:"] = "Vendido hoy:"
+L["Sold Today: %d"] = "Vendido hoy: %d"
+L["Price History"] = "Historial de precios"
 
 -- Buy Sets (Logic/ListSets.lua)
 L["Spend Up To:"] = "Gastar hasta:"

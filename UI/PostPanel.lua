@@ -968,12 +968,17 @@ function PostPanel:Build()
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- A click picks the row for Price History (2026-11-26); a click on
+        -- the picked row lets it go.
+        isSelected = function(line) return PostPanel:IsPicked(line) end,
         -- Right-click: how many to keep on this character (UI/KeepBox.lua,
         -- the owner said build it 2026-10-18).
         onClick = function(line, _, mouseButton)
             if mouseButton == "RightButton" and line and line.itemID and ns.KeepBox then
                 CommitTyping(PostPanel.list)
                 ns.KeepBox:Open(line, PostPanel.frame)
+            elseif mouseButton ~= "RightButton" and type(line) == "table" and line.itemID then
+                PostPanel:Pick(line.itemID)
             end
         end,
     })
@@ -1091,6 +1096,20 @@ function PostPanel:Build()
     end)
     duration:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.duration = duration
+
+    -- Price History (a player asked, the owner said build it from a
+    -- mockup, 2026-11-26): opens the Prices tab on the picked row's item.
+    -- Shows on Sell while a row is picked, in the foot note's place.
+    local history = Widgets.CreateButton(body, L["Price History"], function()
+        PostPanel:OpenPriceHistory()
+    end, { height = 22 })
+    if history.label and Theme.TextWidth then
+        local width = Theme.TextWidth(history.label)
+        history:SetWidth(math.max(80, math.ceil((width or 70) + 20)))
+    end
+    history:SetPoint("LEFT", duration, "RIGHT", 8, 0)
+    history:Hide()
+    self.priceHistory = history
 
     local footNote = Theme.CreateLabel(body, "tiny", "muted")
     footNote:SetPoint("LEFT", duration, "RIGHT", 8, 0)
@@ -1541,13 +1560,67 @@ function PostPanel:QueueAll()
 end
 
 --- The foot's note runs up to Queue All while it shows, else List Next.
+--- Price History takes the note's place while it shows; when the foot is
+--- too narrow for it beside Queue All, it takes Duration's place too.
 function PostPanel:AnchorFootNote()
     local note, queueAll = self.footNote, self.queueAll
     if not (note and self.listAll) or self.view ~= "sell" then return end
     local beside = queueAll and queueAll:IsShown() and queueAll or self.listAll
+    local history = self.priceHistory
+    if history and history:IsShown() then
+        note:Hide()
+        history:ClearAllPoints()
+        local width = (self.frame and self.frame.GetWidth and self.frame:GetWidth()) or 0
+        if width <= 0 then width = PANEL_WIDTH end
+        local need = (EDGE_PAD + 8) + (self.duration and self.duration:GetWidth() or 0) + 8
+            + history:GetWidth() + 8 + self.listAll:GetWidth() + (EDGE_PAD + 6)
+        if beside ~= self.listAll then need = need + beside:GetWidth() + 6 end
+        if self.duration and need > width then
+            self.duration:Hide()
+            history:SetPoint("LEFT", self.frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
+        else
+            if self.duration then self.duration:Show() end
+            history:SetPoint("LEFT", self.duration or self.frame, "RIGHT", 8, 0)
+        end
+        return
+    end
     note:ClearAllPoints()
     if self.duration then note:SetPoint("LEFT", self.duration, "RIGHT", 8, 0) end
     note:SetPoint("RIGHT", beside, "LEFT", -8, 0)
+end
+
+--- True for the row picked for Price History.
+function PostPanel:IsPicked(line)
+    return type(line) == "table" and self.picked ~= nil and line.itemID == self.picked
+end
+
+--- Pick a row for Price History, or let it go when it is the one picked.
+function PostPanel:Pick(itemID)
+    if self.picked == itemID then itemID = nil end
+    self.picked = itemID
+    if self.list then self.list:Refresh() end
+    self:UpdatePriceHistory()
+end
+
+--- Price History shows on Sell while a row is picked.
+function PostPanel:UpdatePriceHistory()
+    local history = self.priceHistory
+    if not history then return end
+    local on = self.view == "sell" and self.picked ~= nil and ns.PricesUI ~= nil
+        and ns.PricesUI.ShowItem ~= nil
+    history:SetShown(on)
+    if self.view == "sell" then
+        if not on and self.footNote then self.footNote:Show() end
+        if not on and self.duration then self.duration:Show() end
+        self:AnchorFootNote()
+    end
+end
+
+--- The Prices tab, on the picked row's item.
+function PostPanel:OpenPriceHistory()
+    if not self.picked or not ns.PricesUI or not ns.PricesUI.ShowItem then return end
+    CommitTyping(self.list)
+    ns.PricesUI:ShowItem(self.picked)
 end
 
 --- Queue All shows only while some row can still be queued.
@@ -2876,6 +2949,7 @@ function PostPanel:Refresh()
 
     if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
     if self.view ~= "sell" then self:UpdateWaitStrip() end
+    if self.view ~= "sell" and self.priceHistory then self.priceHistory:Hide() end
 
     self:UpdateAuctionsTab()
     if self:LayTabs() and ((self.view == "favors" and not PostPanel.ShowsFavors())
@@ -2976,6 +3050,17 @@ function PostPanel:Refresh()
     local lines, hidden, toVendor = self:ShownLines()
     self:UpdateWaitStrip()
     self.shownLines = lines
+    -- The picked row sold, was listed or left the list: let it go.
+    if self.picked then
+        local still = false
+        for _, line in ipairs(lines) do
+            if line.itemID == self.picked then still = true break end
+        end
+        if not still then self.picked = nil end
+    end
+    if self.priceHistory then
+        self.priceHistory:SetShown(self.picked ~= nil and ns.PricesUI ~= nil and ns.PricesUI.ShowItem ~= nil)
+    end
     self:UpdateListAll(lines)
     self:UpdateQueueAll(lines)
 

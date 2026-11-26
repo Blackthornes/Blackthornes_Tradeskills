@@ -3563,6 +3563,8 @@ L["PRICE"] = "价格"
 L["Set Default"] = "默认"
 L["Sold Effects:"] = "售出效果："
 L["Sold Today:"] = "今日售出："
+L["Sold Today: %d"] = "今日售出：%d"
+L["Price History"] = "价格历史"
 
 -- Buy Sets (Logic/ListSets.lua)
 L["Spend Up To:"] = "最多花费："
