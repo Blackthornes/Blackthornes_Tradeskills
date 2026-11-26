@@ -1528,7 +1528,77 @@ local function BuildMaterialRows()
     return rows
 end
 
-local function BuildRows()
+-- Picked, the tab walked every scanned item in that one frame whenever the
+-- list had to be built again (after a scan, the auction house opening or
+-- shutting, or new item facts). Once it has drawn, a pick keeps the rows it
+-- had and walks a few items a frame (Disenchant:BeginAuctionRows,
+-- AuctionRowStep, FinishAuctionRows, the steps GetAuctionRows takes), then
+-- draws. Any other refresh (a click, a filter, the bags) still answers at
+-- once and drops a build under way. The first draw is at once too, so the
+-- list never opens empty. The same way Level Up and Profit build when picked.
+local SLICE_MS = 4
+local spreadNext = false
+local building = nil
+local Refresh
+
+local function StopBuilding()
+    local worker = building
+    building = nil
+    if worker then worker:Cancel() end
+end
+
+--- Still on this tab's auction list, with the window up.
+local function StillShowing()
+    if UI.activeTab ~= "disenchanting" or state.view ~= "auction" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- Build the auction rows across frames, then draw. False when it must be
+--- at once.
+local function BuildInSlices(key, changes, opts)
+    local Disenchant = ns.Disenchant
+    if not (built.rows and Util and type(Util.NewWorker) == "function"
+        and Disenchant.BeginAuctionRows and Disenchant.AuctionRowStep and Disenchant.FinishAuctionRows) then
+        return false
+    end
+
+    local steps = Disenchant:BeginAuctionRows(opts)
+    local worker
+    worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(itemID)
+            if building ~= worker then return end
+            -- Another tab or view was picked, or the window shut: the next
+            -- time this one shows it builds afresh.
+            if not StillShowing() then
+                StopBuilding()
+                return
+            end
+            Disenchant:AuctionRowStep(steps, itemID)
+        end,
+        onDone = function()
+            if building ~= worker then return end
+            building = nil
+            if not StillShowing() then return end
+
+            -- Kept as of when the walk began. The draw then mends whatever
+            -- moved since, as it does for any kept list: a few items' rows
+            -- (PatchAuctionRows), or a fresh build at once.
+            local rows, hidden, pending, places = Disenchant:FinishAuctionRows(steps)
+            built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+            built.places, built.changes = places, changes
+            Disenchant.shownRows, Disenchant.shownBuiltAt = rows, Now()
+            Refresh()
+        end,
+    })
+    building = worker
+    worker:Start(steps.items)
+    return true
+end
+
+--- The rows to draw, or nil when the auction list is building over frames
+--- and will draw itself.
+local function BuildRows(spread)
     if state.view == "bag" then return BuildBagRows() end
     if state.view == "material" then return BuildMaterialRows() end
 
@@ -1545,6 +1615,8 @@ local function BuildRows()
     end
 
     if not patched and (key ~= built.key or changes ~= built.changes) then
+        if spread and BuildInSlices(key, changes, opts) then return nil end
+
         local rows, hidden, pending, places = ns.Disenchant:GetAuctionRows(opts)
         built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
         built.places, built.changes = places, changes
@@ -1737,10 +1809,15 @@ local function RefreshMaterial(rows)
     UpdateDetail(fresh)
 end
 
-local function Refresh()
+Refresh = function()
     if not widgets.list then return end
 
-    local rows = BuildRows()
+    StopBuilding()
+    local spread = spreadNext
+    spreadNext = false
+    local rows = BuildRows(spread)
+    if not rows then return end
+
     -- A clicked heading's order over the list's own. Find a material keeps
     -- its ways under their headings.
     if widgets.sorter and state.view ~= "material" then rows = widgets.sorter:Sort(rows) end
@@ -2092,10 +2169,19 @@ local function Build(container)
     end)
 end
 
+--- The tab was picked (UI:SelectTab): the auction list builds over frames.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(Refresh)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
 UI:RegisterTab({
     key = "disenchanting",
     text = L["Disenchanting"],
     order = 5,
     build = Build,
     refresh = Refresh,
+    refreshPicked = RefreshPicked,
 })

@@ -586,6 +586,167 @@ check("closing the auction house rebuilds the list", Disenchant.rowBuilds == bui
 ns.Scanner.isAuctionHouseOpen = true
 C_Timer.After = function() end
 
+-- Picked (2026-11-26): once it has drawn, a pick that must build the list
+-- again keeps the rows it had up and walks a few items a frame, then draws
+-- the list an at-once build gives. The pick used to walk every scanned item
+-- in its own frame.
+print("\npicked, the list builds over frames")
+
+do
+    -- A worker that does PER_FRAME items each time the test steps a frame.
+    local PER_FRAME, workers = 2, {}
+    local realWorker = ns.Util.NewWorker
+    ns.Util.NewWorker = function(opts)
+        local worker = { index = 0, running = false }
+        function worker:Start(items)
+            self.items, self.index, self.running = items, 0, true
+            workers[#workers + 1] = self
+            return self
+        end
+        function worker:Cancel() self.running = false end
+        function worker:Step()
+            local done = 0
+            while self.running and self.index < #self.items and done < PER_FRAME do
+                self.index = self.index + 1
+                done = done + 1
+                opts.onItem(self.items[self.index], self.index, self)
+            end
+            if self.running and self.index >= #self.items then
+                self.running = false
+                if opts.onDone then opts.onDone(self) end
+            end
+        end
+        return worker
+    end
+    local function Frame()
+        local stepped = false
+        for _, worker in ipairs(workers) do
+            if worker.running then worker:Step(); stepped = true end
+        end
+        return stepped
+    end
+    local function Frames()
+        local count = 0
+        while Frame() do count = count + 1 end
+        return count
+    end
+
+    local walked = 0
+    local realRow = Disenchant.AuctionRow
+    Disenchant.AuctionRow = function(...) walked = walked + 1; return realRow(...) end
+
+    local function Order(rows)
+        local ids = {}
+        for index, row in ipairs(rows) do ids[index] = row.itemID .. "=" .. row.gain end
+        return table.concat(ids, ",")
+    end
+    local draws = 0
+    local setData = list.SetData
+    list.SetData = function(self, data) draws = draws + 1; return setData(self, data) end
+
+    ns.UI.activeTab = "disenchanting"
+    ns.UI.window = { IsShown = function() return true end }
+    check("the tab has a redraw for when it is picked", type(tab.refreshPicked) == "function")
+
+    ns.Prices.changes = 20
+    tab.refresh()
+    local had = list.data
+    local builds = Disenchant.rowBuilds
+
+    walked, draws = 0, 0
+    tab.refreshPicked()
+    check("picked with nothing changed, it draws at once and walks nothing",
+        draws == 1 and walked == 0 and Frames() == 0)
+
+    -- New prices that name no item, as a scan gives.
+    ns.Prices.changes = 21
+    records[2006].rivalMin = 100
+    walked, draws = 0, 0
+    tab.refreshPicked()
+    check("picked after new prices, the pick itself walks no item", walked == 0)
+    check("and the rows it had stay up", draws == 0 and list.data == had)
+    Frame()
+    check("a frame later a few items are walked", walked == PER_FRAME)
+    check("the old rows still up", draws == 0 and list.data == had)
+    Frames()
+    check("every item walked once, over several frames", walked == 7)
+    check("then the list is drawn", draws == 1 and list.data ~= had)
+    check("with the new price in it", Find(list.data, 2006) ~= nil and Find(list.data, 2006).buy == 100)
+    check("counted as one build", Disenchant.rowBuilds == builds + 1)
+    local spread = Order(list.data)
+    ns.Prices.changes = 22
+    tab.refresh()
+    check("the same list an at-once build gives", Order(list.data) == spread)
+
+    -- A click or an event redraws while a build is under way.
+    ns.Prices.changes = 23
+    records[2006].rivalMin = 5000
+    tab.refreshPicked()
+    Frame()
+    draws = 0
+    tab.refresh()
+    check("a refresh under way answers at once, with what is true now",
+        draws == 1 and Find(list.data, 2006).buy == 5000)
+    walked = 0
+    check("and the build under way is dropped", Frames() == 0 and walked == 0)
+
+    -- Another tab picked before the build is done.
+    ns.Prices.changes = 24
+    records[2006].rivalMin = 100
+    tab.refreshPicked()
+    Frame()
+    walked, draws = 0, 0
+    ns.UI.activeTab = "queue"
+    Frames()
+    check("leaving the tab stops the build and draws nothing", walked == 0 and draws == 0)
+    ns.UI.activeTab = "disenchanting"
+    tab.refreshPicked()
+    Frames()
+    check("coming back builds afresh", Find(list.data, 2006).buy == 100)
+
+    -- The last one is bought while the list builds.
+    builds = Disenchant.rowBuilds
+    ns.Prices.changes = 25
+    tab.refreshPicked()
+    Frame()
+    records[2001].rivalMin = nil
+    ns.Prices.TouchedSince = function(_, since) return since == 25 and { [2001] = true } or nil end
+    ns.Prices.changes = 26
+    Frames()
+    check("a price that moved while it built is mended in the draw",
+        Find(list.data, 2001) == nil and Find(list.data, 2006).buy == 100)
+    check("without walking every item again", Disenchant.rowBuilds == builds + 1)
+
+    -- A change it cannot name while it builds: built again, at once.
+    records[2001].rivalMin = 500
+    ns.Prices.TouchedSince = function() return nil end
+    ns.Prices.changes = 27
+    tab.refreshPicked()
+    Frame()
+    ns.Prices.changes = 28
+    records[2006].rivalMin = 5000
+    Frames()
+    check("one it cannot name builds the list again before the draw",
+        Find(list.data, 2001) ~= nil and Find(list.data, 2006).buy == 5000)
+
+    -- The three steps are GetAuctionRows.
+    local steps = Disenchant:BeginAuctionRows({ profitableOnly = true })
+    for index = #steps.items, 1, -1 do Disenchant:AuctionRowStep(steps, steps.items[index]) end
+    local rows, hidden, pending = Disenchant:FinishAuctionRows(steps)
+    local wantRows, wantHidden, wantPending = Disenchant:GetAuctionRows({ profitableOnly = true })
+    check("the steps, in any order, give GetAuctionRows' list",
+        Order(rows) == Order(wantRows) and hidden == wantHidden and pending == wantPending)
+    check("and leave no material price kept after them", Disenchant.materialPrices == nil)
+
+    Disenchant.AuctionRow = realRow
+    list.SetData = setData
+    ns.Util.NewWorker = realWorker
+    ns.UI.activeTab, ns.UI.window = nil, nil
+    ns.Prices.TouchedSince = nil
+    ns.Prices.changes = nil
+    tab.refresh()
+end
+
 -- Buy One (2026-11-24): after Search, the same button buys the cheapest
 -- listing on each click, up to the highest price that meets the minimums.
 print("\nBuy One")

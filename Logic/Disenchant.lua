@@ -1282,36 +1282,55 @@ end
 --   are read while the auction house is open), and each item's place
 --   ([itemID] = "row", "hidden" or "pending"), for PatchAuctionRows
 function Disenchant:GetAuctionRows(opts)
+    local steps = self:BeginAuctionRows(opts)
+    for _, itemID in ipairs(steps.items) do
+        self:AuctionRowStep(steps, itemID)
+    end
+    return self:FinishAuctionRows(steps)
+end
+
+--- GetAuctionRows in steps, so a list can build over frames (the tab does,
+--- when picked): BeginAuctionRows, AuctionRowStep for each of steps.items
+--- in any order, then FinishAuctionRows for what GetAuctionRows returns.
+--- A price that moves between steps is the caller's to notice
+--- (Prices.changes) and mend (PatchAuctionRows, or a fresh build).
+function Disenchant:BeginAuctionRows(opts)
     -- Counted for /bts readysell, which says how often this ran.
     self.rowBuilds = (self.rowBuilds or 0) + 1
 
-    local rows, hidden, pending, places = {}, 0, 0, {}
     local prices = ns.Prices and ns.Prices:GetTable() or {}
-    local ctx = self:AuctionContext(opts)
+    local items = {}
+    for itemID in pairs(prices) do items[#items + 1] = itemID end
 
-    -- Nothing prices an item while this walks, so a material's price is
-    -- kept for the walk (GetMaterialPrice) and let go after it, even when
-    -- a row raises.
-    self.materialPrices = {}
-    local ok, err = pcall(function()
-        for itemID, record in pairs(prices) do
-            local place, row = self:AuctionRow(itemID, record, ctx)
-            places[itemID] = place
-            if place == "row" then
-                rows[#rows + 1] = row
-            elseif place == "hidden" then
-                hidden = hidden + 1
-            elseif place == "pending" then
-                pending = pending + 1
-            end
-        end
-    end)
+    return {
+        items = items, prices = prices, ctx = self:AuctionContext(opts),
+        rows = {}, hidden = 0, pending = 0, places = {},
+        -- Nothing prices an item while a step runs, so a material's price
+        -- is kept for the build (GetMaterialPrice) and let go after each
+        -- step, even when a row raises.
+        materialPrices = {},
+    }
+end
+
+function Disenchant:AuctionRowStep(steps, itemID)
+    self.materialPrices = steps.materialPrices
+    local ok, place, row = pcall(self.AuctionRow, self, itemID, steps.prices[itemID], steps.ctx)
     self.materialPrices = nil
-    if not ok then error(err, 0) end
+    if not ok then error(place, 0) end
 
-    table.sort(rows, BestFirst)
+    steps.places[itemID] = place
+    if place == "row" then
+        steps.rows[#steps.rows + 1] = row
+    elseif place == "hidden" then
+        steps.hidden = steps.hidden + 1
+    elseif place == "pending" then
+        steps.pending = steps.pending + 1
+    end
+end
 
-    return rows, hidden, pending, places
+function Disenchant:FinishAuctionRows(steps)
+    table.sort(steps.rows, BestFirst)
+    return steps.rows, steps.hidden, steps.pending, steps.places
 end
 
 --- Redo the rows of a few items in a list GetAuctionRows built, in place:
