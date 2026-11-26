@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.48.0
+
+- Vendor prices count the Bartering perk.
+- The item tooltip shows what an item costs to make now, above Profit Now.
+- Stock you bought is costed at what you paid and shows under Flipped.
+- Lucky disenchants at an Arcane Salvager say so again, with the sound.
+
+Fixes and changes:
+- Various other bug fixes for Tradeskills.
+
 ## 1.47.2
 
 Fixes and changes:
