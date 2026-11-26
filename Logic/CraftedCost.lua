@@ -363,15 +363,30 @@ function CraftedCost:CostNow(itemID)
     return math.floor(each + 0.5)
 end
 
+--- What one listing at `price` brings in: the price less the cut and the
+--- deposits a sale is expected to lose, the same sum the Profit tab counts
+--- (Profit:NetFromListing, the owner said build it 2026-11-26). Without
+--- Profit loaded, the price less the cut.
+function CraftedCost:NetOfListing(itemID, price)
+    local Profit = ns.Profit
+    if Profit and Profit.NetFromListing then
+        local ok, net = pcall(Profit.NetFromListing, Profit, itemID, price)
+        if ok and type(net) == "number" then return math.floor(net) end
+    end
+    return self:NetOf(price)
+end
+
 --- What one sale at `price` makes over what one costs to make today, after
---- the cut. The owner (2026-11-25): Profit Now always shows the current
---- amount, so it agrees with the craft queue, not with the last craft.
+--- the cut and the deposit. The owner (2026-11-25): Profit Now always shows
+--- the current amount, so it agrees with the craft queue, not with the last
+--- craft. `toVendor` sells it to a vendor: no cut, no deposit.
 -- @return profit (copper, negative for a loss), or nil when either is unknown
-function CraftedCost:ProfitNowAt(itemID, price)
+function CraftedCost:ProfitNowAt(itemID, price, toVendor)
     if type(price) ~= "number" then return nil end
     local cost = self:CostNow(itemID)
     if not cost then return nil end
-    return self:NetOf(price) - cost
+    if toVendor then return math.floor(price) - cost end
+    return self:NetOfListing(itemID, price) - cost
 end
 
 --- Lines for a tooltip, each { label, value, color }: what it cost the last
@@ -402,6 +417,7 @@ function CraftedCost:Lines(itemID, price)
     -- Nothing to make it from today: no profit line, and no price looked up.
     local costNow = self:CostNow(itemID)
     if not costNow then return lines end
+    local toVendor = false
 
     -- An estimate from the materials is not a price anyone pays, so no
     -- profit is worked out on it.
@@ -421,9 +437,16 @@ function CraftedCost:Lines(itemID, price)
         elseif ok and basis ~= "derived" then
             price = chosen
         end
+        -- Worth whichever pays more, as the Profit tab counts the sale:
+        -- a vendor that pays more than the listing brings in is the sale.
+        local vendor = Util.GetVendorSellPrice and Util.GetVendorSellPrice(itemID)
+        if type(vendor) == "number" and vendor > 0
+            and (not price or vendor >= self:NetOfListing(itemID, price)) then
+            price, toVendor = vendor, true
+        end
     end
 
-    local profit = price and self:ProfitNowAt(itemID, price)
+    local profit = price and self:ProfitNowAt(itemID, price, toVendor)
     if profit then
         -- Today's cost on its own line, the one Profit Now takes off, so
         -- the sum can be checked by eye (a player's report, 2026-11-26:
