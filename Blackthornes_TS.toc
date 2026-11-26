@@ -192,8 +192,6 @@ UI\RecipeBookView.lua
 UI\YourTimeView.lua
 UI\ShuffleView.lua
 UI\AllRecipesView.lua
-Logic\Today.lua
-UI\Tab_Today.lua
 UI\Tab_Profit.lua
 UI\RoadView.lua
 UI\Tab_LevelUp.lua

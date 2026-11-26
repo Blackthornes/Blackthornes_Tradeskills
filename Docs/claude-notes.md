@@ -4278,7 +4278,7 @@ open, and `UI.POST_CRAFTED_BUTTON` is off). Tested in
 `tools/test_queuesort.lua` and the Queue part of `tools/test_uifit.lua`.
 
 
-## The Today tab
+## The Today tab (taken out)
 
 The owner said build it (2026-11-26, from the mockup ts-improve-1-today):
 a new first tab, `today` (order 0), that lists what is worth doing now.
@@ -4312,6 +4312,13 @@ draws again.
 
 The seven-tab grouping (PR 1506) was taken back out the same day: the
 owner wants the old bottom tabs, with Today kept first.
+
+Taken out (the owner, 2026-11-26): the tab made Tradeskills hang as it
+opened and was not worth a tab spot. `Logic/Today.lua`, `UI/Tab_Today.lua`,
+`tools/test_today.lua`, its Settings boxes, its words and
+`SalesTab.ShowView` are gone; the window opens on the last tab used, else
+Profit. Saved `todayHide_<kind>` keys are left in place, unread. Don't
+bring the tab back without his yes.
 
 ## A lighter save (2026-11-26)
 
