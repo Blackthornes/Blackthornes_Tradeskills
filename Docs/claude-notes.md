@@ -4132,3 +4132,27 @@ shows the current amount.
   tooltip's one.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
+
+## The Today tab
+
+The owner said build it (2026-11-26, from the mockup ts-improve-1-today):
+a new first tab, `today` (order 0), that lists what is worth doing now.
+`Logic/Today.lua` finds the lines, each read inside a pcall from what
+another part already knows: heard sales still in the mail
+(`Mail:SettleHeard`, the character playing's only), undercut auctions
+(`MyAuctions:Rows`), cooldown crafts up and not queued
+(`Cooldowns:ReadyList`), crafts with their own Keep in Stock number that
+have none left anywhere (`db.postLimits`, `Auctions:GetRoom`), the Profit
+list's count and best (`Profit:BeginRanked`/`RankOne`/`FinishRanked`, a
+few recipes a frame, kept until prices, queue, settings or recipes move),
+writs that pay back more than they cost and are not done
+(`Writs:GetRows`), and the next stretch of Road to 300 (`RoadPlan:Get`,
+`Today.NextStretch`). Buttons only open a tab or queue (`Today:Run`).
+`UI/Tab_Today.lua` draws four cards (Gold Today from `GoldLog`, Up For
+Sale and Sold Today from `AuctionTracker`, Prices Read from
+`Prices:GetLastScan`) and the dark glass Do Next list; a row whose line
+key did not change keeps what it drew. The window opens on Today the
+first time it is opened by hand in a session (`UI.todayOpened`), never
+when docked. Each line kind has a box on the Windows page, saved as
+`todayHide_<kind>` (true hides it; never rename). Tested in
+`tools/test_today.lua`.
