@@ -4155,3 +4155,22 @@ unpacked in place the first time it is read or added to
 those, never by index or with `type(record.history) == "table"`. A version
 from before reads a packed history as none and starts it again (only the
 twelve kept readings). Tested in `tools/test_packedhistory.lua`.
+
+Step two (the owner picked "build it as the mockup", 2026-11-26), on the
+Data page under Remove Old Prices: "Saved Data:" shows about how big the
+save is (`TidyUp:Measure`, added up over frames, measured again after ten
+minutes or a tidy) with a Tidy Up button, and "Keep Price History For:"
+(30 Days, 90 Days, A Year, Always; `keepPriceHistoryDays`, 0 is Always,
+never rename it). Logic/TidyUp.lua and UI/TidyUpBox.lua. Picking a period
+opens the Tidy Up window; only its Confirm saves the choice and removes
+anything; Cancel, the close gem and Escape put the choice back. Tidy Up is
+greyed while Always. A tidy removes, for items not yours, readings older
+than the period and suffix rows not seen for that long, on every realm,
+a slice of records a frame. Yours (`TidyUp:Yours`): crafted or used by a
+character and starred (`PriceHistory:GetTracked`), `myPrices`,
+`lastPosted`. An item's own price is never removed. While a period is
+kept, the tidy runs again `TidyUp.LOGIN_DELAY` seconds after login. The
+mockup's "Scans kept twice" row was left out: nothing in the save is
+kept twice. Because Prices:Prune already drops items not seen for 21
+days, a tidy frees little on a save that scans often. Tested in
+`tools/test_tidyup.lua`.

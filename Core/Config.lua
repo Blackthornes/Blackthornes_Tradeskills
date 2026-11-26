@@ -332,6 +332,12 @@ local DEFAULTS = {
         priceTrendDays = 7,
         tooltipTrend = true,
 
+        -- Keep Price History For (2026-11-26, Logic/TidyUp.lua): days of
+        -- price readings kept for items you don't craft, star or sell. 0 is
+        -- Always, so nothing is removed until the player picks and confirms.
+        -- Never rename it.
+        keepPriceHistoryDays = 0,
+
         -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
         -- teaches, what one craft costs, sells and disenchants for, and how
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
