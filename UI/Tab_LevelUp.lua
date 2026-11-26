@@ -1451,17 +1451,86 @@ ResetLearnFilters = function()
     Refresh(true)
 end
 
-Refresh = function(reuseLearn)
-    if not widgets.list then return end
-
-    local known = ns.LevelUp:GetRanked({
+--- What the list asks the ranking for.
+local function RankOptions()
+    return {
         skillLines = state.profession and skillLinesByName[state.profession] or nil,
         includeTrivial = state.includeTrivial,
         craftableOnly = state.craftableOnly,
         canAfford = state.canAfford,
         subCraftsOnly = state.subCraftsOnly,
         search = state.search,
+    }
+end
+
+-- Picking the tab built a row for every recipe in one frame: each one's
+-- cost, what it gives back and its skill-up chance (2026-11-26, a stall
+-- that grows with every recipe known). When the tab is picked the list now
+-- keeps the rows it had and builds a few rows a frame (LevelUp:BeginRanked,
+-- RankOne, FinishRanked: the steps GetRanked takes), then draws. Any other
+-- refresh (a click, a filter, the bags) still answers at once and drops a
+-- build under way. The first draw is at once too, so the list never opens
+-- empty. The same way the Profit tab ranks when picked.
+local SLICE_MS = 4
+local spreadNext = false
+local ranking = nil
+-- Still on this tab's Next Point view; set once the views are made.
+local StillShowing = function() return true end
+
+local function StopRanking()
+    local worker = ranking
+    ranking = nil
+    if worker then worker:Cancel() end
+end
+
+local Draw
+
+--- Build the rows across frames, then draw. False when it must be at once.
+local function RankInSlices(reuseLearn)
+    if not (state.drawn and Util and type(Util.NewWorker) == "function"
+        and ns.LevelUp.BeginRanked and ns.LevelUp.RankOne and ns.LevelUp.FinishRanked) then
+        return false
+    end
+
+    local steps = ns.LevelUp:BeginRanked(RankOptions())
+    local worker
+    worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(recipeID)
+            if ranking ~= worker then return end
+            -- Another tab or view was picked, or the window shut: the next
+            -- time this one shows it builds afresh.
+            if not StillShowing() then
+                StopRanking()
+                return
+            end
+            ns.LevelUp:RankOne(steps, recipeID)
+        end,
+        onDone = function()
+            if ranking ~= worker then return end
+            ranking = nil
+            if not StillShowing() then return end
+            Draw(ns.LevelUp:FinishRanked(steps), reuseLearn)
+        end,
     })
+    ranking = worker
+    worker:Start(steps.items)
+    return true
+end
+
+Refresh = function(reuseLearn)
+    if not widgets.list then return end
+
+    StopRanking()
+    local spread = spreadNext
+    spreadNext = false
+    if spread and RankInSlices(reuseLearn) then return end
+
+    Draw(ns.LevelUp:GetRanked(RankOptions()), reuseLearn)
+end
+
+Draw = function(known, reuseLearn)
+    state.drawn = true
     local learnRows, built = LearnRows(reuseLearn)
 
     local shown = {}
@@ -1877,12 +1946,29 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     end,
 })
 
+local RefreshView = switch and switch.Refresh or Refresh
+
+StillShowing = function()
+    if UI.activeTab ~= "levelup" then return false end
+    if switch and switch.view ~= "recipes" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- The tab was picked (UI:SelectTab): Next Point builds a few rows a frame.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(RefreshView)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
 UI:RegisterTab({
     key = "levelup",
     text = L["Level Up"],
     order = 6,
     build = switch and switch.Build or Build,
-    refresh = switch and switch.Refresh or Refresh,
+    refresh = RefreshView,
+    refreshPicked = RefreshPicked,
     onShow = OnShow,
 })
 

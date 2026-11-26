@@ -138,6 +138,26 @@ local searched = LevelUp:GetRanked({ search = "BELT" })
 check("search matches any case, across professions", names(searched) == "Aaa Belt, Linen Belt")
 
 local everything = LevelUp:GetRanked({})
+
+-- The Level Up tab builds a few rows a frame when picked, in the three
+-- steps GetRanked takes. They must give GetRanked's rows in its order.
+do
+    local function Names(rows)
+        local names = {}
+        for _, row in ipairs(rows) do names[#names + 1] = tostring(row.recipeID) end
+        return table.concat(names, ",")
+    end
+    for label, opts in pairs({
+        everything = {}, grey = { skillLines = tailoring, includeTrivial = true },
+        craftable = { skillLines = tailoring, craftableOnly = true }, search = { search = "BELT" },
+    }) do
+        local steps = LevelUp:BeginRanked(opts)
+        for _, recipeID in ipairs(steps.items) do LevelUp:RankOne(steps, recipeID) end
+        local stepped = Names(LevelUp:FinishRanked(steps))
+        assert(stepped == Names(LevelUp:GetRanked(opts)),
+            "the three steps must give GetRanked's list (" .. label .. ")")
+    end
+end
 check("no profession given lists every profession", #everything == 9)
 
 print("\nties never reshuffle")

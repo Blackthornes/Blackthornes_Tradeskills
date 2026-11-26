@@ -371,6 +371,99 @@ check("a drop row's menu keeps the wishlist line, no Show the Way",
   menu and #menu == 1 and menu[1].text == "Add to Wishlist", true)
 ns.WishlistUI = nil
 
+-- Picking the tab built a row for every recipe known in one frame
+-- (2026-11-26). Now a pick keeps the rows it had and builds a few a frame,
+-- then draws what an at-once refresh draws. Any other refresh is at once
+-- and drops a build under way; so does leaving the tab.
+print("\npicking the tab builds its rows over frames")
+do
+  -- The tab as the last section left it.
+  local tab, list = tabs.levelup, made.lists[#made.lists]
+  local known = { "Bronze Axe", "Copper Mace", "Iron Buckle" }
+  local builtRows, atOnce = 0, 0
+  local function RowFor(name) return { name = name, recipeID = #name * 7, tier = "optimal" } end
+  ns.LevelUp.GetRanked = function()
+    atOnce = atOnce + 1
+    local rows = {}
+    for _, name in ipairs(known) do rows[#rows + 1] = RowFor(name) end
+    return rows
+  end
+  ns.LevelUp.BeginRanked = function() return { items = { 1, 2, 3 }, rows = {} } end
+  ns.LevelUp.RankOne = function(_, steps, index)
+    builtRows = builtRows + 1
+    steps.rows[#steps.rows + 1] = RowFor(known[index])
+  end
+  ns.LevelUp.FinishRanked = function(_, steps) return steps.rows end
+  ns.LevelUp.BuildRow = function() return nil end
+  ns.SkillUp.GetTierColor = function() return 1, 1, 1 end
+
+  -- A worker that does one item each time the test says a frame passed.
+  local workers = {}
+  ns.Util.NewWorker = function(opts)
+    local worker = { opts = opts, index = 0, items = {} }
+    function worker:Start(items) self.items, self.index, self.running = items, 0, true; workers[#workers + 1] = self end
+    function worker:Cancel() self.running = false end
+    return worker
+  end
+  local function Frame()
+    for _, worker in ipairs(workers) do
+      if worker.running then
+        worker.index = worker.index + 1
+        worker.opts.onItem(worker.items[worker.index], worker.index, worker)
+        if worker.running and worker.index >= #worker.items then
+          worker.running = false
+          worker.opts.onDone(worker)
+        end
+      end
+    end
+  end
+  local function KnownNames()
+    local names = {}
+    for _, entry in ipairs(list.data) do
+      if entry.heading then break end
+      names[#names + 1] = entry.name
+    end
+    return table.concat(names, ", ")
+  end
+
+  ns.UI.activeTab = "levelup"
+  check("the tab has a lighter redraw for a pick", type(tab.refreshPicked), "function")
+  tab.refresh()
+  check("a plain refresh is at once", atOnce, 1)
+  check("and draws the list", KnownNames(), "Bronze Axe, Copper Mace, Iron Buckle")
+
+  known = { "Bronze Axe", "Copper Mace", "Mithril Spurs" }
+  atOnce = 0
+  tab.refreshPicked()
+  check("a pick builds no row in its own frame", builtRows, 0)
+  check("and none at once", atOnce, 0)
+  check("the rows it had stay up meanwhile", KnownNames(), "Bronze Axe, Copper Mace, Iron Buckle")
+  Frame(); Frame()
+  check("a row a frame", builtRows, 2)
+  check("the old rows still up", KnownNames(), "Bronze Axe, Copper Mace, Iron Buckle")
+  Frame()
+  check("then the list an at-once refresh gives", KnownNames(), "Bronze Axe, Copper Mace, Mithril Spurs")
+
+  -- A click, a filter or the bags answer at once and drop a build under way.
+  builtRows = 0
+  tab.refreshPicked()
+  Frame()
+  tab.refresh()
+  check("any other refresh is at once", atOnce, 1)
+  Frame(); Frame(); Frame()
+  check("and the build under way is dropped", builtRows, 1)
+
+  -- Another tab picked mid-build: nothing more is built or drawn.
+  builtRows = 0
+  known = { "Left Behind" }
+  tab.refreshPicked()
+  ns.UI.activeTab = "queue"
+  Frame(); Frame(); Frame()
+  check("leaving the tab stops the build", builtRows, 0)
+  check("and draws nothing over the list", KnownNames(), "Bronze Axe, Copper Mace, Mithril Spurs")
+  ns.UI.activeTab = "levelup"
+end
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
