@@ -1700,6 +1700,46 @@ check("and colours it when it does", late.name.textColor[1], 0.64)
 
 ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After = savedQuality, savedRegister, savedAfter
 
+-- Sort By over the list and the gold an hour on each row (2026-11-26). The
+-- column shows only while Sort By is Gold per Hour, and the name gives it
+-- room.
+local sortBy, picked = "mine", nil
+local savedSorts, savedSortBy, savedSet, savedEarns =
+    ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns
+ns.Queue.SORTS = { "mine", "profit", "perHour", "bags" }
+ns.Queue.SortBy = function() return sortBy end
+ns.Queue.SetSortBy = function(_, value) picked = value end
+ns.Queue.EntryEarns = function(_, entry)
+    if entry.isDependency then return nil, nil end
+    return 10000, 1838400
+end
+local sortChips, realChip = {}, Widgets.CreateChip
+Widgets.CreateChip = function(...)
+    local chip = realChip(...)
+    sortChips[#sortChips + 1] = chip
+    return chip
+end
+listsBefore = #made.CreateScrollList
+UI.tabs.queue.build(Region(UI.window))
+craftList = made.CreateScrollList[listsBefore + 1]
+craftList.height = 200
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+local sortRow = craftList.rows[1]
+check("no gold an hour under My Order", sortRow.perHour:IsShown(), false)
+sortBy = "perHour"
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+check("Gold per Hour shows it on the row", sortRow.perHour:IsShown(), true)
+check("in gold and silver", sortRow.perHour.text ~= nil and sortRow.perHour.text:find("183") ~= nil, true)
+check("a part shows none", craftList.rows[2].perHour.text, "")
+Widgets.CreateChip = realChip
+check("four Sort By chips", #sortChips, 4)
+check("built under My Order, its chip is lit", sortChips[1]:IsSelected(), true)
+check("the others are not", sortChips[3]:IsSelected(), false)
+sortChips[4].scripts.OnClick(sortChips[4])
+check("a chip picks its Sort By", picked, "bags")
+ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns =
+    savedSorts, savedSortBy, savedSet, savedEarns
+
 --------------------------------------------------------------------------------
 
 print("")

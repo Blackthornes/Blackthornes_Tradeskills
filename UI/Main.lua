@@ -102,6 +102,10 @@ UI.SIZES = {
 local GRIP_SIZE = 20
 
 -- How long "Scan complete" stays on the bar before it goes back to idle.
+-- The group row (UI.TAB_GROUPS): how far it sits in from the content's
+-- sides, and how much room it takes off the top of the tab under it.
+local GROUP_STRIP_INSET, GROUP_STRIP_ROOM = 8, 34
+
 local SCAN_DONE_HOLD = 5
 
 -- How far the window sits off the screen corner while the auction house is
@@ -365,10 +369,12 @@ function UI:BuildTabs()
     -- "Vendor Flips", whose names ran into their neighbours.
     local stripWidth = WINDOW_WIDTH - 2 * TAB_INSET
 
+    -- Grouped by what the player came to do (the owner said build it,
+    -- 2026-11-26): Make, Sell and Learn each hold a few tabs (UI.TAB_GROUPS).
     local definitions = {}
-    for _, tab in ipairs(self.tabOrder) do
+    for _, entry in ipairs(self:MainEntries()) do
         -- Settings is always last, flush right (the owner, 2026-10-27).
-        definitions[#definitions + 1] = { key = tab.key, text = tab.text, right = tab.key == "settings" }
+        definitions[#definitions + 1] = { key = entry.key, text = entry.text, right = entry.key == "settings" }
     end
 
     -- Hung below the window, as the game's own windows wear their tabs. The
@@ -384,6 +390,22 @@ function UI:BuildTabs()
     content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, FOOTER_BOTTOM + FOOTER_HEIGHT + 2)
     Theme.Recess(content)
     self.content = content
+
+    -- A grouped tab's own row of tabs, along the top of the content.
+    self.groupStrips = {}
+    for _, group in ipairs(UI.TAB_GROUPS) do
+        local members = self:GroupMembers(group)
+        if #members > 1 then
+            local defs = {}
+            for _, key in ipairs(members) do defs[#defs + 1] = { key = key, text = self.tabs[key].text } end
+            local inner = Widgets.CreateTabStrip(content, defs, function(key)
+                UI:SelectTab(key)
+            end, { width = stripWidth - 2 * GROUP_STRIP_INSET })
+            inner:SetPoint("TOPLEFT", content, "TOPLEFT", GROUP_STRIP_INSET, -4)
+            inner:Hide()
+            self.groupStrips[group.key] = inner
+        end
+    end
 
     for _, tab in ipairs(self.tabOrder) do
         local container = CreateFrame("Frame", nil, content)
@@ -489,6 +511,101 @@ function UI:ActiveStrip()
     return dock or self.tabStrip
 end
 
+-- Seven tabs in place of eleven (the owner said build it, 2026-11-26, from
+-- the mockup ts-improve-9): the usual row groups tabs by what the player
+-- came to do, and a group shows its tabs in a row of their own along the top.
+-- Every tab keeps its key, so /bts commands, the other addons' calls, the
+-- saved last tab and the auction house, profession and mailbox rows (each
+-- still flat) land where they did. A group with only one of its tabs
+-- loaded shows that tab alone. `order` places the group on the row.
+UI.TAB_GROUPS = {
+    { key = "make", text = L["Make"], order = 1, tabs = { "queue", "profit", "disenchanting" } },
+    { key = "sell", text = L["Sell"], order = 2, tabs = { "sales", "deals" } },
+    { key = "learn", text = L["Learn"], order = 3, tabs = { "levelup", "gather" } },
+}
+
+--- A group's tabs that are loaded, in its order.
+function UI:GroupMembers(group)
+    local keys = {}
+    for _, key in ipairs(group.tabs) do
+        if self.tabs[key] then keys[#keys + 1] = key end
+    end
+    return keys
+end
+
+--- The group a tab sits in on the usual row, or nil. Only groups with two
+--- or more tabs loaded count.
+function UI:GroupOf(key)
+    for _, group in ipairs(UI.TAB_GROUPS) do
+        local members = self:GroupMembers(group)
+        if #members > 1 then
+            for _, member in ipairs(members) do
+                if member == key then return group end
+            end
+        end
+    end
+    return nil
+end
+
+--- The usual row: each group once, in place of its tabs, and every other tab.
+function UI:MainEntries()
+    local entries, seen = {}, {}
+    for _, tab in ipairs(self.tabOrder) do
+        local group = self:GroupOf(tab.key)
+        if group then
+            if not seen[group.key] then
+                seen[group.key] = true
+                entries[#entries + 1] = { key = group.key, text = group.text, order = group.order, group = group }
+            end
+        else
+            entries[#entries + 1] = { key = tab.key, text = tab.text, order = tab.order or 99 }
+        end
+    end
+    table.sort(entries, function(a, b)
+        if a.order ~= b.order then return a.order < b.order end
+        return a.key < b.key
+    end)
+    return entries
+end
+
+--- The tab a group's key opens: the one last picked in it, else its first.
+function UI:GroupPick(groupKey)
+    for _, group in ipairs(UI.TAB_GROUPS) do
+        if group.key == groupKey then
+            local members = self:GroupMembers(group)
+            local picked = self.groupPicks and self.groupPicks[groupKey]
+            for _, key in ipairs(members) do
+                if key == picked then return key end
+            end
+            return members[1]
+        end
+    end
+    return nil
+end
+
+--- Show the group row for the tab showing, and make room for it.
+function UI:LayGroupRow(key)
+    local onUsual = self:ActiveStrip() == self.tabStrip
+    local group = onUsual and self:GroupOf(key) or nil
+    for groupKey, inner in pairs(self.groupStrips or {}) do
+        local mine = group ~= nil and group.key == groupKey
+        inner:SetShown(mine)
+        if mine then inner:Select(key) end
+    end
+    local tab = self.tabs[key]
+    local container = tab and tab.container
+    if container and container ~= self.ahContainer then
+        container:ClearAllPoints()
+        container:SetPoint("TOPLEFT", 1, group and -GROUP_STRIP_ROOM or -1)
+        container:SetPoint("BOTTOMRIGHT", -1, 1)
+    end
+    if group then
+        self.groupPicks = self.groupPicks or {}
+        self.groupPicks[group.key] = key
+    end
+    return group
+end
+
 -- The tabs beside Auction House while the one window sits at the auction
 -- house, in this order. Every other tab follows them (UI:EveryTab).
 UI.AUCTION_TABS = { "prices", "profit", "queue", "disenchanting", "deals", "settings" }
@@ -511,6 +628,8 @@ UI.MOVED_TABS = {
 
 function UI:SelectTab(key)
     key = UI.MOVED_TABS[key] or key
+    -- A group's key opens the tab last picked in it.
+    if not self.tabs[key] and self.GroupPick then key = self:GroupPick(key) or key end
     local tab = self.tabs[key]
     if not tab then return end
 
@@ -529,7 +648,8 @@ function UI:SelectTab(key)
 
     self.activeTab = key
     local strip = self:ActiveStrip()
-    strip:Select(key)
+    local group = self:LayGroupRow(key)
+    strip:Select(group and group.key or key)
 
     -- The Auction House, Crafting and Mail tabs are only there while docked
     -- at their place, so none is the tab the window opens on next time.
@@ -1101,6 +1221,15 @@ function UI:Show()
     local last = ns.db and ns.db.lastTab
     last = last and (UI.MOVED_TABS[last] or last)
     if last and not self.tabs[last] then last = nil end
+    -- The Today tab first, the first time the window is opened by hand in
+    -- a session (the owner said build it, 2026-11-26). Docked at the
+    -- auction house, a profession or the mailbox, that place's own tab
+    -- still opens; later openings keep the tab the player left.
+    if opening and not self.todayOpened and self.tabs.today
+        and not TSTabs.atAuction and not TSTabs.atDock and not self:AtAPlace() then
+        self.todayOpened = true
+        self.activeTab = "today"
+    end
     self:SelectTab(self.activeTab or last or self.tabOrder[1].key)
     self:UpdateHeader()
 
@@ -1168,6 +1297,28 @@ function UI:FindAuctionFrame()
             if ok then return frame, name end
         end
     end
+end
+
+--- True while the game's auction window is open.
+function UI:AtAuctionHouse()
+    local frame = self:FindAuctionFrame()
+    if not frame then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown == true
+end
+
+--- True while the auction house, a profession window or the mailbox is
+--- open, where the window keeps that place's own tab.
+function UI:AtAPlace()
+    if self:AtAuctionHouse() then return true end
+    for _, name in ipairs({ "MailFrame", "ProfessionsFrame", "TradeSkillFrame" }) do
+        local frame = rawget(_G, name)
+        if type(frame) == "table" and frame.IsShown then
+            local ok, shown = pcall(frame.IsShown, frame)
+            if ok and shown == true then return true end
+        end
+    end
+    return false
 end
 
 --- The strip of addon controls at the top of the sell list.

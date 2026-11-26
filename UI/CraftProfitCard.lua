@@ -94,7 +94,8 @@ function CraftProfitCard.Rows(figures)
             kind = "mat",
             label = (entry.quantity or 1) .. " " .. name,
             value = entry.lineCost and CP.Money(entry.lineCost) or CP.NoPrice(),
-            way = entry.lineCost and CP.WayText(entry.way) or nil,
+            -- A made or owned mat has no AH or Vendor tag.
+            way = entry.lineCost and entry.way and CP.WayText(entry.way) or nil,
         }
     end
     rows[#rows + 1] = { kind = "cost", label = lines[2].label, value = lines[2].value }

@@ -627,6 +627,23 @@ under the window stays hidden (`WishlistCard.ButlerShows`), so an older
 Butler leaves the card showing. Tested in `tools/test_wishlist.lua`. Keep
 it stable; Butler's `Logic/Wishlist.lua` reads it.
 
+Butler's Set Up Butler card (the owner said build it, 2026-11-26, from
+a mockup) reads and types the disenchanter on the Mail page, inside a
+pcall:
+
+```lua
+_G.BlackthornesTS.Butler:Disenchanter()        -- the typed name, trimmed, or nil
+_G.BlackthornesTS.Butler:SetDisenchanter(name) -- true, or false
+```
+
+`Disenchanter` is only what is typed in the box (`disenchanterName`),
+never the one "Pick One for Me:" picks; the card shows only while the box
+is empty. `SetDisenchanter` writes the box as the Mail page does and
+redraws the mail panel; nil or "" empties it; the character playing
+(`QueueMail:IsPlayingName`) is refused and nothing is written. Tested in
+`tools/test_butlerdisenchanter.lua`. Keep both stable; Butler's
+`UI/QuickSetup.lua` calls them.
+
 Butler's "Craft When It Pays More" (a player asked, the owner said build
 it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
 inside a pcall:
@@ -649,6 +666,16 @@ use, carried or not, so Butler can say "With Tin Bar." Kept in the
 lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 
+
+### Who can make it (Butler's restock list, 2026-11-26)
+
+`Butler:MakersOf(itemID)` answers Butler's restock list: the recipe on
+this account that makes the item and is known by the most characters,
+`{ recipeID, name, per, makers = { { key, name, short, playing } } }`, or
+nil. Linked characters (another account) and dropped professions are left
+out. Read only, inside a pcall, never raises. Butler shows "NAME can make
+them." and a Queue button that calls `QueueCraft`. Tested in
+`tools/test_butlercraft.lua`.
 
 ## Butler Says Wait on the auction house drawer
 
