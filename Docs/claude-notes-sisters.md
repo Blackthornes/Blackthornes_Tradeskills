@@ -197,6 +197,17 @@ the players' reports in `FOREVER_SKILLS`, then Classic's book.
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
 
+Auction house upgrades (the owner said build it from a mockup, 2026-11-26):
+Equipment's Find Upgrades lists gear on the auction house from the scans
+this addon already made, never a scan of its own. It reads, inside a pcall
+and read only, `ns.Prices:OnSale()` (`Data/Prices.lua`): `{ [itemID] = {
+price, count, seen, rolls } }` for items seen listed within
+`staleAfterSeconds`, and `GetLastScan()`'s time. `rolls` holds random
+suffixes with a link of their own (`Prices.SuffixLink`). It also listens
+through `Prices:WatchScans(fn)` to read again after a scan. Keep both
+stable; if one changes, change Equipment's `Logic/AuctionGear.lua`.
+Tested in `tools/test_onsale.lua`.
+
 Equipment's **Queue it** button (a player asked on Discord, the owner agreeing
 2026-10-10; on crafted rows in Where to get upgrades and the Upgrade
 quest's Crafted tab) calls, inside a pcall, through its
