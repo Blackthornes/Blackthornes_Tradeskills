@@ -4132,3 +4132,26 @@ shows the current amount.
   tooltip's one.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
+
+## A lighter save (2026-11-26)
+
+The owner said yes to the lighter save idea (ts-improve-4). The game reads
+the whole save at every login and /reload. His save measured 20.6 MB with
+`tools/measure_save.py` (read only; prints sizes and counts, every realm,
+character and item key shown as `*`; `--ages` adds rows up by how long
+since they were seen). Forever writes the save without spaces or line
+breaks, so key names and numbers are what cost. `prices` was 72% of it,
+and the random suffix rows in it (`record.suffixes`) 44%, half of that
+their readings.
+
+Step one, no setting: at logout (`Prices:PackAll` on PLAYER_LOGOUT) every
+price history, items' and suffixes', every realm, is saved as one string
+(`Prices.PackHistory`): `t,m,q;dt,m,q;...`, dt the seconds since the
+reading before, an empty field a missing value. A history is packed only
+when `Prices.UnpackHistory` gives back exactly what it held. It is
+unpacked in place the first time it is read or added to
+(`Prices.History(record)`); `HistoryCount`, `HistoryReading` and
+`EachReading` also read the string as it is. Read history only through
+those, never by index or with `type(record.history) == "table"`. A version
+from before reads a packed history as none and starts it again (only the
+twelve kept readings). Tested in `tools/test_packedhistory.lua`.
