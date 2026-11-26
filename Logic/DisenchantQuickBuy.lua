@@ -471,10 +471,16 @@ function QuickBuy:BuyNext()
     return self:Click()
 end
 
+-- The addon runs OnEnable at login; nothing else calls Init, so without
+-- this the auction house events were never heard in the game.
 function QuickBuy:Init()
+    if self.eventsOn then return end
+    self.eventsOn = true
     ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) QuickBuy:OnResults(itemKey) end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function(_, _, auctionID) QuickBuy:Bought(auctionID) end)
     ns.RegisterEvent(self, "PLAYER_MONEY", function() QuickBuy:MoneyMoved() end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_ERROR", function() QuickBuy:BuyError() end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() QuickBuy:Closed() end)
 end
+
+function QuickBuy:OnEnable() self:Init() end

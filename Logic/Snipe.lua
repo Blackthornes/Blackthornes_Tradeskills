@@ -1628,7 +1628,11 @@ end
 -- Events
 --------------------------------------------------------------------------
 
+-- The addon runs OnEnable at login; nothing else calls Init, so without
+-- this the auction house events were never heard in the game.
 function Snipe:Init()
+    if self.eventsOn then return end
+    self.eventsOn = true
     ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, _, total) Snipe:PriceUpdated(total) end)
     ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() Snipe:Refused() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() Snipe:Bought() end)
@@ -1643,3 +1647,5 @@ function Snipe:Init()
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_ERROR", function() Snipe:BuyError() end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() Snipe:Closed() end)
 end
+
+function Snipe:OnEnable() self:Init() end
