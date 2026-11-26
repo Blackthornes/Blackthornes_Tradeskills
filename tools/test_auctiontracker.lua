@@ -9,6 +9,9 @@
 --   4. A sale with no row of yours makes up no gold.
 --   5. Sold Today starts again on a new day; a new read forgets this
 --      session's word on each row.
+--   6. Each sale is kept for the Sold Today list, newest first, with what
+--      sold, how many and the gold; another character's are not shown, and
+--      the list is empty on a new day.
 
 local now = 10000
 time = function() return now end
@@ -106,6 +109,28 @@ print("\nby item ID")
 row = AT:Sold("whatever", 2589)
 check("matched by ID", row and row.key, "a:1")
 
+print("\nthe Sold Today list")
+local sales = AT:SalesToday()
+check("three sales kept", #sales, 3)
+check("newest first", sales[1].itemID, 2589)
+check("its gold", sales[1].copper, math.floor(120 * 20 * 0.95))
+check("part of a stack keeps how many sold", sales[2].quantity, 4)
+check("part of a stack keeps its gold", sales[2].copper, 1140)
+check("oldest last", sales[3].copper, 1900)
+check("time of the sale", sales[3].at, now)
+check("row key kept", sales[3].key, "a:2")
+local otherKey = ns.Config.GetCharacterKey
+ns.Config.GetCharacterKey = function() return "Alt-2" end
+check("another character's sales are not shown", #AT:SalesToday(), 0)
+ns.Config.GetCharacterKey = otherKey
+local keep = AT.SALES_KEPT
+AT.SALES_KEPT = 3
+AT:OnRead()
+AT:Sold("Linen Cloth")
+check("past the most kept, the oldest go", #AT:SalesToday(), 3)
+check("the newest stays", AT:SalesToday()[1].copper, 1900)
+AT.SALES_KEPT = keep
+
 print("\na new read")
 AT:OnRead()
 check("the read is the truth again", #AT:Rows(), 3)
@@ -115,6 +140,7 @@ today = "2026-11-12"
 copper, count = AT:SoldToday()
 check("starts again", copper, 0)
 check("count starts again", count, 0)
+check("the list starts again", #AT:SalesToday(), 0)
 
 print("\nparse")
 local plain, n = AT.ParseItem("Linen Cloth x5")

@@ -2842,6 +2842,27 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   a slim gold thumb in the right margin while the list is longer than the
   window. No new words. Tested in `tools/test_verify.lua` and
   `tools/test_auctiontrackerui.lua`.
+- Sold Today list (a player asked, the owner said build it from the
+  ts-improve-7 mockup, 2026-11-26). A sold row still lights, stamps and
+  slides; once it is done going it settles under the auctions, under
+  "Sold Today: %d", newest first, with the time it sold ("2:14 PM" on an
+  English client, 24 hours on the others, `SoldTime`) and "+gold" in the
+  PRICE column. Each sale is kept in `auctionTrackerSold[key].sales`
+  (`{ key, itemID, link, quantity, copper, at }`, at most `SALES_KEPT`
+  100) and read by `AuctionTracker:SalesToday`; a new day clears it, and
+  `Tick` notices the day change. The top "Sold Today:" gold line and its
+  count-up stay. Sold rows sit on their own pool (`soldPool`) and scroll
+  with the rest; `upCount` leaves them out. Written fresh: a player posted
+  a patch for this on Discord, and it was not used.
+- Price History on the Sell list (the same mockup): a left-click on a Sell
+  row picks it (`PostPanel:Pick`, `IsPicked`; a click on it again lets it
+  go, and a row that leaves the list lets it go too). While one is picked,
+  Price History shows in the foot in the foot note's place; beside Queue
+  All, when the foot is too narrow, it takes Duration's place as well
+  (`AnchorFootNote`). It opens the Prices tab on Details with that item
+  picked (`PricesUI:ShowItem`), its row scrolled into sight, the filters
+  left as they were. Right-click still opens the keep box. Tested in
+  `tools/test_pricehistory.lua` and `tools/test_uifit.lua`.
 
 ## Mute All Sounds
 

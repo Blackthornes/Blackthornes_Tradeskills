@@ -12,9 +12,13 @@
 --      clears it.
 --   7. A new post below the rows that show scrolls into sight; a thumb
 --      shows while the list is longer than the window.
+--   8. A long name wraps and its row grows.
+--   9. Sold Today: a sold row settles under the auctions once it is done
+--      going, under "Sold Today: N", newest first, with its time and gold;
+--      the up count leaves it out, and a new day clears the list.
 
 local GLOBALS = { "CreateFrame", "UIParent", "CreateColor", "GameTooltip", "Minimap", "GetTime",
-    "time", "C_Timer", "UISpecialFrames", "tinsert", "date" }
+    "time", "C_Timer", "UISpecialFrames", "tinsert", "date", "GetLocale" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -383,6 +387,58 @@ check("the long name has no brackets", long and not long.name.text:find("[", 1, 
 check("the long name keeps its suffix", long and long.name.text:find("of the Beast", 1, true) ~= nil, true)
 check("the next row starts below the long one", short and long
     and short.points[1][5] <= long.points[1][5] - long.height, true)
+
+-- 9. Sold Today.
+local function SoldRows()
+    local rows = {}
+    for _, widget in ipairs(UIx.soldPool) do
+        if widget:IsShown() and widget.data then rows[#rows + 1] = widget end
+    end
+    return rows
+end
+check("earlier sales show under the auctions", #SoldRows(), 3)
+check("the Sold Today line counts them", FindText(UIx.frame, "Sold Today: 3"), true)
+check("the up count leaves sales out", UIx.upCount, 2)
+local first = SoldRows()[1]
+check("newest first", first and first.data.itemID, 2589)
+check("its gold, with a plus", first and Plain(first.price.text):find("^%+") ~= nil, true)
+check("its time in the time column", first and first.left.text, "x")
+check("the time column is wide enough", first and first.left.width, 62)
+local sold = SoldRows()
+local last = sold[#sold]
+check("the oldest sale is last", last and last.data.itemID, 818)
+check("a sale starts below the auctions", short and first and first.points[1][5] < short.points[1][5], true)
+check("sales sit on dark glass", first and first.stripe ~= nil, true)
+
+-- A sale on Full waits until its row is done going.
+settings.auctionTrackerEffects = "full"
+AT:Sold("Tigerseye", 818)
+check("still going: not in the list yet", #SoldRows(), 3)
+Motion:FinishAll()
+for _ = 1, 40 do Motion:Step(0.2) end
+UIx:Refresh(true)
+check("done going: settled in the list", #SoldRows(), 4)
+check("settled on top", SoldRows()[1].data.itemID, 818)
+check("Sold Today line moved on", FindText(UIx.frame, "Sold Today: 4"), true)
+
+-- A new day clears it.
+today = "2026-11-12"
+UIx:Tick()
+check("a new day clears the list", #SoldRows(), 0)
+check("no Sold Today line", UIx.soldHeading == nil or not UIx.soldHeading:IsShown(), true)
+today = "2026-11-11"
+
+-- Clock words.
+date = function(fmt, at)
+    if fmt == "%I:%M %p" then return "02:14 PM" end
+    if fmt == "%H:%M" then return "14:14" end
+    return today
+end
+GetLocale = function() return "enUS" end
+check("English clock", UIx.SoldTime(1), "2:14 PM")
+GetLocale = function() return "deDE" end
+check("other clients use 24 hours", UIx.SoldTime(1), "14:14")
+GetLocale = saved.GetLocale
 
 AT:SetOn(false)
 check("off again: hidden", UIx.frame:IsShown(), false)

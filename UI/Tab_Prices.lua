@@ -1711,6 +1711,32 @@ function PricesUI:ShowView(key, itemID)
     end
 end
 
+--- Open the window on the Prices tab's Details, with `itemID` picked: the
+--- auction house Sell list's Price History button (2026-11-26, the owner
+--- said build it from a mockup). Its row is scrolled into sight when the
+--- list shows it; the filters are left as the player set them, and the
+--- details still show the item when they hide its row.
+function PricesUI:ShowItem(itemID)
+    if type(itemID) ~= "number" then return end
+    UI:Show()
+    UI:SelectTab("prices")
+    self:ShowView("details")
+    local list = widgets.list
+    if not list then return end
+    local found
+    for index, entry in ipairs(list:GetData() or {}) do
+        if entry.itemID == itemID and not entry.kid then found = index break end
+    end
+    if found then
+        state.selected = list:GetData()[found]
+        list.offset = math.max(0, found - 1)
+    else
+        state.selected = { itemID = itemID, record = ns.Prices:Get(itemID) or {} }
+    end
+    list:Refresh()
+    UpdateDetail(state.selected)
+end
+
 --- True while the Stats view is the one showing.
 function PricesUI:ShowingStats()
     return UI.activeTab == "prices" and self.view == "stats"
