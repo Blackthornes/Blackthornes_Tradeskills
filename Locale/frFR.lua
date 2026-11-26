@@ -3977,6 +3977,20 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "%d désenchantements déplacés vers tes résultats du Salvager."
 L["Your plain disenchant results are cleared."] = "Tes résultats de désenchantement normaux sont effacés."
 
+-- Look choices (All Addons page)
+L["Font:"] = "Police :"
+L["House##font"] = "Maison"
+L["Game##font"] = "Jeu"
+L["Clear##font"] = "Nette"
+L["Colors:"] = "Couleurs :"
+L["Warm"] = "Chaudes"
+L["Darker"] = "Plus sombres"
+L["Fold Gem:"] = "Repli :"
+L["Small Bar"] = "Petite barre"
+L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."] = "Maison, Jeu ou Nette. Nette est simple et facile à lire, et elle a les lettres russes."
+L["Warm is the look today. Darker takes the warm tint out of the glass."] = "Chaudes, c'est le look de toujours. Plus sombres retire la teinte chaude du verre."
+L["What a folded window turns into: the round button, or a small bar with its title."] = "Ce que devient une fenêtre repliée : le bouton rond, ou une petite barre avec son titre."
+
 -- Queue Sort By and Queue Done Sound (2026-11-26)
 L["Sort By:"] = "Trier par :"
 L["My Order"] = "Mon ordre"

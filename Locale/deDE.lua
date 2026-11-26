@@ -3976,6 +3976,20 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "%d Entzauberungen zu deinen Salvager-Ergebnissen geschoben."
 L["Your plain disenchant results are cleared."] = "Deine normalen Entzauber-Ergebnisse sind gelöscht."
 
+-- Look choices (All Addons page)
+L["Font:"] = "Schrift:"
+L["House##font"] = "Haus"
+L["Game##font"] = "Spiel"
+L["Clear##font"] = "Klar"
+L["Colors:"] = "Farben:"
+L["Warm"] = "Warm"
+L["Darker"] = "Dunkler"
+L["Fold Gem:"] = "Einklappen:"
+L["Small Bar"] = "Kleine Leiste"
+L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."] = "Haus, Spiel oder Klar. Klar ist schlicht und gut zu lesen, und es hat russische Buchstaben."
+L["Warm is the look today. Darker takes the warm tint out of the glass."] = "Warm ist das Aussehen wie bisher. Dunkler nimmt den warmen Ton aus dem Glas."
+L["What a folded window turns into: the round button, or a small bar with its title."] = "Was aus einem eingeklappten Fenster wird: der runde Knopf oder eine kleine Leiste mit seinem Namen."
+
 -- Queue Sort By and Queue Done Sound (2026-11-26)
 L["Sort By:"] = "Sortieren nach:"
 L["My Order"] = "Meine Reihenfolge"
