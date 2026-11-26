@@ -1004,11 +1004,37 @@ local function LiveBags()
     return nil
 end
 
+--- What each character has up for sale at the auction houses of this
+--- realm, from its last reading (Auctions:GetListings), for Butler's
+--- search (2026-11-26). A listing that has ended since (sold or back in
+--- the mail) is left out. { [key] = { [itemID] = count } } and when each
+--- was read; empty without the Auctions module.
+local function Listed()
+    local counts, at = {}, {}
+    local auctions = ns.Auctions
+    if not (auctions and auctions.GetListings) then return counts, at end
+    local ok, listings = pcall(auctions.GetListings, auctions)
+    if not ok or type(listings) ~= "table" then return counts, at end
+    for _, listing in ipairs(listings) do
+        local who, itemID, quantity = listing.who, listing.itemID, listing.quantity
+        if type(who) == "string" and type(itemID) == "number" and listing.ended ~= true
+            and type(quantity) == "number" and quantity > 0 then
+            counts[who] = counts[who] or {}
+            counts[who][itemID] = (counts[who][itemID] or 0) + quantity
+            if type(listing.readAt) == "number" and listing.readAt > (at[who] or 0) then
+                at[who] = listing.readAt
+            end
+        end
+    end
+    return counts, at
+end
+
 local function Holdings()
     local list = {}
     local records = Characters()
     local recipes = ns.Recipes
     if not (recipes and recipes.GetCharacters) then return list end
+    local listed, listedAt = Listed()
 
     for _, character in ipairs(recipes:GetCharacters()) do
         local record = records[character.key]
@@ -1032,6 +1058,9 @@ local function Holdings()
                 mailAt = Stamp(record.mailAt),
                 mailMoney = Stamp(record.mailMoney),
                 clearedAt = Stamp(record.clearedAt),
+                -- Up for sale at the auction house, as last read there.
+                auctions = Counts(listed[character.key]),
+                auctionsAt = Stamp(listedAt[character.key]),
             }
             local expiry = record.mailExpiry
             if type(expiry) == "table" then

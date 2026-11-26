@@ -349,6 +349,12 @@ Butler's gold top-ups).
 The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
+Since 2026-11-26 (Butler's search that knows words) each entry also has
+`auctions`, a fresh `{ [itemID] = count }` of what the character has up at
+this realm's auction houses (`Auctions:GetListings`, listings not yet
+ended), and `auctionsAt`, when that was last read (nil when never).
+Butler counts them as "on auction" in All Characters. Tested in
+`tools/test_butler.lua`.
 
 Mail running out (the owner said build it from a mockup, 2026-11-09, for
 Butler's "Mail Running Out"): each inbox read (`Mail:Read`) saves
