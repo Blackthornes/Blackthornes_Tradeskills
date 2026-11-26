@@ -1954,34 +1954,42 @@ local function Build(outer)
     end, true)
     widgets.oneWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- What comes up by itself (a player's request, 2026-11-05), one row with a
-    -- tick for each place since 2026-11-16. Each tick is its own saved
-    -- setting, as before: openAtAuction, openWithShops, openAtProfessions.
+    -- How Tradeskills opens in each place (the owner said build it from a
+    -- mockup, 2026-11-26): Full Window, Slim Panel, Round Button or Stay
+    -- Closed. Each row shows what the older settings give until a choice
+    -- is picked (UI.WindowAt in UI/Main.lua). These took over the Auction
+    -- House and Professions ticks of "Open By Itself At:" and the "Small
+    -- Craft Queue:" box; their saved keys are still read, never changed.
+    local windowChoices = {
+        { text = L["Full Window"], value = "full" },
+        { text = L["Slim Panel"], value = "slim" },
+        { text = L["Round Button"], value = "button" },
+        { text = L["Stay Closed"], value = "closed" },
+    }
+    widgets.windowAt = {}
+    for _, place in ipairs({
+        { "auction", L["At The Auction House:"], L["What opens when you talk to an auctioneer."] },
+        { "profession", L["At A Profession:"], L["What opens with a profession window."] },
+        { "mail", L["At The Mailbox:"], L["What opens at a mailbox."] },
+    }) do
+        local key = UI.WINDOW_AT[place[1]]
+        local row = CreateRow(pages.windows, 1, place[2], place[3])
+        local dropdown = Widgets.CreateDropdown(row, windowChoices, function(value)
+            Config:Set(key, value)
+        end, { width = 150 })
+        dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        widgets.windowAt[place[1]] = dropdown
+    end
+
+    -- What comes up by itself (a player's request, 2026-11-05). The
+    -- auction house and professions moved to the rows above; vendors stay
+    -- here (`openWithShops`, off unless ticked).
     local openRow = CreateRow(pages.windows, 1, L["Open By Itself At:"],
         L["Opens Tradeskills by itself at each place you tick."])
-    widgets.openByItself = Widgets.CreateDropdown(openRow, {
-        { text = L["Auction House"], value = "openAtAuction" },
-        { text = L["Vendors"], value = "openWithShops" },
-        { text = L["Professions"], value = "openAtProfessions" },
-    }, function(set)
-        set = set or {}
-        for _, key in ipairs({ "openAtAuction", "openWithShops", "openAtProfessions" }) do
-            local on = set[key] == true
-            local was
-            if key == "openWithShops" then was = Config:Get(key) == true else was = Config:Get(key) ~= false end
-            if on ~= was then Config:Set(key, on) end
-        end
-    end, { width = 150, multi = true, placeholder = L["None"] })
-    widgets.openByItself:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    -- Only the small craft queue at the profession window, the one window
-    -- staying on everywhere else (a player's request, 2026-11-17).
-    local smallRow = CreateRow(pages.windows, 1, L["Small Craft Queue:"],
-        L["Shows the small craft queue beside your profession window, even when the One Window is on."])
-    widgets.craftPaneBeside = Widgets.CreateCheckbox(smallRow, L["On"], function(checked)
-        Config:Set("craftPaneBeside", checked and true or false)
+    widgets.openWithShops = Widgets.CreateCheckbox(openRow, L["Vendors"], function(checked)
+        Config:Set("openWithShops", checked and true or false)
     end, false)
-    widgets.craftPaneBeside:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
     local windowPlacesRow = CreateRow(pages.all, 1, L["Window Locations:"],
@@ -3305,12 +3313,10 @@ local function Refresh()
     ShowShiftMode(widgets.boughtTooltips)
     ShowShiftMode(widgets.usedInTooltips)
     ShowAllLinesMode()
-    widgets.openByItself:SetValue({
-        openAtAuction = Config:Get("openAtAuction") ~= false,
-        openWithShops = Config:Get("openWithShops") == true,
-        openAtProfessions = Config:Get("openAtProfessions") ~= false,
-    })
-    widgets.craftPaneBeside:SetChecked(Config:Get("craftPaneBeside") == true)
+    for place, dropdown in pairs(widgets.windowAt) do
+        dropdown:SetValue(UI.WindowAt(place))
+    end
+    widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)

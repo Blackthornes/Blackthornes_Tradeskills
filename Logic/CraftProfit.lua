@@ -162,7 +162,51 @@ local function Work(recipeID)
         result.boundProfit = result.sells - result.partial
     end
 
+    CraftProfit.TakeCounted(result, recipe)
     return result
+end
+
+--- The Profit tab's own sum, where it has one (the owner said build it,
+--- 2026-11-26: one profit sum everywhere). Profit:Counted prices the craft
+--- the way the Profit tab, the Queue and the craft pane do (sub-crafts,
+--- Charge for Own Materials, the deposit, Master Chef), so the profession
+--- window shows the same number. Sells For is what the sale brings in after
+--- the cut and the deposit, so Sells For less Mats Cost is the profit.
+--- A grey stays at the vendor; a craft the sum can't price keeps the
+--- figures worked out above.
+function CraftProfit.TakeCounted(result, recipe)
+    local Profit = ns.Profit
+    if not (Profit and Profit.Counted and Profit.Analyse) then return end
+    if not recipe.outputItemID or CraftProfit.IsGrey(recipe.outputItemID) then return end
+    local analysis = Try(Profit.Counted, Profit, result.recipeID)
+    if type(analysis) ~= "table" or not analysis.priceable or type(analysis.profit) ~= "number" then
+        return
+    end
+    local cost = analysis.cost
+    if type(cost) ~= "table" or type(cost.total) ~= "number" then return end
+
+    local reagents = {}
+    for _, reagent in ipairs(cost.reagents or {}) do
+        local source = reagent.source
+        reagents[#reagents + 1] = {
+            itemID = reagent.itemID,
+            quantity = reagent.quantity,
+            unitCost = reagent.unitCost,
+            lineCost = reagent.lineCost,
+            way = source == "vendor" and "vendor" or (source == "buy" or source == "mine") and "auction" or nil,
+            source = source,
+        }
+    end
+    result.reagents = reagents
+    result.bound, result.unpriced = {}, {}
+    result.partial, result.onlyBound, result.boundProfit = nil, nil, nil
+    result.yield = analysis.yield or result.yield
+    result.cost = cost.total
+    result.sells = analysis.profit + cost.total
+    result.sellsEach = result.sells / (result.yield > 0 and result.yield or 1)
+    result.sellsWay = analysis.via
+    result.profit = analysis.profit
+    result.counted = true
 end
 
 --- The figures for one craft, kept until a price or setting moves.
