@@ -8,7 +8,7 @@
 -- suggests a build (the owner, 2026-10-22: "we just read what they have
 -- set").
 --
--- Used for three perks, each only for the ranks the player has spent
+-- Used for four perks, each only for the ranks the player has spent
 -- (none spent means no change anywhere):
 --   Master Chef: cooking gives extra results, so a cooking recipe's yield
 --     on the Profit tab follows it (Cost:GetCraftCost).
@@ -17,10 +17,12 @@
 --   Performance Bonus: a chance a crate turn-in gives double Merchant's
 --     Favor, so gold a favor point counts the expected favor
 --     (MerchantsFavor:GetRows).
+--   Bartering: vendors charge 5% less a rank (2 ranks, 10%), so the shop
+--     price of a material follows it (Vendor:GetUnitPrice). A price seen at
+--     a merchant already has the discount of that moment; Vendor keeps
+--     which discount that was and moves the price to today's.
 -- Perks are found by their spell ID first, then their node ID, then their
--- English name, so every language works. Bartering needs nothing here:
--- vendor prices are read off the real merchant window, which already has
--- the discount.
+-- English name, so every language works.
 --
 -- Every client call is inside a pcall. When nothing can be read, every
 -- answer is the plain one (no bonus), so the addon works as before.
@@ -56,10 +58,15 @@ Legacy.MASTER_CHEF_MOST = 0.5
 --   Working Overtime: skill up chance +4% a rank (5 ranks, 20%).
 --   Performance Bonus: 5% a rank chance of 100% more Merchant's Favor from
 --     a crate turn-in (3 ranks, 15%).
+--   Bartering: the gold price of items from all vendors 5% less a rank
+--     (2 ranks, 10%; the game tables, 2026-11-26). Vendors' payouts for
+--     what you sell are not changed. Its node ID is not pinned: found by
+--     spell ID or name.
 Legacy.PERKS = {
     masterChef = { spell = 1225457, node = 110289, name = "master chef" },
     workingOvertime = { spell = 1225451, node = 110290, name = "working overtime", per = 0.04 },
     performanceBonus = { spell = 1225456, node = 110292, name = "performance bonus", per = 0.05 },
+    bartering = { spell = 1225459, name = "bartering", per = 0.05, most = 0.10 },
 }
 
 -- Every Legacy perk by its spell ID, from the Forever client's game tables
@@ -218,6 +225,7 @@ function Legacy:Search(done)
         if self.configID or index > #list then
             self.searching, self.searched = false, true
             self:Forget()
+            self:CheckDiscount()
             if done then done() end
             return
         end
@@ -384,6 +392,20 @@ function Legacy:FavorBonus()
     return self:Rank("performanceBonus") * self.PERKS.performanceBonus.per
 end
 
+--- Bartering: how much less vendors charge, 0 to 0.1 (0 with no ranks
+--- spent or nothing read).
+function Legacy:VendorDiscount()
+    local perk = self.PERKS.bartering
+    return math.min(self:Rank("bartering") * perk.per, perk.most)
+end
+
+--- True once the perks can be trusted: the config is read, or the search
+--- ended and found none (no Legacy points at all).
+function Legacy:Known()
+    if self.configID then return true end
+    return self.searched == true and not self.searching
+end
+
 --------------------------------------------------------------------------------
 -- The probe
 --------------------------------------------------------------------------------
@@ -483,6 +505,8 @@ function Legacy:ProbeLines()
             tostring(self:PerkNode("workingOvertime")), math.floor(self:SkillUpBonus() * 100 + 0.5)))
         Add("legacy favor", ("Performance Bonus node %s, double favor %d%%"):format(
             tostring(self:PerkNode("performanceBonus")), math.floor(self:FavorBonus() * 100 + 0.5)))
+        Add("legacy vendor", ("Bartering node %s, vendors %d%% less"):format(
+            tostring(self:PerkNode("bartering")), math.floor(self:VendorDiscount() * 100 + 0.5)))
     end
     self:PerkLines(Add)
     for _, id in ipairs(self.CURRENCIES) do
@@ -501,8 +525,21 @@ function Legacy:Forget()
     self.masterChefNode, self.perkNodes, self.perkRanks = nil, nil, nil
 end
 
+--- Costs priced at vendors are kept; when Bartering's discount changes
+--- they are worked out again.
+function Legacy:CheckDiscount()
+    if not self:Known() then return end
+    local now = self:VendorDiscount()
+    if now == self.lastDiscount then return end
+    local first = self.lastDiscount == nil
+    self.lastDiscount = now
+    if first and now == 0 then return end
+    if ns.Cost and ns.Cost.InvalidateIndex then pcall(ns.Cost.InvalidateIndex, ns.Cost) end
+end
+
 function Legacy:Changed()
     self:Forget()
+    self:CheckDiscount()
     if not self.configID and self.searched and not self.searching then
         self.searched = false
         self:Search()

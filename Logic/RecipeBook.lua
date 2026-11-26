@@ -909,6 +909,12 @@ end
 function RecipeBook:GetRecipePrice(record, extraItemID)
     local best, how, which
 
+    -- Shipped vendor prices are full price; Bartering takes its share off.
+    local function Barter(price)
+        if ns.Vendor and ns.Vendor.Discounted then return ns.Vendor:Discounted(price) end
+        return price
+    end
+
     local function Offer(price, way, itemID)
         if price and price > 0 and (not best or price < best) then
             best, how, which = price, way, itemID
@@ -925,10 +931,10 @@ function RecipeBook:GetRecipePrice(record, extraItemID)
         if seenAtVendor then
             Offer(ns.Vendor:GetUnitPrice(itemID), "vendor", itemID)
         elseif row and row.v and #VendorsOf(itemID) > 0 then
-            Offer(row[2], "vendor", itemID)
+            Offer(Barter(row[2]), "vendor", itemID)
         end
         for _, seller in ipairs(SellersOf(itemID)) do
-            Offer(seller.gold, "vendor", itemID)
+            Offer(Barter(seller.gold), "vendor", itemID)
         end
         Offer(ns.Prices and ns.Prices:GetValue(itemID, "lowest"), "auction", itemID)
     end

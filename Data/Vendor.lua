@@ -33,18 +33,60 @@ function Vendor:GetTable()
     return ns.db.vendorPrices
 end
 
+--------------------------------------------------------------------------------
+-- Bartering (a Legacy perk)
+--------------------------------------------------------------------------------
+
+-- Bartering takes 5% a rank off what every vendor charges in gold
+-- (Logic/Legacy.lua). The shipped prices are full price, so they take
+-- today's discount. A price seen at a merchant already had the discount of
+-- that moment, kept beside it as `off` (never rename it), so it is moved to
+-- today's: seen at 10% off and now with no ranks, it goes back up. A price
+-- seen before `off` was kept, or while the perks could not be read yet, is
+-- left as seen, so a discount is never taken twice. Vendors' payouts for
+-- what you sell do not change.
+
+--- How much less vendors charge now, 0 to 0.1, and whether it is known.
+function Vendor:Discount()
+    local legacy = ns.Legacy
+    if not (legacy and legacy.VendorDiscount and legacy.Known) then return 0, false end
+    local okKnown, known = pcall(legacy.Known, legacy)
+    if not (okKnown and known) then return 0, false end
+    local ok, off = pcall(legacy.VendorDiscount, legacy)
+    if not ok or type(off) ~= "number" or off < 0 or off >= 1 then return 0, true end
+    return off, true
+end
+
+local function Round(copper)
+    return math.max(1, math.floor(copper + 0.5))
+end
+
+--- A full shop price (the shipped data's) with today's discount.
+function Vendor:Discounted(price)
+    if type(price) ~= "number" or price <= 0 then return price end
+    local off = self:Discount()
+    if off <= 0 then return price end
+    return Round(price * (1 - off))
+end
+
 --- Copper for one unit, or nil if no vendor sells it.
 function Vendor:GetUnitPrice(itemID)
     local record = self:GetTable()[itemID]
     if not record then
-        return ns.VENDOR_PRICES and ns.VENDOR_PRICES[itemID] or nil
+        return self:Discounted(ns.VENDOR_PRICES and ns.VENDOR_PRICES[itemID] or nil)
     end
 
     -- Items bought with honour, tokens or similar are not purchasable with
     -- gold, so they have no meaningful cash price.
     if record.extendedCost then return nil end
 
-    return record.price
+    local was = record.off
+    if type(was) ~= "number" or was < 0 or was >= 1 or type(record.price) ~= "number" then
+        return record.price
+    end
+    local now, known = self:Discount()
+    if not known or now == was then return record.price end
+    return Round(record.price * (1 - now) / (1 - was))
 end
 
 function Vendor:IsLimited(itemID)
@@ -352,11 +394,15 @@ function Vendor:Scan()
                     seenAt = time(),
                     method = method,
                 }
+                -- The Bartering discount this price has, once it can be read.
+                local off, known = self:Discount()
+                if known then record.off = off end
                 -- Learned means changed: every buy and sale at a vendor
                 -- scans it again, and reading the same prices back is not
                 -- news worth throwing the cost index away for.
                 local was = prices[itemID]
                 if type(was) ~= "table" or was.price ~= record.price or was.stack ~= record.stack
+                    or was.off ~= record.off
                     or was.limited ~= record.limited or was.extendedCost ~= record.extendedCost then
                     learned = learned + 1
                 end
