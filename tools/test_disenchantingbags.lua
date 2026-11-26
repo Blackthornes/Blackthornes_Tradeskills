@@ -340,3 +340,28 @@ check("the deals come back", list.data == auctionRows)
 check("and the Disenchant button goes", not disenchant.shown)
 
 print(("\n%d check(s) passed\n"):format(checks))
+
+print("\nan auction deal on the Salvager view")
+-- A player's report, 2026-11-25: after Move to Salvager the plain record
+-- was empty, so the plain value fell back to the rough chances. The
+-- Salvager view showed its own Disenchant value but kept the plain cut and
+-- profit under it, so a deal showed a big cut and a loss.
+Log.SalvagerApart = function() return true end
+salvagerUp = true
+salvagerValue = 1000      -- the Listed Chest's plain value is 800, net 760
+salvaged = { outcomes = { { itemID = 10940, chance = 1, average = 2, min = 2, max = 2 } },
+    facts = { casts = 5, byItem = true } }
+ns.Config.Get = function(_, key) if key == "auctionCut" then return 0.05 end return 0 end
+list.opts.onClick(auctionRows[1], 1, "LeftButton")
+salvagerSwitch.onSelect("salvager")
+check("the Salvager value shows", Showing("^1000$") ~= nil)
+check("the cut comes off the Salvager value", Showing("^950$") ~= nil and Showing("^760$") == nil)
+check("and the profit follows it", Showing("^450  %(") ~= nil and Showing("^260  %(") == nil)
+
+ns.Config.Get = function() return 0 end
+tab.refresh()
+check("with no cut nothing comes off", Showing("^500  %(") ~= nil)
+
+salvagerSwitch.onSelect("plain")
+check("the plain view keeps the plain profit", Showing("^260  %(") ~= nil)
+ns.Config.Get = function() return 0 end

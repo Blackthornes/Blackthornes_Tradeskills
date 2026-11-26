@@ -1411,15 +1411,27 @@ local function UpdateDetail(entry)
         entry.age and Util.FormatAgeAgo(entry.age) or L["never"])
     if entry.stale then note = note .. L[" That was a while ago, so it may have sold."] end
 
-    -- The Salvager's chances are shown; buy and profit stay plain.
+    -- The Salvager's chances are shown, and the cut and profit follow its
+    -- value. They once stayed plain, which showed a big cut and a loss
+    -- once the plain record was moved over (a player's report, 2026-11-25).
     if salvagerView then
         if salvagerView.view == "salvager" then
             if salvagerView.value then
+                local value = salvagerView.value
+                local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
+                local net = math.floor(value * (1 - cut) + 0.5)
+                local gain = net - (entry.buy or 0)
                 SetLine(lines[2], L["Disenchant value"], salvagerView.partial
-                    and L.Format("%s  or more", Util.FormatMoney(salvagerView.value))
-                    or Util.FormatMoney(salvagerView.value), "text")
+                    and L.Format("%s  or more", Util.FormatMoney(value))
+                    or Util.FormatMoney(value), "text")
+                SetLine(lines[3], L["After the auction house cut"], Util.FormatMoney(net), "muted")
+                SetLine(lines[4], L["Profit"], ("%s  (%s)"):format(Util.FormatMoney(gain),
+                    MarginText(entry.buy and entry.buy > 0 and gain / entry.buy or 0)),
+                    gain > 0 and "profit" or "loss")
             else
                 SetLine(lines[2], nil)
+                SetLine(lines[3], nil)
+                SetLine(lines[4], nil)
             end
         end
         detail.verdict:SetText("")
