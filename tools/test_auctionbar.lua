@@ -87,6 +87,9 @@ ns.Widgets.CreateButton = function()
     made = made + 1
     local button = NewFrame()
     button.GetWidth = function() return 56 end
+    button.Show = function(self) self.shown = true end
+    button.Hide = function(self) self.shown = false end
+    button.IsShown = function(self) return self.shown == true end
     return button
 end
 bar.GetWidth = function() return 350 end
@@ -98,10 +101,20 @@ UI.auctionButton = ns.Widgets.CreateButton()
 made = 0
 UI:AttachPostButton()
 check("no Post Crafted button is made", UI.postButton, nil)
-check("no button made at all", made, 0)
+-- The Full Window button (ts-improve-2, 2026-11-26) is the one made: it
+-- sits left of Scan while the drawer hangs on its own.
+check("only the Full Window button is made", made, 1)
+check("left of Scan", UI.fullWindowButton ~= nil and UI.fullWindowButton:IsShown(), true)
 if bar.status then
-    check("the status runs up to Scan", statusWidth, 350 - 10 - 10 - 56 - 10)
+    check("the status runs up to Full Window", statusWidth, 350 - 10 - 10 - 56 - 10 - 56 - 6)
 end
+ns.PostPanel.inOne = true
+UI:AttachPostButton()
+check("in the one window it goes", UI.fullWindowButton:IsShown(), false)
+if bar.status then
+    check("and the status runs up to Scan", statusWidth, 350 - 10 - 10 - 56 - 10)
+end
+ns.PostPanel.inOne = nil
 UI:UpdatePostButton()
 check("updating it does nothing and raises nothing", UI.postButton, nil)
 UI.auctionButton = nil

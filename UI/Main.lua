@@ -1463,6 +1463,32 @@ function UI:AttachToAuctionHouse()
     if ns.PostPanel then ns.PostPanel:Attach() end
 end
 
+--- The Full Window button left of Scan, while the drawer hangs on its own
+--- beside the auction house (ts-improve-2, the owner said build it,
+--- 2026-11-26), so nobody is stuck with the slim panel. Hidden while the
+--- drawer is the one window's Auction House tab. The button when it shows.
+function UI:PlaceFullWindowButton(bar)
+    local full = self.fullWindowButton
+    if not full then
+        full = Widgets.CreateButton(bar, L["Full Window"], function()
+            UI:OpenFullHere()
+        end, {
+            width = FitButtonWidth({ L["Full Window"] }, 70),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
+        })
+        self.fullWindowButton = full
+    end
+    local panel = ns.PostPanel
+    if (panel and panel.inOne) or not self.auctionButton then
+        full:Hide()
+        return nil
+    end
+    full:ClearAllPoints()
+    full:SetPoint("RIGHT", self.auctionButton, "LEFT", -AUCTION_BAR_GAP, 0)
+    full:Show()
+    return full
+end
+
 --- A Post button beside the Scan button on the auction house window.
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event per
@@ -1532,6 +1558,32 @@ function UI:FitAuctionText()
     FitBarText(bar, (bar.buttonsWidth or 0) + counter)
 end
 
+--- The Full Window button left of Scan, while the drawer hangs on its own
+--- beside the auction house (ts-improve-2, the owner said build it,
+--- 2026-11-26), so nobody is stuck with the slim panel. Hidden while the
+--- drawer is the one window's Auction House tab. The button when it shows.
+function UI:PlaceFullWindowButton(bar)
+    local full = self.fullWindowButton
+    if not full then
+        full = Widgets.CreateButton(bar, L["Full Window"], function()
+            UI:OpenFullHere()
+        end, {
+            width = FitButtonWidth({ L["Full Window"] }, 70),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
+        })
+        self.fullWindowButton = full
+    end
+    local panel = ns.PostPanel
+    if (panel and panel.inOne) or not self.auctionButton then
+        full:Hide()
+        return nil
+    end
+    full:ClearAllPoints()
+    full:SetPoint("RIGHT", self.auctionButton, "LEFT", -AUCTION_BAR_GAP, 0)
+    full:Show()
+    return full
+end
+
 --- A Post button beside the Scan button on the auction house window.
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event
@@ -1546,7 +1598,9 @@ function UI:AttachPostButton()
     if not UI.POST_CRAFTED_BUTTON then
         if button then button:Hide() end
         bar.buttonsWidth = scanWidth + gap
-        if ns.SaleTotal then ns.SaleTotal:Attach(bar, self.auctionButton) end
+        local full = self:PlaceFullWindowButton(bar)
+        if full then bar.buttonsWidth = bar.buttonsWidth + full:GetWidth() + AUCTION_BAR_GAP end
+        if ns.SaleTotal then ns.SaleTotal:Attach(bar, full or self.auctionButton) end
         self:FitAuctionText()
         return
     end
@@ -2520,7 +2574,106 @@ end
 --- auction house until the player opens it there; then the sell list and
 --- the one window's Auction House tab come up as usual for that visit.
 function UI.OpensAtAuction()
-    return ns.Config:Get("openAtAuction") ~= false
+    return UI.WindowAt("auction") ~= "closed"
+end
+
+-- How Tradeskills opens in each place (the owner said build it from a
+-- mockup, 2026-11-26): "At The Auction House:", "At A Profession:" and "At
+-- The Mailbox:" on the Windows page, each Full Window, Slim Panel, Round
+-- Button or Stay Closed. Saved as windowAtAuction, windowAtProfession and
+-- windowAtMail (never rename them); "auto", the default, keeps what the
+-- older settings gave, so nothing changes for a player who never picks:
+-- openAtAuction or openAtProfessions unticked reads as Stay Closed,
+-- craftPaneBeside ticked as Slim Panel, the mailbox as Slim Panel (the
+-- mail list beside it, as before), else Full Window with the one window
+-- on and Slim Panel with it off. Those older keys are only read, never
+-- written here. Tested in tools/test_onewindow.lua (parts 9 to 12).
+UI.WINDOW_AT = { auction = "windowAtAuction", profession = "windowAtProfession", mail = "windowAtMail" }
+UI.WINDOW_CHOICES = { "full", "slim", "button", "closed" }
+local WINDOW_CHOICE = { full = true, slim = true, button = true, closed = true }
+
+--- True while "One Window:" is on and Tradeskills has moved in.
+function UI.OneWindowOn()
+    local One = TSTabs.One()
+    if not (One and One.Hosts) then return false end
+    local ok, on = pcall(One.Hosts, "tradeskills")
+    return ok and on == true
+end
+
+--- What opens at `place` ("auction", "profession" or "mail"): "full",
+--- "slim", "button" or "closed".
+function UI.WindowAt(place)
+    local key = UI.WINDOW_AT[place]
+    local picked = key and ns.Config:Get(key)
+    if WINDOW_CHOICE[picked] then return picked end
+    if place == "auction" then
+        if ns.Config:Get("openAtAuction") == false then return "closed" end
+    elseif place == "profession" then
+        if ns.Config:Get("openAtProfessions") == false then return "closed" end
+        if ns.Config:Get("craftPaneBeside") == true then return "slim" end
+    elseif place == "mail" then
+        return "slim"
+    end
+    return UI.OneWindowOn() and "full" or "slim"
+end
+
+--- Fold a window into its round button, a moment after it opened so it
+--- folds where it settled. The one window folds through the copy that
+--- draws it, whose fold it wears.
+function UI.FoldSoon(frame, shared)
+    local function fold()
+        if not (frame and frame.IsShown and frame:IsShown()) then return end
+        local fw = ns.FoldWindow
+        local SharedWindow = ns.SharedWindow
+        if shared and SharedWindow and SharedWindow.Drawer then
+            local ok, drawer = pcall(SharedWindow.Drawer)
+            local theirs = ok and type(drawer) == "table" and type(drawer.ns) == "table" and drawer.ns.FoldWindow
+            if type(theirs) == "table" then fw = theirs end
+        end
+        if fw and fw.Fold then pcall(fw.Fold, fw, frame) end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, fold) else fold() end
+end
+
+--- The one window's frame, else nil.
+function TSTabs.OneFrame()
+    local hub = rawget(_G, "BlackthornesWindow")
+    return type(hub) == "table" and hub.frame or nil
+end
+
+--- A game window opened at `place`. With the one window on, the auction
+--- house and the profession window are handled as they open
+--- (TSTabs:AtAuctionHouse, TSTabs:AtDock); the mailbox opens the one window
+--- here when Full Window or Round Button is picked. With it off, those two
+--- open Tradeskills' own window beside the slim panel, and close it again
+--- when the game's window closes, if it was opened for it.
+function UI:ArrivedAt(place)
+    local choice = UI.WindowAt(place)
+    if choice ~= "full" and choice ~= "button" then return end
+    if UI.OneWindowOn() then
+        if place == "mail" then TSTabs:AtDock("mail") end
+        return
+    end
+    self:Build()
+    if not self.window or self.window:IsShown() then return end
+    self.openedFor = place
+    self:Show()
+    if choice == "button" then UI.FoldSoon(self.window) end
+end
+
+--- The Full Window button on the slim panel: the full window, here.
+function UI:OpenFullHere()
+    self:Build()
+    if UI.OneWindowOn() then
+        local One = TSTabs.One()
+        TSTabs.ahOpened = true
+        local ok, opened = pcall(One.Open, "tradeskills")
+        if ok and opened then
+            TSTabs:Settle()
+            return
+        end
+    end
+    self:Show()
 end
 
 --- True while Tradeskills may come up at the auction house: ticked, or the
@@ -2732,7 +2885,23 @@ function UI:OnEnable()
     ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function() UI:SellListSoon() end)
 
     -- Settings: Open with the auction house and vendors.
-    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() UI:OpenWithShop("auction") end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
+        UI:OpenWithShop("auction")
+        pcall(UI.ArrivedAt, UI, "auction")
+    end)
+    -- "At The Mailbox:" Full Window or Round Button (UI.WindowAt). A moment
+    -- later, so the one window knows it is at the mailbox.
+    ns.RegisterEvent(self, "MAIL_SHOW", function()
+        local function arrive()
+            if ns.QueueMailPanel and ns.QueueMailPanel.MailboxOpen and not ns.QueueMailPanel.MailboxOpen() then return end
+            pcall(UI.ArrivedAt, UI, "mail")
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, arrive) else arrive() end
+    end)
+    ns.RegisterEvent(self, "MAIL_CLOSED", function()
+        TSTabs:DockClosed("mail")
+        UI:CloseWithShop("mail")
+    end)
     ns.RegisterEvent(self, "MERCHANT_SHOW", function() UI:OpenWithShop("merchant") end)
     ns.RegisterEvent(self, "MERCHANT_CLOSED", function() UI:CloseWithShop("merchant") end)
 
@@ -2952,15 +3121,24 @@ function TSTabs:AtAuctionHouse()
         self.watching = true
         pcall(One.Watch, function() TSTabs:Settle() end)
     end
-    if not self.ahOpened and UI.AuctionWanted() then
+    -- "At The Auction House:" (UI.WindowAt): Slim Panel leaves the one
+    -- window shut and the drawer hangs beside the auction house; Round
+    -- Button opens it folded. Opened by the player on this visit, it opens.
+    local choice = UI.WindowAt("auction")
+    local fold = false
+    if not self.ahOpened and UI.AuctionWanted() and (choice ~= "slim" or UI.ahAsked == true) then
         self.ahOpened = true
         local okOpen, isOpen = pcall(One.IsOpen)
-        if not self.area and not (okOpen and isOpen) then UI.openedFor = "auction" end
+        if not self.area and not (okOpen and isOpen) then
+            UI.openedFor = "auction"
+            fold = choice == "button" and UI.ahAsked ~= true
+        end
         pcall(One.Open, "tradeskills")
     end
     local okPlace, place = pcall(One.Place)
     local okDocked, docked = pcall(One.Docked)
     if okPlace and place == "auction" and not (okDocked and docked) then pcall(One.Dock) end
+    if fold then UI.FoldSoon(TSTabs.OneFrame(), true) end
     TSTabs:Settle()
     return self.atAuction
 end
@@ -2979,11 +3157,14 @@ function TSTabs:AtDock(place)
         pcall(One.Watch, function() TSTabs:Settle() end)
     end
     self.dockOpened = self.dockOpened or {}
-    -- "Small Craft Queue:" ticked (a player's request, 2026-11-17): the
-    -- profession window keeps the small pane beside it, and the one window
-    -- stays shut there. Opened already, the pane moves into it as always.
-    if place == "profession" and not self.dockOpened[place]
-        and ns.Config and ns.Config:Get("craftPaneBeside") == true then
+    -- Slim Panel or Stay Closed for this place (UI.WindowAt; "Small Craft
+    -- Queue:" ticked reads as Slim Panel, a player's request, 2026-11-17):
+    -- the small pane or list hangs beside the game's window, and the one
+    -- window stays shut there. Opened already, the pane moves into it as
+    -- always.
+    local choice = UI.WindowAt(place)
+    local fold = false
+    if not self.dockOpened[place] and (choice == "slim" or choice == "closed") then
         local okOpenNow, openNow = pcall(One.IsOpen)
         if not (okOpenNow and openNow) then return false end
     end
@@ -3004,13 +3185,17 @@ function TSTabs:AtDock(place)
         end
         self.noRoomAt = nil
         local okOpen, isOpen = pcall(One.IsOpen)
-        if not self.area and not (okOpen and isOpen) then UI.openedFor = place end
+        if not self.area and not (okOpen and isOpen) then
+            UI.openedFor = place
+            fold = choice == "button"
+        end
         pcall(One.Open, "tradeskills")
     end
     local okPlace, now = pcall(One.Place)
     local okDocked, docked = pcall(One.Docked)
     if okPlace and now == place and not (okDocked and docked) then pcall(One.Dock) end
     TSTabs:Settle()
+    if fold then UI.FoldSoon(TSTabs.OneFrame(), true) end
     return self.atDock == place
 end
 

@@ -1237,21 +1237,37 @@ Pick(RowDropdown("Price Trend on Tooltips:"), 2)
 check("one line changed by hand", ns.db.tooltipShift.trend, true)
 check("makes All Lines say Mixed", allLines.strings[1].text, "Mixed")
 
--- Open at AH, Open at Professions and Open With AH and Vendors became one
--- row, each tick still its own saved setting.
-local openAt = RowDropdown("Open By Itself At:")
-check("one Open By Itself At row", openAt ~= nil, true)
-check("on Windows, with Window Size", Holder(openAt) == Holder(RowDropdown("Window Size:")), true)
+-- How Tradeskills opens in each place (ts-improve-2, 2026-11-26): a row
+-- for the auction house, a profession window and the mailbox. Until one is
+-- picked, each shows what the older settings give, and those are never
+-- written. Vendors keeps its tick under Open By Itself At.
+local atAH = RowDropdown("At The Auction House:")
+local atProfession = RowDropdown("At A Profession:")
+local atMail = RowDropdown("At The Mailbox:")
+check("a row for each place", atAH ~= nil and atProfession ~= nil and atMail ~= nil, true)
+check("on Windows, with Window Size", Holder(atAH) == Holder(RowDropdown("Window Size:")), true)
+check("Open By Itself At is only Vendors now", RowDropdown("Open By Itself At:"), nil)
+check("no Small Craft Queue box: At A Profession does it", Tick("Small Craft Queue:"), nil)
 settings.openAtAuction, settings.openWithShops, settings.openAtProfessions = nil, nil, nil
+settings.windowAtAuction, settings.windowAtProfession, settings.windowAtMail = nil, nil, nil
+settings.craftPaneBeside = true
 UI.tabs.settings.refresh()
-check("a new player's ticks", openAt:GetValue().openAtAuction == true and openAt:GetValue().openWithShops == nil
-    and openAt:GetValue().openAtProfessions == true, true)
-Pick(openAt, 2)
+check("a new player's mailbox: the slim list", atMail:GetValue(), "slim")
+check("Small Craft Queue ticked shows Slim Panel", atProfession:GetValue(), "slim")
+settings.openAtAuction = false
+UI.tabs.settings.refresh()
+check("Auction House unticked shows Stay Closed", atAH:GetValue(), "closed")
+Pick(atAH, 3)
+check("picking saves the place's choice", settings.windowAtAuction, "button")
+check("and leaves the older settings as they were", settings.openAtAuction == false
+    and settings.craftPaneBeside == true, true)
+settings.openAtAuction, settings.craftPaneBeside, settings.windowAtAuction = nil, nil, nil
+local vendors = Tick("Vendors")
+check("a Vendors tick", vendors ~= nil, true)
+vendors.scripts.OnClick(vendors)
 check("ticking Vendors saves Open With AH and Vendors", settings.openWithShops, true)
-check("and leaves the others unwritten", settings.openAtAuction == nil and settings.openAtProfessions == nil, true)
-Pick(openAt, 1)
-check("unticking Auction House saves it off", settings.openAtAuction, false)
-openAt.scripts.OnMouseDown(openAt)
+settings.openWithShops = nil
+atAH.scripts.OnMouseDown(atAH)
 
 -- Stock From Sales and Raise When Sold Out in one box: each keeps its key.
 local fromSales = RowDropdown("Stock From Sales:")

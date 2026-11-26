@@ -3051,6 +3051,13 @@ end
 
 --- True unless "Open at Professions:" on the Queue page is unticked.
 function CraftPanel.OpensWithProfession()
+    -- "At A Profession:" Stay Closed (UI.WindowAt in UI/Main.lua), which
+    -- an unticked openAtProfessions still reads as.
+    local UI = ns.UI
+    if UI and UI.WindowAt then
+        local ok, choice = pcall(UI.WindowAt, "profession")
+        if ok and choice then return choice ~= "closed" end
+    end
     return ns.Config:Get("openAtProfessions") ~= false
 end
 
@@ -3063,6 +3070,9 @@ function CraftPanel:OnEnable()
         -- request, 2026-11-05): the pane waits for /bts pane.
         if not CraftPanel.OpensWithProfession() then return end
         CraftPanel:Attach()
+        -- With the one window off, Full Window or Round Button opens
+        -- Tradeskills' own window too (UI:ArrivedAt).
+        if ns.UI and ns.UI.ArrivedAt then pcall(ns.UI.ArrivedAt, ns.UI, "profession") end
 
         C_Timer.After(0.5, function()
             if ns.Crafting and ns.Crafting.isTradeSkillOpen then
