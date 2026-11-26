@@ -19,7 +19,7 @@ local Util = ns.Util
 
 local ROW_HEIGHT = 46
 -- Room on the right of a row for its buttons: Skip, Show the Way, Queue Step.
-local RIGHT_WIDTH = 290
+local RIGHT_WIDTH = 330
 local METER_HEIGHT = 6
 
 local state = { line = nil }
