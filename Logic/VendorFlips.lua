@@ -231,10 +231,11 @@ VendorFlips.MIN_RESALE_SCANS = MIN_RESALE_SCANS
 -- @return copper and how many scans it was taken from, or nil when there
 --   are fewer than MIN_RESALE_SCANS
 function VendorFlips.UsualPrice(record)
-    if type(record) ~= "table" or type(record.history) ~= "table" then return nil end
+    if type(record) ~= "table" then return nil end
+    local history = ns.Prices and ns.Prices.History and ns.Prices.History(record) or record.history
+    if type(history) ~= "table" then return nil end
 
     local values = {}
-    local history = record.history
     local count = ReadingCount(history)
     for index, t, m in EachReading(history) do
         local latest = index == count and (record.seen == nil or t == record.seen)
