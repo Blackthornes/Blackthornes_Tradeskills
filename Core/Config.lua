@@ -551,6 +551,10 @@ local DEFAULTS = {
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
+        -- Our own chime when the last craft in the queue is made
+        -- (2026-11-26). Off unless ticked. See Crafting:QueueDone. Never
+        -- rename it.
+        queueDoneSound = false,
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
@@ -600,6 +604,11 @@ local DEFAULTS = {
         -- character makes (a player asked, 2026-11-17). The queue itself
         -- stays shared; nothing is taken off it. See Queue:Shown.
         queueOnlyMine = false,
+
+        -- The Queue tab's Sort By (2026-11-26): "mine" (today's order),
+        -- "profit", "perHour" or "bags". See Queue:SortBy. Account wide;
+        -- never rename it.
+        queueSortBy = "mine",
 
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so

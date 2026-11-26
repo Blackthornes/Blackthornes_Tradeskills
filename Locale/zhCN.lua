@@ -3975,6 +3975,17 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "已把 %d 次分解移到你的 Salvager 结果里。"
 L["Your plain disenchant results are cleared."] = "你的普通分解结果已清除。"
 
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "排序："
+L["My Order"] = "我的顺序"
+L["Gold per Hour"] = "每小时金币"
+L["Frees Bag Space"] = "腾出背包空间"
+L["Queue done. %d craft made."] = "队列完成。共制造 %d 次。"
+L["Queue done. %d crafts made."] = "队列完成。共制造 %d 次。"
+L["Queue Done Sound:"] = "队列完成音效："
+L["Plays a short sound when the last craft in the queue is made."] = "队列中最后一件制造完成时，播放一声短音。"
+
+
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "今日金币："
 L["Up For Sale:"] = "在售："

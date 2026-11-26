@@ -3976,6 +3976,17 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "%d Entzauberungen zu deinen Salvager-Ergebnissen geschoben."
 L["Your plain disenchant results are cleared."] = "Deine normalen Entzauber-Ergebnisse sind gelöscht."
 
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "Sortieren nach:"
+L["My Order"] = "Meine Reihenfolge"
+L["Gold per Hour"] = "Gold pro Stunde"
+L["Frees Bag Space"] = "Macht Taschenplatz frei"
+L["Queue done. %d craft made."] = "Warteschlange fertig. %d Herstellung gemacht."
+L["Queue done. %d crafts made."] = "Warteschlange fertig. %d Herstellungen gemacht."
+L["Queue Done Sound:"] = "Ton bei leerer Warteschlange:"
+L["Plays a short sound when the last craft in the queue is made."] = "Spielt einen kurzen Ton, wenn die letzte Herstellung in der Warteschlange fertig ist."
+
+
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Gold heute:"
 L["Up For Sale:"] = "Im Angebot:"
