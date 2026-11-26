@@ -2727,6 +2727,18 @@ hold is still left out. `Snipe.emptyWhy` now also says when nobody can
 disenchant and when the scan held no gear worth breaking, and the empty
 list shows it. Tested in `tools/test_snipedisenchant.lua`.
 
+Whose buy an event is (2026-11-26): the stack events (`COMMODITY_PRICE_*`,
+`COMMODITY_PURCHASE_*`) come for every buy at the auction house, the
+player's own too. `Snipe.OwnStackBuy(pending, paying)` says whether one is
+Snipe's: "it went through" only while its buy is being paid for (`buying`,
+set before `ConfirmCommoditiesPurchase`), a refusal also while it asks
+for a price. A readied buy waiting for the click is left alone. Snipe
+never calls `AHBuys:Record`: AHBuys hooks `PlaceBid` and
+`ConfirmCommoditiesPurchase` and writes every buy down itself, so a
+second call counted a stack buy twice. Tested in
+`tools/test_snipebuyonce.lua`, which loads both and fires each event at
+every handler.
+
 ## The Enchant strip
 
 The owner said build it (2026-11-05) as a window beside the Enchanting

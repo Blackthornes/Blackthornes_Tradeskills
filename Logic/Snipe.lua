@@ -1444,11 +1444,23 @@ function Snipe:CancelBuy()
     Moved()
 end
 
+--- Is this a stack buy of ours the game is answering now? The stack
+--- events are the same for every buy at the auction house, the player's
+--- own included, so one that comes while our buy is only readied (its
+--- price in, waiting for the click) or still reading listings is not ours.
+-- @param paying  true for "it went through": only a buy being paid for
+function Snipe.OwnStackBuy(pending, paying)
+    if not pending or pending.item then return false end
+    if pending.phase == "buying" then return true end
+    if paying then return false end
+    return pending.phase == "asking" or (pending.phase == "quoted" and pending.refreshing ~= nil)
+end
+
 --- The game would not price a stack, or would not sell it: let the buy go
 --- and say so. A quiet ready stays quiet.
 function Snipe:Refused()
     local pending = self.pending
-    if not pending then return end
+    if not Snipe.OwnStackBuy(pending) then return end
     self:CancelBuy()
     Tell(pending, L["That buy didn't go through. Try it again."])
 end
@@ -1545,6 +1557,9 @@ function Snipe:Pay()
             return true
         end
     else
+        -- Marked first here too: only a buy being paid for takes the
+        -- game's "it went through" as its own (OwnStackBuy).
+        pending.phase = "buying"
         ok = Util.HasFunction("C_AuctionHouse.ConfirmCommoditiesPurchase")
             and pcall(C_AuctionHouse.ConfirmCommoditiesPurchase, pending.itemID, pending.count)
     end
@@ -1580,10 +1595,9 @@ function Snipe:Bought()
     else
         Drop(pending.itemID)
     end
-    -- AHBuys watches PlaceBid itself, so only a stack buy is recorded here.
-    if not pending.item and ns.AHBuys and ns.AHBuys.Record then
-        pcall(ns.AHBuys.Record, ns.AHBuys, pending.itemID, pending.count)
-    end
+    -- Nothing is put down as waiting in the mail here: AHBuys watches
+    -- PlaceBid and ConfirmCommoditiesPurchase itself and writes every buy
+    -- down. Doing it here as well counted a stack buy twice.
     -- What's left of the cap may no longer reach every find.
     self:FitCap()
     Moved()
@@ -1635,7 +1649,9 @@ function Snipe:Init()
     self.eventsOn = true
     ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, _, total) Snipe:PriceUpdated(total) end)
     ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() Snipe:Refused() end)
-    ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() Snipe:Bought() end)
+    ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function()
+        if Snipe.OwnStackBuy(Snipe.pending, true) then Snipe:Bought() end
+    end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() Snipe:Refused() end)
     ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) Snipe:ItemResults(itemKey) end)
     ns.RegisterEvent(self, "COMMODITY_SEARCH_RESULTS_UPDATED", function(_, _, itemID) Snipe:StackResults(itemID) end)
