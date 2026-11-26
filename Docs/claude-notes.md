@@ -4293,6 +4293,24 @@ The owner said build it (ts-improve-3). One sum everywhere:
   Profit (sorting stays on profit); the card shows it under the profit.
 - Tested in `tools/test_profitsum.lua`.
 
+## Seven tabs in place of eleven
+
+The owner said build it (2026-11-26, from the mockup ts-improve-9). The
+usual row shows Today, Make, Sell, Learn, Prices, Characters, Settings.
+`UI.TAB_GROUPS` in `UI/Main.lua` names each group's tabs: Make is Queue,
+Profit, Disenchanting; Sell is Sales, Deals; Learn is Level Up, Gather.
+Prices already holds Stats as a view. Every tab keeps its own key and
+container, so `UI:SelectTab("queue")`, `/bts` commands, the sister addons'
+calls, `UI.MOVED_TABS` and the saved `lastTab` land as before:
+`UI:SelectTab` lights the group on the row (`UI:GroupOf`) and
+`UI:LayGroupRow` shows the group's own strip (`UI.groupStrips`) along the
+top of the content, moving the tab's container down `GROUP_STRIP_ROOM`.
+A group key ("make") opens the tab last picked in it (`UI.groupPicks`,
+session only). A group with one tab loaded shows that tab alone. The
+auction house, profession and mailbox rows (`ahTabStrip`, `dockStrips`)
+stay flat: there the group strip hides and the tab takes the whole room.
+Tested in `tools/test_seventabs.lua`.
+
 ## Lists that read faster (the Profit list, 2026-11-26)
 
 The owner said build it (ts-improve-6), the Profit list first. Look only:
