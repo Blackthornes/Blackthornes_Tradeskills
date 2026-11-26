@@ -4132,3 +4132,32 @@ shows the current amount.
   tooltip's one.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
+
+## How This Profit Adds Up (one profit sum, 2026-11-26)
+
+The owner said build it (ts-improve-3). One sum everywhere:
+
+- `Profit:Counted(recipeID)` is `Analyse` with `Profit:CountedMethod()` (the
+  Profit tab's "Profit:" choice; Auction counts as the sale, max(auction,
+  vendor), as the craft pane always did). The Queue rows, the Queue's
+  totals and snapshots (`CountedProfit` in `Logic/Queue.lua` and
+  `UI/Tab_Queue.lua`, which falls back to `Analyse` for old test stubs) and
+  the craft pane (`PaneMethod`) read it.
+- The game's profession window (`Logic/CraftProfit.lua`) takes the same
+  number through `CraftProfit.TakeCounted`: Sells For is the counted profit
+  plus the materials, so Sells For less Mats Cost is the profit. A grey, or
+  a craft the sum can't price, keeps its own figures.
+- The tooltip's Profit Now (`CraftedCost:ProfitNowAt`, `:NetOfListing`)
+  counts the deposit through `Profit:NetFromListing`, and a vendor that
+  pays more is the sale, as `Analyse` with no method counts it.
+- `Profit:Sum(analysis)` lays out the parts for the side card
+  (`UI/ProfitCard.lua`, `windowSpots["ts.profitcard"]`): Sells For, Auction
+  Cut, Deposit, each material with where it comes from, Makes, Profit. It
+  adds no math; the cut takes what rounding leaves so the lines add to the
+  profit as shown. Opened by a click on a Profit tab row's profit, the
+  detail pane's Profit line, or a Queue row's profit.
+- `Profit:RollRange(analysis)`: for a craft sold at the AH whose output has
+  two or more priced random rolls, the same sum at each roll's lowest
+  posting. The Profit tab shows "by roll" under Sells For and the range in
+  Profit (sorting stays on profit); the card shows it under the profit.
+- Tested in `tools/test_profitsum.lua`.

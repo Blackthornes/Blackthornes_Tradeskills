@@ -338,6 +338,7 @@ end
 -- @return "best", "vendor", "disenchant", or nil for the sale alone
 local function PaneMethod()
     local Profit = ns.Profit
+    if Profit and Profit.CountedMethod then return Profit:CountedMethod() end
     local method = Profit and Profit.GetMethod and Profit:GetMethod() or nil
     if method == "auction" then return nil end
     return method
