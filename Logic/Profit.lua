@@ -1456,6 +1456,188 @@ function Profit:Analyse(recipeID, characterKey, method)
 end
 
 --------------------------------------------------------------------------------
+-- How a profit adds up (the owner said build it, 2026-11-26)
+--------------------------------------------------------------------------------
+--
+-- One sum, read by every place that shows a craft's profit: the Profit tab,
+-- the Queue and the craft pane all ask Counted, so the three can't disagree,
+-- and the How This Profit Adds Up card (UI/ProfitCard.lua) shows Sum's parts.
+-- Sum adds no new math: it lays out what Analyse already worked out, and its
+-- parts add up to analysis.profit to the copper.
+
+--- How the Profit tab's "Profit:" choice is counted outside the tab: the
+--- craft pane and the Queue. Auction stays the sale (max(auction, vendor)),
+--- as the craft pane always counted it.
+-- @return "best", "vendor", "disenchant", "vendordisenchant", or nil
+function Profit:CountedMethod()
+    local method = self:GetMethod()
+    if method == "auction" then return nil end
+    return method
+end
+
+--- One craft's profit as the Queue and the craft pane show it.
+function Profit:Counted(recipeID, characterKey)
+    return self:Analyse(recipeID, characterKey, self:CountedMethod())
+end
+
+--- What a material line's note says about where it comes from.
+local function MaterialNote(reagent)
+    local source = reagent.source
+    if source == "craft" then
+        local name = reagent.madeBy and ns.Cost and ns.Cost.MadeByName
+            and ns.Cost.MadeByName(reagent.madeBy) or nil
+        if not name and ns.Recipes and ns.Recipes.GetCharacterName and ns.Config then
+            local ok, mine = pcall(ns.Recipes.GetCharacterName, ns.Recipes, ns.Config:GetCharacterKey())
+            name = ok and type(mine) == "string" and mine ~= "" and mine or nil
+        end
+        -- Made, as the cheaper way, unless nothing sells it to compare.
+        local bought = ns.Cost and ns.Cost.GetReagentUnitCost
+            and select(1, ns.Cost:GetReagentUnitCost(reagent.itemID)) or nil
+        local cheaper = type(bought) == "number" and type(reagent.unitCost) == "number"
+            and reagent.unitCost < bought
+        if name and cheaper then return L.Format("Made by %s, cheaper than buying", name) end
+        if name then return L.Format("Made by %s", name) end
+        return L["Made by you"]
+    elseif source == "vendor" then
+        return L["From a vendor"]
+    elseif source == "mine" then
+        return L["Your own price"]
+    elseif source == "owned" then
+        return L["In your bags"]
+    end
+    return L["Bought, at today's price"]
+end
+
+--- What the Sells For line's note says.
+local function SaleNote(analysis)
+    local via = analysis.via
+    if via == "vendor" then return L["What a vendor pays"] end
+    if via == "disenchant" then return L["What it disenchants into"] end
+    local basis = analysis.priceBasis
+    if basis == "uncontested" then return L["What it last sold for"] end
+    if basis == "derived" then return L["Materials plus your markup"] end
+    return L["The lowest posting right now"]
+end
+
+--- Low and high profit for a craft whose output comes with random rolls
+--- (of the Bear, of the Eagle...): the same sum at each roll's lowest
+--- posting, cheapest roll to dearest. Only for the auction sale, and only
+--- with two or more rolls priced. Worked out once per analysis.
+-- @return low, high (copper for one craft), or nil
+function Profit:RollRange(analysis)
+    if type(analysis) ~= "table" then return nil end
+    if analysis.rollRange ~= nil then
+        if analysis.rollRange == false then return nil end
+        return analysis.rollRange[1], analysis.rollRange[2]
+    end
+    analysis.rollRange = false
+    if not analysis.priceable or analysis.via ~= "auction" then return nil end
+    local itemID = analysis.outputItemID
+    local prices = ns.Prices
+    if not (itemID and prices and prices.GetTable and prices.SuffixCount) then return nil end
+    local okCount, count = pcall(prices.SuffixCount, prices, itemID)
+    if not okCount or type(count) ~= "number" or count < 2 then return nil end
+
+    local okTable, all = pcall(prices.GetTable, prices)
+    local record = okTable and type(all) == "table" and all[itemID] or nil
+    local suffixes = type(record) == "table" and record.suffixes or nil
+    if type(suffixes) ~= "table" then return nil end
+
+    local oldest = time() - (prices.SUFFIX_KEEP or 0)
+    local yield = analysis.yield or 1
+    local cutRate = ns.Config:Get("auctionCut") or 0.05
+    local deposit = analysis.deposit or 0
+    local cost = analysis.totalCost or 0
+    local low, high
+    for _, entry in pairs(suffixes) do
+        local price = type(entry) == "table" and (tonumber(entry.seen) or 0) >= oldest
+            and tonumber(entry.min or entry.market) or nil
+        if price and price > 0 then
+            local revenue = price * yield
+            local profit = revenue - revenue * cutRate - deposit - cost
+            if not low or profit < low then low = profit end
+            if not high or profit > high then high = profit end
+        end
+    end
+    if not low or low == high then return nil end
+    analysis.rollRange = { low, high }
+    return low, high
+end
+
+--- The parts of one craft's profit, for the How This Profit Adds Up card.
+-- @param analysis  a Profit:Analyse result
+-- @return { itemID, name, lines = { { label, note, amount } }, yield, profit,
+--           low, high }, or nil for a craft with no profit worked out.
+--           Each amount is copper, signed: the sale counts up, the rest down.
+function Profit:Sum(analysis)
+    if type(analysis) ~= "table" or not analysis.priceable or type(analysis.profit) ~= "number" then
+        return nil
+    end
+    local lines = {}
+    lines[#lines + 1] = { label = L["Sells For"], note = SaleNote(analysis),
+        amount = analysis.revenue or 0, sale = true }
+
+    if (analysis.cut or 0) > 0 then
+        local rate = ns.Config:Get("auctionCut") or 0.05
+        local percent = math.floor(rate * 1000 + 0.5) / 10
+        local shown = percent == math.floor(percent) and tostring(math.floor(percent)) or tostring(percent)
+        lines[#lines + 1] = { label = L["Auction Cut"],
+            note = L.Format("%s%% of the sale", shown), amount = -analysis.cut }
+    end
+
+    if analysis.via == "auction" then
+        lines[#lines + 1] = { label = L["Deposit"], note = L["Lost if it doesn't sell the first time"],
+            amount = -(analysis.deposit or 0) }
+    end
+
+    local cost = analysis.cost
+    for _, reagent in ipairs((cost and cost.reagents) or {}) do
+        local name = Util.GetItemLabel and Util.GetItemLabel(reagent.itemID) or tostring(reagent.itemID)
+        lines[#lines + 1] = {
+            label = ("%d %s"):format(reagent.quantity or 0, name),
+            note = MaterialNote(reagent),
+            amount = -(reagent.lineCost or 0),
+            itemID = reagent.itemID,
+        }
+    end
+
+    -- Each line is shown to the copper, so the cut, the one part with a
+    -- fraction in it, takes what rounding leaves: the lines add up to the
+    -- profit as it is shown, on every row of the card.
+    local function Round(value) return math.floor((value or 0) + 0.5) end
+    local profit = Round(analysis.profit)
+    local rest, cutLine = 0, nil
+    for _, line in ipairs(lines) do
+        if line.label == L["Auction Cut"] then
+            cutLine = line
+        else
+            line.amount = line.sale and Round(line.amount) or -Round(-line.amount)
+            rest = rest + line.amount
+        end
+    end
+    if cutLine then cutLine.amount = profit - rest end
+
+    local low, high = self:RollRange(analysis)
+    return {
+        recipeID = analysis.recipeID,
+        itemID = analysis.outputItemID,
+        name = analysis.name,
+        lines = lines,
+        yield = analysis.yield or 1,
+        profit = analysis.profit,
+        low = low,
+        high = high,
+    }
+end
+
+--- A yield for the Makes line: whole numbers plain, an average to one place.
+function Profit.YieldText(yield)
+    yield = tonumber(yield) or 1
+    if yield == math.floor(yield) then return tostring(math.floor(yield)) end
+    return ("%.1f"):format(yield)
+end
+
+--------------------------------------------------------------------------------
 -- Ignored crafts
 --------------------------------------------------------------------------------
 

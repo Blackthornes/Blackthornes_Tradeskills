@@ -20,6 +20,13 @@
 -- With the Blizzard window style the gem is the game's own minimize art when
 -- the client has it.
 --
+-- Fold Gem: Small Bar (the owner said build it, 2026-11-26; the pick is on
+-- the All Addons page, UI/SharedChoices.lua): the window folds into a small
+-- bar with the addon's badge, the window's title and its small number,
+-- across the window's top right corner, in place of the round button. It
+-- drags, keeps its spot and opens the window the same way. The pick counts
+-- from the next fold; a button up when it changes stays as it is.
+--
 -- The same file in all five Blackthornes addons (a fix to it belongs in all
 -- five), as is tools/make_fold_art.py, which draws Media/Frame/FoldGem.tga.
 
@@ -42,6 +49,13 @@ FoldWindow.STEP = 6
 -- The badge inside the ring, as the house portrait has it (36 in 68).
 local EMBLEM = 0.53
 
+-- The small bar: its height, the badge on it, the room round its words,
+-- and how wide it may grow.
+FoldWindow.BAR_HEIGHT = 28
+local BAR_BADGE = 18
+local BAR_PAD = 8
+local BAR_MIN, BAR_MAX = 110, 280
+
 -- Seconds after logging in before windows that were folded come back as
 -- buttons, so windows the addons open at login are up first.
 FoldWindow.RESTORE_AFTER = 2
@@ -56,6 +70,9 @@ local GOLD = { 0.910, 0.784, 0.451 }
 local NAME = { 1, 0.82, 0 }
 local PILL_BACK = { 0.059, 0.047, 0.031 }
 local PILL_EDGE = { 0.722, 0.580, 0.247 }
+local BAR_TOP = { 0.165, 0.141, 0.094 }
+local BAR_LIT = { 0.945, 0.831, 0.533 }
+local BAR_MUTED = { 0.608, 0.573, 0.486 }
 
 -- The game's own minimize art, for the Blizzard window style.
 local ATLAS = {
@@ -211,13 +228,42 @@ local function PutRound(round, x, y)
     round.x, round.y = x, y
 end
 
+-- How wide a button is, and how far it sits out past the window's corner:
+-- the round button stands out a little, the bar lies along the top edge.
+local function Wide(round)
+    if round and round.bar then return round.width or BAR_MIN end
+    return FoldWindow.SIZE
+end
+
+local function Tall(round)
+    if round and round.bar then return FoldWindow.BAR_HEIGHT end
+    return FoldWindow.SIZE
+end
+
+local function Out(round)
+    if round and round.bar then return 0 end
+    return FoldWindow.OUT
+end
+
+--- Fold Gem: "round" (the round button) or "bar" (the small bar).
+function FoldWindow.Style()
+    local shared = ns.SharedChoices
+    if type(shared) == "table" and type(shared.Look) == "function" then
+        local ok, style = pcall(shared.Look, shared, "fold")
+        if ok and style == "bar" then return "bar" end
+    end
+    return "round"
+end
+
 --- Step a button down off any other one it would cover, older ones first.
-function FoldWindow.Unstack(x, y, others, size)
+--- `width` is how far apart side to side counts as clear (`size` if nil).
+function FoldWindow.Unstack(x, y, others, size, width)
     size = size or FoldWindow.SIZE
+    width = width or size
     for _ = 1, 12 do
         local moved = false
         for _, other in ipairs(others) do
-            if math.abs(other[1] - x) < size and math.abs(other[2] - y) < size then
+            if math.abs(other[1] - x) < width and math.abs(other[2] - y) < size then
                 y = other[2] - size - FoldWindow.STEP
                 moved = true
             end
@@ -286,6 +332,7 @@ end
 
 --- The small number under a button: kills, goals. Hidden when there is none.
 function FoldWindow.Pill(round)
+    if round and round.bar then return FoldWindow.FitBar(round) end
     local pill = round and round.pill
     if not pill then return end
     local text = Text(Host(round.key).pill)
@@ -333,11 +380,66 @@ end
 
 local Open
 
+-- The mouse on a button, round or bar: light it, show its tooltip, drag
+-- it, and open its window on a click.
+local function Wire(round)
+    local button, key = round.button, round.key
+    local function Blend(p)
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(button, "hover", p, p > 0 and 0.12 or 0.18, function(v) Light(round, v) end)
+        else
+            Light(round, p)
+        end
+    end
+
+    button:SetScript("OnEnter", function()
+        round.hovered = true
+        Blend(1)
+        FoldWindow.Pill(round)
+        Tooltip(round)
+    end)
+    button:SetScript("OnLeave", function()
+        round.hovered = false
+        Blend(0)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    button:SetScript("OnDragStart", function(self)
+        round.dragging = true
+        Call(self, "StartMoving")
+    end)
+    button:SetScript("OnDragStop", function(self)
+        Call(self, "StopMovingOrSizing")
+        round.dragging = false
+        round.dropped = true
+        local x, y = RoundSpot(round)
+        if x and y then
+            -- Pinned by its top left again, wherever the game left it.
+            PutRound(round, x, y)
+            SaveSpot(key, x, y)
+            round.moved = true
+        end
+    end)
+    button:SetScript("OnClick", function()
+        -- Let go after a drag: that was a move, not a click.
+        if round.dropped then round.dropped = false return end
+        Open(round)
+    end)
+end
+
 --- The button for `key`, made the first time it is asked for.
 function FoldWindow.Round(key)
     local round = FoldWindow.rounds[key]
-    if round then return round end
+    local style = FoldWindow.Style()
+    if round then
+        -- Fold Gem changed while this one was put away: made again.
+        if (round.bar and "bar" or "round") == style or Shown(round.button) then return round end
+        FoldWindow.rounds[key] = nil
+        for i = #hub.rounds, 1, -1 do
+            if hub.rounds[i] == round then table.remove(hub.rounds, i) end
+        end
+    end
     if type(CreateFrame) ~= "function" then return nil end
+    if style == "bar" then return FoldWindow.Bar(key) end
 
     local button = CreateFrame("Button", nil, UIParent)
     round = { key = key, button = button }
@@ -381,52 +483,105 @@ function FoldWindow.Round(key)
 
     round.pill = MakePill(button)
 
-    local function Blend(p)
-        if ns.Motion and type(ns.Motion.Blend) == "function" then
-            ns.Motion:Blend(button, "hover", p, p > 0 and 0.12 or 0.18, function(v) Light(round, v) end)
-        else
-            Light(round, p)
-        end
-    end
-
-    button:SetScript("OnEnter", function()
-        round.hovered = true
-        Blend(1)
-        FoldWindow.Pill(round)
-        Tooltip(round)
-    end)
-    button:SetScript("OnLeave", function()
-        round.hovered = false
-        Blend(0)
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    button:SetScript("OnDragStart", function(self)
-        round.dragging = true
-        Call(self, "StartMoving")
-    end)
-    button:SetScript("OnDragStop", function(self)
-        Call(self, "StopMovingOrSizing")
-        round.dragging = false
-        round.dropped = true
-        local x, y = RoundSpot(round)
-        if x and y then
-            -- Pinned by its top left again, wherever the game left it.
-            PutRound(round, x, y)
-            SaveSpot(key, x, y)
-            round.moved = true
-        end
-    end)
-    button:SetScript("OnClick", function()
-        -- Let go after a drag: that was a move, not a click.
-        if round.dropped then round.dropped = false return end
-        Open(round)
-    end)
+    Wire(round)
     button:Hide()
     return round
 end
 
+
+--- The small bar for `key` (Fold Gem: Small Bar): the addon's badge, the
+--- window's title and its small number on dark glass with a gold edge.
+function FoldWindow.Bar(key)
+    if type(CreateFrame) ~= "function" then return nil end
+    local button = CreateFrame("Button", nil, UIParent)
+    local round = { key = key, button = button, bar = true, width = BAR_MIN }
+    FoldWindow.rounds[key] = round
+    hub.rounds[#hub.rounds + 1] = round
+
+    button:SetSize(BAR_MIN, FoldWindow.BAR_HEIGHT)
+    Call(button, "SetFrameStrata", "HIGH")
+    Call(button, "SetClampedToScreen", true)
+    Call(button, "SetMovable", true)
+    Call(button, "EnableMouse", true)
+    Call(button, "RegisterForDrag", "LeftButton")
+    Call(button, "RegisterForClicks", "LeftButtonUp")
+
+    local edge = button:CreateTexture(nil, "BACKGROUND")
+    edge:SetAllPoints(button)
+    edge:SetColorTexture(PILL_EDGE[1], PILL_EDGE[2], PILL_EDGE[3], 1)
+    local back = button:CreateTexture(nil, "BORDER")
+    back:SetPoint("TOPLEFT", 1, -1)
+    back:SetPoint("BOTTOMRIGHT", -1, 1)
+    back:SetColorTexture(PILL_BACK[1], PILL_BACK[2], PILL_BACK[3], 1)
+    -- A faint lift along its top, as the house plate has.
+    local top = button:CreateTexture(nil, "BORDER", nil, 1)
+    top:SetPoint("TOPLEFT", 1, -1)
+    top:SetPoint("TOPRIGHT", -1, -1)
+    top:SetHeight(math.floor(FoldWindow.BAR_HEIGHT / 2))
+    top:SetColorTexture(BAR_TOP[1], BAR_TOP[2], BAR_TOP[3], 0.6)
+
+    local host = Host(key)
+    local emblem = button:CreateTexture(nil, "ARTWORK")
+    emblem:SetTexture(host.emblem or (MEDIA .. "Emblem"))
+    emblem:SetSize(BAR_BADGE, BAR_BADGE)
+    emblem:SetPoint("LEFT", BAR_PAD - 2, 0)
+    round.emblem = emblem
+
+    if type(button.CreateFontString) == "function" then
+        local name = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        if name then
+            pcall(name.SetPoint, name, "LEFT", emblem, "RIGHT", 6, 0)
+            pcall(name.SetTextColor, name, NAME[1], NAME[2], NAME[3])
+            local theme = ns.Theme
+            local ok, font = pcall(function() return theme and theme.FONT end)
+            if ok and type(font) == "string" then pcall(name.SetFont, name, font, 12, "") end
+            round.name = name
+        end
+        local count = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        if count then
+            pcall(count.SetPoint, count, "RIGHT", -BAR_PAD, 0)
+            pcall(count.SetTextColor, count, BAR_MUTED[1], BAR_MUTED[2], BAR_MUTED[3])
+            round.count = count
+        end
+    end
+
+    -- Lit under the mouse: the gold edge brightens.
+    local lit = button:CreateTexture(nil, "ARTWORK", nil, 1)
+    lit:SetAllPoints(button)
+    lit:SetColorTexture(BAR_LIT[1], BAR_LIT[2], BAR_LIT[3], 0.25)
+    pcall(lit.SetBlendMode, lit, "ADD")
+    round.lit = lit
+    Light(round, 0)
+
+    Wire(round)
+    button:Hide()
+    return round
+end
+
+--- Fill a bar's words and size it to them: the title, its small number.
+function FoldWindow.FitBar(round)
+    if not (round and round.bar) then return end
+    local title = Title(round.key) or ""
+    local text = Text(Host(round.key).pill) or ""
+    if round.name and round.titleText ~= title then
+        round.titleText = title
+        Call(round.name, "SetText", title)
+    end
+    if round.count and round.pillText ~= text then
+        round.pillText = text
+        Call(round.count, "SetText", text)
+    end
+    local width = BAR_PAD - 2 + BAR_BADGE + 6
+    width = width + (Number(round.name, "GetStringWidth") or (#title * 7))
+    if text ~= "" then width = width + 10 + (Number(round.count, "GetStringWidth") or (#text * 6)) end
+    width = math.max(BAR_MIN, math.min(BAR_MAX, math.ceil(width + BAR_PAD)))
+    round.width = width
+    Call(round.button, "SetWidth", width)
+end
+
 local function ShowRound(round, x, y, unstack)
-    if unstack then x, y = FoldWindow.Unstack(x, y, OthersShown(round)) end
+    FoldWindow.Pill(round)
+    if unstack then x, y = FoldWindow.Unstack(x, y, OthersShown(round), Tall(round), Wide(round)) end
     PutRound(round, x, y)
     round.moved, round.dropped = false, false
     FoldWindow.Pill(round)
@@ -628,8 +783,9 @@ function FoldWindow:Fold(frame, opts)
     else
         -- On the window's top right corner, where the fold gem is.
         local scale, size = Scale(frame), Scale(round.button)
-        ShowRound(round, right * scale + (FoldWindow.OUT - FoldWindow.SIZE) * size,
-            top * scale + FoldWindow.OUT * size, true)
+        if round.bar then FoldWindow.FitBar(round) end
+        ShowRound(round, right * scale + (Out(round) - Wide(round)) * size,
+            top * scale + Out(round) * size, true)
     end
     round.ghost = false
     SaveFolded(state.key, true)
@@ -656,7 +812,7 @@ local function ToRound(frame, round)
     local scale, size = Scale(frame), Scale(round.button)
     Call(frame, "ClearAllPoints")
     Call(frame, "SetPoint", "TOPLEFT", UIParent, "BOTTOMLEFT",
-        (x + (FoldWindow.SIZE - FoldWindow.OUT) * size) / scale - width, (y - FoldWindow.OUT * size) / scale)
+        (x + (Wide(round) - Out(round)) * size) / scale - width, (y - Out(round) * size) / scale)
     return true
 end
 
