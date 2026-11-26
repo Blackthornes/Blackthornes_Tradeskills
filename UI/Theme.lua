@@ -69,12 +69,29 @@ Theme.colors = {
     natural   = { 1, 1, 1 },
 }
 
-local FONT do
+-- The house font, the game's own. The Font choice on the All Addons page
+-- (UI/SharedChoices.lua) can swap it once the save is in, so Theme.FONT is
+-- looked up as it is read rather than kept.
+local HOUSE_FONT do
     local ok, path = pcall(function() return (GameFontNormal:GetFont()) end)
-    FONT = (ok and path) or [[Fonts\FRIZQT__.TTF]]
+    HOUSE_FONT = (ok and path) or [[Fonts\FRIZQT__.TTF]]
+end
+Theme.HOUSE_FONT = HOUSE_FONT
+
+--- The font to draw with. Also puts the Colors choice into the palette,
+--- once, the first time it is asked after the save is in.
+function Theme.Font()
+    local Shared = ns.SharedChoices
+    if Shared and Shared.FontPath then
+        Shared:Recolor(Theme.colors)
+        return Shared:FontPath(HOUSE_FONT)
+    end
+    return HOUSE_FONT
 end
 
-Theme.FONT = FONT
+setmetatable(Theme, { __index = function(_, key)
+    if key == "FONT" then return Theme.Font() end
+end })
 
 -- The sizes at Normal text size.
 Theme.BASE_SIZES = {
@@ -117,6 +134,8 @@ Theme.sizes = setmetatable({}, {
 --------------------------------------------------------------------------------
 
 function Theme.Unpack(key, alpha)
+    local Shared = ns.SharedChoices
+    if Shared and Shared.Recolor then Shared:Recolor(Theme.colors) end
     local color = Theme.colors[key] or Theme.colors.text
     return color[1], color[2], color[3], alpha or 1
 end
@@ -194,7 +213,7 @@ end
 --- A text label.
 function Theme.CreateLabel(parent, size, colorKey, justify)
     local label = parent:CreateFontString(nil, "OVERLAY")
-    label:SetFont(FONT, Theme.sizes[size] or size or Theme.sizes.normal, "")
+    label:SetFont(Theme.Font(), Theme.sizes[size] or size or Theme.sizes.normal, "")
     label:SetTextColor(Theme.Unpack(colorKey or "text"))
     label:SetJustifyH(justify or "LEFT")
     label:SetWordWrap(false)
@@ -274,7 +293,7 @@ end
 --- Red" over "Swashbuckler's Shirt").
 function Theme.SetRowName(label, text, size)
     size = Theme.sizes[size or "small"] or Theme.sizes.small
-    pcall(label.SetFont, label, FONT, size, "")
+    pcall(label.SetFont, label, Theme.Font(), size, "")
     pcall(label.SetWordWrap, label, false)
     pcall(label.SetHeight, label, 0)
     label.rowNeed, label.rowNeedText = nil, nil
@@ -286,7 +305,7 @@ function Theme.SetRowName(label, text, size)
     if type(width) ~= "number" or width <= room then return end
 
     local small = math.min(size, Theme.sizes.tiny)
-    pcall(label.SetFont, label, FONT, small, "")
+    pcall(label.SetFont, label, Theme.Font(), small, "")
     pcall(label.SetWordWrap, label, true)
     label:SetText(text)
 
