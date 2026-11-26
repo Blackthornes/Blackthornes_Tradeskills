@@ -3978,6 +3978,17 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "%d desencantamientos movidos a tus resultados del Salvager."
 L["Your plain disenchant results are cleared."] = "Tus resultados de desencantar normales están borrados."
 
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "Ordenar por:"
+L["My Order"] = "Mi orden"
+L["Gold per Hour"] = "Oro por hora"
+L["Frees Bag Space"] = "Libera espacio"
+L["Queue done. %d craft made."] = "Cola terminada. %d fabricación hecha."
+L["Queue done. %d crafts made."] = "Cola terminada. %d fabricaciones hechas."
+L["Queue Done Sound:"] = "Sonido al terminar la cola:"
+L["Plays a short sound when the last craft in the queue is made."] = "Suena un sonido corto cuando se hace la última fabricación de la cola."
+
+
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Oro hoy:"
 L["Up For Sale:"] = "En venta:"
@@ -4056,3 +4067,10 @@ L["%s a craft"] = "%s por creación"
 L["The same number on the Queue, the tooltip and the profession window"] = "El mismo número en la cola, en la descripción y en la ventana de profesión"
 L["by roll"] = "según la variante"
 L["Click to see how it adds up."] = "Haz clic para ver cómo se suma."
+
+-- Lists that read faster (UI/Tab_Profit.lua cards, 7 Days)
+L["7 DAYS"] = "7 DÍAS"
+L["Best Right Now"] = "Lo mejor ahora"
+L["Crafts That Pay"] = "Recetas que dan ganancia"
+L["Prices Read"] = "Precios leídos"
+L["No prices yet. Visit an auctioneer and the list fills in by itself."] = "Aún no hay precios. Visita a un subastador y la lista se llena sola."

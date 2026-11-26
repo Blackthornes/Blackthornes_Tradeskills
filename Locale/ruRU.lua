@@ -3979,6 +3979,17 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "Перенесено в итоги Salvager: %d."
 L["Your plain disenchant results are cleared."] = "Обычные итоги распыления очищены."
 
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "Сортировка:"
+L["My Order"] = "Мой порядок"
+L["Gold per Hour"] = "Золото в час"
+L["Frees Bag Space"] = "Освобождает сумки"
+L["Queue done. %d craft made."] = "Очередь готова. Создано: %d."
+L["Queue done. %d crafts made."] = "Очередь готова. Создано: %d."
+L["Queue Done Sound:"] = "Звук конца очереди:"
+L["Plays a short sound when the last craft in the queue is made."] = "Короткий звук, когда сделан последний предмет в очереди."
+
+
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "Золото сегодня:"
 L["Up For Sale:"] = "Выставлено:"
@@ -4057,3 +4068,10 @@ L["%s a craft"] = "%s за создание"
 L["The same number on the Queue, the tooltip and the profession window"] = "То же число в очереди, в подсказке и в окне профессии"
 L["by roll"] = "зависит от варианта"
 L["Click to see how it adds up."] = "Нажми, чтобы увидеть, из чего она складывается."
+
+-- Lists that read faster (UI/Tab_Profit.lua cards, 7 Days)
+L["7 DAYS"] = "7 ДНЕЙ"
+L["Best Right Now"] = "Лучшее сейчас"
+L["Crafts That Pay"] = "Выгодные рецепты"
+L["Prices Read"] = "Цены прочитаны"
+L["No prices yet. Visit an auctioneer and the list fills in by itself."] = "Цен пока нет. Подойди к аукционисту, и список заполнится сам."

@@ -3975,6 +3975,17 @@ L["Clear all %d plain disenchants. Values use the built-in table until you disen
 L["Moved %d disenchants to your Salvager results."] = "已把 %d 次分解移到你的 Salvager 结果里。"
 L["Your plain disenchant results are cleared."] = "你的普通分解结果已清除。"
 
+-- Queue Sort By and Queue Done Sound (2026-11-26)
+L["Sort By:"] = "排序："
+L["My Order"] = "我的顺序"
+L["Gold per Hour"] = "每小时金币"
+L["Frees Bag Space"] = "腾出背包空间"
+L["Queue done. %d craft made."] = "队列完成。共制造 %d 次。"
+L["Queue done. %d crafts made."] = "队列完成。共制造 %d 次。"
+L["Queue Done Sound:"] = "队列完成音效："
+L["Plays a short sound when the last craft in the queue is made."] = "队列中最后一件制造完成时，播放一声短音。"
+
+
 -- The Today tab (2026-11-26).
 L["Gold Today:"] = "今日金币："
 L["Up For Sale:"] = "在售："
@@ -4053,3 +4064,10 @@ L["%s a craft"] = "每次制作 %s"
 L["The same number on the Queue, the tooltip and the profession window"] = "队列、鼠标提示和专业窗口里是同一个数字"
 L["by roll"] = "因属性而异"
 L["Click to see how it adds up."] = "点击查看它是怎么算的。"
+
+-- Lists that read faster (UI/Tab_Profit.lua cards, 7 Days)
+L["7 DAYS"] = "7 天"
+L["Best Right Now"] = "当前最佳"
+L["Crafts That Pay"] = "赚钱的配方"
+L["Prices Read"] = "价格读取于"
+L["No prices yet. Visit an auctioneer and the list fills in by itself."] = "还没有价格。去找拍卖师，列表会自己填好。"

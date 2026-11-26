@@ -2795,6 +2795,8 @@ function CraftPanel:RefreshQueued()
 
     -- With "Only My Crafts:" ticked, only this character's crafts.
     local entries = wanted and (ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll())
+    -- In the Queue tab's Sort By order (2026-11-26).
+    if entries and ns.Queue.Ordered then entries = ns.Queue:Ordered(entries) end
     if not entries or #entries == 0 then
         if self.queuedFrame then self.queuedFrame:Hide() end
         if container then self:LayOutInOne(false) end

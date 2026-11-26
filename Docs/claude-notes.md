@@ -4169,6 +4169,36 @@ shows the current amount.
 
 Tested in `tools/test_craftedcost.lua` and `tools/test_queuecrafttime.lua`.
 
+## Queue Sort By and Queue Done Sound (2026-11-26)
+
+The owner said do it (ts-improve-10 mockup). The Queue tab has "Sort By:"
+chips: My Order (the default, today's order and Craft Next rules), Profit,
+Gold per Hour and Frees Bag Space. Saved account wide as `queueSortBy`
+(never rename). `Queue:Ordered(list, costs)` lays out a copy, highest
+first, a part placed with the best craft it feeds and never below it
+(`Queue.LayOut`, shared with `ApplyOrder`); what can't be told goes last.
+The stored queue and `queueOrder` never move. `Crafting:PickNext` makes
+the first ready row in that order when Sort By isn't My Order. Move Up,
+Move Down and the row arrows are off outside My Order. Gold an hour is
+`Queue:EntryEarns`: the row's profit over its own casts (no sub-craft
+time), shown in a column only while Sort By is Gold per Hour. The craft
+pane's queued list follows the same order.
+
+When the last craft of this character's on the queue is made
+(`Crafting:NoteQueueMade`, from the bag walk), the tab's footer says
+"Queue done. N crafts made." until something new is queued, and with
+"Queue Done Sound:" ticked (`queueDoneSound`, off unless ticked, never
+rename) our own `Media/Sounds/queue-done.ogg` plays through
+`ns.PlaySoundFile` (Mute All Sounds). Made by `tools/make_sounds.py
+queue-done.ogg`, which writes only the files named. Emptying the queue by
+hand resets the count and stays quiet. The run chime (`craftDoneSound`)
+skips when the queue chime just played. The taskbar flash in the mockup is
+left out: `FlashClientIcon` has not been probed on Forever. The done
+line's Post Crafted button is left out too (it needs the auction house
+open, and `UI.POST_CRAFTED_BUTTON` is off). Tested in
+`tools/test_queuesort.lua` and the Queue part of `tools/test_uifit.lua`.
+
+
 ## The Today tab
 
 The owner said build it (2026-11-26, from the mockup ts-improve-1-today):
@@ -4280,3 +4310,26 @@ session only). A group with one tab loaded shows that tab alone. The
 auction house, profession and mailbox rows (`ahTabStrip`, `dockStrips`)
 stay flat: there the group strip hides and the tab takes the whole room.
 Tested in `tools/test_seventabs.lua`.
+
+## Lists that read faster (the Profit list, 2026-11-26)
+
+The owner said build it (ts-improve-6), the Profit list first. Look only:
+the same rows, numbers, sorting and clicks.
+
+- 7 DAYS column (`trend`, beside the name): a small line of the price over
+  the last 7 days from `PriceGraph.Series(itemID, "week")`, bucketed into
+  `TREND_POINTS` steps, green when it rose over 2%, red when it fell
+  (`TrendFor`, kept per item until `Prices.changes` moves or the hour turns;
+  a row redraws its line only when the shape changes). First to be squeezed
+  out when the list is narrow. Sorts by the change.
+- DEMAND gets a small bar under it: a third for Low, two thirds for Some,
+  full for High, in the demand's colour.
+- Three cards over the headings (`UpdateCards`, run by `Draw`): Best Right
+  Now (the listed craft that makes most each), Crafts That Pay (listed
+  crafts with a profit, of every craft in view), Prices Read (the last
+  full scan's age, gold when stale).
+- No prices at all: "No prices yet. Visit an auctioneer and the list fills
+  in by itself." with Scan Auctions as before. The mockup's Show The Way
+  button waits: no auctioneer spots are kept to point the arrow at.
+- Icons with a rarity ring were already on every row (UI/ItemLook.lua).
+- Tested in `tools/test_profitdetail.lua`.
