@@ -8,6 +8,14 @@
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
+--- A craft's profit as the Profit tab counts it (Profit:Counted); a Profit
+--- without it (an older test stub) gives the plain sale.
+local function CountedProfit(recipeID)
+    local Profit = ns.Profit
+    if Profit.Counted then return Profit:Counted(recipeID) end
+    return Profit:Analyse(recipeID)
+end
+
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
@@ -272,6 +280,7 @@ local function CreateCraftRow(row)
         GameTooltip:SetText(L.Format("Profit for %d", row.profitCount or 1), 1, 1, 1)
         GameTooltip:AddDoubleLine(L["Each:"], Util.FormatMoney(row.profitEach, { short = true }),
             1, 0.82, 0)
+        if ns.ProfitCard then ns.ProfitCard.AddHint(GameTooltip) end
         GameTooltip:Show()
     end)
     row.profitHover:SetScript("OnLeave", function()
@@ -421,7 +430,8 @@ end
 
 local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
-    local analysis = ns.Profit:Analyse(entry.recipeID)
+    -- The same sum as the Profit tab and the craft pane (Profit:Counted).
+    local analysis = CountedProfit(entry.recipeID)
 
     local plain = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     local label = plain
@@ -1365,6 +1375,12 @@ local function Build(container)
 
         -- Right-click: move, pause or take it off (2026-11-14).
         onClick = function(entry, _, mouseButton, row)
+            -- A click on the profit shows how one craft's profit adds up.
+            if mouseButton ~= "RightButton" and row and row.profitHover and row.profitHover:IsShown()
+                and row.profit:IsMouseOver() and ns.ProfitCard and not entry.isDependency then
+                ns.ProfitCard:ShowRecipe(entry.recipeID, _G.BlackthornesTSWindow)
+                return
+            end
             if mouseButton ~= "RightButton" or not ns.RowMenu then return end
             local Queue = ns.Queue
             local recipe = ns.Recipes:GetAny(entry.recipeID)

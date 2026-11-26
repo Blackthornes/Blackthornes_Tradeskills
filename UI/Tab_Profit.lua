@@ -182,6 +182,14 @@ local function ApplyRowLayout(row)
     row.columnsVersion = ns.Columns.version
 end
 
+--- What the How This Profit Adds Up card opens beside: the main window
+--- while it shows, else `fallback`.
+local function CardAnchor(fallback)
+    local window = _G.BlackthornesTSWindow
+    if window and window.IsShown and window:IsShown() then return window end
+    return fallback
+end
+
 local function CreateRow(row)
     row.mark = Theme.CreateMark(row)
     row.mark:SetPoint("LEFT", 7, 0)
@@ -198,6 +206,26 @@ local function CreateRow(row)
     end
 
     row.marginBar = Theme.CreateBar(row, 40, 2)
+
+    -- Hovering the profit says a click shows how it adds up (UI/ProfitCard.lua).
+    -- Clicks still reach the row, which opens the card when over the profit.
+    row.profitHover = CreateFrame("Frame", nil, row)
+    row.profitHover:SetAllPoints(row.cells.profit)
+    row.profitHover:EnableMouse(true)
+    if row.profitHover.SetMouseClickEnabled then row.profitHover:SetMouseClickEnabled(false) end
+    row.profitHover:SetScript("OnEnter", function()
+        local enter = row:GetScript("OnEnter")
+        if enter then enter(row) end
+        if row.data and row.data.priceable and ns.ProfitCard and GameTooltip:IsShown() then
+            ns.ProfitCard.AddHint(GameTooltip)
+            GameTooltip:Show()
+        end
+    end)
+    row.profitHover:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+        local script = row:GetScript(row:IsMouseOver() and "OnEnter" or "OnLeave")
+        if script then script(row) end
+    end)
 
     ApplyRowLayout(row)
 end
@@ -522,6 +550,18 @@ local function UpdateRow(row, analysis)
 
     Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
+
+    -- Random rolls (of the Bear, of the Eagle...): each roll sells for its
+    -- own price, so Sells For says "by roll" and Profit gives the range,
+    -- cheapest roll to dearest (Profit:RollRange). Sorting stays on profit.
+    local low, high
+    if ns.Profit.RollRange then low, high = ns.Profit:RollRange(analysis) end
+    if low and ns.ProfitCard then
+        cells.sells:SetText(L["by roll"])
+        cells.sells:SetTextColor(Theme.Unpack("muted"))
+        Theme.FitText(cells.profit, { ns.ProfitCard.RangeText(low, high, 2), ns.ProfitCard.RangeText(low, high, 1) })
+        cells.profit:SetTextColor(Theme.Unpack("text"))
+    end
 
     cells.via:SetText(ns.Profit.WAY_LABELS and ns.Profit.WAY_LABELS[analysis.via] or "")
     cells.via:SetTextColor(Theme.Unpack(analysis.via == "disenchant" and "accent" or "muted"))
@@ -1020,6 +1060,27 @@ local function BuildDetail(parent)
     end)
     yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     detail.yieldHover = yieldHover
+
+    -- A click on the profit shows how it adds up (UI/ProfitCard.lua).
+    local profitClick = CreateFrame("Button", nil, summary)
+    profitClick:SetPoint("TOPLEFT", detail.summaryRows[7].label, "TOPLEFT", 0, 2)
+    profitClick:SetPoint("BOTTOMRIGHT", detail.profitValue, "BOTTOMRIGHT", 0, -2)
+    profitClick:SetScript("OnClick", function()
+        local selected = state.selected
+        if selected and ns.ProfitCard then
+            ns.ProfitCard:ShowRecipe(selected.recipeID,
+                CardAnchor(detail), Method())
+        end
+    end)
+    profitClick:SetScript("OnEnter", function(self)
+        if not (state.selected and state.selected.priceable and ns.ProfitCard) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["How This Profit Adds Up"], 1, 1, 1)
+        ns.ProfitCard.AddHint(GameTooltip)
+        GameTooltip:Show()
+    end)
+    profitClick:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.profitClick = profitClick
     for index = 13, 14 do
         detail.summaryRows[index].label:Hide()
         detail.summaryRows[index].value:Hide()
@@ -2498,11 +2559,18 @@ local function BuildCrafts(container)
             return state.selected ~= nil and entry.recipeID == state.selected.recipeID
         end,
 
-        onClick = function(analysis, _, mouseButton)
+        onClick = function(analysis, _, mouseButton, row)
             if mouseButton == "RightButton" then return end
 
             state.selected = analysis
-            UpdateDetail(ns.Profit:Analyse(analysis.recipeID, nil, Method()))
+            local fresh = ns.Profit:Analyse(analysis.recipeID, nil, Method())
+            UpdateDetail(fresh)
+
+            -- A click on the profit shows how it adds up.
+            local cell = row and row.cells and row.cells.profit
+            if cell and cell:IsShown() and cell:IsMouseOver() and ns.ProfitCard then
+                ns.ProfitCard:Show(fresh, CardAnchor(container))
+            end
         end,
     })
 

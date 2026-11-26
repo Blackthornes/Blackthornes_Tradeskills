@@ -534,6 +534,14 @@ local DEFAULTS = {
         -- profession window opens the small craft pane beside it, not the
         -- one window. Off unless ticked. Account wide; never rename it.
         craftPaneBeside = false,
+        -- How Tradeskills opens at the auction house, a profession window
+        -- and the mailbox: "full", "slim", "button" or "closed" (the owner
+        -- said build it, 2026-11-26). "auto" keeps what the three settings
+        -- above give (UI.WindowAt in UI/Main.lua). Account wide; never
+        -- rename them.
+        windowAtAuction = "auto",
+        windowAtProfession = "auto",
+        windowAtMail = "auto",
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
