@@ -172,7 +172,7 @@ local function SignedMoney(copper)
 end
 
 --- What one ledger sale made, or nil.
--- @return profit, cost, source ("made" | "est")
+-- @return profit, cost, source ("made" | "bought" | "est")
 local function EntryProfit(entry)
     if not ns.CraftedCost or not ns.CraftedCost.SaleProfit then return nil end
     saleCosts = saleCosts or ns.CraftedCost:NewSaleCache()

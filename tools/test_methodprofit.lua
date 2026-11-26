@@ -25,7 +25,14 @@ local crafted = { [BOLT] = { cost = 800 } }
 ns.CraftedCost = {
   Get = function(_, id) return crafted[id] end,
   NewSaleCache = function() return {} end,
-  SaleCost = function(_, entry) return entry.estimate end,
+  -- As the real one answers (tools/test_flipcost.lua runs it): the cost on
+  -- the sale, else today's estimate, else what was bought.
+  SaleCost = function(_, entry, itemID)
+    if type(entry.cost) == "number" then return entry.cost, entry.bought and "bought" or "made" end
+    if entry.estimate then return entry.estimate, "est" end
+    local paid = ns.MethodProfit:BuyCost(itemID or entry.itemID)
+    if paid then return paid, "bought" end
+  end,
 }
 ns.Disenchant = { GetMaterialPrice = function(_, id) if id == DUST then return 50 end end }
 

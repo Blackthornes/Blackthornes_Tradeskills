@@ -1419,7 +1419,7 @@ function Posting:GetPostable(opts)
             -- Under what the last craft of it cost, with that guard on.
             local belowCrafted = price ~= nil
                 and self:BelowCraftedCost(itemID, price) ~= nil
-            local madeFor = ns.CraftedCost and ns.CraftedCost:Get(itemID)
+            local madeFor = ns.CraftedCost and (ns.CraftedCost.ForStock and ns.CraftedCost:ForStock(itemID) or nil)
 
             local isCommodity = ns.Scanner:IsCommodity(itemID)
 
