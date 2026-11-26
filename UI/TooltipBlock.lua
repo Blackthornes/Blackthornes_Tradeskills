@@ -10,6 +10,11 @@
 --   3. advice   what to do with it (Equipment, then Butler)
 --   4. holders  who has it (Butler)
 --
+-- Lines shown only because Shift is held (`shift = true` on the line) go
+-- after all the others, under a second thin gold line, in the same order
+-- (the owner said build it, 2026-11-26). Holding Shift adds to the bottom;
+-- nothing above moves.
+--
 -- "Hold Shift for more." goes last, once, when any addon held a line back.
 --
 -- The same file in Farmer, Tradeskills, Equipment and Butler (a fix to it
@@ -17,8 +22,10 @@
 -- the board a function with `TooltipBlock:Provide(part, section, order, fn)`
 -- and stops writing item lines itself. `fn(tooltip, data)` returns a list
 -- of lines and whether it held one back for Shift. A line is
---   { left, right, leftColor = {r,g,b}, rightColor = {r,g,b}, wrap = true }
--- with `right` left out for a line on its own (wrapped when `wrap`).
+--   { left, right, leftColor = {r,g,b}, rightColor = {r,g,b}, wrap = true,
+--     shift = true }
+-- with `right` left out for a line on its own (wrapped when `wrap`), and
+-- `shift` set on a line that shows only while Shift is held.
 --
 -- One shared table, `_G.BlackthornesTooltipBlock`, ties the copies together.
 -- The first copy to load hooks item tooltips, once; the hook calls the
@@ -38,7 +45,7 @@ local TooltipBlock = {}
 ns.TooltipBlock = TooltipBlock
 
 -- Raise this when the writer below changes, in every copy.
-TooltipBlock.FILE_VERSION = 1
+TooltipBlock.FILE_VERSION = 2
 
 TooltipBlock.SECTIONS = { price = 1, source = 2, advice = 3, holders = 4 }
 
@@ -58,6 +65,7 @@ shared.providers = shared.providers or {}
 shared.handlers = shared.handlers or { version = 0 }
 shared.decorated = shared.decorated or setmetatable({}, { __mode = "k" })
 shared.rules = shared.rules or setmetatable({}, { __mode = "k" })
+shared.shiftRules = shared.shiftRules or setmetatable({}, { __mode = "k" })
 shared.hooked = shared.hooked or setmetatable({}, { __mode = "k" })
 TooltipBlock.shared = shared
 
@@ -155,13 +163,20 @@ local function Forget(tooltip)
     if type(shift) == "table" and type(shift.hinted) == "table" then shift.hinted[tooltip] = nil end
     local rule = shared.rules[tooltip]
     if rule then pcall(rule.Hide, rule) end
+    local shiftRule = shared.shiftRules[tooltip]
+    if shiftRule then pcall(shiftRule.Hide, shiftRule) end
 end
 TooltipBlock.Forget = Forget
 
 local function HookClear(tooltip)
     if shared.hooked[tooltip] then return true end
     if type(tooltip.HookScript) ~= "function" then return false end
-    local ok = pcall(tooltip.HookScript, tooltip, "OnTooltipCleared", function(shown) Forget(shown) end)
+    -- The newest copy's Forget, so a later file's own textures go too.
+    local ok = pcall(tooltip.HookScript, tooltip, "OnTooltipCleared", function(shown)
+        local forget = shared.handlers.Forget
+        if type(forget) ~= "function" then forget = Forget end
+        forget(shown)
+    end)
     if ok then shared.hooked[tooltip] = true end
     return ok
 end
@@ -178,17 +193,19 @@ local function LeftText(tooltip, index)
     return nil
 end
 
---- The thin gold line over the blank row that starts the block: a texture
---- of our own, made once per tooltip and shown only while the block is on.
-local function PlaceRule(tooltip, index)
+--- The thin gold line over the blank row that starts the block (or, with
+--- `store` set to `shared.shiftRules`, the one over the Shift lines): a
+--- texture of our own, made once per tooltip and shown only while needed.
+local function PlaceRule(tooltip, index, store)
+    store = store or shared.rules
     local anchor = LeftText(tooltip, index)
     if not anchor then return false end
-    local rule = shared.rules[tooltip]
+    local rule = store[tooltip]
     if not rule then
         local ok, made = pcall(tooltip.CreateTexture, tooltip, nil, "ARTWORK")
         if not ok or type(made) ~= "table" then return false end
         rule = made
-        shared.rules[tooltip] = rule
+        store[tooltip] = rule
     end
     local c = TooltipBlock.RULE_COLOR
     return (pcall(function()
@@ -250,13 +267,27 @@ local function Write(tooltip, data)
     local lines, held = TooltipBlock.Gather(tooltip, data)
     if #lines == 0 and not held then return "quiet" end
 
+    -- Shift lines after the rest, each group in the block's order.
+    local always, extra = {}, {}
+    for _, line in ipairs(lines) do
+        if line.shift then extra[#extra + 1] = line else always[#always + 1] = line end
+    end
+
     HookClear(tooltip)
     shared.writing = true
+    local shiftRule = shared.shiftRules[tooltip]
+    if shiftRule then pcall(shiftRule.Hide, shiftRule) end
     if #lines > 0 then
         pcall(tooltip.AddLine, tooltip, " ")
         local ruleAt = Count(tooltip)
         if ruleAt then PlaceRule(tooltip, ruleAt) end
-        for _, line in ipairs(lines) do TooltipBlock.WriteLine(tooltip, line) end
+        for _, line in ipairs(always) do TooltipBlock.WriteLine(tooltip, line) end
+        if #extra > 0 and #always > 0 then
+            pcall(tooltip.AddLine, tooltip, " ")
+            local shiftAt = Count(tooltip)
+            if shiftAt then PlaceRule(tooltip, shiftAt, shared.shiftRules) end
+        end
+        for _, line in ipairs(extra) do TooltipBlock.WriteLine(tooltip, line) end
     end
     if held then Hint(tooltip) end
     -- A tooltip that has grown is told to size itself again.
@@ -276,6 +307,7 @@ TooltipBlock.Write = Write
 if (shared.handlers.version or 0) < TooltipBlock.FILE_VERSION then
     shared.handlers.version = TooltipBlock.FILE_VERSION
     shared.handlers.Write = Write
+    shared.handlers.Forget = Forget
 end
 
 local function OnItem(tooltip, data)
