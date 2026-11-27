@@ -923,3 +923,22 @@ function Util.IsItemAuctionPrice(price)
     end
     return not Util.wholeSilverOnly or price % COPPER_PER_SILVER == 0
 end
+
+--- A copy of a recipe's materials with the costliest line first, so a list
+--- cut short only ever hides the cheapest (a player asked, 2026-11-25).
+--- Lines with no price go last; ties keep the recipe's own order.
+function Util.CostliestFirst(list, key)
+    key = key or "lineCost"
+    local copy, order = {}, {}
+    for index, entry in ipairs(list or {}) do
+        copy[index] = entry
+        order[entry] = index
+    end
+    table.sort(copy, function(a, b)
+        local ca, cb = a[key], b[key]
+        if ca and cb and ca ~= cb then return ca > cb end
+        if (ca ~= nil) ~= (cb ~= nil) then return ca ~= nil end
+        return order[a] < order[b]
+    end)
+    return copy
+end

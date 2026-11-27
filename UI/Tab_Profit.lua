@@ -7,6 +7,11 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+-- Costliest material first; a list as it came when Util is not loaded.
+local function CostliestFirst(list)
+    if Util.CostliestFirst then return Util.CostliestFirst(list) end
+    return list
+end
 
 local UI = ns.UI
 
@@ -1683,7 +1688,9 @@ function UpdateDetail(analysis)
     local y = -12
     local anchor = detail.reagentHeading
 
-    local reagents = (analysis.cost and analysis.cost.reagents) or {}
+    -- Costliest first, so the line that says how many more only hides
+    -- the cheapest (a player asked, 2026-11-25).
+    local reagents = CostliestFirst((analysis.cost and analysis.cost.reagents) or {})
     local shownCount = #reagents
     local room = ReagentRoom(detail)
     if shownCount > room then shownCount = room - 1 end

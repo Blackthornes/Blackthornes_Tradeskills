@@ -14,6 +14,11 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+-- Costliest material first; a list as it came when Util is not loaded.
+local function CostliestFirst(list)
+    if Util.CostliestFirst then return Util.CostliestFirst(list) end
+    return list
+end
 
 local RecipeBookView = {}
 ns.RecipeBookView = RecipeBookView
@@ -319,7 +324,9 @@ local function NewView(opts)
     --------------------------------------------------------------------------------
 
     local VALUE_LINES = 7
-    local MATERIAL_LINES = 5
+    -- Room for every material a recipe takes (7 at most in the book),
+    -- costliest first, so none is hidden (a player asked, 2026-11-25).
+    local MATERIAL_LINES = 7
     local LEARN_LINES = 4
 
     local function DoubleLine(parent, anchor, gap)
@@ -558,7 +565,7 @@ local function NewView(opts)
         end
         detail.graphInfo = nil
 
-        local reagents = (value.costDetail and value.costDetail.reagents) or {}
+        local reagents = CostliestFirst((value.costDetail and value.costDetail.reagents) or {})
         for index, line in ipairs(detail.materials) do
             local reagent = reagents[index]
             line.itemID, line.itemName = nil, nil
