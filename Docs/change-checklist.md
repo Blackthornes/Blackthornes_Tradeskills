@@ -234,3 +234,13 @@ Check: These come for every buy at the auction house, the player's own
 Why: Snipe took any stack buy going through as its own readied buy, and
   wrote its own stack buys down a second time, so My Lists counted twice
   what was on the way (2026-11-26).
+
+## Item data asked for in a big loop
+Lines: GetItemInfo|GetMaxStackSize|GetSellPrice|StackOf\(
+Check: A loop over thousands of items (a scan's rows, the price book) asks
+  the client for item data only when the answer is used. Each item the
+  client hasn't cached is fetched from the server and comes back as a
+  GET_ITEM_INFO_RECEIVED event, which every addon hears.
+Why: A quick scan asked every row's stack size, rows of one too, and the
+  flood of item data that came back made the game stutter for a few
+  seconds (2026-11-27).

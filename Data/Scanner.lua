@@ -1431,7 +1431,15 @@ function Scanner:ReadReplicateResults(numItems, reread)
                     unitPrice = buyoutPrice
                 end
             else
-                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity, StackOf(itemID) or false)
+                -- The stack size only matters for a row of more than one.
+                -- Asked for every row, it sent the client off for thousands
+                -- of items it hadn't cached (most gear is listed one at a
+                -- time), and their answers came back over the next seconds
+                -- as a flood of item data events: the game stuttered while
+                -- a quick scan was read (a player's report, 2026-11-27).
+                local stack = false
+                if quantity > 1 and buyoutPrice >= quantity then stack = StackOf(itemID) or false end
+                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity, stack)
             end
 
             -- A price nothing can pay is not a market observation, so it is
