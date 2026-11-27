@@ -85,6 +85,11 @@ ns.Util = {
     if id == 5 then return 0, 0.44, 0.87 end
   end,
 }
+do -- the real sort, so the materials order is the game's
+  local real = {}
+  assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", real)
+  ns.Util.CostliestFirst = real.Util.CostliestFirst
+end
 ns.RegisterEvent = function() end
 
 local record = { recipeID = 1, name = "Fine Leather Boots", profession = "Leatherworking", skill = 90,
@@ -200,6 +205,33 @@ check("materials", View._widgets.detail.materials[1].label.text, "7x item2318")
 check("where to learn", View._widgets.detail.learn.text, "World drop (569 kinds of creature)")
 list.opts.onClick(rows[1])
 check("picking it again goes back", View._state.selected, nil)
+
+-- A player saw "and 3 more" under a 7 material recipe and could not tell
+-- what made up the cost (2026-11-25): every material shows, costliest
+-- first, and one with no price goes last.
+local oneValue = ns.RecipeBook.Value
+ns.RecipeBook.Value = function()
+  local value = oneValue()
+  value.costDetail = { reagents = {
+    { itemID = 1, quantity = 6, lineCost = 1000 },
+    { itemID = 2, quantity = 10, lineCost = 3700 },
+    { itemID = 3, quantity = 20, lineCost = 9700 },
+    { itemID = 4, quantity = 10, lineCost = 260 },
+    { itemID = 5, quantity = 2 },
+    { itemID = 6, quantity = 1, lineCost = 5000 },
+    { itemID = 7, quantity = 4, lineCost = 40 },
+  } }
+  return value
+end
+list.opts.onClick(rows[1])
+local mats = View._widgets.detail.materials
+local seen = {}
+for index = 1, 7 do seen[index] = mats[index] and mats[index].label.text or "none" end
+check("all seven materials show", table.concat(seen, ", "),
+  "20x item3, 1x item6, 10x item2, 6x item1, 10x item4, 4x item7, 2x item5")
+check("no line says how many more", mats[8], nil)
+ns.RecipeBook.Value = oneValue
+list.opts.onClick(rows[1])
 check("to the overview", View._widgets.detail.title.text, "Recipes to learn")
 
 print("\npicking a profession by name")

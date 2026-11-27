@@ -11,6 +11,11 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+-- Costliest material first; a list as it came when Util is not loaded.
+local function CostliestFirst(list)
+    if Util.CostliestFirst then return Util.CostliestFirst(list) end
+    return list
+end
 
 local UI = ns.UI
 
@@ -1125,6 +1130,7 @@ local function UpdateLearnDetail(detail, entry)
 
     local reagents = (entry.costDetail and entry.costDetail.reagents) or {}
     if #reagents == 0 and entry.record then reagents = entry.record.reagents or {} end
+    reagents = CostliestFirst(reagents)
     for index, line in ipairs(learn.materials) do
         local reagent = reagents[index]
         line:SetShown(reagent ~= nil)
