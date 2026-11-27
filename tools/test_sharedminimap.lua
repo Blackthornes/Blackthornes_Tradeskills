@@ -13,6 +13,8 @@
 --   7. The addon bar launcher: nothing without LibStub or the library
 --      (asked quietly), one "Blackthornes" launcher once another addon
 --      loaded it, signed up only once, and its clicks match the button.
+--   8. A button drawer took the shared button (gave it a new parent): we
+--      no longer place it back on the minimap ring, and own buttons can ask.
 
 local NAMES = { "CreateFrame", "UIParent", "Minimap", "GameTooltip", "C_Timer", "time",
     "BlackthornesMinimap", "UISpecialFrames", "IsShiftKeyDown", "GetCursorPosition", "LibStub" }
@@ -175,6 +177,23 @@ assert(not menu:IsShown(), "and closes it")
 local lines = {}
 launcher.OnTooltipShow({ AddLine = function(_, text) lines[#lines + 1] = text end })
 assert(lines[1] == "Blackthornes AddOns" and #lines >= 3, "the tooltip names the addons")
+
+-- 8. A button drawer takes the shared button.
+local shared = BlackthornesMinimap.button
+assert(shared, "the shared button was built")
+local placed = 0
+shared.ClearAllPoints = function() placed = placed + 1 end
+shared.GetParent = function() return Minimap end
+SM.Reposition()
+assert(placed == 1, "on the minimap, it sits on the ring")
+local drawer = Object()
+shared.GetParent = function() return drawer end
+SM.Reposition()
+assert(placed == 1, "taken by a drawer, it stays where the drawer put it")
+assert(SM.TakenAway(shared) == true, "TakenAway says so")
+shared.GetParent = function() return Minimap end
+assert(SM.TakenAway(shared) == false, "back on the minimap, it is ours again")
+assert(SM.TakenAway(nil) == false, "no button, nothing taken")
 
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_sharedminimap: ok")

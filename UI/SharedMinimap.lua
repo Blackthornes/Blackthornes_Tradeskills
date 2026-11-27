@@ -30,6 +30,12 @@
 -- LibStub or the library ourselves; without them nothing changes. Its
 -- clicks match the shared button: left opens the menu, right the All
 -- Addons settings (else the first addon's), middle Farmer's panels.
+--
+-- Left where another addon puts it (FILE_VERSION 5, 2026-11-27, after a
+-- player's button went missing in a minimap button drawer): a drawer takes
+-- a button by giving it a new parent. Once our button's parent is no
+-- longer the minimap, we stop placing it on the ring (`TakenAway`), so it
+-- stays where the drawer laid it. Each addon's own button asks the same.
 
 local ADDON, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -37,7 +43,7 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local SharedMinimap = {}
 ns.SharedMinimap = SharedMinimap
 
-local FILE_VERSION = 4
+local FILE_VERSION = 5
 SharedMinimap.FILE_VERSION = FILE_VERSION
 
 local TITLE = "Blackthornes AddOns"
@@ -302,9 +308,18 @@ local function SaveAngle(angle)
     end
 end
 
+--- True once another addon (a button drawer) has moved the button off the
+--- minimap. We leave it where that addon put it.
+function SharedMinimap.TakenAway(button)
+    if not button or not Minimap or type(button.GetParent) ~= "function" then return false end
+    local ok, parent = pcall(button.GetParent, button)
+    return ok and parent ~= nil and parent ~= Minimap
+end
+
 function SharedMinimap.Reposition()
     local button = hub.button
     if not button or not Minimap then return end
+    if SharedMinimap.TakenAway(button) then return end
     local angle = SharedMinimap.Angle()
     local radius = Radius()
     button:ClearAllPoints()
