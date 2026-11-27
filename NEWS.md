@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.50.0
+
+- Recipe tooltips show which of your other characters can learn the recipe.
+- Butler can mail your alts the materials for their Road to 300. It is off unless ticked.
+- Butler can mail a recipe to the alt who can learn it. It is off unless ticked.
+- You can leave an alt out of both.
+
+Fixes and changes:
+- Buy materials at a vendor buys only for the character you are playing.
+
 ## 1.49.3
 
 Fixes and changes:

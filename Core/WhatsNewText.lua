@@ -5,6 +5,12 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.50.0", lines = {
+        "Recipe tooltips show which of your other characters can learn the recipe.",
+        "Butler can mail your alts the materials for their Road to 300. It is off unless ticked.",
+        "Butler can mail a recipe to the alt who can learn it. It is off unless ticked.",
+        "You can leave an alt out of both.",
+    } },
     { version = "1.49.1", lines = {
         "The Sell list shows your other copies of an item when one copy is soulbound.",
     } },
@@ -15,11 +21,5 @@ ns.WHATS_NEW = {
         "My Auctions lists today's sales under Sold Today.",
         "Pick how Tradeskills opens at the auction house, a profession and the mailbox.",
         "New Font, Colors and Fold Gem choices on the All Addons page.",
-    } },
-    { version = "1.48.0", lines = {
-        "Vendor prices count the Bartering perk.",
-        "The item tooltip shows what an item costs to make now, above Profit Now.",
-        "Stock you bought is costed at what you paid and shows under Flipped.",
-        "Lucky disenchants at an Arcane Salvager say so again, with the sound.",
     } },
 }

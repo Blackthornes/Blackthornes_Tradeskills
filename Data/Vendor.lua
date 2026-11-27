@@ -517,7 +517,7 @@ end
 -- The queue is shared with the alts, so a line can hold an alt's part too
 -- (`forOthers`, less what the alts already hold). That part is bought when
 -- the alt stands at a vendor. Bought here it had to be mailed over, with
--- postage (Trent, 2026-11-27: Heavy Silken Thread for an alt's bag).
+-- postage (2026-11-27: Heavy Silken Thread for an alt's bag).
 local function MyShortfall(line)
     local shortfall = tonumber(line.shortfall) or 0
     if type(line.forOthers) ~= "table" then return shortfall end

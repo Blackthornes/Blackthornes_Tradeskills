@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.50.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating.
+
+- **Can Learn: line.** A recipe's tooltip lists which of your other characters can learn it, under Known By. It shows by itself.
+- **Level up materials for your alts.** Tradeskills works out what each alt on this realm and side still needs for its Road to 300, minus what that alt already has. Butler mails it. To turn it on: 1. Open Butler. 2. Click Settings. 3. On the Keep page, tick Send Level Up Materials to Alts:. It is off unless ticked.
+- **Recipes for the alt who can learn them.** Butler mails a recipe nobody knows to the alt with that profession. To turn it on: 1. Open Butler. 2. Click Settings. 3. On the Errands page, under Mail and Bank, tick Mail Recipes to Who Can Learn Them:. It is off unless ticked.
+- **Leave an alt out.** To skip a character: 1. Open Butler. 2. Click Settings. 3. On the Keep page, untick the character under Characters That Get Them:. The next alt gets the item.
+- **Sell list.** It holds back what an alt needs while Send Level Up Materials to Alts: is ticked. Anything past that still sells.
+- **Fix.** Buy materials at a vendor buys only what this character's own crafts use. Materials for an alt's crafts are bought when that alt is at a vendor.
+
 ## 1.49.3
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
