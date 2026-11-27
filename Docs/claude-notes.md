@@ -4498,3 +4498,19 @@ a player sees changed: every row, column and sort is as before.
   each frame's timers and OnUpdates timed after it.
 - Tested in `tools/test_tidyup.lua`, `test_tabstall.lua`, `test_disenchantdeals.lua`,
   `test_learnfilters.lua`, `test_levelup.lua` and `test_mailslots.lua`.
+
+## Materials only from this side (2026-11-27)
+
+A player's report: a Horde character was told cloth on the same realm's
+Alliance character was there to use. Items never cross sides. The counts
+of what other characters hold now ask `Characters:InReach(key)` (the same
+realm and side as the one playing, through `Characters:CanMail`; a field
+a record lacks counts as the same): the craft pane's "on <name>"
+(`CraftPanel:AltHolder`) and "On other characters" in the queue and gather
+lists (`Inventory:GetAltCounts`). Butler's helper (`Holder` in
+`Logic/Butler.lua`) skips anyone who can't mail the crafter, so an
+Alliance alt with more never hides the Horde one that can send it.
+Account-wide views stay account wide on purpose: the bank view
+(`Banks:Collect`) and the disenchant buy marks (`DisenchantBuys:Held`).
+Tested in `tools/test_oneside.lua` and `tools/test_butlerjobs.lua`.
+Equipment (`Alts`) and Butler already keep to this realm and side.

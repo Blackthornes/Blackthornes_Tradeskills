@@ -2425,6 +2425,8 @@ local QUEUED_MAX_SHARE = 0.45
 --
 -- From the counts Inventory already saved for each character; nothing new is
 -- read. Only a hint: stock on another character is not in reach of the craft.
+-- Only characters this one can mail (the same realm and side): a Horde
+-- crafter was told its Alliance alt held the cloth (2026-11-27).
 -- @return name, count  (nil when no other character has any)
 function CraftPanel:AltHolder(itemID)
     local characters = ns.db and ns.db.characters
@@ -2432,9 +2434,11 @@ function CraftPanel:AltHolder(itemID)
 
     local selfKey = ns.Config:GetCharacterKey()
     local bestKey, bestCount = nil, 0
+    local who = ns.Characters
 
     for key, record in pairs(characters) do
-        if key ~= selfKey and type(record) == "table" then
+        if key ~= selfKey and type(record) == "table"
+            and not (who and who.InReach and not who:InReach(key)) then
             local count = 0
             if type(record.inventory) == "table" then count = count + (record.inventory[itemID] or 0) end
             if type(record.bank) == "table" then count = count + (record.bank[itemID] or 0) end

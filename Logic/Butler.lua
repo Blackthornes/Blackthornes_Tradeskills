@@ -1389,12 +1389,16 @@ end
 -- the leather it holds is a step on its own line (a player logged in on
 -- the holder and the mail step was gone, 2026-10-11); its other records
 -- never do. The key, how many, and for the character playing how many of
--- them are in its bags; or nil.
+-- them are in its bags; or nil. Only a character that can mail the
+-- crafter (the same realm and side): an Alliance alt holding more must not
+-- hide the Horde one that can send it (2026-11-27).
 local function Holder(records, crafterKey, itemID, Playing, selfKey)
     local bestKey, bestCount = nil, 0
+    local queue = ns.Queue
     for key, record in pairs(records) do
         if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key)
-            and not Butler.Stale(record) then
+            and not Butler.Stale(record)
+            and not (queue and queue.CanMail and not queue:CanMail(key, crafterKey)) then
             local count = 0
             if type(record.inventory) == "table" then count = count + (tonumber(record.inventory[itemID]) or 0) end
             if type(record.bank) == "table" then count = count + (tonumber(record.bank[itemID]) or 0) end
@@ -1404,7 +1408,8 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
         end
     end
     local inventory = ns.Inventory
-    if selfKey and not Playing(crafterKey) and inventory and inventory.GetBagCount then
+    if selfKey and not Playing(crafterKey) and inventory and inventory.GetBagCount
+        and not (queue and queue.CanMail and not queue:CanMail(selfKey, crafterKey)) then
         local bags = inventory:GetBagCount(itemID) or 0
         local bank = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
         if bags + bank > 0 and bags + bank >= bestCount then
