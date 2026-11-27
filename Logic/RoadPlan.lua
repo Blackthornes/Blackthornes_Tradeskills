@@ -612,6 +612,43 @@ function RoadPlan:Candidates(line)
     return list
 end
 
+--- The Classic line of a saved profession entry ({ name, skillLineID }),
+--- or nil when it has no road. For another character's saved professions
+--- (Logic/AltLevelUp.lua).
+function RoadPlan.LineFor(profession)
+    if type(profession) ~= "table" then return nil end
+    local line = Classic(profession.skillLineID)
+    if RoadPlan.RANKS[line] then return line end
+    return LineByName(profession)
+end
+
+--- The recipes another character could level `line` with: only the ones
+--- it knows (`knows[recipeID]`) and the starters, each { record, known }.
+--- No learning places, so nothing to buy (Logic/AltLevelUp.lua).
+function RoadPlan:KnownCandidates(line, knows)
+    local list = {}
+    local book = ns.RecipeBook
+    if not (book and type(knows) == "table") then return list end
+    local all = book:GetAll()
+    local memo, remade = {}, {}
+    for _, record in pairs(all) do
+        if record.forever and record.name and LineOf(record, memo) == line then
+            remade[record.name:lower()] = true
+        end
+    end
+    for _, record in pairs(all) do
+        if LineOf(record, memo) == line and record.yellow and record.grey
+            and record.reagents and #record.reagents > 0
+            and (knows[record.recipeID] or record.starter)
+            and not RoadPlan.OnCooldown(record.recipeID, record)
+            and not (not record.forever and record.name and remade[record.name:lower()]) then
+            list[#list + 1] = { record = record, known = true }
+        end
+    end
+    table.sort(list, function(a, b) return a.record.recipeID < b.record.recipeID end)
+    return list
+end
+
 --- The line under the road's header while the character has no specialty
 --- yet and the road left a specialty's recipes off; nil otherwise.
 function RoadPlan.SpecialtyNote(line)

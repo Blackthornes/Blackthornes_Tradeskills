@@ -272,6 +272,24 @@
 -- too. Prices play no part. Kept for 60 seconds or until the recipes are
 -- read again. nil on any error.
 --
+-- Butler's "Send Level Up Materials to Alts:" and "Mail Recipes to Who
+-- Can Learn Them:" (a player asked, the owner said build it, 2026-11-27,
+-- both off unless ticked in Butler) ask, only while ticked:
+--
+--   _G.BlackthornesTS.Butler:AltLevelUp()        -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:RecipeFor(itemID)   -- a table, or nil; reads only
+--
+-- AltLevelUp is { [itemID] = { to (full name), count, profession (the
+-- client's name) } }: what an alt's Road to 300 still needs from the
+-- recipes it knows, less its bags, bank, mail and what is on its way
+-- (Logic/AltLevelUp.lua). nil while the first answer is worked out; Butler
+-- is told (Verdicts:Changed) when a new one differs. RecipeFor is { to,
+-- profession, skill (what the recipe needs), has (the alt's skill), now
+-- (true when it can learn it now) } for a recipe item nobody on the
+-- account knows, that the character playing can't learn now itself, and
+-- that no alt already holds; the alt is AltLevelUp:CanLearn's first.
+-- Both only for characters the one playing can mail, never itself.
+--
 -- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
 -- owner said build it, off unless ticked in Butler) asks, only while that
 -- is on, whether a bag item is worth more made into something:
@@ -2213,6 +2231,53 @@ function Butler:LevelUpMaterials()
     local copy = {}
     for itemID, name in pairs(answer) do copy[itemID] = name end
     return copy
+end
+
+--------------------------------------------------------------------------------
+-- The alts' level-up materials and recipes, for Butler (2026-11-27)
+--------------------------------------------------------------------------------
+
+--- What the alts' roads to 300 still need, each item to one alt: { [itemID]
+--- = { to, count, profession } }. nil while it is worked out or on any
+--- error. Never raises, writes nothing; a fresh table each time.
+function Butler:AltLevelUp()
+    local alts = ns.AltLevelUp
+    if not (alts and alts.Needs) then return nil end
+    local ok, needs = pcall(alts.Needs, alts)
+    if not (ok and type(needs) == "table") then return nil end
+    local copy = {}
+    for itemID, need in pairs(needs) do
+        if type(need.to) == "string" and (need.count or 0) > 0 then
+            copy[itemID] = { to = need.to, count = need.count, profession = need.profession }
+        end
+    end
+    return copy
+end
+
+--- The alt to mail a recipe item to: { to, profession, skill, has, now },
+--- or nil. Never raises, writes nothing.
+function Butler:RecipeFor(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local book, alts = ns.RecipeBook, ns.AltLevelUp
+        if not (book and alts) then return nil end
+        local record = book:ForItem(itemID)
+        if not record then return nil end
+        -- Someone on the account knows it: it stays free to sell.
+        if #book:WhoKnows(record) > 0 then return nil end
+        if alts:PlayingCanLearn(record) then return nil end
+        for _, alt in ipairs(alts:CanLearn(record)) do
+            local holder = { key = alt.key, record = ns.db.characters[alt.key] }
+            if holder.record and alts.Has(holder, itemID) == 0 then
+                return { to = alt.name, profession = alt.profession, skill = tonumber(record.skill) or 0,
+                    has = alt.skill, now = not alt.short }
+            end
+        end
+        return nil
+    end)
+    if ok and type(answer) == "table" then return answer end
+    return nil
 end
 
 --------------------------------------------------------------------------------

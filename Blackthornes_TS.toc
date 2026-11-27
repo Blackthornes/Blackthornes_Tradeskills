@@ -75,6 +75,7 @@ Logic\VendorPins.lua
 Logic\LearnNext.lua
 Logic\Wishlist.lua
 Logic\RoadPlan.lua
+Logic\AltLevelUp.lua
 Logic\Welcome.lua
 Logic\Queue.lua
 Logic\QueueActions.lua
