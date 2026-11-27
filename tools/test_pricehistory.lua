@@ -92,7 +92,8 @@ PostPanel.priceHistory = Stub({ width = 96, shown = false })
 PostPanel.view = "sell"
 
 local opened
-ns.PricesUI = { ShowItem = function(_, itemID) opened = itemID end }
+local openedLink
+ns.PricesUI = { ShowItem = function(_, itemID, link) opened, openedLink = itemID, link end }
 
 check("nothing picked at first", PostPanel:IsPicked({ itemID = 7 }) == false)
 check("Price History hides with nothing picked", not PostPanel.priceHistory:IsShown())
@@ -108,6 +109,13 @@ check("it sits right of Duration", PostPanel.priceHistory.points[1][2] == PostPa
 
 PostPanel:OpenPriceHistory()
 check("it opens the Prices tab on the picked item", opened == 7)
+PostPanel:Pick(7)
+PostPanel:Pick(7, "|Hitem:7::::::::18:1485:::1:12722:::::|h[Band of the Monkey]|h")
+PostPanel:OpenPriceHistory()
+check("with the picked copy, so a suffix opens as itself", openedLink == "|Hitem:7::::::::18:1485:::1:12722:::::|h[Band of the Monkey]|h")
+PostPanel:Pick(7)
+check("let go, the copy goes too", PostPanel.pickedLink == nil)
+PostPanel:Pick(7)
 
 -- Queue All too: too wide for all four, so Duration steps aside.
 PostPanel.queueAll.shown = true
@@ -136,8 +144,9 @@ PostPanel:UpdatePriceHistory()
 check("no Prices tab, no button", not PostPanel.priceHistory:IsShown())
 
 local source = assert(io.open(lfs_cwd .. "/UI/PostPanel.lua")):read("*a")
+check("a click hands on the row's copy", source:find("PostPanel:Pick(line.itemID, line.link)", 1, true) ~= nil)
 check("the Sell list marks the picked row", source:find("isSelected = function(line) return PostPanel:IsPicked(line) end", 1, true) ~= nil)
-check("a row that left the list lets the pick go", source:find("if not still then self.picked = nil end", 1, true) ~= nil)
+check("a row that left the list lets the pick go", source:find("if not still then self.picked, self.pickedLink = nil, nil end", 1, true) ~= nil)
 check("right-click still opens the keep box", source:find('mouseButton == "RightButton" and line and line.itemID and ns.KeepBox', 1, true) ~= nil)
 
 --------------------------------------------------------------------------------
@@ -145,7 +154,7 @@ check("right-click still opens the keep box", source:find('mouseButton == "Right
 --------------------------------------------------------------------------------
 
 local prices = assert(io.open(lfs_cwd .. "/UI/Tab_Prices.lua")):read("*a")
-check("Prices has ShowItem", prices:find("function PricesUI:ShowItem(itemID)", 1, true) ~= nil)
+check("Prices has ShowItem", prices:find("function PricesUI:ShowItem(itemID, link)", 1, true) ~= nil)
 check("it opens on Details", prices:find('self:ShowView("details")', 1, true) ~= nil)
 check("it leaves the filters alone", select(2, prices:find("function PricesUI:ShowItem.-\nend\n")) ~= nil
     and not prices:match("function PricesUI:ShowItem.-\nend\n"):find("state.search =", 1, true))

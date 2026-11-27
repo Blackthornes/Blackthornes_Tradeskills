@@ -978,7 +978,7 @@ function PostPanel:Build()
                 CommitTyping(PostPanel.list)
                 ns.KeepBox:Open(line, PostPanel.frame)
             elseif mouseButton ~= "RightButton" and type(line) == "table" and line.itemID then
-                PostPanel:Pick(line.itemID)
+                PostPanel:Pick(line.itemID, line.link)
             end
         end,
     })
@@ -1599,9 +1599,11 @@ function PostPanel:IsPicked(line)
 end
 
 --- Pick a row for Price History, or let it go when it is the one picked.
-function PostPanel:Pick(itemID)
+--- `link` is the row's copy, so a random suffix opens as itself.
+function PostPanel:Pick(itemID, link)
     if self.picked == itemID then itemID = nil end
     self.picked = itemID
+    self.pickedLink = itemID and link or nil
     if self.list then self.list:Refresh() end
     self:UpdatePriceHistory()
 end
@@ -1624,7 +1626,7 @@ end
 function PostPanel:OpenPriceHistory()
     if not self.picked or not ns.PricesUI or not ns.PricesUI.ShowItem then return end
     CommitTyping(self.list)
-    ns.PricesUI:ShowItem(self.picked)
+    ns.PricesUI:ShowItem(self.picked, self.pickedLink)
 end
 
 --- Queue All shows only while some row can still be queued.
@@ -3060,7 +3062,7 @@ function PostPanel:Refresh()
         for _, line in ipairs(lines) do
             if line.itemID == self.picked then still = true break end
         end
-        if not still then self.picked = nil end
+        if not still then self.picked, self.pickedLink = nil, nil end
     end
     if self.priceHistory then
         self.priceHistory:SetShown(self.picked ~= nil and ns.PricesUI ~= nil and ns.PricesUI.ShowItem ~= nil)
