@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.49.3
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fix.** Materials on your other characters only count when that character is on the same realm and faction, so they can mail them to you. This covers the craft pane, the Queue and gather lists, and the mail helper.
+- **Fix.** Price History on the Sell list opens the exact item you picked, including its suffix, such as "of the Monkey", with that item's own prices.
+
 ## 1.49.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

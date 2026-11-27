@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.49.3
+
+Fixes and changes:
+- Materials on your other characters only count when that character is on the same realm and faction.
+- Price History on the Sell list opens the exact item you picked, including its suffix.
+
 ## 1.49.2
 
 Fixes and changes:
