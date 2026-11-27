@@ -191,11 +191,12 @@ check("a Cooking recipe has a trainer", ribs and ns4.LearnNext:Place(ribs) ~= ni
 
 print("\nRugged Armor Kit at 211 (a player's report, 2026-11-21)")
 -- Forever's client tables say 205; the Feralas trainer asks 225. Once a
--- trainer line was read, the road waits for 225.
+-- trainer line was read, the road waits for 225. Since 2026-11-27 the book
+-- knows 225 before any visit too.
 local ns5 = Fresh()
 local RUGGED = 19058
-check("the book alone says 205", ns5.RecipeBook:Get(RUGGED).skill, 205)
-check("so it gives a point at 211", ns5.RoadPlan.Chance(ns5.RecipeBook:Get(RUGGED), 211) > 0, true)
+check("the book alone says 225", ns5.RecipeBook:Get(RUGGED).skill, 225)
+check("so no point from it at 211", ns5.RoadPlan.Chance(ns5.RecipeBook:Get(RUGGED), 211), 0)
 IsTradeskillTrainer = function() return true end
 GetNumTrainerServices = function() return 1 end
 GetTrainerServiceInfo = function() return "Rugged Armor Kit", nil, "unavailable" end
@@ -236,6 +237,65 @@ check("an Armorsmith can", ns6.LearnNext.WrongSpecialty(breastplate), false)
 check("read straight from the line", ns6.TrainerRecipes.SpecialtyReq(1), "armor")
 GetTrainerServiceNumAbilityReq = function() return 0 end
 check("none asked, none kept", ns6.TrainerRecipes.SpecialtyReq(1), nil)
+
+print("\nthe skill a leather recipe asks for, in any language")
+-- A player's report (2026-11-26): Road to 300 had Leatherworking craft
+-- Cured Thick Hide from 155 to 175, but the trainer teaches it at 175.
+-- The fix for it went by the recipe's name, and a window in another
+-- language (an alt who knows it) renames the recipe, so the fix missed.
+local function OnLine(ns, line, id)
+  for _, c in ipairs(ns.RoadPlan:Candidates(line)) do
+    if c.record.recipeID == id then return c end
+  end
+end
+local ns7 = Fresh()
+ns7.Recipes.SKILL_LINE_PROFESSIONS = { [165] = "Leatherworking", [171] = "Alchemy" }
+ns7.Recipes.EnglishProfessionName = function(p) return type(p) == "table" and p.name or p end
+ns7.db.seenRecipes = {
+  [10482] = { name = "Geschmeidiger dicker Balg", skillLineID = 2945, outputItemID = 8172,
+    profession = "Lederverarbeitung" },
+}
+ns7.RecipeBook:Invalidate()
+check("Cured Thick Hide asks for 175 in German too", ns7.RecipeBook:GetSkill(10482), 175)
+check("Rugged Armor Kit asks for 225, as its trainer does", ns7.RecipeBook:GetSkill(19058), 225)
+local cands7 = ns7.RoadPlan:Candidates(165)
+for _, c in ipairs(cands7) do c.price = ns7.RoadPlan.Price(c.record) end
+local plan7 = ns7.RoadPlan:Plan({ line = 165, skill = 150, max = 300, level = 60, candidates = cands7, owned = {} })
+-- What Forever's trainers ask, as players saw it.
+local TRAINER_ASKS = { [10482] = 175, [20650] = 175, [19047] = 225, [22331] = 225, [19058] = 225 }
+local early = {}
+for _, step in ipairs(plan7.steps) do
+  if not step.done and step.kind == "craft" then
+    local skill = TRAINER_ASKS[step.recipeID] or 0
+    if step.from < skill then early[#early + 1] = step.name .. " at " .. step.from end
+  end
+end
+check("no leather step comes before its skill", table.concat(early, ", "), "")
+
+print("\ncrafts with a cooldown stay off the road")
+-- A player's report (2026-11-27): Road to 300 had Alchemy transmute Iron
+-- to Gold 28 times, but every transmute waits a day between uses.
+local ns8 = Fresh()
+ns8.Config.Get = function(_, k) return ({ auctionCut = 0.05, valueOwnedMaterials = true })[k] end
+ns8.RegisterCommand = function() end
+ns8.RegisterEvent = function() end
+assert(loadfile(lfs_cwd .. "/Logic/Cooldowns.lua"))("Blackthornes_TS", ns8)
+-- The game's window lists the transmute under an ID of its own.
+ns8.db.seenRecipes = {
+  [1999001] = { name = "Transmutation: Eisen in Gold", skillLineID = 2937, outputItemID = 3577,
+    profession = "Alchemie", reagents = { { itemID = 3575, quantity = 1 } } },
+}
+ns8.Recipes.GetAccountWide = function() return { [1999001] = { knownBy = { "me" } } } end
+ns8.RecipeBook:Invalidate()
+check("Iron to Gold under the game's own ID is off", OnLine(ns8, 171, 1999001), nil)
+check("Legionite is off", OnLine(ns8, 171, 1317279), nil)
+check("Mithril to Truesilver is off", OnLine(ns8, 171, 11480), nil)
+local brews = 0
+for _, c in ipairs(ns8.RoadPlan:Candidates(171)) do
+  if (c.record.bookName or c.record.name or ""):find("^Transmute") then brews = brews + 1 end
+end
+check("no transmute at all", brews, 0)
+check("a plain potion stays on", OnLine(ns8, 171, 7255) ~= nil, true)
 
 print("\nonly a profession trainer")
 local ns3 = Fresh()
