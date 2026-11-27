@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.50.1
+
+Fixes and changes:
+- My Crafts, All Recipes and Recipes to Learn keep the same profession pick when you switch between them.
+
 ## 1.50.0
 
 - Recipe tooltips show which of your other characters can learn the recipe.

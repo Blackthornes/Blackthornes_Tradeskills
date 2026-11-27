@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.50.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fix.** My Crafts, All Recipes and Recipes to Learn keep the same profession pick when you switch between them.
+- **Fix.** All professions carries over between those three views too.
+
 ## 1.50.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating.
