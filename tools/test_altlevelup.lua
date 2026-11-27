@@ -176,6 +176,17 @@ check("the one playing can learn it now: kept here", Butler:RecipeFor(BAG), nil)
 records[ME].professions = { prof("Mining", 186, 120) }
 check("not a recipe: nothing", Butler:RecipeFor(LINEN), nil)
 
+-- Left out in Butler ("Characters That Get Them:").
+Alt:Forget()
+records[MIRA].inventory = nil
+records[MIRA].inventoryAt = 4
+local leave = { [MIRA] = true }
+check("Mira left out: wool goes to nobody else who needs it", (Butler:AltLevelUp(leave) or {})[WOOL], nil)
+check("without the list, Mira gets it", Butler:AltLevelUp()[WOOL] ~= nil, true)
+check("left out of Can Learn", #Alt:CanLearn(BOOK[200], { [TORV] = true }), 1)
+check("the recipe goes to the next one", Butler:RecipeFor(BAG, { [TORV] = true }).to, "Mira Ashvale")
+check("nobody left: no recipe mail", Butler:RecipeFor(BAG, { [TORV] = true, [MIRA] = true }), nil)
+
 -- Smooth play: with timers, the first answer is nil and comes a few
 -- recipes a frame; Butler is told once a new one is in.
 local queued, told = {}, 0

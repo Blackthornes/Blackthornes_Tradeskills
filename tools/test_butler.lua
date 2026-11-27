@@ -298,6 +298,8 @@ check("empty counts are left out", held[1].bank[7], nil)
 check("an alt's bags are its snapshot", held[2].bags[1], 2)
 check("a key that is not an item is left out", held[2].bags["x"], nil)
 check("when the bags were read", held[2].bagsAt, 50)
+check("an alt's professions with their skill", held[2].professions[1] and held[2].professions[1].name
+  .. " " .. held[2].professions[1].skill, "Enchanting 150")
 check("its mail", held[2].mail[4], 1)
 check("when the mail was read", held[2].mailAt, 60)
 check("never read is nil", held[2].bankAt, nil)

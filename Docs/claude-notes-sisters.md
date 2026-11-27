@@ -726,6 +726,13 @@ read two calls here (`Logic/Butler.lua`, worked out in
   rest still sells; held whether or not "Keep What Other Addons Need" is
   ticked, as Butler's own lists are.
 
+Both calls take an optional `leaveOut` (`{ [key] = true }`, since
+2026-11-27): the alts the player unticked under Butler's "Characters That
+Get Them:" (`Verdicts:AltsLeftOut()`, which the Sell list reads too). The
+roads are kept per alt and profession, so leaving one out only picks the
+next alt again. `Butler:Holdings()` entries carry `professions` (`{ { name,
+skill } }`) for that list's rows.
+
 Nothing new is saved. Tested in `tools/test_altlevelup.lua`,
 `tools/test_recipebook.lua` and `tools/test_sisterkeeps.lua`.
 
