@@ -23,6 +23,26 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.49.0
+
+- The Profit tab shows a 7 Days price line, a sell-speed bar and three cards. Click any profit to see how it adds up.
+- Road to 300 has Stop At buttons, Fewest Materials, No Auction House and Skip on each step.
+- The Queue has Sort By chips and an optional chime when it is done.
+- My Auctions lists today's sales under Sold Today.
+- Pick how Tradeskills opens at the auction house, a profession and the mailbox.
+- New Font, Colors and Fold Gem choices on the All Addons page.
+
+Fixes and changes:
+- The game no longer stutters while a quick scan is read.
+- The Prices, Disenchanting, Level Up and Profit tabs open without a stall.
+- Opening Settings no longer freezes the game.
+- The save is smaller.
+- Road to 300 skips recipes before their skill and cooldown crafts such as transmutes.
+- The Recipes to Learn pane shows every material, costliest first.
+- A new copy of gear sells while the equipment set's own copy is worn.
+- The minimap button stays where a button drawer puts it.
+- Shift tooltip lines sit at the bottom of the tooltip.
+
 ## 1.48.0
 
 - Vendor prices count the Bartering perk.

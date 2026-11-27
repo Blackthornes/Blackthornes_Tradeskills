@@ -4,6 +4,28 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.49.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating.
+
+- **Profit tab.** Each craft shows a 7 Days price line. A sell-speed bar sits under Demand. Three cards sit over the list: Best Right Now, Crafts That Pay and Prices Read. An empty list says what to do.
+- **How This Profit Adds Up.** Click a profit to see the sale, the cut, the deposit, each material and where it comes from, and how many one craft makes. Crafts with random rolls show a range.
+- **Road to 300.** Stop At buttons, Fewest Materials, No Auction House, a Skip on each step and Queue To.
+- **Queue.** Sort By chips: My Order, Profit, Gold per Hour and Frees Bag Space. Queue Done Sound plays a chime when the last craft is made. It is off unless ticked.
+- **My Auctions.** It lists today's sales under Sold Today.
+- **Opening Tradeskills.** Three rows on the Windows page pick Full Window, Slim Panel, Round Button or Stay Closed at the auction house, a profession and the mailbox.
+- **Price History.** A Price History button on the Sell list opens the Prices tab on the picked item. Keep Price History For and the Tidy Up window trim old readings. Keep Price History For starts at Always, and nothing is removed until you press Confirm.
+- **Recipes to Learn.** The pane shows every material, costliest first.
+- **Look.** The All Addons page has Font, Colors and Fold Gem rows, picked once for all five addons. Each starts on the look you had before.
+- **Tooltips.** Lines that show only while Shift is held go at the bottom of the block under a thin gold line.
+- **Fix.** The game no longer stutters while a quick scan is read.
+- **Fix.** The Prices, Disenchanting, Level Up and Profit tabs open without a stall.
+- **Fix.** Opening Settings no longer freezes the game while it measures the save.
+- **Fix.** The save is smaller. Price readings are kept as one short string.
+- **Fix.** Road to 300 skips recipes before their skill and cooldown crafts such as transmutes in every language.
+- **Fix.** The Sell list sells a new copy of gear while the equipment set's own copy is worn.
+- **Fix.** The minimap button stays where a button drawer puts it.
+
 ## 1.48.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
