@@ -1350,6 +1350,15 @@ Farmer's `middle` (brings back its panels). The tooltip reuses the shared
 button's lines, no new words. Never name the bar addon that asked. Tested in
 `tools/test_sharedminimap.lua` (part 7).
 
+Left where a button drawer puts it (FILE_VERSION 5, 2026-11-27; a player's
+button went missing in a minimap button drawer, the owner said build it):
+a drawer takes a button by giving it a new parent. `SharedMinimap.TakenAway(button)`
+is true once a button's parent is no longer the minimap; then
+`SharedMinimap.Reposition` and each addon's own `UpdatePosition` leave it
+alone instead of pinning it back on the ring, where it ended up out of
+sight. Show and Hide still follow "Combine Addon Buttons:". Tested in
+`tools/test_sharedminimap.lua` (and Farmer's `tools/test_minimap.lua`).
+
 ## Off, Shift or Always on tooltips
 
 A player asked (2026-10-18, the owner said yes): each tooltip line
