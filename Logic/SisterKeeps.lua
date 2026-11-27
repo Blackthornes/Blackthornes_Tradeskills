@@ -178,6 +178,58 @@ local function GearReason(itemID, link, bag, slot)
     return nil
 end
 
+--- Where the game keeps a set's piece: { bags, bag, slot }, or nil when
+--- the client won't say. Read through whichever helper this client has.
+local function SetSpot(location)
+    location = tonumber(location)
+    if not location or location < 2 then return nil end
+    local data = rawget(_G, "EquipmentManager_GetLocationData")
+    if type(data) == "function" then
+        local ok, found = pcall(data, location)
+        if ok and type(found) == "table" then
+            return { bags = found.isBags == true, bag = found.bag, slot = found.slot }
+        end
+    end
+    local unpack = rawget(_G, "EquipmentManager_UnpackLocation")
+    if type(unpack) ~= "function" then return nil end
+    local ok, r = pcall(function() return { unpack(location) } end)
+    if not ok or type(r) ~= "table" or r[3] == nil then return nil end
+    -- Newer clients put a void storage flag before the slot.
+    if #r >= 6 then return { bags = r[3] == true, bag = r[6], slot = r[5] } end
+    return { bags = r[3] == true, bag = r[5], slot = r[4] }
+end
+
+--- Is a copy of this item that an equipment set uses in the bags? Butler
+--- answers by item, so a new crafted copy read as the set's while the set's
+--- own copy was worn (a player's Toughened Leather Gloves, 2026-11-27).
+--- False only when the client shows every set copy is somewhere else (worn
+--- or in the bank); true when one is in the bags or the client won't say.
+function SisterKeeps.SetCopyInBags(itemID)
+    local sets = rawget(_G, "C_EquipmentSet")
+    if type(sets) ~= "table" or type(sets.GetEquipmentSetIDs) ~= "function"
+        or type(sets.GetItemIDs) ~= "function" or type(sets.GetItemLocations) ~= "function" then
+        return true
+    end
+    local ok, setIDs = pcall(sets.GetEquipmentSetIDs)
+    if not ok or type(setIDs) ~= "table" then return true end
+    local found = false
+    for _, setID in ipairs(setIDs) do
+        local fine, ids = pcall(sets.GetItemIDs, setID)
+        local good, locations = pcall(sets.GetItemLocations, setID)
+        if not fine or type(ids) ~= "table" then return true end
+        for slot, id in pairs(ids) do
+            if tonumber(id) == itemID then
+                found = true
+                local spot = good and type(locations) == "table" and SetSpot(locations[slot])
+                if not spot or spot.bags then return true end
+            end
+        end
+    end
+    -- Not in any set the client lists: Butler knows something we don't.
+    if not found then return true end
+    return false
+end
+
 --- What Butler's own lists say: why to keep it, or nil.
 local function ButlerReason(itemID)
     local choice, mailTo = Ask("BlackthornesButler", "Verdicts", "Choice", itemID)
@@ -190,7 +242,7 @@ local function ButlerReason(itemID)
     end
 
     local set = Ask("BlackthornesButler", "Verdicts", "InSet", itemID)
-    if type(set) == "string" and set ~= "" then
+    if type(set) == "string" and set ~= "" and SisterKeeps.SetCopyInBags(itemID) then
         return L.Format("In your %s equipment set", set)
     end
 

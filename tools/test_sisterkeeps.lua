@@ -476,6 +476,53 @@ ns.Butler = { CraftFor = Boom }
 check("a craft check that raises changes nothing", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
 ns.Butler, craftFirstOn = nil, nil
 
+print("\na new copy sells while the set's own copy is worn (2026-11-27)")
+-- Packed spots as the game keeps them: worn in hands (10), or bag 0 slot 6.
+local WORN, INBAG = 0x00100000 + 10, 0x00300000 + 6
+local setSpots = { [10] = WORN }
+C_EquipmentSet = {
+    GetEquipmentSetIDs = function() return { 1 } end,
+    GetItemIDs = function() return { [10] = SET } end,
+    GetItemLocations = function() return setSpots end,
+}
+EquipmentManager_UnpackLocation = function(location)
+    if location == WORN then return true, false, false, false, 10, nil end
+    if location == INBAG then return true, false, true, false, 6, 0 end
+end
+Reset()
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the bag copy is not held", LineFor(lines, SET) and LineFor(lines, SET).held, nil)
+end
+Reset()
+setSpots = { [10] = INBAG }
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the set's own copy in the bags is still held", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+Reset()
+setSpots = { [10] = -1 }
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("a set copy the game can't find is still held", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+Reset()
+setSpots = { [10] = WORN }
+EquipmentManager_UnpackLocation = nil
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("a client that won't say still holds it", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+EquipmentManager_GetLocationData = function(location)
+    if location == WORN then return { isPlayer = true, isBags = false, slot = 10 } end
+end
+Reset()
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the newer helper reads it worn too", LineFor(lines, SET).held, nil)
+end
+C_EquipmentSet, EquipmentManager_GetLocationData = nil, nil
+
 BlackthornesFarmer, BlackthornesEquipment, BlackthornesPets, BlackthornesButler = nil, nil, nil, nil
 sisterKeepsOn = nil
 
