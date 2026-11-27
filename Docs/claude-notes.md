@@ -147,6 +147,16 @@ page (`cooldownAlerts`, on unless unticked) and `/bts cooldowns`. Butler's
 makes a ready cooldown craft once, queued or not. Tested in
 `tools/test_cooldowns.lua` and `tools/test_butlerjobs.lua`.
 
+Never "make" a cooldown craft for a favor or a writ (a player on Discord,
+2026-11-27: the Deals tab said make 10 Gold Bars by transmute). The
+Merchant's Favor and Craftsman's Writs views ask `Cost:FindRecipeToMake`,
+which skips any craft `Cost:IsCooldownCraft` names (its ID, the book's ID,
+or a name or book name starting "Transmute", the same test as
+`RoadPlan.OnCooldown`) unless it is set to Make on the Level Up tab.
+`FindAnyRecipeForItem` still names the transmute, for selling. The own and
+alt sub-craft lists use the same test. Tested in
+`tools/test_cooldowncost.lua`, `test_writs.lua` and `test_merchantsfavor.lua`.
+
 Priced to buy (a player on Discord, 2026-11-20): a craft with a cooldown
 (`Cooldowns:HasCooldown`) is never a sub-craft for the character playing
 either, as it already was not for alts (`Cost:BuildAltIndex`), so a Gold

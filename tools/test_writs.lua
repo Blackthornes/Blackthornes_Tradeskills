@@ -213,6 +213,13 @@ check("with the reported 75 reputation", rod.rep == 75 and rod.source == "report
 check("total is writ + item", rod.total == 550)
 check("and a point is a 75th of that", math.abs(rod.perRep - 550 / 75) < 1e-9)
 
+-- A craft with a cooldown is never Make (Discord, 2026-11-27: 10 Gold Bars
+-- by transmute, one an hour at most). Cost:FindRecipeToMake leaves it out.
+ns.Cost.FindRecipeToMake = function() return nil end
+local bought = Row(Writs:GetRows(), ROD)
+check("a cooldown craft is not made for a writ", bought.how ~= "make" and bought.itemCost == 900)
+ns.Cost.FindRecipeToMake = nil
+
 -- None on the auction house: no writ to buy, so no price (a player asked,
 -- 2026-10-11, for the column to go blank rather than show the average).
 noneListed[ROD_WRIT] = true

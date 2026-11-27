@@ -118,4 +118,66 @@ gold = line(10, GOLD)
 check("the bar is made from its iron", gold.crafted == true and gold.unitCost == 4500)
 check("and offered as a sub-craft", Cost:FindRecipeForItem(GOLD) == 11479)
 
+print("\nFavors and writs never make a cooldown craft (Discord, 2026-11-27)")
+
+-- The Deals tab's favor and writ views said "make" 10 Gold Bars by
+-- transmute, one an hour at most. They ask FindRecipeToMake, which skips
+-- every cooldown craft, by its ID, its book ID or a "Transmute" name.
+fresh()
+check("selling still names the transmute", Cost:FindAnyRecipeForItem(GOLD) == 11479)
+check("nothing makes a Gold Bar for a favor", Cost:FindRecipeToMake(GOLD) == nil)
+check("a plain craft is still made", Cost:FindRecipeToMake(ROD) == 10)
+
+-- The game's window can list a transmute under an ID of its own, in the
+-- player's language; the book knows it by its English name.
+local WINDOW_ID = 990001
+ns.db.characters[ME].recipes[WINDOW_ID] = { recipeID = WINDOW_ID, name = "Transmutation : Fer en or",
+    outputItemID = GOLD, quantityMin = 1, quantityMax = 1, reagents = { { itemID = IRON, quantity = 1 } } }
+ns.db.characters[ME].recipes[11479] = nil
+ns.RecipeBook = { Get = function(_, id)
+    if id == WINDOW_ID then return { recipeID = 11479, bookID = 11479, bookName = "Transmute: Iron to Gold" } end
+end }
+Cost:InvalidateIndex()
+check("a transmute under the window's own ID is not made", Cost:FindRecipeToMake(GOLD) == nil)
+check("nor offered as a sub-craft", Cost:FindRecipeForItem(GOLD) == nil)
+ns.RecipeBook = nil
+
+-- Any "Transmute" by its English name, though no list knows its ID.
+fresh()
+ns.db.characters[ME].recipes[11479] = nil
+ns.db.characters[ME].recipes[990002] = { recipeID = 990002, name = "Transmute: Something New",
+    outputItemID = GOLD, quantityMin = 1, quantityMax = 1, reagents = { { itemID = IRON, quantity = 1 } } }
+Cost:InvalidateIndex()
+check("a new transmute is not made either", Cost:FindRecipeToMake(GOLD) == nil)
+
+-- A plain craft of the same item is made instead.
+fresh()
+local SMELT = { recipeID = 3308, name = "Smelt Gold", outputItemID = GOLD,
+    quantityMin = 1, quantityMax = 1, reagents = { { itemID = 2776, quantity = 1 } } }
+ns.db.characters[ME].recipes[3308] = SMELT
+Cost:InvalidateIndex()
+check("smelting makes the bar", Cost:FindRecipeToMake(GOLD) == 3308)
+
+-- An alt's transmute counts the same.
+fresh()
+ns.db.characters[ME].recipes[11479] = nil
+ns.db.characters["Player-ALT"] = { name = "Al Kemist", recipes = { [11479] = TRANSMUTE } }
+local own = ns.Recipes.GetAccountWide
+ns.Recipes.GetAccountWide = function()
+    local all = {}
+    for _, record in pairs(ns.db.characters) do
+        for id, recipe in pairs(record.recipes) do all[id] = recipe end
+    end
+    return all
+end
+Cost:InvalidateIndex()
+check("an alt's transmute names the bar for selling", Cost:FindAnyRecipeForItem(GOLD) == 11479)
+check("but is not made for a favor", Cost:FindRecipeToMake(GOLD) == nil)
+ns.Recipes.GetAccountWide = own
+
+-- Set to Make on the Level Up tab, the player asked for it.
+fresh()
+Cost:SetSubCraftChoice(11479, "make", "Transmute: Iron to Gold")
+check("set to Make, it is made", Cost:FindRecipeToMake(GOLD) == 11479)
+
 print(("\n%d checks passed"):format(checks))
