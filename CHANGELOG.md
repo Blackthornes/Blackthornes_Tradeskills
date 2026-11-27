@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.49.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fix.** Merchant's Favor and Craftsman's Writs never say to make an item by transmute or another craft with a cooldown. They count it as bought, and a plain craft of the same item is still made.
+
 ## 1.49.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
