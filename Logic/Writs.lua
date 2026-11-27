@@ -1155,8 +1155,11 @@ local function ItemCosts(itemID)
     end
 
     local make, recipeID
-    if ns.Cost and ns.Cost.FindAnyRecipeForItem and ns.Cost.GetMaterialValue then
-        recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    -- Never a craft with a cooldown (FindRecipeToMake): one transmute an
+    -- hour can't fill an order for ten.
+    local find = ns.Cost and (ns.Cost.FindRecipeToMake or ns.Cost.FindAnyRecipeForItem)
+    if find and ns.Cost.GetMaterialValue then
+        recipeID = find(ns.Cost, itemID)
         if recipeID then make = ns.Cost:GetMaterialValue(recipeID) end
     end
     return buy, make, make and recipeID or nil

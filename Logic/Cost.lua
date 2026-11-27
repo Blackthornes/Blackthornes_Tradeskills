@@ -127,10 +127,43 @@ function Cost:FindAnyRecipeForItem(itemID)
     return self.anyRecipeByOutput and self.anyRecipeByOutput[itemID]
 end
 
+--- Which recipe a favor or a writ can make an item with: any character's,
+--- the logged-in one's first, never a craft with a cooldown. The Deals tab
+--- said "make" 10 Gold Bars by transmute, one an hour at most (a player on
+--- Discord, 2026-11-27). FindAnyRecipeForItem still names the transmute,
+--- since what a Gold Bar sells for doesn't depend on its cooldown.
+function Cost:FindRecipeToMake(itemID)
+    if self.makeRecipeByOutput == nil or self.recipeIndexStale then
+        self:RebuildOutputIndex()
+    end
+    return self.recipeByOutput[itemID] or self.makeRecipeByOutput[itemID]
+end
+
+--- Is this a craft with a cooldown? By its ID, the book's ID for it (the
+--- game's window can list a recipe under an ID of its own), or any name
+--- starting "Transmute", English or the book's: every transmute shares one
+--- cooldown, Forever's new ones too. The same test as RoadPlan.OnCooldown.
+function Cost:IsCooldownCraft(recipeID, recipe)
+    local book
+    if ns.RecipeBook and ns.RecipeBook.Get then
+        local ok, record = pcall(ns.RecipeBook.Get, ns.RecipeBook, recipeID)
+        if ok and type(record) == "table" then book = record end
+    end
+    for _, name in ipairs({ book and book.bookName or false, type(recipe) == "table" and recipe.name or false }) do
+        if type(name) == "string" and name:find("^Transmute") then return true end
+    end
+    local cooldowns = ns.Cooldowns
+    if not (cooldowns and cooldowns.HasCooldown) then return false end
+    for _, id in ipairs({ recipeID, book and book.bookID or false }) do
+        local ok, has = pcall(cooldowns.HasCooldown, cooldowns, id)
+        if ok and has == true then return true end
+    end
+    return false
+end
+
 function Cost:RebuildOutputIndex()
     local index = {}
 
-    local cooldowns = ns.Cooldowns
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         -- A dropped profession's crafts are not offered as sub-crafts, nor
         -- is one the player said never to make as a sub-craft. Nor is a
@@ -140,7 +173,7 @@ function Cost:RebuildOutputIndex()
         -- player set it to Make on the Level Up tab. Alts' were already left
         -- out (BuildAltIndex).
         local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe)
-        local cooldown = cooldowns and cooldowns.HasCooldown and cooldowns:HasCooldown(recipeID)
+        local cooldown = recipe.outputItemID and self:IsCooldownCraft(recipeID, recipe)
             and not self:IsAlwaysSubCraft(recipeID)
         if recipe.outputItemID and not dropped and not cooldown
             and not self:IsNeverSubCraft(recipeID) then
@@ -150,18 +183,23 @@ function Cost:RebuildOutputIndex()
 
     -- Every character's crafts, for FindAnyRecipeForItem, leaving out each
     -- one's dropped professions as above.
-    local anywhere = {}
+    -- And for FindRecipeToMake, those without a cooldown.
+    local anywhere, make = {}, {}
 
     if ns.Recipes.GetAccountWide then
         for recipeID, recipe in pairs(ns.Recipes:GetAccountWide(true)) do
             if recipe.outputItemID then
                 anywhere[recipe.outputItemID] = recipeID
+                if not self:IsCooldownCraft(recipeID, recipe) or self:IsAlwaysSubCraft(recipeID) then
+                    make[recipe.outputItemID] = recipeID
+                end
             end
         end
     end
 
     self.recipeByOutput = index
     self.anyRecipeByOutput = anywhere
+    self.makeRecipeByOutput = make
     self.altRecipeByOutput = self:BuildAltIndex()
     self.recipeIndexStale = false
 end
@@ -198,7 +236,6 @@ function Cost:BuildAltIndex()
     -- A fixed order, so the same alt is named whoever looks.
     table.sort(keys)
 
-    local cooldowns = ns.Cooldowns
     for _, characterKey in ipairs(keys) do
         local record = characters[characterKey]
         if queue:CanMail(characterKey, selfKey) and type(record.recipes) == "table" then
@@ -206,8 +243,7 @@ function Cost:BuildAltIndex()
                 local itemID = type(recipe) == "table" and recipe.outputItemID
                 local dropped = itemID and ns.Recipes.IsDropped
                     and ns.Recipes:IsDropped(recipe, characterKey)
-                local cooldown = itemID and cooldowns and cooldowns.HasCooldown
-                    and cooldowns:HasCooldown(recipeID)
+                local cooldown = itemID and self:IsCooldownCraft(recipeID, recipe)
                 if itemID and not list[itemID] and not dropped and not cooldown
                     and not self:IsNeverSubCraft(recipeID) then
                     list[itemID] = { recipeID = recipeID, characterKey = characterKey }

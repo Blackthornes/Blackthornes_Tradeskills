@@ -376,11 +376,14 @@ local function UnitCost(itemID)
 end
 
 --- What one of an item costs made from bought materials, and the recipe,
---- when one of the player's characters knows a craft for it.
+--- when one of the player's characters knows a craft for it. Never a craft
+--- with a cooldown (FindRecipeToMake): one transmute an hour can't fill a
+--- crate of ten.
 function MerchantsFavor.MakeCost(itemID)
     local cost = ns.Cost
-    if not (itemID and cost and cost.FindAnyRecipeForItem and cost.GetMaterialValue) then return nil end
-    local recipeID = cost:FindAnyRecipeForItem(itemID)
+    local find = cost and (cost.FindRecipeToMake or cost.FindAnyRecipeForItem)
+    if not (itemID and find and cost.GetMaterialValue) then return nil end
+    local recipeID = find(cost, itemID)
     if not recipeID then return nil end
     local perUnit = cost:GetMaterialValue(recipeID)
     if not perUnit then return nil end

@@ -628,6 +628,13 @@ check("BUNDLE says Make, pinned at the column's left", row.make and row.make.tex
     and row.cells[3].text:find("Make") == nil)
 list.opts.onClick(Row(list.data, "apprentice-textiles"), 1, "LeftButton")
 check("the detail says making is cheaper", Showing("^Cheaper to make:") ~= nil)
+
+-- A craft with a cooldown is never Make (Discord, 2026-11-27: 10 Gold Bars
+-- by transmute, one an hour at most). Cost:FindRecipeToMake leaves it out.
+ns.Cost.FindRecipeToMake = function(_, itemID) return itemID ~= LEATHER and makes[itemID] and makes[itemID][1] or nil end
+local bought = Row(MerchantsFavor:GetRows(), "apprentice-textiles").best
+check("a cooldown craft is not made for a crate", not bought.made and bought.make == nil)
+ns.Cost.FindRecipeToMake = nil
 many = nil
 buttons["Search Both"].onClick()
 check("Search Both looks for what makes the bundle", many and many.ids[1] == TEXTILES
