@@ -634,11 +634,42 @@ local function NewView(opts)
         return options, first
     end
 
+    --- Share a pick with My Crafts and All Recipes (the Profit tab's copy
+    --- only, 2026-11-27).
+    local function SharePick(value)
+        local Profit = ns.Profit
+        if not (opts.shareProfession and Profit and Profit.PickProfession) then return end
+        Profit.PickProfession(value ~= ALL and value or nil)
+        state.pickSeen = (Profit.PickedProfession())
+    end
+
+    --- Take the profession picked on My Crafts or All Recipes, once per
+    --- pick. One this list does not offer leaves it where it was.
+    local function AdoptPickedProfession(options)
+        local Profit = ns.Profit
+        if not (opts.shareProfession and Profit and Profit.PickedProfession) then return end
+        local version, english = Profit.PickedProfession()
+        if version == (state.pickSeen or 0) then return end
+        state.pickSeen = version
+
+        local value = english == false and ALL or nil
+        if english then
+            for _, option in ipairs(options) do
+                if option.value == english and not option.header then value = english end
+            end
+        end
+        if value and value ~= state.profession then
+            state.profession = value
+            state.selected = nil
+        end
+    end
+
     function instance.Refresh()
         if not widgets.list or not ns.RecipeBook then return end
 
         local options, first = ProfessionOptions()
         widgets.profession:SetOptions(options)
+        AdoptPickedProfession(options)
         if state.profession == nil then state.profession = first or ALL end
         widgets.profession:SetValue(state.profession)
         if widgets.method then
@@ -758,6 +789,7 @@ local function NewView(opts)
             if profession:lower():find(needle, 1, true) then
                 state.profession = profession
                 state.selected = nil
+                SharePick(profession)
                 return
             end
         end
@@ -891,6 +923,7 @@ local function NewView(opts)
             function(value)
                 state.profession = value
                 state.selected = nil
+                SharePick(value)
                 instance.Refresh()
             end, { width = 150 })
         profession:SetPoint("TOPLEFT", 8, -8)
@@ -1086,7 +1119,7 @@ RecipeBookView.New = NewView
 -- The Profit tab's copy, which /bts recipes and the Settings button open.
 -- It shows your skill above the list too, so a recipe's SKILL reads
 -- against it on either tab.
-local main = NewView({ showSkill = true, methodChoice = true })
+local main = NewView({ showSkill = true, methodChoice = true, shareProfession = true })
 RecipeBookView.Build = main.Build
 RecipeBookView.Refresh = main.Refresh
 RecipeBookView.SetProfession = main.SetProfession

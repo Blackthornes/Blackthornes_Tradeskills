@@ -115,8 +115,16 @@ function AllRecipesView.Rows()
         analysis.grey = Tier(analysis) == "trivial" or nil
         analysis.professionName = AllRecipesView.ProfessionName(analysis.skillLineID)
         analysis.have = analysis.outputItemID and ((analysis.onHand or 0) + (analysis.inMail or 0)) or nil
-        professions[analysis.professionName] = true
+        -- Each name seen, with its English name for the shared pick.
+        professions[analysis.professionName] = professions[analysis.professionName]
+            or (Profit.ProfessionOfLine and Profit.ProfessionOfLine(analysis.skillLineID)) or true
+    end
 
+    -- A profession with no recipes here (picked on another view, or gone
+    -- with All Characters unticked) shows them all.
+    if state.profession and not professions[state.profession] then state.profession = nil end
+
+    for _, analysis in ipairs(ranked) do
         local keep = true
         if state.profession and analysis.professionName ~= state.profession then keep = false end
         if keep and state.hideIgnored and analysis.ignored then keep = false end
@@ -327,6 +335,26 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
+--- Take the profession picked on My Crafts or Recipes to Learn
+--- (Profit.PickProfession), once per pick, by the name this list shows.
+local function AdoptPickedProfession()
+    local Profit = ns.Profit
+    if not (Profit and Profit.PickedProfession) then return end
+    local version, english = Profit.PickedProfession()
+    if version == (state.pickSeen or 0) then return end
+    state.pickSeen = version
+
+    local name
+    local lines = english and ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+    if type(lines) == "table" then
+        for skillLineID, line in pairs(lines) do
+            if line == english then name = AllRecipesView.ProfessionName(skillLineID); break end
+        end
+    end
+    state.profession = name
+    if widgets.professionDropdown then widgets.professionDropdown:SetValue(name) end
+end
+
 local function RefreshProfessions(professions)
     local dropdown = widgets.professionDropdown
     if not dropdown then return end
@@ -343,13 +371,17 @@ local function RefreshProfessions(professions)
         dropdown:SetOptions(options)
         if state.profession and not professions[state.profession] then state.profession = nil end
         dropdown:SetValue(state.profession)
+    elseif dropdown:GetValue() ~= state.profession then
+        dropdown:SetValue(state.profession)
     end
 end
 
 function AllRecipesView.Refresh()
     if not widgets.list then return end
 
+    AdoptPickedProfession()
     local rows, ignored, professions = AllRecipesView.Rows()
+    widgets.professionEnglish = professions
     RefreshProfessions(professions)
 
     if widgets.sorter then rows = widgets.sorter:Sort(rows) end
@@ -391,6 +423,13 @@ function AllRecipesView.Build(container)
     local profession = Widgets.CreateDropdown(toolbar, { { text = L["All professions"], value = nil } },
         function(value)
             state.profession = value
+            -- My Crafts and Recipes to Learn follow (2026-11-27).
+            local Profit = ns.Profit
+            local english = value and widgets.professionEnglish and widgets.professionEnglish[value]
+            if Profit and Profit.PickProfession and (value == nil or type(english) == "string") then
+                Profit.PickProfession(english)
+                state.pickSeen = (Profit.PickedProfession())
+            end
             AllRecipesView.Refresh()
         end)
     profession:SetPoint("LEFT", 0, 0)
