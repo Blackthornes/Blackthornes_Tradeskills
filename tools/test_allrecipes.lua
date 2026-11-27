@@ -305,6 +305,36 @@ local words = {}
 for _, b in ipairs(buttons) do words[b.text] = true end
 check(words["Confirm"] and words["Use Usual"] and words["-"] and words["+"], "its buttons")
 
+-- 6. The profession picked on My Crafts or Recipes to Learn carries over
+--    (a player's ask, 2026-11-27), with the real Logic/Profit.lua pick.
+do
+  local side = { modules = {}, moduleOrder = {}, Util = {}, Recipes = ns.Recipes,
+    RegisterCommand = function() end, Config = { Get = function() end } }
+  function side.NewModule(name) local m = {}; side[name] = m; return m end
+  assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", side)
+  ns.Profit.PickProfession = side.Profit.PickProfession
+  ns.Profit.PickedProfession = side.Profit.PickedProfession
+  ns.Profit.ProfessionOfLine = side.Profit.ProfessionOfLine
+
+  state.profession = nil
+  side.Profit.PickProfession("Alchemy"); View.Refresh()
+  check(state.profession == "Alchemy" and #list.data == 3, "a profession picked elsewhere carries over")
+  check(widgets.professionDropdown.value == "Alchemy", "and shows on the drop-down")
+  side.Profit.PickProfession("Cooking"); View.Refresh()
+  check(state.profession == nil and #list.data == 6, "one with no recipes here shows them all")
+  side.Profit.PickProfession("Tailoring"); View.Refresh()
+  side.Profit.PickProfession(false); View.Refresh()
+  check(state.profession == nil, "All professions carries over too")
+
+  widgets.professionDropdown.onPick("Tailoring")
+  local _, english = side.Profit.PickedProfession()
+  check(english == "Tailoring", "a pick here is shared")
+  state.profession = nil; View.Refresh()
+  check(state.profession == nil, "and taken only once")
+  widgets.professionDropdown.onPick(nil)
+  check(select(2, side.Profit.PickedProfession()) == false, "All professions here is shared")
+end
+
 for name, value in pairs(saved) do _G[name] = value end
 for name in pairs({ CreateFrame = 1, UIParent = 1, GameTooltip = 1, C_Timer = 1, UISpecialFrames = 1 }) do
   if saved[name] == nil then _G[name] = nil end

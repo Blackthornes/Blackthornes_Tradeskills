@@ -506,5 +506,32 @@ learnNext.Build(Frame())
 check("Level Up's Learn Next has none", learnNext._widgets.method, nil)
 ns.Profit, ns.RecipeBook.List = savedProfit, savedList
 
+print("\nthe profession picked on another Profit view")
+do
+  local side = { modules = {}, moduleOrder = {}, Util = {}, Recipes = ns.Recipes,
+    RegisterCommand = function() end, Config = { Get = function() end } }
+  function side.NewModule(name) local m = {}; side[name] = m; return m end
+  assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", side)
+  local savedPick = ns.Profit
+  ns.Profit = setmetatable({ PickProfession = side.Profit.PickProfession,
+    PickedProfession = side.Profit.PickedProfession }, { __index = savedPick })
+
+  side.Profit.PickProfession("Enchanting"); View.Refresh()
+  check("carries over to Recipes to Learn", View._state.profession, "Enchanting")
+  side.Profit.PickProfession("Leatherworking"); View.Refresh()
+  check("each new pick", View._state.profession, "Leatherworking")
+  side.Profit.PickProfession("Cooking"); View.Refresh()
+  check("one it does not list leaves it", View._state.profession, "Leatherworking")
+  side.Profit.PickProfession(false); View.Refresh()
+  check("All professions carries over", View._state.profession, "all")
+  second.Refresh()
+  check("Level Up's copy keeps its own", second._state.profession, "Enchanting")
+  View.SetProfession("ench")
+  check("a pick here is shared", select(2, side.Profit.PickedProfession()), "Enchanting")
+  second.SetProfession("leath")
+  check("Level Up's pick is not", select(2, side.Profit.PickedProfession()), "Enchanting")
+  ns.Profit = savedPick
+end
+
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")

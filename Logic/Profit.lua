@@ -989,6 +989,33 @@ function Profit.MethodOptions()
     return options
 end
 
+--- The profession picked on the Profit tab, shared by My Crafts, All
+--- Recipes and Recipes to Learn (a player's ask, 2026-11-27: pick
+--- Engineering on one and the others jumped to another profession). Kept
+--- by English name, false for All professions, for this session only.
+--- Each view keeps the version it last took and takes a newer pick on its
+--- next redraw; a view that lacks the profession falls back on its own.
+local picked = { version = 0, english = nil }
+
+--- A view's profession drop-down was changed.
+-- @param english  the English profession name, or nil/false for all
+function Profit.PickProfession(english)
+    picked.version = picked.version + 1
+    picked.english = type(english) == "string" and english or false
+end
+
+--- The shared pick: its version (0 until one is made) and the English
+--- name, or false for All professions.
+function Profit.PickedProfession()
+    return picked.version, picked.english
+end
+
+--- The English name of a skill line's profession, or nil.
+function Profit.ProfessionOfLine(skillLineID)
+    local lines = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+    return type(lines) == "table" and skillLineID ~= nil and lines[skillLineID] or nil
+end
+
 --- Set the Profit: choice, from either drop-down. The pane beside the
 --- profession window counts the same way, so it redraws too.
 function Profit:SetMethod(method)

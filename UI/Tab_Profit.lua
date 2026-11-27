@@ -2279,8 +2279,47 @@ local function RankInSlices()
     return true
 end
 
+--- The English name of a My Crafts profession choice (a skill line), or
+--- nil when it is none of the known ones.
+local function EnglishOfLine(skillLineID, text)
+    local Profit = ns.Profit
+    local english = Profit and Profit.ProfessionOfLine and Profit.ProfessionOfLine(skillLineID)
+    if not english and text and ns.Recipes and ns.Recipes.EnglishProfessionName then
+        local ok, name = pcall(ns.Recipes.EnglishProfessionName, text)
+        if ok then english = name end
+    end
+    return english
+end
+
+--- Take the profession picked on All Recipes or Recipes to Learn
+--- (Profit.PickProfession), once per pick. A profession with no crafts
+--- here leaves the list on All professions.
+local function AdoptPickedProfession()
+    local dropdown = widgets.professionDropdown
+    local Profit = ns.Profit
+    if not (dropdown and Profit and Profit.PickedProfession) then return end
+    local version, english = Profit.PickedProfession()
+    if version == (state.pickSeen or 0) then return end
+    state.pickSeen = version
+
+    local value
+    if english then
+        for _, option in ipairs(dropdown.options or {}) do
+            if option.value ~= nil and not option.header
+                and EnglishOfLine(option.value, option.text) == english then
+                value = option.value
+                break
+            end
+        end
+    end
+    dropdown:SetValue(value)
+    state.profession = value
+end
+
 local function Refresh()
     if not widgets.list then return end
+
+    AdoptPickedProfession()
 
     -- Recipes to Learn can change the Profit: choice too. VIA shows only
     -- when more than one way can win, so the headings follow.
@@ -2543,6 +2582,9 @@ local function RefreshProfessionOptions()
     -- follow it or the list would stay filtered to a choice no longer shown.
     state.profession = dropdown:GetValue()
 
+    -- A profession picked on another Profit view comes along.
+    AdoptPickedProfession()
+
     -- And named on its face. The dropdown writes that only when the choice
     -- changes, and "All professions" is already the choice when the tab
     -- first opens, so the face stayed blank until something was picked.
@@ -2564,6 +2606,20 @@ local function BuildCrafts(container)
     local profession = Widgets.CreateDropdown(toolbar, { { text = L["All professions"], value = nil } },
         function(value)
             state.profession = value
+            -- All Recipes and Recipes to Learn follow (2026-11-27).
+            local Profit = ns.Profit
+            if Profit and Profit.PickProfession then
+                local english
+                if value ~= nil then
+                    for _, option in ipairs(widgets.professionDropdown.options or {}) do
+                        if option.value == value then english = EnglishOfLine(value, option.text) end
+                    end
+                end
+                if value == nil or english then
+                    Profit.PickProfession(english)
+                    state.pickSeen = (Profit.PickedProfession())
+                end
+            end
             Refresh()
         end, { width = 150 })
     profession:SetPoint("LEFT", 0, 0)

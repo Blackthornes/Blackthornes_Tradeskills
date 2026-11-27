@@ -169,6 +169,36 @@ checkboxes["All characters"].onChange(false)
 check("unticked, the alt's profession is gone again", Offered()[ALCHEMY] == nil)
 check("and the list is no longer filtered to it", AskedOnly("all"))
 
+-- The profession picked on All Recipes or Recipes to Learn carries over to
+-- My Crafts, and a pick here is shared (a player's ask, 2026-11-27), with
+-- the real Logic/Profit.lua pick.
+print("")
+print("one profession across the Profit views")
+ns.Recipes.SKILL_LINE_PROFESSIONS = { [TAILORING] = "Tailoring", [ALCHEMY] = "Alchemy" }
+local side = { modules = {}, moduleOrder = {}, Util = {}, Recipes = ns.Recipes,
+    RegisterCommand = function() end, Config = { Get = function() end } }
+function side.NewModule(name) local m = {}; side[name] = m; return m end
+assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", side)
+ns.Profit.PickProfession = side.Profit.PickProfession
+ns.Profit.PickedProfession = side.Profit.PickedProfession
+ns.Profit.ProfessionOfLine = side.Profit.ProfessionOfLine
+
+asked = {}
+side.Profit.PickProfession("Tailoring"); profit.refresh()
+check("a profession picked elsewhere carries over", AskedOnly(TAILORING))
+profit.refresh()
+check("and stays on later redraws", AskedOnly(TAILORING))
+side.Profit.PickProfession("Alchemy"); profit.refresh()
+check("one with no crafts here shows them all", AskedOnly("all"))
+side.Profit.PickProfession("Tailoring"); profit.refresh(); asked = {}
+side.Profit.PickProfession(false); profit.refresh()
+check("All professions carries over", AskedOnly("all"))
+
+professionPicked(TAILORING)
+check("a pick here is shared", select(2, side.Profit.PickedProfession()) == "Tailoring")
+professionPicked(nil)
+check("All professions here is shared", select(2, side.Profit.PickedProfession()) == false)
+
 ns.db = nil
 C_TradeSkillUI = nil
 print("test_profitprofessions: ok")
