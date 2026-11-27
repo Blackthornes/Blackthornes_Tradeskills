@@ -128,6 +128,8 @@
 --                  mailAt, nil when never read this way (2026-11-10).
 --   clearedAt      when the player last cleared this character's saved
 --                  items (Butler:ClearHoldings), else nil.
+--   professions    { { name (the client's), skill } }, each learned
+--                  profession as saved, highest skill first (2026-11-27).
 --
 -- At a mailbox and the bank (2026-10-11), Butler asks two more things:
 --
@@ -276,8 +278,12 @@
 -- Can Learn Them:" (a player asked, the owner said build it, 2026-11-27,
 -- both off unless ticked in Butler) ask, only while ticked:
 --
---   _G.BlackthornesTS.Butler:AltLevelUp()        -- a table, or nil; reads only
---   _G.BlackthornesTS.Butler:RecipeFor(itemID)   -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:AltLevelUp(leaveOut)        -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:RecipeFor(itemID, leaveOut) -- a table, or nil; reads only
+--
+-- `leaveOut` (optional, since 2026-11-27) is { [character key] = true }:
+-- alts the player unticked under Butler's "Characters That Get Them:";
+-- the item or recipe then goes to the next alt.
 --
 -- AltLevelUp is { [itemID] = { to (full name), count, profession (the
 -- client's name) } }: what an alt's Road to 300 still needs from the
@@ -1122,6 +1128,20 @@ local function Listed()
     return counts, at
 end
 
+local function SavedProfessions(record)
+    local list = {}
+    for _, profession in ipairs(type(record.professions) == "table" and record.professions or {}) do
+        if type(profession) == "table" and profession.learned ~= false and type(profession.name) == "string" then
+            list[#list + 1] = { name = profession.name, skill = tonumber(profession.skillLevel) or 0 }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.skill ~= b.skill then return a.skill > b.skill end
+        return a.name < b.name
+    end)
+    return list
+end
+
 local function Holdings()
     local list = {}
     local records = Characters()
@@ -1145,6 +1165,9 @@ local function Holdings()
                 playing = character.isCurrent == true
                     or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
                 linked = character.linkedFrom,
+                -- Each learned profession and its skill, as saved, for
+                -- Butler's "Characters That Get Them:" rows (2026-11-27).
+                professions = SavedProfessions(record),
                 bank = Counts(record.bank),
                 mail = Counts(record.mail),
                 bankAt = Stamp(record.bankAt),
@@ -2240,10 +2263,10 @@ end
 --- What the alts' roads to 300 still need, each item to one alt: { [itemID]
 --- = { to, count, profession } }. nil while it is worked out or on any
 --- error. Never raises, writes nothing; a fresh table each time.
-function Butler:AltLevelUp()
+function Butler:AltLevelUp(leaveOut)
     local alts = ns.AltLevelUp
     if not (alts and alts.Needs) then return nil end
-    local ok, needs = pcall(alts.Needs, alts)
+    local ok, needs = pcall(alts.Needs, alts, type(leaveOut) == "table" and leaveOut or nil)
     if not (ok and type(needs) == "table") then return nil end
     local copy = {}
     for itemID, need in pairs(needs) do
@@ -2256,8 +2279,9 @@ end
 
 --- The alt to mail a recipe item to: { to, profession, skill, has, now },
 --- or nil. Never raises, writes nothing.
-function Butler:RecipeFor(itemID)
+function Butler:RecipeFor(itemID, leaveOut)
     itemID = tonumber(itemID)
+    leaveOut = type(leaveOut) == "table" and leaveOut or nil
     if not itemID then return nil end
     local ok, answer = pcall(function()
         local book, alts = ns.RecipeBook, ns.AltLevelUp
@@ -2267,7 +2291,7 @@ function Butler:RecipeFor(itemID)
         -- Someone on the account knows it: it stays free to sell.
         if #book:WhoKnows(record) > 0 then return nil end
         if alts:PlayingCanLearn(record) then return nil end
-        for _, alt in ipairs(alts:CanLearn(record)) do
+        for _, alt in ipairs(alts:CanLearn(record, leaveOut)) do
             local holder = { key = alt.key, record = ns.db.characters[alt.key] }
             if holder.record and alts.Has(holder, itemID) == 0 then
                 return { to = alt.name, profession = alt.profession, skill = tonumber(record.skill) or 0,

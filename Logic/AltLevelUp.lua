@@ -208,16 +208,39 @@ local function Walk(task)
     return needs
 end
 
--- All the roads' needs, each item to the alt that needs most.
-local function Gather(tasks)
-    local answer = {}
+-- Every road walked: { key, to, profession, needs }.
+local function WalkAll(tasks)
+    local walks = {}
     for _, task in ipairs(tasks) do
-        for itemID, count in pairs(Walk(task)) do
-            local best = answer[itemID]
-            local name = task.alt.name
-            if not best or count > best.count or (count == best.count and name < best.to) then
-                answer[itemID] = { key = task.alt.key, to = name, count = count,
-                    profession = task.profession.name }
+        walks[#walks + 1] = { key = task.alt.key, to = task.alt.name, profession = task.profession.name,
+            needs = Walk(task) }
+    end
+    return walks
+end
+
+-- Is this key one the player left out (Butler's "Characters That Get
+-- Them:")? `leaveOut` is { [key] = true }.
+local function LeftOut(key, leaveOut)
+    if type(leaveOut) ~= "table" then return false end
+    if leaveOut[key] then return true end
+    local chars = ns.Characters
+    for other, on in pairs(leaveOut) do
+        if on and chars and chars.Same and chars:Same(key, other) then return true end
+    end
+    return false
+end
+AltLevelUp.LeftOut = LeftOut
+
+-- The roads' needs, each item to the alt that needs most, less those left out.
+local function Gather(walks, leaveOut)
+    local answer = {}
+    for _, walk in ipairs(walks) do
+        if not LeftOut(walk.key, leaveOut) then
+            for itemID, count in pairs(walk.needs) do
+                local best = answer[itemID]
+                if not best or count > best.count or (count == best.count and walk.to < best.to) then
+                    answer[itemID] = { key = walk.key, to = walk.to, count = count, profession = walk.profession }
+                end
             end
         end
     end
@@ -226,6 +249,7 @@ end
 
 local function Differs(a, b)
     if type(a) ~= "table" or type(b) ~= "table" then return a ~= b end
+    a, b = Gather(a), Gather(b)
     for itemID, one in pairs(a) do
         local two = b[itemID]
         if not two or two.key ~= one.key or two.count ~= one.count then return true end
@@ -255,8 +279,10 @@ end
 
 --- { [itemID] = { key, to, count, profession } }: what the alts' roads to
 --- 300 still need, less what they have; nil while the first answer is
---- worked out. Never raises, writes nothing; a fresh table each time.
-function AltLevelUp:Needs()
+--- worked out. `leaveOut` ({ [key] = true }) are alts the player left out:
+--- an item then goes to the next alt that needs it. Never raises, writes
+--- nothing; a fresh table each time.
+function AltLevelUp:Needs(leaveOut)
     local ok, answer = pcall(function()
         local alts = AltLevelUp.Alts()
         local key = Key(alts)
@@ -270,7 +296,7 @@ function AltLevelUp:Needs()
             for _, task in ipairs(tasks) do
                 for _, candidate in ipairs(task.candidates) do candidate.price = road.Price(candidate.record) end
             end
-            kept = { key = key, answer = Gather(tasks) }
+            kept = { key = key, answer = WalkAll(tasks) }
             return kept.answer
         end
 
@@ -283,7 +309,7 @@ function AltLevelUp:Needs()
                 local task = tasks[this.task]
                 if not task then
                     job = nil
-                    local fine, fresh = pcall(Gather, tasks)
+                    local fine, fresh = pcall(WalkAll, tasks)
                     if not fine then return end
                     local old = kept and kept.answer
                     kept = { key = key, answer = fresh }
@@ -305,7 +331,9 @@ function AltLevelUp:Needs()
         return kept and kept.answer or nil
     end)
     if not ok or type(answer) ~= "table" then return nil end
-    return Copy(answer)
+    local fine, gathered = pcall(Gather, answer, leaveOut)
+    if not fine then return nil end
+    return Copy(gathered)
 end
 
 --- Forget the kept answer (a test).
@@ -320,8 +348,9 @@ end
 --- The alts who have `record`'s profession and don't know it, each { key,
 --- name, profession (the client's name), skill, short (true while the
 --- skill is below what it needs) }: those who can learn it now first,
---- then the highest skill, then by name. Never raises.
-function AltLevelUp:CanLearn(record)
+--- then the highest skill, then by name. `leaveOut` ({ [key] = true })
+--- are alts the player left out. Never raises.
+function AltLevelUp:CanLearn(record, leaveOut)
     local list = {}
     if type(record) ~= "table" or type(record.profession) ~= "string" then return list end
     local ok = pcall(function()
@@ -334,7 +363,7 @@ function AltLevelUp:CanLearn(record)
             for _, key in ipairs(knownBy) do
                 if key == alt.key or (chars and chars:Same(key, alt.key)) then knows = true end
             end
-            if not knows then
+            if not knows and not LeftOut(alt.key, leaveOut) then
                 for _, profession in ipairs(Professions(alt)) do
                     if English(profession) == record.profession then
                         local skill = tonumber(profession.skillLevel) or 0

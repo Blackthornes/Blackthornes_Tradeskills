@@ -23,6 +23,7 @@
 --   _G.BlackthornesButler.Verdicts:SellAnyway(itemID)    -- the drawer's Sell Anyway
 --   _G.BlackthornesButler.Verdicts:AltLevelUpOn()        -- "Send Level Up Materials to Alts:"
 --   _G.BlackthornesButler.Verdicts:AltRecipesOn()        -- "Mail Recipes to Who Can Learn Them:"
+--   _G.BlackthornesButler.Verdicts:AltsLeftOut()         -- { [key] = true }, alts unticked there
 --
 -- Butler's Wait for a Better Price (2026-11-14): a waiting item stays on
 -- the drawer with a Butler Says Wait tag and a Sell Anyway button, and
@@ -379,15 +380,18 @@ end
 function SisterKeeps.AltHold(itemID, count)
     local butler = ns.Butler
     if not butler then return nil end
+    -- Alts the player unticked in Butler ("Characters That Get Them:").
+    local leaveOut = Ask("BlackthornesButler", "Verdicts", "AltsLeftOut")
+    if type(leaveOut) ~= "table" then leaveOut = nil end
     if Ask("BlackthornesButler", "Verdicts", "AltRecipesOn") == true and butler.RecipeFor then
-        local ok, recipe = pcall(butler.RecipeFor, butler, itemID)
+        local ok, recipe = pcall(butler.RecipeFor, butler, itemID, leaveOut)
         if ok and type(recipe) == "table" and type(recipe.to) == "string" then
             return 1, recipe.now and L.Format("%s can learn this", recipe.to)
                 or L.Format("%s can learn this at %s %d", recipe.to, tostring(recipe.profession), recipe.skill or 0)
         end
     end
     if Ask("BlackthornesButler", "Verdicts", "AltLevelUpOn") == true and butler.AltLevelUp then
-        local ok, needs = pcall(butler.AltLevelUp, butler)
+        local ok, needs = pcall(butler.AltLevelUp, butler, leaveOut)
         local need = ok and type(needs) == "table" and needs[itemID]
         if need and (need.count or 0) > 0 then
             return math.min(count, need.count),
