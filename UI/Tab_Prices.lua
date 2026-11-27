@@ -1931,22 +1931,57 @@ end
 --- said build it from a mockup). Its row is scrolled into sight when the
 --- list shows it; the filters are left as the player set them, and the
 --- details still show the item when they hide its row.
-function PricesUI:ShowItem(itemID)
+---
+--- `link` is the copy picked on the Sell list. When it has a random suffix
+--- its own row is opened and picked, so the details show "of the Monkey"
+--- and that suffix's prices, not the plain item (a player's report,
+--- 2026-11-27: it showed the plain item). A suffix with no price of its
+--- own still shows under its own name.
+function PricesUI:ShowItem(itemID, link)
     if type(itemID) ~= "number" then return end
+    local suffix = link ~= nil and Util.LinkSuffix and tonumber((Util.LinkSuffix(link))) or nil
+    if suffix == 0 then suffix = nil end
+    if suffix then state.open[itemID] = true end
     UI:Show()
     UI:SelectTab("prices")
     self:ShowView("details")
     local list = widgets.list
     if not list then return end
-    local found
+    local found, plain
     for index, entry in ipairs(list:GetData() or {}) do
-        if entry.itemID == itemID and not entry.kid then found = index break end
+        if entry.itemID == itemID then
+            if entry.kid then
+                if suffix and tonumber(entry.suffix) == suffix then found = index break end
+            elseif not plain then
+                plain = index
+                if not suffix then break end
+            end
+        end
     end
+    found = found or (not suffix and plain) or nil
     if found then
         state.selected = list:GetData()[found]
         list.offset = math.max(0, found - 1)
     else
-        state.selected = { itemID = itemID, record = ns.Prices:Get(itemID) or {} }
+        local record = ns.Prices:Get(itemID) or {}
+        state.selected = { itemID = itemID, record = record }
+        if suffix then
+            local own
+            for _, row in ipairs(ns.Prices.SuffixRows and ns.Prices:SuffixRows(itemID) or {}) do
+                if tonumber(row.suffix) == suffix then own = row break end
+            end
+            local name = own and own.name
+                or (ns.Prices.SuffixName and ns.Prices.SuffixName(itemID, suffix))
+                or (type(link) == "string" and link:match("|h%[(.-)%]|h"))
+            own = own or {}
+            state.selected = {
+                kid = true, itemID = itemID, suffix = suffix, fullName = name, name = name or "",
+                record = { market = own.market, min = own.min, rivalMin = own.rival,
+                           quantity = own.quantity, seen = own.seen },
+                market = own.market or 0, min = own.min or 0, quantity = own.quantity or 0,
+            }
+        end
+        if plain then list.offset = math.max(0, plain - 1) end
     end
     list:Refresh()
     UpdateDetail(state.selected)

@@ -1506,6 +1506,53 @@ do
     state.selected = nil
 end
 
+-- Price History on a copy with a random suffix opens that suffix, not the
+-- plain item (a player's report, 2026-11-27: "it doesnt show the suffix").
+do
+    local widgets, state = UI._PricesWidgets()
+    local MONKEY, EAGLE = 1197, 1200
+    -- Forever's shape: the old suffix field empty, the suffix a bonus ID,
+    -- which the client's own reading (Util.LinkSuffix) turns into the suffix.
+    local BONUS = { ["12722"] = MONKEY, ["12725"] = 1203 }
+    local link = "|cff1eff00|Hitem:1018::::::::18:1485:::1:12722:::::|h[Item of the Monkey]|h|r"
+    local kept = { records[1018].suffixes, ns.Prices.SuffixCount, ns.Prices.SuffixRows,
+                   ns.Prices.SuffixName, ns.Util.LinkSuffix }
+    records[1018].suffixes = { [MONKEY] = {}, [EAGLE] = {} }
+    ns.Prices.SuffixCount = function(_, itemID) return itemID == 1018 and 2 or 0 end
+    ns.Prices.SuffixRows = function(_, itemID)
+        if itemID ~= 1018 then return {} end
+        return { { suffix = EAGLE, market = 900, name = "Item of the Eagle", seen = NOW },
+                 { suffix = MONKEY, market = 700, name = "Item of the Monkey", seen = NOW } }
+    end
+    ns.Prices.SuffixName = function(_, suffix) return "Item of suffix " .. tostring(suffix) end
+    ns.Util.LinkSuffix = function(l) return BONUS[tostring(l):match(":1:(%d+):")] end
+    UI:SelectTab("settings")
+    ns.PricesUI:ShowItem(1018, link)
+    check("a suffix copy opens its suffix row", state.selected and state.selected.kid, true)
+    check("the one the player picked", state.selected and tonumber(state.selected.suffix), MONKEY)
+    check("the details name the suffix", widgets.detail.title:GetText():find("of the Monkey", 1, true) ~= nil, true)
+    check("with that suffix's price", state.selected and state.selected.market, 700)
+    local lit = false
+    for _, row in ipairs(pricesList.rows) do
+        if row.data and row.data.kid and tonumber(row.data.suffix) == MONKEY then lit = true end
+    end
+    check("its row on screen", lit, true)
+
+    local LION = 1203
+    ns.PricesUI:ShowItem(1018, (link:gsub("12722", "12725")))
+    check("a suffix with no price of its own still shows as itself", state.selected and tonumber(state.selected.suffix), LION)
+    check("under its own name", widgets.detail.title:GetText():find("suffix " .. LION, 1, true) ~= nil, true)
+
+    ns.PricesUI:ShowItem(1018, "|cff1eff00|Hitem:1018::::::::18:1485::::::::|h[Item]|h|r")
+    check("a copy with no suffix opens the plain item", state.selected and state.selected.kid, nil)
+    check("still that item", state.selected and state.selected.itemID, 1018)
+
+    records[1018].suffixes, ns.Prices.SuffixCount, ns.Prices.SuffixRows,
+        ns.Prices.SuffixName, ns.Util.LinkSuffix = kept[1], kept[2], kept[3], kept[4], kept[5]
+    state.open[1018] = nil
+    state.selected = nil
+end
+
 --------------------------------------------------------------------------------
 print("")
 print("Characters")
