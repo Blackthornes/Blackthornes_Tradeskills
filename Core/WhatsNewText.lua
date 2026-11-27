@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.49.1", lines = {
+        "The Sell list shows your other copies of an item when one copy is soulbound.",
+    } },
     { version = "1.49.0", lines = {
         "The Profit tab shows a 7 Days price line, a sell-speed bar and three cards. Click any profit to see how it adds up.",
         "Road to 300 has Stop At buttons, Fewest Materials, No Auction House and Skip on each step.",
@@ -18,9 +21,5 @@ ns.WHATS_NEW = {
         "The item tooltip shows what an item costs to make now, above Profit Now.",
         "Stock you bought is costed at what you paid and shows under Flipped.",
         "Lucky disenchants at an Arcane Salvager say so again, with the sound.",
-    } },
-    { version = "1.47.0", lines = {
-        "Profit Now on the item tooltip uses what one costs to make today, and shows for any item a recipe makes.",
-        "Hovering a craft's profit in the Craft queue shows the profit for one craft.",
     } },
 }
