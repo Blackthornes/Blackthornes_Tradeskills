@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.49.2
+
+Fixes and changes:
+- Favors and writs no longer say to make an item by transmute or another craft with a cooldown.
+
 ## 1.49.1
 
 - The Sell list shows your other copies of an item when one copy is soulbound.
