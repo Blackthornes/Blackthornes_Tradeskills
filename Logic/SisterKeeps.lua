@@ -21,6 +21,8 @@
 --   _G.BlackthornesButler.Verdicts:Waiting(itemID, bag, slot)
 --                                                        -- { short, reason, cost, now, usual }
 --   _G.BlackthornesButler.Verdicts:SellAnyway(itemID)    -- the drawer's Sell Anyway
+--   _G.BlackthornesButler.Verdicts:AltLevelUpOn()        -- "Send Level Up Materials to Alts:"
+--   _G.BlackthornesButler.Verdicts:AltRecipesOn()        -- "Mail Recipes to Who Can Learn Them:"
 --
 -- Butler's Wait for a Better Price (2026-11-14): a waiting item stays on
 -- the drawer with a Butler Says Wait tag and a Sell Anyway button, and
@@ -371,8 +373,37 @@ function SisterKeeps:CraftReason(itemID, count, price)
     return L.Format("Worth more as %s: %s each", name, money)
 end
 
+--- What an alt needs mailed (2026-11-27), while Butler's "Send Level Up
+--- Materials to Alts:" or "Mail Recipes to Who Can Learn Them:" is ticked:
+--- how many to hold back, and why; or nil. The rest still sells.
+function SisterKeeps.AltHold(itemID, count)
+    local butler = ns.Butler
+    if not butler then return nil end
+    if Ask("BlackthornesButler", "Verdicts", "AltRecipesOn") == true and butler.RecipeFor then
+        local ok, recipe = pcall(butler.RecipeFor, butler, itemID)
+        if ok and type(recipe) == "table" and type(recipe.to) == "string" then
+            return 1, recipe.now and L.Format("%s can learn this", recipe.to)
+                or L.Format("%s can learn this at %s %d", recipe.to, tostring(recipe.profession), recipe.skill or 0)
+        end
+    end
+    if Ask("BlackthornesButler", "Verdicts", "AltLevelUpOn") == true and butler.AltLevelUp then
+        local ok, needs = pcall(butler.AltLevelUp, butler)
+        local need = ok and type(needs) == "table" and needs[itemID]
+        if need and (need.count or 0) > 0 then
+            return math.min(count, need.count),
+                L.Format("Used to level %s's %s. Needs %d more.", need.to, tostring(need.profession), need.count)
+        end
+    end
+    return nil
+end
+
 function SisterKeeps:Work(itemID, held, count, price)
     local butler, butlerWhy = ButlerHold(itemID, count)
+    if butler and butler >= count then return count, butlerWhy end
+    -- The player's own pick in Butler: held whether or not "Keep What
+    -- Other Addons Need" is ticked, as Butler's lists are.
+    local alt, altWhy = SisterKeeps.AltHold(itemID, count)
+    if alt and alt > (butler or 0) then butler, butlerWhy = alt, altWhy end
     if butler and butler >= count then return count, butlerWhy end
 
     local craftWhy = self:CraftReason(itemID, count, price)

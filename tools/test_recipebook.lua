@@ -344,5 +344,19 @@ check("not an item is not", Book:IsCrafted(nil), false)
 C_TooltipInfo = nil
 C_Item.IsItemDataCachedByID = nil
 
+-- Can Learn: the alt who could learn it (2026-11-27).
+local boots = Book:ForItem(PATTERN_BOOTS)
+ns.AltLevelUp = { CanLearn = function() return { { name = "Mira Ashvale", profession = "Leatherworking", skill = 162 } } end }
+check("Can Learn names the alt and its skill", Book:CanLearnText(boots), "Mira Ashvale (Leatherworking 162)")
+ns.AltLevelUp.CanLearn = function()
+  return { { name = "Mira Ashvale", profession = "Leatherworking", skill = 98, short = true } }
+end
+check("Can Learn says the skill it needs when short",
+  Book:CanLearnText(boots), ("Mira Ashvale at Leatherworking %d (has 98)"):format(boots.skill or 0))
+ns.AltLevelUp.CanLearn = function() return {} end
+check("no Can Learn when no alt can", Book:CanLearnText(boots), nil)
+ns.AltLevelUp = nil
+check("no Can Learn without the module", Book:CanLearnText(boots), nil)
+
 if failures > 0 then error(("%d recipe book check(s) failed"):format(failures)) end
 print("\n  recipe book: all checks passed")

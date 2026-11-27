@@ -476,6 +476,31 @@ ns.Butler = { CraftFor = Boom }
 check("a craft check that raises changes nothing", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
 ns.Butler, craftFirstOn = nil, nil
 
+print("\nmaterials and recipes an alt needs (2026-11-27)")
+local altOn, recipesOn = false, false
+ns.Butler = {
+    AltLevelUp = function() return { [PLAIN] = { to = "Mira Ashvale", count = 3, profession = "Tailoring" } } end,
+    RecipeFor = function(_, id) if id == CLAM then return { to = "Mira Ashvale", now = true } end end,
+}
+Reset()
+BlackthornesButler.Verdicts.AltLevelUpOn = function() return altOn end
+BlackthornesButler.Verdicts.AltRecipesOn = function() return recipesOn end
+check("off in Butler, the cloth all sells", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN).count, 7)
+Reset()
+altOn, recipesOn = true, true
+BlackthornesButler.Verdicts.AltLevelUpOn = function() return altOn end
+BlackthornesButler.Verdicts.AltRecipesOn = function() return recipesOn end
+sisterKeepsOn = false
+do
+    local lines = Posting:GetPostable({ includeAll = true })
+    check("ticked, the alt's 3 are held, the rest sells", LineFor(lines, PLAIN) and LineFor(lines, PLAIN).count, 4)
+    check("and says why", LineFor(lines, PLAIN) and LineFor(lines, PLAIN).keptWhy,
+        "Used to level Mira Ashvale's Tailoring. Needs 3 more.")
+    local clam = LineFor(lines, CLAM)
+    check("one recipe is held for the alt", clam and clam.count, 2)
+end
+ns.Butler = nil
+
 print("\na new copy sells while the set's own copy is worn (2026-11-27)")
 -- Packed spots as the game keeps them: worn in hands (10), or bag 0 slot 6.
 local WORN, INBAG = 0x00100000 + 10, 0x00300000 + 6

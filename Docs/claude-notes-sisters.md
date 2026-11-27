@@ -694,6 +694,41 @@ out. Read only, inside a pcall, never raises. Butler shows "NAME can make
 them." and a Queue button that calls `QueueCraft`. Tested in
 `tools/test_butlercraft.lua`.
 
+## Mats and recipes to alts (2026-11-27)
+
+A player asked, the owner said build it (2026-11-27, from a mockup whose
+words he approved). Two Butler boxes, both off unless ticked in Butler,
+read two calls here (`Logic/Butler.lua`, worked out in
+`Logic/AltLevelUp.lua`):
+
+- `Butler:AltLevelUp()` for "Send Level Up Materials to Alts:":
+  `{ [itemID] = { to, count, profession } }`. For each alt the one playing
+  can mail (`Characters:CanMail`, never itself, never `linkedFrom`, each
+  once by `Characters:Same`; nobody with no GUID for the one playing), each
+  profession under 300 gets a Road to 300 (`RoadPlan:Plan`) from only the
+  recipes it knows (`RoadPlan:KnownCandidates`, `RoadPlan.LineFor`, no
+  places to learn, no cooldown crafts). What the steps still want less its
+  bags, bank, mail and `QueueMail:InFlight` is the count; an item two alts
+  need goes to the one needing most. Kept by a key (the alts' saved
+  times, sent mail, scans, Pick By, skips, the queue), priced
+  `AltLevelUp.BUDGET` recipes a frame; nil while the first answer is
+  worked out, then `_G.BlackthornesButler.Verdicts:Changed()` (pcall)
+  when a new answer differs.
+- `Butler:RecipeFor(itemID)` for "Mail Recipes to Who Can Learn Them:":
+  `{ to, profession, skill, has, now }` for a recipe item nobody on the
+  account knows, that the one playing can't learn now, and that the alt
+  doesn't already hold; the alt is `AltLevelUp:CanLearn`'s first (can
+  learn now first, then higher skill).
+- The recipe tooltip's "Can Learn:" line (`RecipeBook:CanLearnText`):
+  "%s (%s %d)" or "%s at %s %d (has %d)", with the recipe lines.
+- The Sell list holds the alt's count (`SisterKeeps.AltHold`) while
+  Butler's `Verdicts:AltLevelUpOn()` or `AltRecipesOn()` says so, the
+  rest still sells; held whether or not "Keep What Other Addons Need" is
+  ticked, as Butler's own lists are.
+
+Nothing new is saved. Tested in `tools/test_altlevelup.lua`,
+`tools/test_recipebook.lua` and `tools/test_sisterkeeps.lua`.
+
 ## Butler Says Wait on the auction house drawer
 
 The owner said build it from a mockup (2026-11-14). Butler folds an item

@@ -1114,6 +1114,20 @@ end
 
 local WAY_NAMES = { vendor = L["vendor"], auction = L["auction"], disenchant = L["disenchant"] }
 
+--- "Mira Ashvale (Tailoring 162)" for the alt who can learn a recipe now,
+--- "Mira Ashvale at Tailoring 115 (has 98)" when none can yet; nil when no
+--- alt the character playing can mail has the profession and lacks it.
+function RecipeBook:CanLearnText(record)
+    local alts = ns.AltLevelUp
+    if not (alts and alts.CanLearn) then return nil end
+    local best = alts:CanLearn(record)[1]
+    if not best then return nil end
+    if best.short then
+        return L.Format("%s at %s %d (has %d)", best.name, best.profession, tonumber(record.skill) or 0, best.skill)
+    end
+    return L.Format("%s (%s %d)", best.name, best.profession, best.skill)
+end
+
 --- Lines for a recipe item's tooltip, in ItemTooltip's `{ label, value }`
 --- shape. Nothing for an item that teaches no recipe the book knows.
 function RecipeBook:TooltipLines(itemID)
@@ -1150,6 +1164,11 @@ function RecipeBook:TooltipLines(itemID)
     else
         lines[#lines + 1] = { L["Known by"], L["nobody on this account"], color = "warn" }
     end
+
+    -- The alt who could learn it (2026-11-27): the one Butler's "Mail
+    -- Recipes to Who Can Learn Them:" would mail it to.
+    local canLearn = self:CanLearnText(record)
+    if canLearn then lines[#lines + 1] = { L["Can Learn"], canLearn } end
 
     local value = self:Value(record, itemID)
 
