@@ -150,6 +150,16 @@ local waiting = jobs[3] and jobs[3].name == "Blackthornes Wither" and jobs[3] or
 check("the craft still waits", waiting.steps[1].ready, false)
 check("and says who has it", waiting.steps[1].missing[1].from, "Dee Tanner")
 
+print("\nmore on the other side never hides the one who can mail it")
+ns.db.characters[CY].inventory = { [2318] = 100 }
+jobs = Butler:Jobs()
+dee = nil
+for _, job in ipairs(jobs) do if job.name == "Dee Tanner" then dee = job end end
+check("the Alliance alt still mails it", dee and dee.steps[1].kind, "mail")
+waiting = jobs[3] and jobs[3].name == "Blackthornes Wither" and jobs[3] or jobs[2]
+check("and is the one named", waiting.steps[1].missing[1].from, "Dee Tanner")
+ns.db.characters[CY].inventory = nil
+
 print("\nan old record of the crafter counts as its own")
 ns.db.characters[DEE] = nil
 ns.db.characters["Blackthornes-R"] = { name = "Blackthornes", realm = "R", faction = "Alliance",

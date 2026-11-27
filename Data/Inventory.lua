@@ -445,6 +445,8 @@ end
 --- Cached counts held by other characters, as { characterKey = count }.
 -- Never merged into the local count: "you have 40, but 30 are on an alt" is a
 -- materially different situation from "you have 40".
+-- Only characters the one playing can mail: the same realm and side. A Horde
+-- character was told cloth on its Alliance alt was there to use (2026-11-27).
 function Inventory:GetAltCounts(itemID)
     local results = {}
     if not ns.db then return results end
@@ -454,7 +456,8 @@ function Inventory:GetAltCounts(itemID)
     -- Never this character under an old record of it: its bags are read live.
     local characters = ns.Characters
     for characterKey, record in pairs(ns.db.characters) do
-        if characterKey ~= selfKey and not (characters and characters:IsPlaying(characterKey)) then
+        if characterKey ~= selfKey and not (characters and characters:IsPlaying(characterKey))
+            and not (characters and characters.InReach and not characters:InReach(characterKey)) then
             local count = record.inventory and record.inventory[itemID]
             if count and count > 0 then
                 results[characterKey] = count
