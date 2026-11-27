@@ -105,6 +105,9 @@ local FOREVER_SKILLS = {
     -- Road to 300 never offers it before the trainer would let you make it.
     ["rugged leather"] = 225,
     ["cured rugged hide"] = 225,
+    -- A player saw its trainer ask for 225 (2026-11-21), where the
+    -- estimate said 205.
+    ["rugged armor kit"] = 225,
 }
 
 -- Required skills read from recipe items' tooltips, one read per item a
@@ -253,6 +256,9 @@ function RecipeBook:GetAll()
             recipeID = recipeID,
             bookID = recipeID,
             name = row[7],
+            -- The English name, kept when a window in another language
+            -- renames the recipe: fixes below go by it.
+            bookName = row[7],
             skillLineID = row[1],
             profession = book.PROFESSIONS[row[1]],
             skill = row[2],
@@ -326,7 +332,11 @@ function RecipeBook:GetAll()
         end
     end
     for _, record in pairs(merged) do
-        local fixed = record.name and FOREVER_SKILLS[record.name:lower()]
+        -- By the English name: a window in another language renames the
+        -- recipe, and the fix missed it (a player's report, 2026-11-26:
+        -- Cured Thick Hide from 155 to 175).
+        local name = record.bookName or record.name
+        local fixed = name and FOREVER_SKILLS[name:lower()]
         if fixed then
             record.skill = fixed
         end

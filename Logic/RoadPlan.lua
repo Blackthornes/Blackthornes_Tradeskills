@@ -542,11 +542,20 @@ end
 --- was seen waiting on) never levels a profession: one every few days is
 --- not a step (a player's report, the owner said leave them off, 2026-11-25).
 --- The Profit and Queue tabs still show them.
-function RoadPlan.OnCooldown(recipeID)
+--- The game's window can list a recipe under an ID of its own and in the
+--- player's language, so the book's ID and English name are asked too
+--- (a player's report, 2026-11-27: Iron to Gold 28 times). Every
+--- transmute shares one cooldown, Forever's new ones too.
+function RoadPlan.OnCooldown(recipeID, record)
+    local name = record and record.bookName
+    if type(name) == "string" and name:find("^Transmute") then return true end
     local cooldowns = ns.Cooldowns
     if not (cooldowns and cooldowns.HasCooldown) then return false end
-    local ok, has = pcall(cooldowns.HasCooldown, cooldowns, recipeID)
-    return ok and has == true
+    for _, id in ipairs({ recipeID, record and record.bookID }) do
+        local ok, has = pcall(cooldowns.HasCooldown, cooldowns, id)
+        if ok and has == true then return true end
+    end
+    return false
 end
 
 --- The recipes that could level a profession: known, or taught by a trainer
@@ -571,7 +580,7 @@ function RoadPlan:Candidates(line)
         if LineOf(record, memo) == line and record.yellow and record.grey
             and record.reagents and #record.reagents > 0
             and not RoadPlan:IsSkipped(record.recipeID)
-            and not RoadPlan.OnCooldown(record.recipeID)
+            and not RoadPlan.OnCooldown(record.recipeID, record)
             and not (not record.forever and record.name and remade[record.name:lower()]) then
             local known = record.starter or book:KnowsIt(record)
             local place

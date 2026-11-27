@@ -59,6 +59,7 @@ Cooldowns.KNOWN = {
     [17566] = true, -- Transmute: Earth to Life
     [25146] = true, -- Transmute: Elemental Fire
     [18560] = true, -- Mooncloth
+    [1317279] = true, -- Transmute: Legionite (Forever's)
 }
 
 -- Items with a cooldown of their own (the Salt Shaker makes Refined Deeprock
