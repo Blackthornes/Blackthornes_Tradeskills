@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.49.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fix.** The Sell list shows your other copies of an item when one copy is soulbound.
+
 ## 1.49.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating.
