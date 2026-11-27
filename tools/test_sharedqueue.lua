@@ -460,4 +460,31 @@ check("and the sub-craft is gone", entryFor(20) == nil)
 check("with its wool", row(WOOL) == nil)
 check("nothing moved, nothing to say", Queue:HoldingsChanged({ [BOLT] = true }) == false)
 
+print("\nat a vendor, only your own crafts' materials are bought")
+
+-- Trent, 2026-11-27: the Buy button at a vendor took what an alt's crafts
+-- use too, which then had to be mailed. A vendor that sells wool and thread:
+-- Bob buys the thread for his bag, and leaves the wool for Loom's bolts.
+ns.AHBuys = nil
+assert(loadfile(lfs_cwd .. "/Data/Vendor.lua"))("Blackthornes_TS", ns)
+local Vendor = ns.Vendor
+Vendor.isMerchantOpen = true
+Vendor.merchantItems = {
+    [WOOL] = { index = 1, price = 10, stack = 1, numAvailable = -1, extendedCost = false },
+    [THREAD] = { index = 2, price = 90, stack = 1, numAvailable = -1, extendedCost = false },
+}
+local function buys(itemID)
+    for _, line in ipairs((Vendor:GetNeeded())) do
+        if line.itemID == itemID then return line.amount end
+    end
+end
+queueOneBag()
+check("Bob's list still shows the wool", row(WOOL) and row(WOOL).shortfall == 9)
+check("but Bob buys none of it here", buys(WOOL) == nil)
+check("and buys his own thread", buys(THREAD) == 1)
+loginAs(LOOM, {})
+Queue:RefreshForCharacter()
+check("Loom buys the wool for the bolts", buys(WOOL) == 9)
+check("and not Bob's thread", buys(THREAD) == nil)
+
 print(("\n%d passed, 0 failed"):format(checks))

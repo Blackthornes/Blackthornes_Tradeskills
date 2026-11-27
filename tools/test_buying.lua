@@ -232,3 +232,34 @@ expect("and counted as cheaper there", cheaper, 1)
 shopping[1].shortfall = 10
 
 ns.Prices = nil
+
+-- Only this character's part (Trent, 2026-11-27). The queue held an alt's
+-- bag beside dyes this character makes for it. At the tailoring vendor the
+-- Buy button took the Heavy Silken Thread for the alt's bag too, which then
+-- had to be mailed over. An alt's crafts are bought when that alt is at a
+-- vendor, so here only the part this character's own crafts use is bought.
+print("")
+print("only this character's part")
+
+local SILK = 8343
+Vendor.merchantItems = {
+    [SILK] = { index = 1, price = 18, stack = 1, numAvailable = -1, extendedCost = false },
+    [VIAL] = { index = 2, price = 20, stack = 1, numAvailable = -1, extendedCost = false },
+}
+shopping = {
+    -- All 18 thread go into the alt's bags; it holds none.
+    { itemID = SILK, shortfall = 18, forOthers = { ["Player-1-ALT"] = 18 }, othersHold = 0 },
+    -- 5 vials for this character's dyes, 3 for the alt, who holds 1.
+    { itemID = VIAL, shortfall = 7, forOthers = { ["Player-1-ALT"] = 3 }, othersHold = 1 },
+}
+lines, _, cheaper = Vendor:GetNeeded()
+byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+expect("thread only the alt's crafts use: not bought here", byItem[SILK], nil)
+expect("and not called cheaper elsewhere", cheaper, 0)
+expect("vials: only the 5 for this character's dyes", byItem[VIAL] and byItem[VIAL].amount, 5)
+
+-- With the alts not sharing the queue, every line is this character's.
+shopping = { { itemID = SILK, shortfall = 18 } }
+lines = Vendor:GetNeeded()
+expect("no alt part: all of it is bought", lines[1] and lines[1].amount, 18)

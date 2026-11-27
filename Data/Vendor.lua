@@ -512,8 +512,23 @@ local function CheaperAtAuction(itemID, stock, shortfall)
     return auction < vendorUnit
 end
 
+--- How much of a shopping line this character's own crafts still need.
+--
+-- The queue is shared with the alts, so a line can hold an alt's part too
+-- (`forOthers`, less what the alts already hold). That part is bought when
+-- the alt stands at a vendor. Bought here it had to be mailed over, with
+-- postage (Trent, 2026-11-27: Heavy Silken Thread for an alt's bag).
+local function MyShortfall(line)
+    local shortfall = tonumber(line.shortfall) or 0
+    if type(line.forOthers) ~= "table" then return shortfall end
+    local others = 0
+    for _, units in pairs(line.forOthers) do others = others + (tonumber(units) or 0) end
+    others = math.max(0, others - (tonumber(line.othersHold) or 0))
+    return math.max(0, shortfall - others)
+end
+
 --- Queue shortfalls that this vendor can actually supply, where it is the
---- cheaper place to buy them.
+--- cheaper place to buy them. Only this character's part (MyShortfall).
 -- @return lines, totalCost, how many were left for the auction house because
 --   they are cheaper there
 function Vendor:GetNeeded()
@@ -525,20 +540,21 @@ function Vendor:GetNeeded()
 
     for _, line in ipairs(ns.Queue:GetShoppingList()) do
         local stock = self.merchantItems[line.itemID]
+        local shortfall = MyShortfall(line)
 
         -- Items bought with tokens or honour cannot be paid for in gold.
-        local buyable = line.shortfall > 0 and stock and not stock.extendedCost
+        local buyable = shortfall > 0 and stock and not stock.extendedCost
 
-        if buyable and CheaperAtAuction(line.itemID, stock, line.shortfall) then
+        if buyable and CheaperAtAuction(line.itemID, stock, shortfall) then
             cheaperElsewhere = cheaperElsewhere + 1
         elseif buyable then
-            local affordable = line.shortfall
+            local affordable = shortfall
 
             -- Limited stock: never ask for more than the vendor has.
             if stock.numAvailable >= 0 then
                 affordable = math.min(affordable, stock.numAvailable * stock.stack)
             end
-            local limited = affordable < line.shortfall
+            local limited = affordable < shortfall
 
             if affordable > 0 then
                 local cost = affordable * stock.price
@@ -668,7 +684,7 @@ function Vendor:BuyStep()
     local liveShortfall
     for _, current in ipairs(ns.Queue:GetShoppingList()) do
         if current.itemID == line.itemID then
-            liveShortfall = current.shortfall
+            liveShortfall = MyShortfall(current)
             break
         end
     end
