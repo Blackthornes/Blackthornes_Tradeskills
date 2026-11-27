@@ -367,7 +367,8 @@ local function FindInBags(itemID)
             for slot = 1, slots do
                 local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
 
-                if infoOk and info and info.itemID == itemID and not info.isLocked then
+                if infoOk and info and info.itemID == itemID and not info.isLocked
+                        and info.isBound ~= true then
                     return bag, slot, info.stackCount or 1
                 end
             end
@@ -408,7 +409,13 @@ local function IndexBags()
                         order[#order + 1] = itemID
                     end
 
-                    if not entry.bag and not info.isLocked then
+                    -- A soulbound copy can't be listed, so it is never
+                    -- the slot a listing comes from: one bound bag among
+                    -- six hid all six from the Sell list (2026-11-27).
+                    local free = info.isBound ~= true
+                    if free then entry.free = (entry.free or 0) + (info.stackCount or 1) end
+
+                    if not entry.bag and not info.isLocked and free then
                         entry.bag, entry.slot = bag, slot
                         entry.stackCount = info.stackCount or 1
                         -- The copy that will be listed, so a random suffix
@@ -624,6 +631,9 @@ function Posting:GetSellInfo(itemID, held, steady)
         local ok, available = pcall(C_AuctionHouse.GetAvailablePostCount, location)
         if ok and available then count = available end
     end
+    -- Soulbound copies never go up: offer only the free ones.
+    local free = held and tonumber(held.free)
+    if free and count and count > free then count = free end
 
     if steady then
         local seen = sellSeen[itemID]
