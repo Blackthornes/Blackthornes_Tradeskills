@@ -229,6 +229,19 @@ profession's, an alt this character can't mail, and anything bound when
 picked up. The character's own recipe always comes first. Nothing saved.
 Tested in `tools/test_altpartcost.lua`.
 
+## Buy materials at a vendor: your own crafts only
+
+The owner asked (2026-11-27): with "Alts Make Sub-Crafts:" on, the vendor's
+Buy materials button (and Butler's Buy row, through `Butler:VendorOffer`
+and `BuyFromVendor`) bought what an alt's crafts use too, such as Heavy
+Silken Thread for an alt's bag, which then had to be mailed with postage.
+`Vendor:GetNeeded` and `BuyStep` now buy only this character's part of each
+shopping line (`MyShortfall` in `Data/Vendor.lua`: the shortfall less the
+line's `forOthers`, less `othersHold`). The alt buys its part at a vendor
+when it is the one playing. The shopping list, the auction house and
+Butler's jobs are unchanged. No new setting or words. Tested in
+`tools/test_buying.lua` and `tools/test_sharedqueue.lua`.
+
 ## Craft next frees bag space first
 
 A player asked (2026-10-14, the owner agreeing) for the queue to craft
