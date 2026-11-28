@@ -4584,6 +4584,21 @@ the craft back (it stays with whoever queued it), and Butler's restock
 "who can make it" (`Butler:MakersOf`) skips characters out of reach.
 Tested in `tools/test_queueoneside.lua` and `tools/test_butlercraft.lua`.
 
+## Vendor pop-ups on top (2026-11-28)
+
+Two players saw the one window cover the game's stack split pop-up
+(shift-click an item at a vendor) and another addon's buy pop-up. The owner
+picked plan A from the mockup: no new words, no setting, no saved key
+changed. `UI/SharedWindow.lua` is FILE_VERSION 18, the same in all five.
+The window is still built at `HIGH` with toplevel. Docked at a place marked
+`below` (only the vendor), `SharedWindow.Strata()` gives the vendor
+window's own layer, read in a pcall: `MEDIUM` when it won't say or says one
+not under `HIGH` (the stack split pop-up is `HIGH`). A local `Stack` sets it
+from `Dock` and `Undock`, only when it changed (`frame.blackthornesStrata`),
+so leaving the vendor, or moving beside the mailbox or the character sheet,
+puts it back at `HIGH`. Clicking still brings it to the front of its layer.
+Tested in `tools/test_sharedwindow.lua` (18). Not yet seen in game.
+
 ## Shift-click List on the Sell list (2026-11-28)
 
 A player asked, the owner said build it from a mockup. Shift-click a Sell

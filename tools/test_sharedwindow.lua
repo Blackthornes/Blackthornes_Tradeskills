@@ -49,6 +49,10 @@
 --  14. Two game windows at once (the character sheet at a vendor, heard by
 --      HookScript): it docks beside the newest and goes back beside the
 --      other when that one closes.
+--  18. At the vendor it takes the vendor window's layer, so the game's
+--      stack split pop-up (HIGH) and other addons' buy pop-ups show on top;
+--      undocked, or beside any other window, it is HIGH. A vendor window
+--      that won't say its layer, or says one not under HIGH, means MEDIUM.
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "time", "BlackthornesWindow",
     "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum", "CharacterFrame", "ContainerFrame1", "BlackthornesShelves", "ObjectiveTrackerFrame" }
@@ -739,6 +743,40 @@ do
     assert(not SW.IsOpen(), "closed, it stays closed at the vendor")
     SW.Left("vendor")
     SW.Open("gamma")
+end
+
+-- 18. Pop-ups over the window at the vendor (players, 2026-11-28).
+do
+    local layer
+    frame.SetFrameStrata = function(_, strata) layer = strata end
+    MerchantFrame.GetFrameStrata = function() return "MEDIUM" end
+    SW.Open("gamma")
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(SW.Docked() and layer == "MEDIUM", "docked at the vendor: the vendor's layer")
+    SW.Left("vendor")
+    assert(not SW.Docked() and layer == "HIGH", "the vendor closes: HIGH again")
+    now = now + 5
+    SW.Arrived("mail")
+    assert(SW.Docked() and layer == "HIGH", "beside the mailbox: HIGH")
+    SW.Arrived("vendor")
+    assert(SW.Place() == "vendor" and layer == "MEDIUM", "a vendor opens over the mailbox: down")
+    SW.Left("vendor")
+    assert(SW.Place() == "mail" and SW.Docked() and layer == "HIGH", "back beside the mailbox: HIGH")
+    SW.Left("mail")
+    for _, case in ipairs({
+        { say = function() error("secret") end, want = "MEDIUM", what = "won't say" },
+        { say = function() return "HIGH" end, want = "MEDIUM", what = "says HIGH" },
+        { say = function() return "LOW" end, want = "LOW", what = "says LOW" },
+    }) do
+        MerchantFrame.GetFrameStrata = case.say
+        now = now + 5
+        SW.Arrived("vendor")
+        assert(SW.Docked() and layer == case.want, "a vendor window that " .. case.what .. ": " .. case.want)
+        SW.Left("vendor")
+        assert(layer == "HIGH", "and HIGH once it closes (" .. case.what .. ")")
+    end
+    frame.SetFrameStrata, MerchantFrame.GetFrameStrata = nil, nil
 end
 
 SW.SetOn(false)
