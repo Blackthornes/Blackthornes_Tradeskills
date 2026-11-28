@@ -1089,6 +1089,38 @@ local function Build(outer)
     end, false)
     widgets.vendorAuction:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- A player asked (2026-11-28): the vendor price check only for the
+    -- colors ticked. Saved as `vendorPriceFor`, the quality numbers ticked
+    -- ("1234", all four, to start). Grey has no box: it always goes to a
+    -- vendor. See Posting.VendorPriceFor.
+    local vendorForRow = CreateRow(pages.auction, 1, L["Vendor Price For:"],
+        L["Items of these colors won't list on the auction house when a vendor pays more. Grey items always go to a vendor."])
+    local QUALITY_HEX = { "ffffff", "1eff00", "0070dd", "a335ee" }
+    local function QualityWords(quality, words)
+        local r, g, b = Util.GetQualityColor(quality)
+        local hex = r and string.format("%02x%02x%02x",
+            math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+            or QUALITY_HEX[quality]
+        return "|cff" .. hex .. words .. "|r"
+    end
+    widgets.vendorPriceFor = {}
+    local function SaveVendorPriceFor()
+        local picked = ""
+        for quality = 1, 4 do
+            if widgets.vendorPriceFor[quality]:GetChecked() then picked = picked .. quality end
+        end
+        Config:Set("vendorPriceFor", picked)
+        UI:RefreshActiveTab()
+    end
+    local vendorForX = CONTROL_X
+    for quality, key in ipairs({ "White", "Green", "Blue", "Purple" }) do
+        local box = Widgets.CreateCheckbox(vendorForRow, QualityWords(quality, L[key]),
+            SaveVendorPriceFor, true)
+        box:SetPoint("TOPLEFT", vendorForX, -2)
+        vendorForX = vendorForX + box:GetWidth() + 12
+        widgets.vendorPriceFor[quality] = box
+    end
+
     -- Asked 2026-10-11: the real cost of many could run far past the estimate.
     local buyWarnRow = CreateRow(pages.auction, 1, L["Warn When Price Is Higher:"],
         L["Warns under Buy Now when a material costs this much more than expected. 0 turns it off."])
@@ -3375,6 +3407,11 @@ local function Refresh()
     widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
     widgets.vendorAuction:SetChecked(Config:Get("vendorItemsOnAuction") == true)
+    local vendorFor = Config:Get("vendorPriceFor")
+    if type(vendorFor) ~= "string" then vendorFor = "1234" end
+    for quality = 1, 4 do
+        widgets.vendorPriceFor[quality]:SetChecked(vendorFor:find(tostring(quality), 1, true) ~= nil)
+    end
     local buyWarn = Config:Get("buyWarnPercent")
     Put(widgets.buyWarn, type(buyWarn) == "number" and buyWarn or 25)
     local disenchanterBox = widgets.disenchanter.editBox

@@ -22,6 +22,7 @@ local PostPanel = ns.NewModule("PostPanel")
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+local unpack = unpack or table.unpack
 
 -- Wider than it needs to be for the text alone: the amount to list sits beside
 -- the button, and squeezing it in would have cost the item names their width.
@@ -262,9 +263,18 @@ local function CreateRow(row)
         if row.data.butlerWait and ns.SisterKeeps then
             ns.SisterKeeps:SellAnyway(row.data.itemID)
         end
-        ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
+        PostPanel:ListRow(row.data, IsShiftKeyDown and IsShiftKeyDown())
     end, { width = POST_WIDTH, height = 18 })
     row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
+
+    -- Shift held over List: it reads List Anyway, the box shows the whole
+    -- stack, and the tooltip says so (PostPanel:ShowShift).
+    row.post.tooltipFunc = function(_, tooltip, wait)
+        return PostPanel:ShiftTooltip(row, tooltip, wait)
+    end
+    if row.post.HookScript then
+        row.post:HookScript("OnLeave", function() PostPanel:ShowShift(row, false) end)
+    end
 
     -- How many to list, beside the button that lists them. Empty-handed this
     -- panel posted whole stacks with no way to say otherwise.
@@ -335,6 +345,9 @@ PostPanel._TypingInList = TypingInList
 --- Cheap enough for the label ticker: it never walks the bags.
 local function PostLabel(line)
     if line and line.butlerWait and not line.held then return L["Sell Anyway"] end
+    if line and PostPanel.shiftKey ~= nil and PostPanel.shiftKey == PostPanel.ShiftKey(line) then
+        return L["List Anyway"]
+    end
     local posting = ns.Posting
     if line and posting and posting.ClickChecksFirst and posting:ClickChecksFirst(line.itemID) then
         return L["Check Price"]
@@ -487,6 +500,19 @@ function UpdateRow(row, line)
     end
     row.boundItemID = line.itemID
 
+    -- Shift held over List: the box keeps the whole stack through a redraw,
+    -- and lets go when the row shows another item or nothing is held back.
+    if rawget(row, "shiftOn") then
+        if PostPanel.shiftKey == PostPanel.ShiftKey(line) and PostPanel.HoldsBack(line) then
+            local whole = row.shiftQuantity or maxQuantity
+            row.quantity:SetLimits(1, math.max(1, whole))
+            row.quantity:SetValue(whole, true)
+        else
+            row.shiftOn, row.shiftQuantity = false, nil
+            PostPanel.shiftKey = nil
+        end
+    end
+
     -- Quantity and unit price on one line: together they are the decision,
     -- and a commodity posting 63 at once is worth noticing before clicking.
     -- Listing part of a stack says so, since "7 @ 6c" out of 20 in the bag
@@ -594,9 +620,128 @@ function UpdateRow(row, line)
         or L.Format("List %d of %d at %s each.",
             line.postQuantity, maxQuantity,
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
+    if PostPanel.HoldsBack(line) then
+        row.post.tooltipText = row.post.tooltipText .. "\n" .. L["Shift-click to list it anyway."]
+    end
 end
 
 PostPanel._UpdateRow = UpdateRow
+
+--------------------------------------------------------------------------------
+-- Shift-click List (the owner said build it, 2026-11-28)
+--------------------------------------------------------------------------------
+--
+-- "Bypass Disallowed Postings:" for one listing: Shift-click a row's List and
+-- that row goes up whole, past the price floor, the cost guards, the queue's
+-- keeps, Keep on this Character, the other addons' keeps, list rules and When
+-- Cheaper (Posting:ListAnywayOnce). Ask Before Listing and the Far Under ask
+-- still ask, and the game's limits stay. List Next, List All and the wheel
+-- are unchanged, and so are Butler Says Wait rows (their List is Sell Anyway).
+
+--- Whether Tradeskills holds any of this row back, so Shift-click has
+--- something to do.
+function PostPanel.HoldsBack(line)
+    if type(line) ~= "table" or not line.unitPrice then return false end
+    if line.butlerWait and not line.held then return false end
+    if line.held or line.kept or line.queueKept or line.listCapped
+            or line.atALoss or line.belowCrafted or line.noted then
+        return true
+    end
+    local posting = ns.Posting
+    return posting ~= nil and posting.IsUnderFloor ~= nil and posting:IsUnderFloor(line) == true
+end
+
+--- How many a Shift-click lists: the whole stack, or the row's own amount
+--- when nothing is held back.
+function PostPanel.AnywayQuantity(line)
+    local whole = PostPanel.HoldsBack(line) and ns.Posting.WholeStack and ns.Posting:WholeStack(line.itemID)
+    return whole or line.postQuantity
+end
+
+--- List one row, as its List button does. Shift lists it anyway, except on
+--- a Butler Says Wait row.
+function PostPanel:ListRow(line, shift)
+    if shift and not (line.butlerWait and not line.held) then
+        ns.Posting:Request(line.itemID, PostPanel.AnywayQuantity(line), line.unitPrice, { anyway = true })
+    else
+        ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
+    end
+end
+
+--- Which row Shift is on, by item and copy: the list is drawn again every
+--- second with new line tables.
+function PostPanel.ShiftKey(line)
+    return tostring(line.itemID) .. ":" .. tostring(line.link or "")
+end
+
+-- Owner for the Shift event, so it never touches the panel's own events.
+local ShiftWatch = {}
+
+--- Turn the row's Shift look on or off. Returns true when it changed.
+function PostPanel:ShowShift(row, over)
+    local line = row and row.data
+    local on = over and line ~= nil and IsShiftKeyDown ~= nil and IsShiftKeyDown() == true
+        and PostPanel.HoldsBack(line)
+
+    -- Watch Shift only while the mouse is on a List button.
+    if over and self.shiftRow ~= row then
+        self.shiftRow = row
+        if not self.watchingShift and ns.RegisterEvent then
+            self.watchingShift = true
+            ns.RegisterEvent(ShiftWatch, "MODIFIER_STATE_CHANGED", function() PostPanel:ShiftChanged() end)
+        end
+    elseif not over and self.shiftRow == row then
+        self.shiftRow = nil
+        if self.watchingShift and ns.UnregisterEvent then
+            self.watchingShift = false
+            ns.UnregisterEvent(ShiftWatch, "MODIFIER_STATE_CHANGED")
+        end
+    end
+
+    local was = rawget(row, "shiftOn") == true
+    if (on and true or false) == was then return false end
+    row.shiftOn = on and true or false
+
+    if on then
+        self.shiftKey = PostPanel.ShiftKey(line)
+        local whole = PostPanel.AnywayQuantity(line) or line.postQuantity or 1
+        row.shiftQuantity = whole
+        row.quantity:SetLimits(1, math.max(1, whole))
+        row.quantity:SetValue(whole, true)
+    else
+        if line and self.shiftKey == PostPanel.ShiftKey(line) then self.shiftKey = nil end
+        row.shiftQuantity = nil
+        if line then UpdateRow(row, line) end
+    end
+    if row.post.SetText then row.post:SetText(PostLabel(line)) end
+    return true
+end
+
+--- Shift went up or down: redraw the row under the mouse and its tooltip.
+function PostPanel:ShiftChanged()
+    local row = self.shiftRow
+    if not row then return end
+    local over = not row.post.IsMouseOver or row.post:IsMouseOver()
+    if not self:ShowShift(row, over) or not over then return end
+    local onEnter = row.post.GetScript and row.post:GetScript("OnEnter")
+    if onEnter then pcall(onEnter, row.post) end
+end
+
+--- The List button's hover. With Shift held on a row Tradeskills holds
+--- back, it says what a click does then; else the usual words.
+function PostPanel:ShiftTooltip(row, tooltip, wait)
+    self:ShowShift(row, true)
+    if not rawget(row, "shiftOn") then return false end
+    local line = row.data
+    local whole = row.shiftQuantity or line.postQuantity or 1
+    if wait then tooltip:AddLine(wait, 1, 1, 1, true) end
+    tooltip:AddLine(L["List Anyway"], 1, 1, 1)
+    tooltip:AddLine(L.Format("List %d of %d at %s each.", whole, whole,
+        Util.FormatMoney(line.unitPrice or 0, { noColor = true })), 0.9, 0.9, 0.9, true)
+    tooltip:AddLine(L["Lists it even though Tradeskills would hold it back. Only this one."],
+        Theme.Unpack("accent"))
+    return true
+end
 
 --- The crafted cost lines (Logic/CraftedCost.lua) on the row's tooltip.
 local function AddCraftedLines(line)
@@ -1010,8 +1155,11 @@ function PostPanel:Build()
 
     local View = ns.ShoppingListsView
     if View then
-        View:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
-        if View.paste then View.paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end
+        -- Kept, so the Lists tab can take its pieces back from the Lists
+        -- window opened away from the auction house (PostPanel:TakeLists).
+        self.listsSpot = { body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT,
+            placePaste = function(paste) paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end } }
+        View:Build(unpack(self.listsSpot))
     end
 
     if ns.AuctionsView then
@@ -2966,7 +3114,9 @@ function PostPanel:Refresh()
         if ns.AuctionWheel then ns.AuctionWheel:Update() end
     end
     local View = ns.ShoppingListsView
-    if View and View.list then View:SetShown(self.view == "lists") end
+    if self.view == "lists" then self:TakeLists() end
+    -- The Lists window may hold them while this drawer shows another tab.
+    if View and View.list and View:HeldBy(self.frame) then View:SetShown(self.view == "lists") end
     local Auctions = ns.AuctionsView
     if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
     local Snipe = ns.SnipeView
@@ -3246,4 +3396,12 @@ end
 
 function PostPanel:IsShown()
     return self.frame ~= nil and self.frame:IsShown()
+end
+
+--- The Lists tab takes the list pieces back from the Lists window
+--- (UI/ShoppingListsView.lua's View:OpenWindow), which closes.
+function PostPanel:TakeLists()
+    local View = ns.ShoppingListsView
+    if not (View and View.list and self.listsSpot) or View:HeldBy(self.frame) then return end
+    View:Place(unpack(self.listsSpot))
 end

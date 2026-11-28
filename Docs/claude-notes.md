@@ -2374,6 +2374,20 @@ takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 Tested in `tools/test_shoppinglists.lua` and
 `tools/test_shoppinglistsview.lua`.
 
+Away from the auction house (a player's report, 2026-11-28: lists could
+only be changed with it open): a quiet **Lists** button left of Scan
+Auctions in the main window's header, and `/bts lists`, open the Lists
+window (`View:OpenWindow`, `ToggleWindow`, titled "Shopping lists", spot
+kept as `ts.lists`). There is one set of list pieces: `View:Place` moves
+them into whichever frame shows them, and the one before is told
+(`opts.onLeave`), so the window closes when the drawer's Lists tab takes
+them back (`PostPanel:TakeLists`, `listsSpot`). The drawer only shows or
+hides them while it holds them (`View:HeldBy`). At the auction house the
+button opens the drawer's Lists tab instead. Search still needs the
+auction house and says so. New words: "Make and change your shopping lists
+anywhere." and "open your shopping lists". Tested in part 6 of
+`tools/test_shoppinglistsview.lua`.
+
 ## List rules
 
 The owner said build it (2026-10-19, from a mockup; he approved the words):
@@ -4538,6 +4552,19 @@ Account-wide views stay account wide on purpose: the bank view
 Tested in `tools/test_oneside.lua` and `tools/test_butlerjobs.lua`.
 Equipment (`Alts`) and Butler already keep to this realm and side.
 
+## Shift-click + to queue all you can make (2026-11-28)
+
+A player asked, the owner said build it from the mockup. Shift-click on
+either + (the craft pane's row, `CraftPanel:QueueAll`, and the Queue tab's
+row, `ns.QueuePlus.Click` through `CraftPanel:QueueAllForEntry`) sets the
+queued total to `Profit:GetCraftableCount` (bags only), never lower, and
+stops at the max on hand the way + does (`QueueMore`). With none to make
+it queues nothing, shakes the + (`CraftPanel.Shake`, an animation) and
+prints "Your bags don't have the materials for any %s." Sub-crafts on the
+Queue tab are left alone. Both hovers add `CraftPanel.ShiftClickLine`;
+the Queue tab + got its first hover, "Add one more." No setting. Tested
+in `tools/test_shiftqueueall.lua`.
+
 ## The queue only from this side (2026-11-28)
 
 A player's report: with an Alliance and a Horde character on one realm,
@@ -4556,6 +4583,27 @@ words. `Queue:GetCrafter` never falls back to a character that can't mail
 the craft back (it stays with whoever queued it), and Butler's restock
 "who can make it" (`Butler:MakersOf`) skips characters out of reach.
 Tested in `tools/test_queueoneside.lua` and `tools/test_butlercraft.lua`.
+
+## Shift-click List on the Sell list (2026-11-28)
+
+A player asked, the owner said build it from a mockup. Shift-click a Sell
+list row's List and that one listing goes up as if "Bypass Disallowed
+Postings:" (`postAnyway`) were ticked: `PostPanel:ListRow` asks
+`Posting:Request(..., { anyway = true })`, which sets
+`Posting:ListAnywayOnce(itemID)`. `Posting:PostsAnyway(itemID)` answers yes
+for that item only, until it is listed (`EndAnywayOnce` in `Post`), a plain
+click on it comes, or `ANYWAY_ONCE_SECONDS` (120) pass. Asked without an
+item it is the setting alone, so `GetPostable`, List Next, List All, the
+wheel and the Far Under ask never see the one-shot. `Post` and
+`RefusesEarly` ask with the item. On a row Tradeskills holds back
+(`PostPanel.HoldsBack`: held, kept, `queueKept`, `listCapped`, at a loss,
+below crafted, noted, under the floor) Shift over List turns the button to
+"List Anyway" and the box to `Posting:WholeStack` (watched through
+`MODIFIER_STATE_CHANGED` only while the mouse is on a List button); a plain
+row's Shift-click keeps its own amount. Butler Says Wait rows are
+unchanged. A refusal while the Sell list is open adds "Shift-click List to
+list it anyway." (`Posting:HintShiftClick`). No new setting. Tested in
+`tools/test_sellnowclick.lua` and `tools/test_sellnowclick_ui.lua`.
 
 ## Crafts with a wait on the Profit tab (2026-11-28)
 

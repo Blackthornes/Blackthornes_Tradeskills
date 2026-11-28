@@ -1127,7 +1127,7 @@ end
 --- Make the view inside the drawer. topAnchor is the frame the list hangs
 --- under; the foot sits in the drawer's foot.
 function View:Build(body, frame, topAnchor, opts)
-    if self.list then return end
+    if self.list then return self:Place(body, frame, topAnchor, opts) end
     opts = opts or {}
 
     local list = Widgets.CreateScrollList(body, {
@@ -1145,19 +1145,12 @@ function View:Build(body, frame, topAnchor, opts)
             View:Refresh(true)
         end,
     })
-    list:SetPoint("TOPLEFT", topAnchor, "BOTTOMLEFT", 0, -4)
-    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, opts.bottom or 49)
     list:Hide()
     self.list = list
-    self.frame = frame
-
-    local pad = opts.edge or 11
-    local footMiddle = pad + (opts.footHeight or 34) / 2
 
     local newList = Widgets.CreateButton(body, L["New list"], function()
         View:SetMode("new")
     end, { width = 86, height = 22, primary = true })
-    newList:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.newList = newList
 
     -- Wide enough for either word it shows (German runs longer).
@@ -1174,8 +1167,6 @@ function View:Build(body, frame, topAnchor, opts)
 
     local box = Theme.CreatePanel(body, "row")
     box:SetHeight(22)
-    box:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
-    box:SetPoint("RIGHT", save, "LEFT", -6, 0)
     if Theme.Recess then Theme.Recess(box) end
     local edit = CreateFrame("EditBox", nil, box)
     edit:SetPoint("TOPLEFT", 6, 0)
@@ -1229,8 +1220,6 @@ function View:Build(body, frame, topAnchor, opts)
     self.suggest = BuildSuggest(body, box)
 
     local note = Theme.CreateLabel(body, "tiny", "muted")
-    note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
-    note:SetPoint("RIGHT", save, "LEFT", -6, 0)
     note:SetWordWrap(true)
     self.note = note
 
@@ -1241,7 +1230,53 @@ function View:Build(body, frame, topAnchor, opts)
 
     self.parts = { list, newList, save, box, note, paste, self.suggest }
     self:HookShiftClick()
+    self:Place(body, frame, topAnchor, opts)
     self:SetShown(false)
+end
+
+--- Put the Lists pieces into `frame`: the drawer at the auction house, or
+--- the Lists window anywhere else. One set of pieces, moved, never two. The
+--- one that held them before is told (`opts.onLeave`) so it can close.
+-- @param opts { bottom, edge, footHeight, placePaste(paste), onLeave() }
+function View:Place(body, frame, topAnchor, opts)
+    if not self.list then return end
+    opts = opts or {}
+    local before = self.holder
+    if before and before.frame ~= frame and before.onLeave then pcall(before.onLeave) end
+    self.holder = { frame = frame, onLeave = opts.onLeave }
+    self.frame = frame
+    for _, part in ipairs(self.parts or {}) do
+        if part.SetParent then part:SetParent(body) end
+    end
+    if self.suggest and self.suggest.SetFrameLevel and body.GetFrameLevel then
+        self.suggest:SetFrameLevel((body:GetFrameLevel() or 0) + 30)
+    end
+
+    local pad = opts.edge or 11
+    local footMiddle = pad + (opts.footHeight or 34) / 2
+    local list = self.list
+    list:ClearAllPoints()
+    list:SetPoint("TOPLEFT", topAnchor, "BOTTOMLEFT", 0, -4)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, opts.bottom or 49)
+    self.newList:ClearAllPoints()
+    self.newList:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
+    self.box:ClearAllPoints()
+    self.box:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
+    self.box:SetPoint("RIGHT", self.save, "LEFT", -6, 0)
+    self.note:ClearAllPoints()
+    self.note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
+    self.note:SetPoint("RIGHT", self.save, "LEFT", -6, 0)
+    self.paste:ClearAllPoints()
+    if opts.placePaste then
+        opts.placePaste(self.paste)
+    else
+        self.paste:SetPoint("BOTTOMRIGHT", topAnchor, "TOPRIGHT", 0, 3)
+    end
+end
+
+--- True when `frame` holds the Lists pieces now.
+function View:HeldBy(frame)
+    return self.holder ~= nil and self.holder.frame == frame
 end
 
 function View:SetShown(on)
@@ -1317,4 +1352,100 @@ function View:Summary()
     local count = #Lists():Readable()
     if count == 0 then return L["Your own lists of things to buy."] end
     return count == 1 and L["1 list of your own"] or L.Format("%d lists of your own", count)
+end
+
+-- The Lists window: the same lists, away from the auction house (a player's
+-- report, 2026-11-28: they could only be changed with it open). It borrows
+-- the drawer's pieces (View:Place) and gives them back when the drawer's
+-- Lists tab is picked, closing as it does. Searching still needs the
+-- auction house, and says so.
+local WINDOW_WIDTH, WINDOW_HEIGHT = 400, 520
+local WINDOW_TOP = 62
+local WINDOW_NAME = "BlackthornesTSLists"
+
+function View:BuildWindow()
+    if self.window then return self.window end
+    local frame = CreateFrame("Frame", WINDOW_NAME, UIParent)
+    frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    frame:SetFrameStrata("HIGH")
+    frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetPoint("CENTER")
+    frame:Hide()
+
+    if Theme.Fill then Theme.Fill(frame, "window") end
+    if ns.Titanforged and ns.Titanforged.Dress then
+        ns.Titanforged:Dress(frame, { title = L["Shopping lists"], close = function() View:CloseWindow() end })
+    elseif Theme.AddGameOutline then
+        Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    end
+    if Theme.Halo then Theme.Halo(frame, 10, 0.10) end
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, WINDOW_NAME) end
+
+    local summary = Theme.CreateLabel(frame, "small", "muted")
+    summary:SetPoint("TOPLEFT", 14, -(WINDOW_TOP - 18))
+    summary:SetPoint("RIGHT", frame, "RIGHT", -110, 0)
+    frame.summary = summary
+
+    local top = CreateFrame("Frame", nil, frame)
+    top:SetPoint("TOPLEFT", 14, -WINDOW_TOP)
+    top:SetPoint("TOPRIGHT", -14, -WINDOW_TOP)
+    top:SetHeight(1)
+    frame.top = top
+
+    -- The drawer redraws its view every second; this window does the same
+    -- for its own, only while shown. View:Refresh skips what didn't move.
+    local since = 0
+    frame:SetScript("OnUpdate", function(_, elapsed)
+        since = since + (elapsed or 0)
+        if since < 1 then return end
+        since = 0
+        if View:HeldBy(frame) then
+            summary:SetText(View:Summary())
+            View:Refresh()
+        end
+    end)
+    frame:SetScript("OnHide", function()
+        if View:HeldBy(frame) then View:SetShown(false) end
+        if ns.ListRulesUI and ns.ListRulesUI.Hide then pcall(ns.ListRulesUI.Hide, ns.ListRulesUI) end
+    end)
+
+    if ns.SharedWindow and ns.SharedWindow.KeepSpot then ns.SharedWindow.KeepSpot(frame, "ts.lists") end
+    self.window = frame
+    return frame
+end
+
+--- Open the lists anywhere. At the auction house, the drawer's Lists tab.
+function View:OpenWindow()
+    local panel = ns.PostPanel
+    if ns.Scanner and ns.Scanner.isAuctionHouseOpen and panel and panel.IsShown
+            and panel:IsShown() and panel.SetView then
+        panel:SetView("lists")
+        return
+    end
+    local frame = self:BuildWindow()
+    self:Build(frame, frame, frame.top, { bottom = 49, edge = 11, footHeight = 34,
+        onLeave = function() View:CloseWindow() end })
+    frame:Show()
+    if ns.Titanforged and ns.Titanforged.Opened then pcall(ns.Titanforged.Opened, ns.Titanforged, frame) end
+    self:SetShown(true)
+    frame.summary:SetText(self:Summary())
+    self:Refresh(true)
+end
+
+function View:CloseWindow()
+    if self.window then self.window:Hide() end
+end
+
+function View:ToggleWindow()
+    if self.window and self.window:IsShown() then return self:CloseWindow() end
+    self:OpenWindow()
+end
+
+if ns.RegisterCommand then
+    ns.RegisterCommand("lists", L["open your shopping lists"], function() View:ToggleWindow() end)
 end
