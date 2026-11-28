@@ -1367,6 +1367,11 @@ local function FromBank()
     for itemID, used in pairs(myUse) do
         local carried = inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
         local banked = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        -- Never what it keeps on this character (Logic/KeepHere.lua): a
+        -- player kept 3 in the bank and one came out for a craft (2026-11-28).
+        if ns.KeepHere and ns.KeepHere.Spare then
+            carried, banked = ns.KeepHere:Spare(itemID, carried, banked, 0)
+        end
         local short = used - (myMake[itemID] or 0) - carried
         local take = math.min(short, banked)
         if take > 0 then wants[itemID] = take end
@@ -1381,6 +1386,10 @@ local function FromBank()
                 for _, item in ipairs(step.kind == "mail" and step.forCraft and step.items or {}) do
                     if item.bank then
                         local banked = inventory.GetBankCount and inventory:GetBankCount(item.itemID) or 0
+                        if ns.KeepHere and ns.KeepHere.Spare then
+                            local bags = inventory.GetBagCount and inventory:GetBagCount(item.itemID) or 0
+                            banked = select(2, ns.KeepHere:Spare(item.itemID, bags, banked, 0))
+                        end
                         wants[item.itemID] = math.min(banked, (wants[item.itemID] or 0) + item.bank)
                     end
                 end
@@ -1457,6 +1466,8 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
         and not (queue and queue.CanMail and not queue:CanMail(selfKey, crafterKey)) then
         local bags = inventory:GetBagCount(itemID) or 0
         local bank = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        -- What it keeps on this character is never mailed away for a craft.
+        if ns.KeepHere and ns.KeepHere.Spare then bags, bank = ns.KeepHere:Spare(itemID, bags, bank, 0) end
         if bags + bank > 0 and bags + bank >= bestCount then
             return selfKey, bags + bank, bags
         end
