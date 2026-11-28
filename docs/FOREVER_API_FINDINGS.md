@@ -497,6 +497,18 @@ knows, the event that answers says what it is (and is kept with
 needing the player's own click, so a clicked buy is planned from the
 listings and the next click asks. Not yet seen in game.
 
+**A stack's price is never asked again on a timer (2026-11-28).** After a
+click priced a stack, the keep-fresh timer still called
+`StartCommoditiesPurchase` again. With the click rule above Forever never
+answers that, so the button waited 10 seconds and the buy was dropped. Now,
+while `ASK_OUTSIDE_CLICK` is false, the price is marked run out once
+`GetQuoteDurationRemaining` reaches 0 and the next click asks again.
+`GetQuoteDurationRemaining` itself is not yet seen in game; without it the
+price is taken to hold `READY_KEEP` seconds. A browse search can answer in
+parts (`HasFullBrowseResults` false, the rest on
+`AUCTION_HOUSE_BROWSE_RESULTS_ADDED`); Snipe now waits `PART_WAIT` for the
+rest. How often Forever splits an answer is not measured.
+
 ## Bank slot events fire with the bank shut
 
 `PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on

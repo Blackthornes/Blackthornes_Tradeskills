@@ -220,6 +220,39 @@ local function CreateRow(row)
     hold:SetPoint("BOTTOMLEFT", row.buy, "BOTTOMLEFT", 2, 2)
     hold:Hide()
     row.hold = hold
+
+    -- "Last Scan" after the name: a find the last full scan saw, not yet
+    -- seen by a live search.
+    if Widgets.CreateChip then
+        local chip = Widgets.CreateChip(row, L["Last Scan"], function()
+            if row.data and SnipeView.ClickFind then SnipeView.ClickFind(row.data, nil, "LeftButton") end
+        end, { height = 16 })
+        chip.label:SetText(L["Last Scan"])
+        chip:SetPoint("RIGHT", row, "RIGHT", NAME_RIGHT, 0)
+        chip:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(L["From your last scan. Snipe checks it first."], 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        chip:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        chip:Hide()
+        row.scanChip = chip
+    end
+end
+
+--- Show the Last Scan chip on a find from the last scan, and give the name
+--- the room left of it.
+local function DressScanChip(row, find)
+    local chip = row.scanChip
+    local on = chip and find and find.fromScan and true or false
+    if chip then chip:SetShown(on) end
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", row, "LEFT", 8 + ICON_SIZE + 8, 0)
+    if on then
+        row.name:SetPoint("RIGHT", chip, "LEFT", -4, 0)
+    else
+        row.name:SetPoint("RIGHT", row, "RIGHT", NAME_RIGHT, 0)
+    end
 end
 
 --- How much of a material's price time is left, 0 to 1, or nil.
@@ -393,6 +426,7 @@ local function UpdateRow(row, find)
 
     DressRowBuy(row, find)
     SnipeView:DressHold(row)
+    DressScanChip(row, find)
 
     Theme.SetItemIcon(row.icon, find.itemID)
     local label = ItemName(find.itemID)
@@ -416,6 +450,8 @@ local function ShowTooltip(row, find)
     end
 end
 
+function SnipeView.ClickFind(...) return SnipeView.ClickRow(...) end
+
 local function ClickRow(find, _, mouseButton)
     if mouseButton == "RightButton" then return end
     local snipe = Snipe()
@@ -431,6 +467,7 @@ local function ClickRow(find, _, mouseButton)
         snipe:Buy(find)
     end
 end
+SnipeView.ClickRow = ClickRow
 
 --------------------------------------------------------------------------------
 -- Settings strip
@@ -740,6 +777,20 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     note:SetWordWrap(true)
     self.note = note
 
+    -- How far this pass is: a thin gold bar just under the list.
+    local track = body:CreateTexture(nil, "ARTWORK")
+    track:SetColorTexture(Theme.Unpack("border"))
+    track:SetHeight(2)
+    track:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -1)
+    track:SetPoint("TOPRIGHT", list, "BOTTOMRIGHT", 0, -1)
+    track:Hide()
+    local fill = body:CreateTexture(nil, "OVERLAY")
+    fill:SetColorTexture(Theme.Unpack("accent"))
+    fill:SetHeight(2)
+    fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+    fill:Hide()
+    self.passTrack, self.passFill = track, fill
+
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
     empty:SetWidth(300)
@@ -767,6 +818,7 @@ function SnipeView:Build(body, frame, topAnchor, opts)
         if SnipeView.shown then
             SnipeView:WatchMouse()
             SnipeView:DressHold()
+            SnipeView:DressProgress()
         end
     end)
     self.watcher = watcher
@@ -831,6 +883,7 @@ function SnipeView:SetShown(on)
     if self.newChip and not self.shown then self.newChip:Hide() end
     for _, part in pairs(self.parts or {}) do part:SetShown(self.shown) end
     if self.empty and not self.shown then self.empty:Hide() end
+    self:DressProgress()
     if self.strip then self.strip:SetShown(self.shown and self:StripOpen()) end
     if self.shown then self.key = nil end
     local snipe = Snipe()
@@ -930,7 +983,8 @@ function SnipeView:Refresh(force)
         self.empty:Hide()
     end
 
-    self.note:SetText(self:Summary())
+    self.noteText = nil
+    self:DressProgress()
     self.go:SetText(running and L["Stop"] or L["Start Sniping"])
     self.go:SetEnabledState(true)
     local label, can = self:BuyState()
@@ -959,6 +1013,42 @@ function SnipeView:EmptyText()
         if Snipe().Need(items[id].want, id) > 0 then return "" end
     end
     return L["Got all you need"]
+end
+
+--- "Checked 420 of 1240. A full pass takes about 3m.", or nil before it
+--- can be told.
+function SnipeView.ProgressText()
+    local snipe = Snipe()
+    if not (snipe and snipe.Progress) then return nil end
+    local checked, total, seconds = snipe:Progress()
+    if not (checked and total and total > 0 and seconds) then return nil end
+    local age = Util.FormatAge and Util.FormatAge(math.max(60, seconds)) or tostring(math.floor(seconds))
+    return L.Format("Checked %d of %d. A full pass takes about %s.", checked, total, age)
+end
+
+--- The footer note and the pass bar. Run a few times a second while the
+--- tab shows: only the note's words and the bar's width change, never the
+--- list.
+function SnipeView:DressProgress()
+    if not self.note then return end
+    local snipe = Snipe()
+    local line = self.shown and SnipeView.ProgressText() or nil
+    local text = self:Summary()
+    if line then text = text .. "\n" .. line end
+    if text ~= self.noteText then
+        self.noteText = text
+        self.note:SetText(text)
+    end
+    local checked, total = nil, nil
+    if self.shown and snipe and snipe.Progress then checked, total = snipe:Progress() end
+    local on = checked and total and total > 0
+    self.passTrack:SetShown(on and true or false)
+    self.passFill:SetShown(on and checked > 0 or false)
+    if on and checked > 0 then
+        local ok, width = pcall(self.passTrack.GetWidth, self.passTrack)
+        width = (ok and type(width) == "number" and width > 0) and width or 300
+        self.passFill:SetWidth(math.max(1, width * checked / total))
+    end
 end
 
 function SnipeView:Summary()

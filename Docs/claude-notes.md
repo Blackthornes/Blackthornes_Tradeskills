@@ -2862,6 +2862,47 @@ second call counted a stack buy twice. Tested in
 `tools/test_snipebuyonce.lua`, which loads both and fires each event at
 every handler.
 
+
+### A faster Snipe tab (2026-11-28)
+
+The owner said build it all from `Docs/mockups/ts-snipe-faster.html`.
+Not yet seen in game. Tested in `tools/test_snipestaleprice.lua`,
+`tools/test_snipefaster.lua` and `tools/test_snipebuyrow.lua`.
+
+- Bug: after a click priced a stack, `KeepFresh` called `Refresh`, which
+  asked `StartCommoditiesPurchase` from a timer. With
+  `ASK_OUTSIDE_CLICK = false` (Forever) nothing is asked on a timer now
+  (`Snipe:AsksOnTimer`): when `QuoteLeft` reaches 0 the buy turns
+  `phase = "expired"` (`Snipe:Expire`), the button reads "Check Price
+  Again", and `Pay` asks again from the click with the old total as the
+  most it may cost. Retail's path (`ASK_OUTSIDE_CLICK` true) is unchanged.
+- A stack priced by a click (`pending.fromClick`) shows "Pay %s" with a
+  thin gold bar under the row's button for the time left
+  (`SnipeView.HoldShare`, `DressHold`, only that row, from the 0.2 s
+  watcher).
+- At Start, `FindsFromScan` puts deals the last scan saw (records with
+  `seen` after `GetLastScan() - SCAN_SLACK`, price `ScanPrice`: rival
+  cheapest, a lone low one included) on the list as `fromScan` finds with
+  a "Last Scan" chip (tooltip "From your last scan. Snipe checks it
+  first."). Their items lead the first pass (`scanFirst`). A live search
+  that sees one clears the mark; a whole answer without it, or above the
+  deal line, drops it.
+- Passes: `NewPass` lays out `lane` from the pool: scan finds, then `hot`
+  rows (`IsHot`: last low within `HOT_NEAR` of the deal line, or
+  `LISTED_A_LOT` up; every list item; every item when there is no last
+  scan), then a third of the rest by `passNo % COLD_EVERY`.
+- Progress: `Snipe:Progress()` gives checked, total and a pass's seconds,
+  from `ns.db.snipePace` (seconds an item, weighed `PACE_WEIGHT`, never
+  rename) or after `PACE_LEAST` items this pass. The footer note adds
+  "Checked %d of %d. A full pass takes about %s." and a 2 px gold bar runs
+  under the list, both set from the watcher without a list redraw.
+- Split browse answers: `OnBrowseResults` keeps the search open while
+  `HasFullBrowseResults` is false, for `PART_WAIT` seconds or until the
+  rest comes (`AUCTION_HOUSE_BROWSE_RESULTS_ADDED` calls it again), and
+  reads every row. Only a search with no answer shrinks the next one.
+- deDE "Pay %s" is now "%s zahlen" (the owner's okayed wording), which
+  Favors' Buy button shares.
+
 ## The Enchant strip
 
 The owner said build it (2026-11-05) as a window beside the Enchanting

@@ -100,4 +100,12 @@ View:RowBuy(finds[1])
 check("the click asks again", log[1] == "pay")
 snipe.QuoteLeft = nil
 
+-- The progress line, once a pass's length can be told.
+snipe.Progress = function() return 420, 1240, nil end
+check("no line before a pass's length is known", View.ProgressText() == nil)
+snipe.Progress = function() return 420, 1240, 185 end
+ns.Util.FormatAge = function(sec) return math.floor(sec / 60) .. "m" end
+check("progress line", View.ProgressText() == "Checked 420 of 1240. A full pass takes about 3m.")
+snipe.Progress = nil
+
 if failures > 0 then error(failures .. " snipe buy row checks failed") end
