@@ -112,7 +112,10 @@ local function UpdateRow(row, entry)
         local ok, name = pcall(function() return C_Item.GetItemInfo(entry.outputItemID) end)
         if not ok or not name then state.waiting = true end
     end
-    Theme.SetRowName(row.name, entry.name)
+    -- A craft with a wait: Ready, or the time left, as on My Crafts.
+    local name = entry.name
+    if ns.Profit and ns.Profit.WithCooldownMark then name = ns.Profit.WithCooldownMark(name, entry) end
+    Theme.SetRowName(row.name, name)
 
     -- The name in the item's rarity colour, as on My crafts; plain until
     -- the client has the item, then the redraw above colours it.
@@ -151,6 +154,16 @@ local function ShowRowTooltip(row, entry)
             1, 1, 1, 1, 1, 1)
     end
     GameTooltip:AddDoubleLine(L["Buy the mats, then craft"], Money(entry.buyProfit), 1, 1, 1, 1, 1, 1)
+    -- A craft with a wait: how often, and Ready or the time left.
+    if type(entry.cooldown) == "table" and ns.Profit and ns.Profit.CooldownLines then
+        for _, line in ipairs(ns.Profit.CooldownLines(entry)) do
+            if line.ready then
+                GameTooltip:AddLine(line.text, Theme.Unpack("profit"))
+            else
+                GameTooltip:AddLine(line.text, Theme.Unpack("muted"))
+            end
+        end
+    end
     if not entry.farmSeconds and entry.missing then
         GameTooltip:AddLine(L.Format("Farm some %s and this fills in.",
             Util.ColoredItemName(entry.missing.itemID)), Theme.Unpack("muted"))

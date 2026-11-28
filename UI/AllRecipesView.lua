@@ -270,8 +270,23 @@ local function UpdateKeep(row, analysis)
     row.keepClear:SetShown(own ~= nil)
 end
 
+--- A craft with a wait: how often, and Ready or the time left.
+function AllRecipesView.AddCooldownLines(analysis)
+    if type(analysis.cooldown) ~= "table" or not ns.Profit.CooldownLines or not GameTooltip:IsShown() then return end
+    for _, line in ipairs(ns.Profit.CooldownLines(analysis, state.accountWide)) do
+        if line.ready then
+            GameTooltip:AddLine(line.text, Theme.Unpack("profit"))
+        else
+            GameTooltip:AddLine(line.text, 0.7, 0.7, 0.7, true)
+        end
+    end
+    GameTooltip:Show()
+end
+
 local function UpdateRow(row, analysis)
     local name = analysis.name or L.Format("recipe %s", analysis.recipeID)
+    -- A craft with a wait: Ready, or the time left, as on My Crafts.
+    if ns.Profit.WithCooldownMark then name = ns.Profit.WithCooldownMark(name, analysis, state.accountWide) end
     Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
 
@@ -511,6 +526,7 @@ function AllRecipesView.Build(container)
         updateRow = UpdateRow,
         onEnter = function(row, analysis)
             Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
+            AllRecipesView.AddCooldownLines(analysis)
         end,
         onLeave = HideTip,
         clickHint = L["Right-click for more."],

@@ -4604,3 +4604,36 @@ row's Shift-click keeps its own amount. Butler Says Wait rows are
 unchanged. A refusal while the Sell list is open adds "Shift-click List to
 list it anyway." (`Posting:HintShiftClick`). No new setting. Tested in
 `tools/test_sellnowclick.lua` and `tools/test_sellnowclick_ui.lua`.
+
+## Crafts with a wait on the Profit tab (2026-11-28)
+
+A Discord player asked, the owner said build it from the mockup: Mooncloth
+can be made once every 4 days, but A DAY counted it as if one could be made
+each time one sold, so it topped My Crafts. Now:
+
+- `Profit:CooldownFor(recipeID, recipe, characterKey)` gives
+  `analysis.cooldown = { wait, perDay, readyAt }` for a craft
+  `Cost:IsCooldownCraft` calls one (the same test as `RoadPlan.OnCooldown`),
+  read before Analyse's early exits so unpriced rows get the mark too.
+- `Profit:PerDay` counts min(sells a day, `cooldown.perDay`) and returns a
+  fourth value, `analysis.perDayByWait`, when the wait is what cut it.
+- The wait: `Cooldowns:WaitFor(recipeID)`, the longest `wait` saved on any
+  character's entry, else `Cooldowns.WAITS` (Classic's: Mooncloth 4 days,
+  Iron to Gold, Mithril to Truesilver and Arcanite 2 days), else
+  `Cooldowns.DAY`. `wait` is a new field inside `professionCooldowns`
+  entries (never rename it or the table), written by `Note` from the game's
+  spell or item cooldown duration while one runs (the global cooldown,
+  under `MIN_SECONDS`, never writes it).
+- Ready or time left: `Cooldowns:ReadyAtFor(key, recipeID, name)` (crafts
+  of one group share a wait, so every transmute waits when one was cast),
+  and `Cooldowns:SoonestFor` with All Characters ticked. `Profit.CooldownReadyAt`,
+  `Profit.WithCooldownMark` (name, pocket watch icon, "Ready" green or
+  `Cooldowns.LeftText` muted), `Profit.MakeNow` (MAKE 1 when ready, else 0;
+  the MAKE sort uses it), `Profit.CooldownLines` (tooltip lines).
+- Rows: My Crafts and All Recipes show the mark; My Crafts' tooltip adds the
+  lines after "About N sell a day.", plus a GOLD/HR line with Gold an Hour
+  ticked. Analyse skips `hourPlans` for these crafts, so GOLD/HR shows --.
+  Your Time (`CraftOrFarm` rows carry `cooldown` and `owner`) keeps its
+  numbers and shows the mark and lines. `craftableNow` itself is unchanged,
+  so the queue, Queue All and the Sell list work as before. No setting.
+- Tested in `tools/test_profitcooldowns.lua`.

@@ -4081,3 +4081,12 @@ L["%s can learn this at %s %d"] = "%s peut apprendre ça à %s %d"
 L["Used to level %s's %s. Needs %d more."] = "Sert à %s pour monter %s. Il en faut encore %d."
 L["Make and change your shopping lists anywhere."] = "Crée et modifie tes listes d'achats où tu veux."
 L["open your shopping lists"] = "ouvre tes listes d'achats"
+
+
+-- Crafts with a wait on the Profit tab (2026-11-28)
+L["You can make one a day."] = "Tu peux en faire un par jour."
+L["You can make one every %d days."] = "Tu peux en faire un tous les %d jours."
+L["You can make one every %d hours."] = "Tu peux en faire un toutes les %d heures."
+L["So it counts %s a day."] = "Il compte donc %s par jour."
+L["Ready in %s"] = "Prêt dans %s"
+L["It has a wait, so gold an hour doesn't count it."] = "Il a un temps d'attente, donc l'or par heure ne le compte pas."
