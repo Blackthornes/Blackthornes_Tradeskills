@@ -50,7 +50,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 17
+local FILE_VERSION = 18
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -99,13 +99,15 @@ SharedWindow.PRIOR_FOR = 0.5
 -- so an open letter, which stands right of the mailbox, comes before it;
 -- `follow` are the frames that come and go while the place stays open
 -- (watched by HookScript, read only), so the window moves with them.
+-- `below`: docked there, the window steps down to the game window's own
+-- layer (SharedWindow.Strata), so the game's pop-ups show on top.
 SharedWindow.PLACES = {
     auction = { show = "AUCTION_HOUSE_SHOW", hide = "AUCTION_HOUSE_CLOSED", frames = { "AuctionHouseFrame" }, only = "tradeskills",
         interaction = { "Auctioneer", 21 } },
     mail = { show = "MAIL_SHOW", hide = "MAIL_CLOSED", frames = { "OpenMailFrame", "MailFrame" },
         follow = { "OpenMailFrame" }, interaction = { "MailInfo", 17 } },
     vendor = { show = "MERCHANT_SHOW", hide = "MERCHANT_CLOSED", frames = { "MerchantFrame" },
-        prefer = "butler", interaction = { "Merchant", 5 } },
+        prefer = "butler", below = true, interaction = { "Merchant", 5 } },
     trainer = { show = "TRAINER_SHOW", hide = "TRAINER_CLOSED", frames = { "ClassTrainerFrame" },
         interaction = { "Trainer", 7 } },
     -- Added 2026-11-16 (the owner said build it, from the UI cleanup
@@ -531,7 +533,8 @@ function SharedWindow.Build()
 
     local frame = CreateFrame("Frame", "BlackthornesOneWindow", UIParent)
     frame:SetSize(SharedWindow.WIDTH, SharedWindow.HEIGHT)
-    frame:SetFrameStrata("HIGH")
+    frame:SetFrameStrata(SharedWindow.STRATA)
+    frame.blackthornesStrata = SharedWindow.STRATA
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
@@ -870,6 +873,34 @@ local function GameFrame()
     return nil
 end
 
+--- The layer the window stands on: HIGH, except docked at a place marked
+--- `below` (the vendor), where it takes the game window's own layer
+--- (players at a vendor, 2026-11-28): at HIGH it covered the game's stack
+--- split pop-up, HIGH as well, and other addons' buy pop-ups. A layer the
+--- game window won't give, or one not under HIGH, is MEDIUM. Clicking the
+--- window still brings it to the front of its layer.
+SharedWindow.STRATA = "HIGH"
+SharedWindow.UNDER = { BACKGROUND = true, LOW = true, MEDIUM = true }
+function SharedWindow.Strata()
+    local place = hub.place and SharedWindow.PLACES[hub.place]
+    if not (hub.docked and place and place.below) then return SharedWindow.STRATA end
+    local game = GameFrame()
+    if game and type(game.GetFrameStrata) == "function" then
+        local ok, strata = pcall(game.GetFrameStrata, game)
+        if ok and type(strata) == "string" and SharedWindow.UNDER[strata] then return strata end
+    end
+    return "MEDIUM"
+end
+
+--- Put the window on the layer SharedWindow.Strata gives, only when it changed.
+local function Stack(frame)
+    frame = frame or hub.frame
+    if not (frame and frame.SetFrameStrata) then return end
+    local strata = SharedWindow.Strata()
+    if frame.blackthornesStrata == strata then return end
+    if pcall(frame.SetFrameStrata, frame, strata) then frame.blackthornesStrata = strata end
+end
+
 --- True while the window sits beside one of the game's windows.
 function SharedWindow.Docked()
     return hub.docked == true
@@ -1134,8 +1165,10 @@ function SharedWindow.Dock(again)
         SharedWindow.Lay(frame, true, not hub.row)
         SharedWindow.FillRail()
     elseif not again then
+        Stack(frame)
         return true
     end
+    Stack(frame)
     local placed = Beside(frame, game)
     hub.spot = placed and Spot(frame, game) or nil
     Tell()
@@ -1279,6 +1312,7 @@ function SharedWindow.Undock()
     local frame = hub.frame
     if not (frame and hub.docked) then return end
     hub.docked = false
+    Stack(frame)
     hub.spot = nil
     hub.sized = nil
     local row = hub.row ~= false

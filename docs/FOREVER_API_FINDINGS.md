@@ -604,3 +604,16 @@ Read from saved links and saved suffix prices, not from a probe.
   whether the character has it. Still to see: that Forever keeps these
   spell numbers and that its trainers list the specialty as an ability
   requirement.
+
+## The stack split pop-up's layer (2026-11-28)
+
+- Not read from the client yet. Blizzard's own UI files for retail and
+  Classic both build `StackSplitFrame` at strata `HIGH`, toplevel, and
+  leave `MerchantFrame` at the default, `MEDIUM`. Forever runs a retail
+  engine, so it most likely matches.
+- So the one window, `HIGH` and toplevel too, covered the pop-up whenever
+  it was raised last. Docked at the vendor it now takes the vendor
+  window's layer (read in a pcall; `MEDIUM` when that fails or is not under
+  `HIGH`). See "Vendor pop-ups on top" in Docs/claude-notes.md.
+- To check in game at a vendor: `/dump StackSplitFrame:GetFrameStrata()`
+  and `/dump MerchantFrame:GetFrameStrata()`.
