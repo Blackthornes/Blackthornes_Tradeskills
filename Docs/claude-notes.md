@@ -4556,3 +4556,24 @@ words. `Queue:GetCrafter` never falls back to a character that can't mail
 the craft back (it stays with whoever queued it), and Butler's restock
 "who can make it" (`Butler:MakersOf`) skips characters out of reach.
 Tested in `tools/test_queueoneside.lua` and `tools/test_butlercraft.lua`.
+
+## Shift-click List on the Sell list (2026-11-28)
+
+A player asked, the owner said build it from a mockup. Shift-click a Sell
+list row's List and that one listing goes up as if "Bypass Disallowed
+Postings:" (`postAnyway`) were ticked: `PostPanel:ListRow` asks
+`Posting:Request(..., { anyway = true })`, which sets
+`Posting:ListAnywayOnce(itemID)`. `Posting:PostsAnyway(itemID)` answers yes
+for that item only, until it is listed (`EndAnywayOnce` in `Post`), a plain
+click on it comes, or `ANYWAY_ONCE_SECONDS` (120) pass. Asked without an
+item it is the setting alone, so `GetPostable`, List Next, List All, the
+wheel and the Far Under ask never see the one-shot. `Post` and
+`RefusesEarly` ask with the item. On a row Tradeskills holds back
+(`PostPanel.HoldsBack`: held, kept, `queueKept`, `listCapped`, at a loss,
+below crafted, noted, under the floor) Shift over List turns the button to
+"List Anyway" and the box to `Posting:WholeStack` (watched through
+`MODIFIER_STATE_CHANGED` only while the mouse is on a List button); a plain
+row's Shift-click keeps its own amount. Butler Says Wait rows are
+unchanged. A refusal while the Sell list is open adds "Shift-click List to
+list it anyway." (`Posting:HintShiftClick`). No new setting. Tested in
+`tools/test_sellnowclick.lua` and `tools/test_sellnowclick_ui.lua`.
