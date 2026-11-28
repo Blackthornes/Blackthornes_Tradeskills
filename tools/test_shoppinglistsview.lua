@@ -10,6 +10,9 @@
 --      for one at a time.
 --   5. After a buy from a list's search, the results look again for only
 --      what is still needed, and stop once another search took them over.
+--   6. Away from the auction house the Lists window shows the same lists and
+--      changes them; the drawer's Lists tab takes them back and it closes
+--      (a player's report, 2026-11-28: lists only changed at the AH).
 
 local function noop() end
 
@@ -261,6 +264,42 @@ do
     timer.fn()
     check("its bought item drops out though the mail is unread", #sent == before + 1 and #sent[#sent] == 1
         and sent[#sent][1].itemID == SILVER)
+end
+
+-- 6. Away from the auction house
+do
+    ns.Scanner.isAuctionHouseOpen = false
+    local drawer = View.frame
+    check("the lists start in the drawer", View:HeldBy(drawer))
+    View:SetShown(false)  -- the auction house closed: the drawer hid them
+
+    check("the lists can be opened away from the auction house", type(View.OpenWindow) == "function")
+    View:OpenWindow()
+    local win = View.window
+    -- The stub fires OnHide as the game does.
+    local plainHide = win.Hide
+    win.Hide = function(self) plainHide(self); if self.scripts.OnHide then self.scripts.OnHide(self) end end
+    check("the Lists window opens and holds the lists", win:IsShown() and View:HeldBy(win)
+        and View.shown and View.list.shown)
+
+    local before = #Lists:All()
+    buttons["New list"].click()
+    Type("Made away")
+    check("a list made away from the auction house is kept", #Lists:All() == before + 1
+        and Lists:Get(before + 1).name == "Made away")
+    Type("2447 5")
+    check("and takes an item", Lists:Get(before + 1).items[1].id == PEACE)
+    View:Refresh(true)
+    check("the window shows it", View.list.data ~= nil and #View.list.data > 0)
+
+    View:Place(Stub(), drawer, Stub(), {})
+    check("the drawer's Lists tab takes them back and the window closes",
+        View:HeldBy(drawer) and not win:IsShown())
+
+    View:OpenWindow()
+    check("opened again it holds them again", win:IsShown() and View:HeldBy(win) and View.shown)
+    View:ToggleWindow()
+    check("closing it puts the lists away", not win:IsShown() and not View.shown)
 end
 
 print(("\n%d check(s) passed\n"):format(checks))
