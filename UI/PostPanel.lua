@@ -22,6 +22,7 @@ local PostPanel = ns.NewModule("PostPanel")
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+local unpack = unpack or table.unpack
 
 -- Wider than it needs to be for the text alone: the amount to list sits beside
 -- the button, and squeezing it in would have cost the item names their width.
@@ -1010,8 +1011,11 @@ function PostPanel:Build()
 
     local View = ns.ShoppingListsView
     if View then
-        View:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
-        if View.paste then View.paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end
+        -- Kept, so the Lists tab can take its pieces back from the Lists
+        -- window opened away from the auction house (PostPanel:TakeLists).
+        self.listsSpot = { body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT,
+            placePaste = function(paste) paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end } }
+        View:Build(unpack(self.listsSpot))
     end
 
     if ns.AuctionsView then
@@ -2966,7 +2970,9 @@ function PostPanel:Refresh()
         if ns.AuctionWheel then ns.AuctionWheel:Update() end
     end
     local View = ns.ShoppingListsView
-    if View and View.list then View:SetShown(self.view == "lists") end
+    if self.view == "lists" then self:TakeLists() end
+    -- The Lists window may hold them while this drawer shows another tab.
+    if View and View.list and View:HeldBy(self.frame) then View:SetShown(self.view == "lists") end
     local Auctions = ns.AuctionsView
     if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
     local Snipe = ns.SnipeView
@@ -3246,4 +3252,12 @@ end
 
 function PostPanel:IsShown()
     return self.frame ~= nil and self.frame:IsShown()
+end
+
+--- The Lists tab takes the list pieces back from the Lists window
+--- (UI/ShoppingListsView.lua's View:OpenWindow), which closes.
+function PostPanel:TakeLists()
+    local View = ns.ShoppingListsView
+    if not (View and View.list and self.listsSpot) or View:HeldBy(self.frame) then return end
+    View:Place(unpack(self.listsSpot))
 end

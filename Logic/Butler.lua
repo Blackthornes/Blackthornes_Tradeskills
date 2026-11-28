@@ -980,7 +980,9 @@ end
 --- Who on this account can craft an item, for Butler's restock list
 -- (2026-11-26): { recipeID, name, per, makers = { { key, name, short,
 -- playing } } }, the recipe known by the most of them, or nil. Only this
--- account's own characters (not linked ones). Read only; never raises.
+-- account's own characters (not linked ones), on this realm and side: a
+-- Horde character can't mail an Alliance one what it made (a player's
+-- report, 2026-11-28). Read only; never raises.
 function Butler:MakersOf(item)
     local itemID = tonumber(item)
     if not itemID then return nil end
@@ -989,9 +991,11 @@ function Butler:MakersOf(item)
         if not (recipes and recipes.GetCharacters) then return nil end
         local records = Characters()
         local byRecipe, best = {}, nil
+        local who = ns.Characters
         for _, character in ipairs(recipes:GetCharacters()) do
             local record = records[character.key]
-            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table" then
+            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table"
+                and not (who and who.InReach and not who:InReach(character.key)) then
                 for recipeID, recipe in pairs(record.recipes) do
                     if type(recipe) == "table" and recipe.outputItemID == itemID
                         and not (recipes.IsDropped and recipes:IsDropped(recipe, character.key)) then
@@ -1367,6 +1371,11 @@ local function FromBank()
     for itemID, used in pairs(myUse) do
         local carried = inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
         local banked = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        -- Never what it keeps on this character (Logic/KeepHere.lua): a
+        -- player kept 3 in the bank and one came out for a craft (2026-11-28).
+        if ns.KeepHere and ns.KeepHere.Spare then
+            carried, banked = ns.KeepHere:Spare(itemID, carried, banked, 0)
+        end
         local short = used - (myMake[itemID] or 0) - carried
         local take = math.min(short, banked)
         if take > 0 then wants[itemID] = take end
@@ -1381,6 +1390,10 @@ local function FromBank()
                 for _, item in ipairs(step.kind == "mail" and step.forCraft and step.items or {}) do
                     if item.bank then
                         local banked = inventory.GetBankCount and inventory:GetBankCount(item.itemID) or 0
+                        if ns.KeepHere and ns.KeepHere.Spare then
+                            local bags = inventory.GetBagCount and inventory:GetBagCount(item.itemID) or 0
+                            banked = select(2, ns.KeepHere:Spare(item.itemID, bags, banked, 0))
+                        end
                         wants[item.itemID] = math.min(banked, (wants[item.itemID] or 0) + item.bank)
                     end
                 end
@@ -1457,6 +1470,8 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
         and not (queue and queue.CanMail and not queue:CanMail(selfKey, crafterKey)) then
         local bags = inventory:GetBagCount(itemID) or 0
         local bank = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        -- What it keeps on this character is never mailed away for a craft.
+        if ns.KeepHere and ns.KeepHere.Spare then bags, bank = ns.KeepHere:Spare(itemID, bags, bank, 0) end
         if bags + bank > 0 and bags + bank >= bestCount then
             return selfKey, bags + bank, bags
         end

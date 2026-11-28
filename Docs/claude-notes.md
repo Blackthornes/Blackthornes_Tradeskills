@@ -1611,6 +1611,16 @@ _G.BlackthornesTS.KeepHere.IsAll(count)    -- true for Keep All
 Keep both stable; if one changes, change Butler's `Logic/KeepHere.lua`
 too. Tested in `tools/test_sisterkeeps.lua`.
 
+The keep holds for crafting too (a player, 2026-11-28: 3 Gold Power Cores
+kept in the bank, and the queue and Take from bank still used one).
+`KeepHere:Kept(itemID)` is the bigger of this number and Butler's
+`KeepHere:Count`; `KeepHere:Spare(itemID, bags, bank, mail)` takes it off
+the bank first, then the bags, then the mail. The shopping list (its
+`inBags`, `inBank` and `have` are past the keep), sub-craft sizing,
+`Queue:HeldBy` for the character playing, `Butler:FromBank`, the mail
+plan's spare count and the holder for another character's craft read it.
+Tested in `tools/test_keepbanked.lua` and `tools/test_butler.lua`.
+
 ## Goblin Gold
 
 The owner said build it (2026-10-17, from a mockup): a small bar on
@@ -2362,6 +2372,20 @@ copy line (`BTSlist1:<name>:<id>x<want>,...`) or takes a pasted one. Delete
 takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 `shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
 Tested in `tools/test_shoppinglists.lua` and
+`tools/test_shoppinglistsview.lua`.
+
+Away from the auction house (a player's report, 2026-11-28: lists could
+only be changed with it open): a quiet **Lists** button left of Scan
+Auctions in the main window's header, and `/bts lists`, open the Lists
+window (`View:OpenWindow`, `ToggleWindow`, titled "Shopping lists", spot
+kept as `ts.lists`). There is one set of list pieces: `View:Place` moves
+them into whichever frame shows them, and the one before is told
+(`opts.onLeave`), so the window closes when the drawer's Lists tab takes
+them back (`PostPanel:TakeLists`, `listsSpot`). The drawer only shows or
+hides them while it holds them (`View:HeldBy`). At the auction house the
+button opens the drawer's Lists tab instead. Search still needs the
+auction house and says so. New words: "Make and change your shopping lists
+anywhere." and "open your shopping lists". Tested in part 6 of
 `tools/test_shoppinglistsview.lua`.
 
 ## List rules
@@ -4540,3 +4564,22 @@ prints "Your bags don't have the materials for any %s." Sub-crafts on the
 Queue tab are left alone. Both hovers add `CraftPanel.ShiftClickLine`;
 the Queue tab + got its first hover, "Add one more." No setting. Tested
 in `tools/test_shiftqueueall.lua`.
+
+## The queue only from this side (2026-11-28)
+
+A player's report: with an Alliance and a Horde character on one realm,
+the queue and mail kept naming the other side's characters. The queue is
+one list for the whole account, so a Horde character saw the Alliance
+one's crafts, its materials on the list to buy, and "on Ana" as who makes
+them. `Queue:InReach(entry)` asks `Characters:InReach` of the craft's
+maker; `Queue:Reachable()` is the queue without the crafts out of reach
+(the stored list itself when none are). The Queue tab and craft pane
+(`Queue:Shown`), the materials list (`BuildShoppingList`), the row prices
+(`BuildEntryCosts`), the items kept off the sell list
+(`GetReservedItems`), and `GetTotals`/`GetCraftTime` with no list all read
+`Reachable`. The stored queue is unchanged; each side sees its own crafts
+when it logs in, and the empty Queue tab says so with the Only My Crafts
+words. `Queue:GetCrafter` never falls back to a character that can't mail
+the craft back (it stays with whoever queued it), and Butler's restock
+"who can make it" (`Butler:MakersOf`) skips characters out of reach.
+Tested in `tools/test_queueoneside.lua` and `tools/test_butlercraft.lua`.

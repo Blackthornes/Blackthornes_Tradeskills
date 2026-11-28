@@ -315,9 +315,13 @@ function QueueMail:GetDeliveries()
     local function Spare(itemID)
         if spare[itemID] == nil then
             local bags = ns.Inventory:GetBagCount(itemID)
+            local bank = ns.Inventory:GetBankCount(itemID)
+            -- What you keep on this character never goes (Logic/KeepHere.lua).
+            if ns.KeepHere and ns.KeepHere.Spare then
+                bags, bank = ns.KeepHere:Spare(itemID, bags, bank, 0)
+            end
             -- Your own crafts come first, and use the bank before the bags.
-            local own = math.max(0, (myUse[itemID] or 0) - (myMake[itemID] or 0)
-                - ns.Inventory:GetBankCount(itemID))
+            local own = math.max(0, (myUse[itemID] or 0) - (myMake[itemID] or 0) - bank)
             spare[itemID] = math.max(0, bags - own)
         end
         return spare[itemID]

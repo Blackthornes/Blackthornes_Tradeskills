@@ -79,6 +79,37 @@ function KeepHere:Count(itemID)
     return nil
 end
 
+--- How many of an item the character playing keeps, its own number or
+--- Butler's, the bigger one (the owner, 2026-10-18): 0 for none. Read
+--- inside a pcall; Butler's is read only.
+function KeepHere:Kept(itemID)
+    local keep = self:Count(itemID) or 0
+    local butler = _G.BlackthornesButler
+    local theirs = type(butler) == "table" and type(butler.KeepHere) == "table" and butler.KeepHere
+    if theirs and type(theirs.Count) == "function" then
+        local ok, count = pcall(theirs.Count, theirs, itemID)
+        count = ok and tonumber(count) or 0
+        if count > keep then keep = math.min(KeepHere.MOST, math.floor(count)) end
+    end
+    return keep
+end
+
+--- What of an item the character playing can use up: its bags, bank and
+--- mail less what it keeps (a player kept 3 Gold Power Cores in the bank
+--- and the queue still used one, 2026-11-28). The keep comes out of the
+--- bank first, then the bags, then the mail, so nothing kept is taken out
+--- of the bank for a craft. Returns the three counts left.
+function KeepHere:Spare(itemID, bags, bank, mail)
+    bags, bank, mail = math.max(0, tonumber(bags) or 0), math.max(0, tonumber(bank) or 0), math.max(0, tonumber(mail) or 0)
+    local keep = self:Kept(itemID)
+    if keep <= 0 then return bags, bank, mail end
+    local fromBank = math.min(bank, keep)
+    keep = keep - fromBank
+    local fromBags = math.min(bags, keep)
+    keep = keep - fromBags
+    return bags - fromBags, bank - fromBank, math.max(0, mail - keep)
+end
+
 --- Keep `count` of an item on the character playing. 0 or nil takes it off
 --- the list. True, or false and why.
 function KeepHere:Set(itemID, count)

@@ -54,12 +54,35 @@ function Queue:IsMine(entry)
     return crafter == selfKey
 end
 
---- The crafts the Queue tab and the craft pane list: the whole queue, or
---- with "Only My Crafts:" ticked, only the crafts this character makes.
---- The stored queue is never changed; other characters see their crafts
---- when they log in.
-function Queue:Shown()
+--- Is this queued craft made by a character the one playing can mail: the
+--- same realm and side? The queue is shared by every character on the
+--- account, and a Horde character was shown an Alliance one's crafts, with
+--- their materials to buy (a player's report, 2026-11-28). Items never
+--- cross sides. Not sure who is playing, true: this only ever hides.
+function Queue:InReach(entry)
+    local characters = ns.Characters
+    if not (characters and characters.InReach) then return true end
+    local ok, reach = pcall(characters.InReach, characters, self:GetCrafter(entry))
+    return not ok or reach ~= false
+end
+
+--- The crafts on the queue made on this realm and side (Queue:InReach),
+--- the stored list itself when that is all of them.
+function Queue:Reachable()
     local all = self:GetAll()
+    local list, hidden = {}, false
+    for _, entry in ipairs(all) do
+        if self:InReach(entry) then list[#list + 1] = entry else hidden = true end
+    end
+    return hidden and list or all
+end
+
+--- The crafts the Queue tab and the craft pane list: the queue on this
+--- realm and side, or with "Only My Crafts:" ticked, only the crafts this
+--- character makes. The stored queue is never changed; other characters
+--- see their crafts when they log in.
+function Queue:Shown()
+    local all = self:Reachable()
     if not (ns.Config and ns.Config:Get("queueOnlyMine") == true) then return all end
     local shown = {}
     for _, entry in ipairs(all) do
@@ -107,6 +130,15 @@ local DropBuysFor
 
 local function SelfKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
+end
+
+--- What the character playing owns of an item (bags, bank and mail) less
+--- what it keeps on this character (Logic/KeepHere.lua): a kept item is
+--- never counted as there to craft with (2026-11-28).
+local function SpareOwned(itemID)
+    local owned = ns.Inventory:GetOwnedCount(itemID)
+    if not (ns.KeepHere and ns.KeepHere.Kept) then return owned end
+    return math.max(0, owned - ns.KeepHere:Kept(itemID))
 end
 
 local function CharacterRecord(characterKey)
@@ -166,7 +198,9 @@ end
 -- A sub-craft says. A craft you queued is made by whoever queued it when
 -- they know it, else by another character who does and can mail it back.
 -- A craft queued before owners were kept is made here when this character
--- knows it.
+-- knows it, else by one who can mail it here. Never a character of another
+-- realm or side: with nobody who can mail it back knowing it, it stays the
+-- one who queued it (a player's report, 2026-11-28).
 function Queue:GetCrafter(entry)
     if entry.crafter then return entry.crafter end
 
@@ -176,15 +210,22 @@ function Queue:GetCrafter(entry)
     local selfKey = SelfKey()
     if not owner and self:Knows(selfKey, entry.recipeID) then return selfKey end
 
+    -- Who it goes back to. With no record of them (before any was saved),
+    -- anyone, as before: this only ever narrows the pick.
+    local forKey = owner or selfKey
+    local function Reaches(characterKey)
+        if owner then return self:CanMail(characterKey, owner) end
+        return not CharacterRecord(forKey) or self:CanMail(characterKey, forKey)
+    end
     for _, characterKey in ipairs(SortedCharacterKeys()) do
-        if self:Knows(characterKey, entry.recipeID)
-            and (not owner or self:CanMail(characterKey, owner)) then
+        if self:Knows(characterKey, entry.recipeID) and Reaches(characterKey) then
             return characterKey
         end
     end
 
     local _, knownBy = ns.Recipes:GetAny(entry.recipeID)
-    return knownBy or owner or selfKey
+    if knownBy and (not CharacterRecord(forKey) or self:CanMail(knownBy, forKey)) then return knownBy end
+    return forKey or knownBy
 end
 
 --- Who a queued craft is for, other than the character making it.
@@ -219,7 +260,7 @@ function Queue:HeldBy(characterKey, itemID)
         -- for any other character. Logged in before opening the mailbox, the
         -- crafter saw none of the Medium Leather sent to it and the queue
         -- made it again, with its Light Leather to mail (2026-10-11).
-        local held = ns.Inventory:GetOwnedCount(itemID)
+        local held = SpareOwned(itemID)
         if ns.QueueMail and ns.QueueMail.InFlight then
             held = held + ns.QueueMail:InFlight(characterKey or SelfKey(), itemID)
         end
@@ -817,7 +858,7 @@ function Queue:RebuildDependencies()
 
                 if subRecipe then
                     local short = HeldPool(pool, itemID,
-                        ns.Inventory:GetOwnedCount(itemID) + BoughtBeyondMail(itemID), need.units)
+                        SpareOwned(itemID) + BoughtBeyondMail(itemID), need.units)
 
                     if short > 0 then
                         -- Missing units become crafts, since one craft can
@@ -2015,7 +2056,7 @@ function Queue:GetTotals(list)
     local totals = { crafts = 0, cost = 0, profit = 0, priceable = true }
     local entries = self:GetEntryCosts()
 
-    for _, entry in ipairs(list or self:GetAll()) do
+    for _, entry in ipairs(list or self:Reachable()) do
         local priced = entries[entry]
 
         totals.crafts = totals.crafts + entry.quantity
@@ -2049,7 +2090,7 @@ function Queue:GetCraftTime(list)
     local result = { seconds = 0, timed = 0, untimed = 0, byCrafter = {}, untimedBy = {} }
     local craftTime = ns.CraftTime
 
-    for _, entry in ipairs(list or self:GetAll()) do
+    for _, entry in ipairs(list or self:Reachable()) do
         local count = entry.quantity or 0
         if count > 0 then
             local crafter = self:GetCrafter(entry) or "?"
@@ -2093,7 +2134,7 @@ function Queue:BuildEntryCosts()
     -- A material is costed as made only when a sub-craft on the queue makes
     -- it, and as bought otherwise, so the rows match To buy.
     local made = {}
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(self:Reachable()) do
         local recipe = entry.isDependency and ns.Recipes:GetAny(entry.recipeID)
         if recipe and recipe.outputItemID then made[recipe.outputItemID] = true end
     end
@@ -2106,7 +2147,7 @@ function Queue:BuildEntryCosts()
     -- it is priced the usual way, the cheaper of making and buying, as the
     -- tooltip prices it.
     local needs = {}
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(self:Reachable()) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
         for _, reagent in ipairs(recipe and recipe.reagents or {}) do
             needs[reagent.itemID] = (needs[reagent.itemID] or 0) + reagent.quantity * entry.quantity
@@ -2135,7 +2176,7 @@ function Queue:BuildEntryCosts()
         return now - was
     end
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(self:Reachable()) do
         local analysis = not entry.isDependency and CountedProfit(entry.recipeID)
         local count = entry.quantity
         local cost
@@ -2215,7 +2256,7 @@ end
 function Queue:GetReservedItems()
     local required, queuedToMake = {}, {}
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(self:Reachable()) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
         if recipe then
             for _, reagent in ipairs(recipe.reagents or {}) do
@@ -2248,7 +2289,7 @@ function Queue:BuildShoppingList()
     local selfKey = SelfKey()
     local forOthers = {}
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(self:Reachable()) do
         -- GetAny, as everywhere else the queue is read: an alt's craft queued
         -- from the account-wide view still needs its materials gathered.
         local recipe = ns.Recipes:GetAny(entry.recipeID)
@@ -2309,7 +2350,6 @@ function Queue:BuildShoppingList()
             -- already own it, it just needs collecting.
             local inBags = ns.Inventory:GetBagCount(itemID)
             local inBank = ns.Inventory:GetBankCount(itemID)
-            local have = inBags + inBank
 
             -- A sub-craft was sized against everything owned, mail included, so
             -- whatever of this it leaves over is already owned. Counting it the
@@ -2323,8 +2363,15 @@ function Queue:BuildShoppingList()
             -- not to be bought again. A mail count already taken holds the
             -- ones the mailbox showed; only the rest are added.
             local bought = ns.AHBuys and ns.AHBuys:GetPending(itemID) or 0
-            inMail = inMail + BoughtBeyondMail(itemID, inMail)
-            have = have + inMail
+            local boughtMore = BoughtBeyondMail(itemID, inMail)
+
+            -- What it keeps on this character is not there to craft with,
+            -- in the bank least of all (Logic/KeepHere.lua, 2026-11-28).
+            if ns.KeepHere and ns.KeepHere.Spare then
+                inBags, inBank, inMail = ns.KeepHere:Spare(itemID, inBags, inBank, inMail)
+            end
+            inMail = inMail + boughtMore
+            local have = inBags + inBank + inMail
 
             local shortfall = math.max(0, needed - have)
 
