@@ -160,6 +160,10 @@ end
 
 local DecodeValue
 
+-- Set only while DecodeInSteps works: called once a table entry, it lets the
+-- decode stop for a frame. Nil for every other decode.
+local Pause
+
 --- @return value, nextPosition
 DecodeValue = function(text, position)
     local tag = text:sub(position, position)
@@ -215,6 +219,7 @@ DecodeValue = function(text, position)
 
             -- A nil key would be a corrupt stream rather than real data.
             if key ~= nil then result[key] = value end
+            if Pause then Pause() end
         end
     end
 
@@ -231,4 +236,34 @@ function Serialize.Decode(text)
         local value = DecodeValue(text, 1)
         return value
     end)
+end
+
+--- Decode a long string a slice at a time, so no one frame does it all.
+-- `per` table entries a slice; `wait(fn)` runs fn on a later frame (default
+-- the next one). `done(ok, value|error)` once, as Decode returns. Farmer
+-- added it (2026-11-28) for pasted data; Tradeskills has it unused.
+function Serialize.DecodeInSteps(text, per, wait, done)
+    if type(text) ~= "string" or text == "" then
+        return done(false, "empty")
+    end
+    per = math.max(1, tonumber(per) or 2000)
+    wait = wait or function(fn) C_Timer.After(0, fn) end
+    local count = 0
+    local function Tick()
+        count = count + 1
+        if count >= per then
+            count = 0
+            coroutine.yield()
+        end
+    end
+    local work = coroutine.create(function() return (DecodeValue(text, 1)) end)
+    local function Step()
+        Pause = Tick
+        local ok, value = coroutine.resume(work)
+        Pause = nil
+        if not ok then return done(false, value) end
+        if coroutine.status(work) == "dead" then return done(true, value) end
+        wait(Step)
+    end
+    Step()
 end
