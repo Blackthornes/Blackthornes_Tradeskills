@@ -18,7 +18,7 @@
 --     or banked.
 --
 -- What is kept, account wide, in professionCooldowns[characterKey][id] =
--- { name, group, readyAt, recipeID or itemID, told, seen } (never rename it):
+-- { name, group, readyAt, recipeID or itemID, told, seen, wait } (never rename it):
 -- `id` is "spell:N" or "item:N", `readyAt` is time() when it is (or was)
 -- ready, `told` the readyAt last said in chat. Crafts that share one
 -- cooldown (every transmute) are shown once, as their `group`: the name
@@ -30,6 +30,10 @@
 -- recipes were kept as cooldowns (2026-11-05). A wait that short never
 -- starts one now, and an entry from before with no `seen` is left in the
 -- save but never shown or said (`Cooldowns.Counts`).
+--
+-- `wait` is how long the wait was, in seconds, as the game said when the
+-- craft was cast (2026-11-28, the Profit tab's A DAY counts one per wait).
+-- Before that is seen, WAITS below gives Classic's lengths.
 --
 -- One key per character: the character playing writes only under its GUID,
 -- and nothing at all when the client will not say who is playing.
@@ -60,6 +64,17 @@ Cooldowns.KNOWN = {
     [25146] = true, -- Transmute: Elemental Fire
     [18560] = true, -- Mooncloth
     [1317279] = true, -- Transmute: Legionite (Forever's)
+}
+
+-- How long Classic's waits are, in seconds, until the game has said
+-- (`wait` on the saved entry). A craft with a wait and no length here
+-- counts as one a day.
+Cooldowns.DAY = 86400
+Cooldowns.WAITS = {
+    [11479] = 2 * 86400, -- Transmute: Iron to Gold
+    [11480] = 2 * 86400, -- Transmute: Mithril to Truesilver
+    [17187] = 2 * 86400, -- Transmute: Arcanite
+    [18560] = 4 * 86400, -- Mooncloth
 }
 
 -- Items with a cooldown of their own (the Salt Shaker makes Refined Deeprock
@@ -131,17 +146,19 @@ end
 --------------------------------------------------------------------------------
 
 --- Seconds left, from a start and duration, or 0 when it is not cooling
---- down; nil when the client gave nothing readable (a secret value).
+--- down; nil when the client gave nothing readable (a secret value). The
+--- second answer is how long the whole wait is, while one is running.
 local function Left(start, duration)
-    local ok, left = pcall(function()
+    local ok, left, long = pcall(function()
         if type(start) ~= "number" or type(duration) ~= "number" then return nil end
         if start == 0 or duration < Cooldowns.MIN_SECONDS then return 0 end
         local clock = GetTime()
         if start > clock then start = start - Cooldowns.CLOCK_WRAP end
         -- Never more left than the cooldown is long, whatever the client says.
-        return math.min(duration, math.max(0, start + duration - clock))
+        local left = math.min(duration, math.max(0, start + duration - clock))
+        return left, left > 0 and duration or nil
     end)
-    if ok then return left end
+    if ok then return left, long end
     return nil
 end
 
@@ -205,7 +222,7 @@ end
 --- Put what was read on the character's entry. `left` nil means unread:
 --- nothing changes. A ready one keeps the moment it came ready, so it is
 --- said once, not on every read.
-local function Note(characterKey, id, fields, left)
+local function Note(characterKey, id, fields, left, wait)
     local store = Store()
     if not (store and characterKey) then return end
     local entries = store[characterKey]
@@ -231,6 +248,9 @@ local function Note(characterKey, id, fields, left)
     entry.group = Cooldowns.Group(entry.name) or entry.group
     entry.recipeID = fields.recipeID or entry.recipeID
     entry.itemID = fields.itemID or entry.itemID
+    if type(wait) == "number" and wait >= Cooldowns.MIN_SECONDS and left and left > 0 then
+        entry.wait = math.floor(wait + 0.5)
+    end
     if left ~= nil then
         local now = Now()
         local before = entry.readyAt
@@ -492,6 +512,58 @@ function Cooldowns:ReadyHere(recipeID)
         end
     end
     return false
+end
+
+--- How long a craft's wait is, in seconds: what the game said when any
+--- character cast it, else Classic's length (WAITS), else a day.
+function Cooldowns:WaitFor(recipeID)
+    local id = "spell:" .. tostring(recipeID)
+    local longest
+    for _, entries in pairs(Store() or {}) do
+        local entry = type(entries) == "table" and entries[id]
+        local wait = type(entry) == "table" and tonumber(entry.wait)
+        if wait and wait >= Cooldowns.MIN_SECONDS and (not longest or wait > longest) then longest = wait end
+    end
+    return longest or Cooldowns.WAITS[recipeID] or Cooldowns.DAY
+end
+
+--- When a craft is ready for one character: the time() it comes ready, or
+--- nil when nothing is kept for it (never cast, so ready). Crafts that
+--- share one wait (every transmute) count the latest of the group.
+function Cooldowns:ReadyAtFor(characterKey, recipeID, name)
+    local store = Store()
+    local entries = store and characterKey and store[characterKey]
+    if type(entries) ~= "table" then return nil end
+    local id = "spell:" .. tostring(recipeID)
+    local own = entries[id]
+    local group = type(own) == "table" and own.group or Cooldowns.Group(name)
+    local readyAt
+    for key, entry in pairs(entries) do
+        if type(entry) == "table" and type(entry.readyAt) == "number" and Cooldowns.Counts(key, entry)
+            and (key == id or (group and entry.recipeID and entry.group == group)) then
+            if not readyAt or entry.readyAt > readyAt then readyAt = entry.readyAt end
+        end
+    end
+    return readyAt
+end
+
+--- The soonest any of this account's characters who know the craft has it
+--- ready: the time() it comes ready, or nil when one has it ready now.
+--- `fallback` (a character key) answers when no character knows it.
+function Cooldowns:SoonestFor(recipeID, name, fallback)
+    local characters = ns.db and ns.db.characters or {}
+    local soonest, any = nil, false
+    for characterKey, record in pairs(characters) do
+        local recipes = type(record) == "table" and not record.linkedFrom and record.recipes
+        if type(recipes) == "table" and recipes[recipeID] then
+            any = true
+            local readyAt = self:ReadyAtFor(characterKey, recipeID, name)
+            if not readyAt or readyAt <= Now() then return nil end
+            if not soonest or readyAt < soonest then soonest = readyAt end
+        end
+    end
+    if not any then return self:ReadyAtFor(fallback, recipeID, name) end
+    return soonest
 end
 
 --- "2d 4h", "3h 12m", "12m", "under a minute".

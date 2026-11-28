@@ -1068,8 +1068,12 @@ end
 --- number), no more than Keep in stock lists at once. The Profit tab's
 --- A DAY, in place of gold an hour, which said nothing of whether it sells
 --- (the owner, 2026-10-16). Only for a craft sold on the auction house.
--- @return copper a day, how many that counts, and true when Keep in stock
---         cut the count; nil while there is no sales estimate
+--- A craft with a wait (analysis.cooldown, from CooldownFor) counts no more
+--- than can be made a day: Mooncloth every 4 days is 0.25 (a Discord
+--- player, the owner said build it 2026-11-28).
+-- @return copper a day, how many that counts, true when Keep in stock
+--         cut the count, and true when the wait cut it; nil while there
+--         is no sales estimate
 function Profit:PerDay(analysis, itemID)
     if analysis.via ~= "auction" or type(analysis.profitPerUnit) ~= "number" then return nil end
     local ok, sells = pcall(ns.Prices.GetUnitsSoldPerDay, ns.Prices, itemID)
@@ -1081,7 +1085,112 @@ function Profit:PerDay(analysis, itemID)
         limit = fine and tonumber(limit) or 0
         if limit > 0 and sells > limit then sells, capped = limit, true end
     end
-    return analysis.profitPerUnit * sells, sells, capped
+    local byWait = false
+    local cooldown = analysis.cooldown
+    if type(cooldown) == "table" and type(cooldown.perDay) == "number" and cooldown.perDay < sells then
+        sells, capped, byWait = cooldown.perDay, false, true
+    end
+    return analysis.profitPerUnit * sells, sells, capped, byWait
+end
+
+--------------------------------------------------------------------------------
+-- Crafts with a wait (the owner said build it, 2026-11-28)
+--------------------------------------------------------------------------------
+--
+-- Mooncloth, transmutes and the like can be made once a wait. A DAY counts
+-- one per wait (PerDay), the row says Ready or the time left after the
+-- name, MAKE is 1 when ready and 0 while waiting, and GOLD/HR shows --.
+-- Which crafts: Cost:IsCooldownCraft, the same test as RoadPlan.OnCooldown.
+-- How long: Cooldowns:WaitFor. Tested in tools/test_profitcooldowns.lua.
+
+--- { wait, perDay, readyAt } for a craft with a wait, for the character who
+--- would make it; nil for any other craft. readyAt nil means ready.
+function Profit:CooldownFor(recipeID, recipe, characterKey)
+    local Cost, Cooldowns = ns.Cost, ns.Cooldowns
+    if not (Cost and Cost.IsCooldownCraft and Cooldowns and Cooldowns.WaitFor) then return nil end
+    local ok, has = pcall(Cost.IsCooldownCraft, Cost, recipeID, recipe)
+    if not ok or has ~= true then return nil end
+    local wait = Cooldowns:WaitFor(recipeID)
+    local readyAt = Cooldowns:ReadyAtFor(characterKey, recipeID, type(recipe) == "table" and recipe.name or nil)
+    return { wait = wait, perDay = Cooldowns.DAY / wait, readyAt = readyAt }
+end
+
+--- When the craft is ready, as a row shows it: for the character who would
+--- make it, or the soonest of every character who knows it (`everyone`,
+--- with All Characters ticked). nil means ready now.
+function Profit.CooldownReadyAt(analysis, everyone)
+    local cooldown = analysis and analysis.cooldown
+    if type(cooldown) ~= "table" then return nil end
+    local readyAt = cooldown.readyAt
+    if everyone and ns.Cooldowns and ns.Cooldowns.SoonestFor then
+        readyAt = ns.Cooldowns:SoonestFor(analysis.recipeID, analysis.name, analysis.owner)
+    end
+    if readyAt and readyAt <= time() then return nil end
+    return readyAt
+end
+
+--- How many MAKE shows: 1 at most for a craft with a wait, and 0 while it
+--- waits; the plain count for any other craft.
+function Profit.MakeNow(analysis)
+    local count = analysis and analysis.craftableNow or 0
+    if type(analysis) == "table" and type(analysis.cooldown) == "table" then
+        if Profit.CooldownReadyAt(analysis) then return 0 end
+        return math.min(count, 1)
+    end
+    return count
+end
+
+local HOURGLASS = "|TInterface\\Icons\\INV_Misc_PocketWatch_01:0|t"
+
+--- The name with the mark after it: "Ready" in green, or the time left
+--- muted. The name alone for a craft with no wait.
+function Profit.WithCooldownMark(name, analysis, everyone)
+    if type(analysis) ~= "table" or type(analysis.cooldown) ~= "table" then return name end
+    local colors = ns.COLORS or {}
+    local readyAt = Profit.CooldownReadyAt(analysis, everyone)
+    if readyAt then
+        local left = ns.Cooldowns and ns.Cooldowns.LeftText(readyAt - time()) or ""
+        return ("%s  %s |c%s%s|r"):format(name, HOURGLASS, colors.muted or "ff857c68", left)
+    end
+    return ("%s  %s |c%s%s|r"):format(name, HOURGLASS, colors.profit or "ff4fd17a", L["Ready"])
+end
+
+--- How often it can be made, in words.
+function Profit.CooldownWaitText(wait)
+    wait = tonumber(wait) or 86400
+    if wait >= 86400 * 1.5 then
+        return L.Format("You can make one every %d days.", math.floor(wait / 86400 + 0.5))
+    elseif wait >= 86400 * 0.75 then
+        return L["You can make one a day."]
+    end
+    return L.Format("You can make one every %d hours.", math.max(1, math.floor(wait / 3600 + 0.5)))
+end
+
+--- A count a day as the tooltip says it: "0.25", "1.5", "4".
+function Profit.CountText(count)
+    count = tonumber(count) or 0
+    if count >= 10 then return ("%d"):format(math.floor(count + 0.5)) end
+    local text = ("%.2f"):format(count):gsub("0+$", ""):gsub("%.$", "")
+    return text
+end
+
+--- The tooltip lines for a craft with a wait, in order: { text, ready }
+--- where `ready` is true for the green Ready line. `perDayNote` adds "So it
+--- counts N a day." when the wait is what holds A DAY back.
+function Profit.CooldownLines(analysis, everyone, perDayNote)
+    local lines = {}
+    if type(analysis) ~= "table" or type(analysis.cooldown) ~= "table" then return lines end
+    lines[#lines + 1] = { text = Profit.CooldownWaitText(analysis.cooldown.wait) }
+    if perDayNote and analysis.perDayByWait then
+        lines[#lines + 1] = { text = L.Format("So it counts %s a day.", Profit.CountText(analysis.perDaySells)) }
+    end
+    local readyAt = Profit.CooldownReadyAt(analysis, everyone)
+    if readyAt then
+        lines[#lines + 1] = { text = L.Format("Ready in %s", ns.Cooldowns.LeftText(readyAt - time())) }
+    else
+        lines[#lines + 1] = { text = L["Ready"], ready = true }
+    end
+    return lines
 end
 
 --- What one of a recipe's output cost to make, as Analyse gives it in
@@ -1148,6 +1257,10 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- Read before the early exits below, so a craft that cannot be priced can
     -- still say it would raise your skill.
     analysis.skillUp = ns.SkillUp and ns.SkillUp:GetForRecipe(recipeID, recipe) or nil
+
+    -- A craft with a wait, read before the early exits too: the mark after
+    -- the name needs no price (CooldownFor).
+    analysis.cooldown = self:CooldownFor(recipeID, recipe, crafter)
 
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
@@ -1445,7 +1558,9 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- Buy the parts or make them, whichever earns more an hour (a Discord
     -- player, 2026-11-12). Only while "Gold an Hour:" is ticked, and only
     -- for a craft whose own cast is timed (Logic/HourPlans.lua).
-    if analysis.knownByMe and ns.HourPlans and ns.HourPlans:IsOn() then
+    -- A craft with a wait (Mooncloth, transmutes) can't be made again and
+    -- again for an hour, so it has no gold an hour (GOLD/HR shows --).
+    if analysis.knownByMe and not analysis.cooldown and ns.HourPlans and ns.HourPlans:IsOn() then
         analysis.hourPlans = ns.HourPlans:For(recipeID, analysis)
     end
 
@@ -1456,7 +1571,8 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     analysis.confidence, analysis.confidenceReason = ns.Prices:GetConfidence(recipe.outputItemID)
     analysis.liquidity = ns.Prices:GetSalesPerDay(recipe.outputItemID)
-    analysis.perDay, analysis.perDaySells, analysis.perDayCapped = self:PerDay(analysis, recipe.outputItemID)
+    analysis.perDay, analysis.perDaySells, analysis.perDayCapped, analysis.perDayByWait =
+        self:PerDay(analysis, recipe.outputItemID)
     -- The age of the price the profit is for (Discord, 2026-10-08):
     -- a disenchant is valued at its material, so that scan's age is the one
     -- that says how far to trust it. A vendor's price does not age; the

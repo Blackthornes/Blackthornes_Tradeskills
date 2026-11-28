@@ -378,7 +378,8 @@ end
 -- This column exists because the name no longer carries it: greying the name
 -- out was the old "you are short of materials", and it drowned out rarity.
 local function UpdateMakeCell(cells, analysis)
-    local craftable = analysis.craftableNow or 0
+    -- A craft with a wait makes 1 when ready, 0 while it waits.
+    local craftable = ns.Profit.MakeNow and ns.Profit.MakeNow(analysis) or analysis.craftableNow or 0
 
     if craftable > 0 then
         cells.make:SetText(tostring(craftable))
@@ -496,6 +497,25 @@ local function AddPerDayLine(analysis)
     GameTooltip:Show()
 end
 
+--- A craft with a wait: how often it can be made, what A DAY counts, and
+--- Ready or the time left (Profit.CooldownLines). With Gold an Hour ticked,
+--- why GOLD/HR shows --.
+local function AddCooldownLines(analysis)
+    if type(analysis.cooldown) ~= "table" or not ns.Profit.CooldownLines or not GameTooltip:IsShown() then return end
+    local r, g, b = 0.7, 0.7, 0.7
+    for _, line in ipairs(ns.Profit.CooldownLines(analysis, state.accountWide, analysis.perDay ~= nil)) do
+        if line.ready then
+            GameTooltip:AddLine(line.text, Theme.Unpack("profit"))
+        else
+            GameTooltip:AddLine(line.text, r, g, b, true)
+        end
+    end
+    if state.goldHour then
+        GameTooltip:AddLine(L["It has a wait, so gold an hour doesn't count it."], r, g, b, true)
+    end
+    GameTooltip:Show()
+end
+
 --- What the STOCK column's "0/3" means (a player asked, the owner said yes,
 --- 2026-10-22): how many you have, and how many you keep and why.
 --- A price for one item, with " x2" after it when one craft makes more,
@@ -587,6 +607,8 @@ local function UpdateRow(row, analysis)
     -- Equipment (Logic/Upgrades.lua).
     local name = analysis.name or L.Format("recipe %s", analysis.recipeID)
     if ns.Upgrades and ns.Upgrades.WithAltText then name = ns.Upgrades:WithAltText(name, analysis.outputItemID) end
+    -- A craft with a wait: Ready, or the time left (Profit.WithCooldownMark).
+    if ns.Profit.WithCooldownMark then name = ns.Profit.WithCooldownMark(name, analysis, state.accountWide) end
     Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
@@ -2772,7 +2794,7 @@ local function BuildCrafts(container)
         margin = function(a) return a.priceable and a.margin or nil end,
         age = function(a) return a.age end,
         posted = function(a) return a.stock end,
-        make = function(a) return a.craftableNow end,
+        make = function(a) return ns.Profit.MakeNow and ns.Profit.MakeNow(a) or a.craftableNow end,
         who = function(a) return a.ownerName end,
         disenchant = function(a) return a.disenchantValue end,
         via = function(a) return a.via end,
@@ -2824,6 +2846,7 @@ local function BuildCrafts(container)
             if not AddWaysLines(analysis) then AddDisenchantLine(analysis) end
             AddTimeLines(analysis)
             AddPerDayLine(analysis)
+            AddCooldownLines(analysis)
             AddStockLine(analysis)
             AddOwnerLine(analysis)
         end,
