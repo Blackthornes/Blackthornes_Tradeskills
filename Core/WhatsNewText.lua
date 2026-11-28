@@ -5,6 +5,13 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.51.0", lines = {
+        "The Snipe tab is faster. It shows your last scan's deals first and tells you how far along it is.",
+        "Vendor Price For lets you choose which item colors count a vendor price on the Sell list.",
+        "Shift-click List lists one row anyway, and Shift-click + queues all your bags can make.",
+        "A Lists button opens your shopping lists away from the auction house.",
+        "Crafts with a wait, like Mooncloth, count once per wait on the Profit tab.",
+    } },
     { version = "1.50.0", lines = {
         "Recipe tooltips show which of your other characters can learn the recipe.",
         "Butler can mail your alts the materials for their Road to 300. It is off unless ticked.",
@@ -13,13 +20,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.49.1", lines = {
         "The Sell list shows your other copies of an item when one copy is soulbound.",
-    } },
-    { version = "1.49.0", lines = {
-        "The Profit tab shows a 7 Days price line, a sell-speed bar and three cards. Click any profit to see how it adds up.",
-        "Road to 300 has Stop At buttons, Fewest Materials, No Auction House and Skip on each step.",
-        "The Queue has Sort By chips and an optional chime when it is done.",
-        "My Auctions lists today's sales under Sold Today.",
-        "Pick how Tradeskills opens at the auction house, a profession and the mailbox.",
-        "New Font, Colors and Fold Gem choices on the All Addons page.",
     } },
 }

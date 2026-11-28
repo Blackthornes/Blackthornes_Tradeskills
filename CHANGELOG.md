@@ -4,6 +4,25 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.51.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Faster Snipe.** The Snipe tab shows deals from your last scan at once, marked Last Scan, and checks them first. Items that were close to a deal come up more often. The footer shows how many items it checked and how long a full pass takes, with a thin gold bar under the list
+- **Check Price Again.** When a material's price runs out on the Snipe tab, the buy stays and the button reads Check Price Again. A gold bar under the button shows how long the price holds
+- **Vendor Price For.** Pick which item colors a vendor price counts for on the Sell list. To turn a color off: 1. Open Tradeskills. 2. Click Settings. 3. Open the Auction House page and find Buying and Posting. 4. Untick White, Green, Blue or Purple on Vendor Price For:. All four start ticked
+- **Shift-click List.** Shift-click List on a Sell list row lists that one row even when Tradeskills would hold it back. The button reads List Anyway while Shift is down
+- **Shift-click +.** Shift-click the + in the craft pane, or on a queued craft on the Queue tab, to queue all your bags can make
+- **Lists button.** A Lists button next to Scan Auctions, and `/bts lists`, open your shopping lists away from the auction house
+- **Crafts with a wait.** Crafts you can make once every few days, such as Mooncloth, count once per wait on the Profit tab. A pocket watch mark shows Ready or the time left on My Crafts, All Recipes and Your Time
+- **Fix.** The buy box on a shopping list item follows that item's own Most I'll Pay.
+- **Fix.** The craft queue, its materials list and mail show only crafts from your realm and side.
+- **Fix.** Fill Mail for Butler takes the version of an item it names, not the version you keep.
+- **Fix.** Keep on This Character holds what is in the bank too.
+- **Fix.** Tidy Up on Price History keeps a reading's place when it leaves out old ones.
+- **Fix.** A fold gem on a window set to a round button no longer reads "Expand this window" at the wrong time.
+- **Fix.** The vendor window sits under the stack split pop-up and other buy pop-ups.
+
 ## 1.50.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
