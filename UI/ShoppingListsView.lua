@@ -348,7 +348,8 @@ local function CreateRow(row)
     row.sub:SetPoint("RIGHT", row.want, "LEFT", -6, 0)
     row.sub:SetWordWrap(false)
 
-    -- Most I'll Pay: the price Snipe's My Lists stops at for this item.
+    -- Most I'll Pay: the price Snipe's My Lists stops at for this item, and
+    -- the buy box fills with only what costs this or less (BuyQuantity).
     row.payHolder = CreateFrame("Frame", nil, row)
     row.payHolder:SetPoint("TOPLEFT", row, "TOPLEFT", 40, -28)
     row.payHolder:SetPoint("RIGHT", row.want, "LEFT", -6, 0)

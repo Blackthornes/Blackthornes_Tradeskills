@@ -235,10 +235,13 @@ function BuyQuantity:Fill(itemID)
         return false
     end
 
-    -- Most I'll Pay on the item's list (Logic/ListRules.lua): only as many
-    -- as are listed at that or less each. Nothing filled until the
-    -- listings are in, and nothing when none are that cheap.
-    local most = ns.ListRules and ns.ListRules:Rule(want.itemID, "maxPay")
+    -- Most I'll Pay: the item's own on its list, else its list's rule
+    -- (Logic/ListRules.lua). Only as many as are listed at that or less
+    -- each. Nothing filled until the listings are in, and nothing when none
+    -- are that cheap.
+    local lists = ns.ShoppingLists
+    local most = lists and lists.MaxPayFor and lists:MaxPayFor(want.itemID)
+    most = most or (ns.ListRules and ns.ListRules:Rule(want.itemID, "maxPay"))
     if most then
         local cheap = self.UnitsUpTo(self:LiveListings(want.itemID), most)
         if not cheap or cheap < 1 then

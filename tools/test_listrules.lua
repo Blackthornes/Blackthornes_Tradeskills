@@ -12,6 +12,7 @@
 --   5. Keep Listed counts stacks up and the room left.
 --   6. Post For changes only that list's items' length.
 --   7. Most I'll Pay counts only the cheap enough units, past your own.
+--   8. An item's own Most I'll Pay fills the buy box, ahead of the list's.
 
 local function noop() end
 
@@ -253,6 +254,59 @@ local listings = {
 check("units at or under the price, less your own", ns.BuyQuantity.UnitsUpTo(listings, 45) == 13)
 check("none cheap enough is 0", ns.BuyQuantity.UnitsUpTo(listings, 10) == 0)
 check("no listings is nil", ns.BuyQuantity.UnitsUpTo(nil, 45) == nil)
+
+-- 8. An item's own Most I'll Pay fills the buy box too, and beats the
+-- list's rule (a player's report, 2026-11-28: the box on each item did
+-- nothing for the buy amount, which filled to the whole need).
+do
+    local ORE = 2770
+    local rows = {
+        { unitPrice = 40, quantity = 10, numOwnerItems = 0 },
+        { unitPrice = 45, quantity = 5, numOwnerItems = 0 },
+        { unitPrice = 60, quantity = 50, numOwnerItems = 0 },
+    }
+    local savedHouse, savedFrame = C_AuctionHouse, AuctionHouseFrame
+    C_AuctionHouse = {
+        GetNumCommoditySearchResults = function() return #rows end,
+        GetCommoditySearchResultInfo = function(_, i) return rows[i] end,
+    }
+    local display = { quantity = 1 }
+    function display:GetItemID() return self.itemID end
+    function display:GetQuantitySelected() return self.quantity end
+    function display:SetQuantitySelected(n) self.quantity = n end
+    AuctionHouseFrame = { CommoditiesBuyFrame = { BuyDisplay = display } }
+    local BQ = ns.BuyQuantity
+
+    -- A list with no rules, only the item's own price.
+    local ore = Lists:Make("Ore")
+    Lists:Add(ore, ORE, 40)
+    Lists:SetMaxPay(ore, ORE, 45)
+    display.itemID, display.quantity = ORE, 1
+    BQ:WantMany({ [ORE] = 40 })
+    BQ:Fill(ORE)
+    check("the item's own price fills only the cheap ones", display.quantity == 15)
+
+    -- Too dear: nothing filled.
+    Lists:SetMaxPay(ore, ORE, 10)
+    display.quantity = 1
+    BQ:Fill(ORE)
+    check("none at the item's price fills nothing", display.quantity == 1)
+
+    -- Its own price wins over the list's rule (4500 on Herbs).
+    Lists:SetMaxPay(herbs, PEACE, 40)
+    display.itemID, display.quantity = PEACE, 1
+    BQ:WantMany({ [PEACE] = 40 })
+    BQ:Fill(PEACE)
+    check("the item's own price beats the list's rule", display.quantity == 10)
+
+    -- Taken off: the list's rule decides again.
+    Lists:SetMaxPay(herbs, PEACE, 0)
+    display.quantity = 1
+    BQ:Fill(PEACE)
+    check("without its own price the list's rule decides", display.quantity == 40)
+
+    C_AuctionHouse, AuctionHouseFrame = savedHouse, savedFrame
+end
 
 
 print("\nthe Rules window")

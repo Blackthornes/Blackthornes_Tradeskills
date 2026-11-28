@@ -12,7 +12,7 @@
 --   { { name = "Potion herbs", items = { { id = 2447, want = 40 }, ... },
 --       id = 3, rules = { ... } }, ... }
 -- An item may also carry `maxPay` (copper): the most Snipe's My Lists pays
--- for one (2026-11-06). Left out, the list's own Most I'll Pay rule or the
+-- for one (2026-11-06), and the buy box fills only up to it (2026-11-28). Left out, the list's own Most I'll Pay rule or the
 -- item's worth decides.
 -- `id` is made once for each list (`shoppingListNextId`, never rename
 -- either) and `rules` are the list's rules (Logic/ListRules.lua).
@@ -259,6 +259,23 @@ function ShoppingLists.MaxPayOf(item)
     local value = type(item) == "table" and tonumber(item.maxPay)
     if not value or value < 1 then return nil end
     return math.floor(value)
+end
+
+--- An item's own Most I'll Pay from the first list on the Lists view that
+--- holds it with one set, or nil. The buy box reads it ahead of the list's
+--- rule, as Snipe's My Lists does.
+function ShoppingLists:MaxPayFor(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    for _, held in ipairs(self:Readable()) do
+        for _, item in ipairs(Items(held.list)) do
+            if type(item) == "table" and tonumber(item.id) == itemID then
+                local own = ShoppingLists.MaxPayOf(item)
+                if own then return own end
+            end
+        end
+    end
+    return nil
 end
 
 --------------------------------------------------------------------------------
