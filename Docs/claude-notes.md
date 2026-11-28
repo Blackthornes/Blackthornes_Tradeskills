@@ -4527,3 +4527,22 @@ Account-wide views stay account wide on purpose: the bank view
 (`Banks:Collect`) and the disenchant buy marks (`DisenchantBuys:Held`).
 Tested in `tools/test_oneside.lua` and `tools/test_butlerjobs.lua`.
 Equipment (`Alts`) and Butler already keep to this realm and side.
+
+## The queue only from this side (2026-11-28)
+
+A player's report: with an Alliance and a Horde character on one realm,
+the queue and mail kept naming the other side's characters. The queue is
+one list for the whole account, so a Horde character saw the Alliance
+one's crafts, its materials on the list to buy, and "on Ana" as who makes
+them. `Queue:InReach(entry)` asks `Characters:InReach` of the craft's
+maker; `Queue:Reachable()` is the queue without the crafts out of reach
+(the stored list itself when none are). The Queue tab and craft pane
+(`Queue:Shown`), the materials list (`BuildShoppingList`), the row prices
+(`BuildEntryCosts`), the items kept off the sell list
+(`GetReservedItems`), and `GetTotals`/`GetCraftTime` with no list all read
+`Reachable`. The stored queue is unchanged; each side sees its own crafts
+when it logs in, and the empty Queue tab says so with the Only My Crafts
+words. `Queue:GetCrafter` never falls back to a character that can't mail
+the craft back (it stays with whoever queued it), and Butler's restock
+"who can make it" (`Butler:MakersOf`) skips characters out of reach.
+Tested in `tools/test_queueoneside.lua` and `tools/test_butlercraft.lua`.

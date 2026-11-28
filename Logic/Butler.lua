@@ -980,7 +980,9 @@ end
 --- Who on this account can craft an item, for Butler's restock list
 -- (2026-11-26): { recipeID, name, per, makers = { { key, name, short,
 -- playing } } }, the recipe known by the most of them, or nil. Only this
--- account's own characters (not linked ones). Read only; never raises.
+-- account's own characters (not linked ones), on this realm and side: a
+-- Horde character can't mail an Alliance one what it made (a player's
+-- report, 2026-11-28). Read only; never raises.
 function Butler:MakersOf(item)
     local itemID = tonumber(item)
     if not itemID then return nil end
@@ -989,9 +991,11 @@ function Butler:MakersOf(item)
         if not (recipes and recipes.GetCharacters) then return nil end
         local records = Characters()
         local byRecipe, best = {}, nil
+        local who = ns.Characters
         for _, character in ipairs(recipes:GetCharacters()) do
             local record = records[character.key]
-            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table" then
+            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table"
+                and not (who and who.InReach and not who:InReach(character.key)) then
                 for recipeID, recipe in pairs(record.recipes) do
                     if type(recipe) == "table" and recipe.outputItemID == itemID
                         and not (recipes.IsDropped and recipes:IsDropped(recipe, character.key)) then

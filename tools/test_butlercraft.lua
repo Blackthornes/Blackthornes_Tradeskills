@@ -159,14 +159,18 @@ print("\nwho can make an item (Butler's restock list)")
 ns.db.characters["Player-2"] = { name = "Ana", realm = "R", recipes = { [1] = { name = "Bolt of Woolen Cloth",
   outputItemID = BOLT, quantityMin = 1 }, [3] = { name = "Wool Thing", outputItemID = OTHER, quantityMin = 2 } } }
 ns.db.characters["Player-3"] = { name = "Linked", realm = "R", recipes = { [1] = { outputItemID = BOLT } } }
+-- A Horde character on the same realm: it can't mail an Alliance one, so it
+-- is never named as a maker (a player's report, 2026-11-28).
+ns.db.characters["Player-4"] = { name = "Grosh", realm = "R", faction = "Horde",
+  recipes = { [1] = { outputItemID = BOLT }, [3] = { outputItemID = OTHER, quantityMin = 2 } } }
 ns.db.characters[SELF].recipes = { [3] = { name = "Wool Thing", outputItemID = OTHER, quantityMin = 2 } }
 ns.Recipes.GetCharacters = function()
   return { { key = SELF, name = "Mia", isCurrent = true }, { key = "Player-2", name = "Ana" },
-    { key = "Player-3", name = "Linked", linkedFrom = "other" } }
+    { key = "Player-3", name = "Linked", linkedFrom = "other" }, { key = "Player-4", name = "Grosh" } }
 end
 local bolt = Butler:MakersOf(BOLT)
 check("bolts: the recipe", bolt and bolt.recipeID, 1)
-check("bolts: only Ana, not the linked one", bolt and #bolt.makers, 1)
+check("bolts: only Ana, not the linked one nor the Horde one", bolt and #bolt.makers, 1)
 check("bolts: Ana's short name", bolt and bolt.makers[1].short, "Ana")
 check("bolts: Ana isn't playing", bolt and bolt.makers[1].playing, false)
 local thing = Butler:MakersOf(OTHER)
