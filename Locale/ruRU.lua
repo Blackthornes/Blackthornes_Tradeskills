@@ -4070,3 +4070,9 @@ L["%s can learn this at %s %d"] = "%s может выучить это при н
 L["Used to level %s's %s. Needs %d more."] = "Нужно %s для прокачки: %s. Ещё %d."
 L["Make and change your shopping lists anywhere."] = "Создавай и меняй списки покупок где угодно."
 L["open your shopping lists"] = "открывает твои списки покупок"
+
+-- Snipe: last scan finds, progress, run-out prices
+L["Checked %d of %d. A full pass takes about %s."] = "Проверено %d из %d. Полный круг займёт около %s."
+L["Last Scan"] = "Прошлый скан"
+L["From your last scan. Snipe checks it first."] = "Из твоего прошлого скана. Snipe проверит его первым."
+L["Check Price Again"] = "Узнать цену снова"

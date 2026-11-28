@@ -212,6 +212,48 @@ local function CreateRow(row)
     end
     row.cells = row.cells or {}
     row.cells.buy = label
+
+    -- A thin gold bar under the button: how long a material's price holds.
+    local hold = row.buy:CreateTexture(nil, "OVERLAY")
+    hold:SetColorTexture(Theme.Unpack("accent"))
+    hold:SetHeight(2)
+    hold:SetPoint("BOTTOMLEFT", row.buy, "BOTTOMLEFT", 2, 2)
+    hold:Hide()
+    row.hold = hold
+end
+
+--- How much of a material's price time is left, 0 to 1, or nil.
+function SnipeView.HoldShare()
+    local snipe = Snipe()
+    local pending = snipe and snipe.pending
+    if not (pending and pending.phase == "quoted" and not pending.item and snipe.QuoteLeft) then return nil end
+    local left = snipe:QuoteLeft()
+    local whole = pending.quoteFor
+    if not (left and whole and whole > 0) then return nil end
+    return math.max(0, math.min(1, left / whole))
+end
+
+--- Size the price-time bar on the row being paid for. Only that one row
+--- is touched, a few times a second, never the whole list.
+function SnipeView:DressHold(row)
+    row = row or self.holdRow
+    if not (row and row.hold) then return end
+    local pending = Snipe().pending
+    local share = pending and row.data == pending.find and SnipeView.HoldShare()
+    if not share then
+        row.hold:Hide()
+        if row == self.holdRow then self.holdRow = nil end
+        return
+    end
+    local width = (row.buy.GetWidth and row.buy:GetWidth() or BUY_WIDTH) - 4
+    row.hold:SetWidth(math.max(1, width * share))
+    row.hold:Show()
+    self.holdRow = row
+end
+
+--- Can a click pay for (or ask again about) this buy?
+function SnipeView.Payable(pending)
+    return pending ~= nil and (pending.phase == "quoted" or pending.phase == "planned" or pending.phase == "expired")
 end
 
 --- What a row's own Buy button says, and whether it can be clicked.
@@ -224,6 +266,11 @@ function SnipeView.RowBuyState(find)
         if snipe.armed == pending then return L["Confirm"], true end
         -- An aged price is being checked again: wait for it.
         if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        -- A material's price ran out before the click: one click asks again.
+        if pending.phase == "expired" then return L["Check Price Again"], true end
+        if pending.phase == "quoted" and not pending.item and pending.fromClick then
+            return L.Format("Pay %s", Colored(pending.total)), true
+        end
         if pending.phase == "quoted" or pending.phase == "planned" then
             local count = pending.count or (find and find.qty) or 1
             return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
@@ -244,7 +291,7 @@ function SnipeView:RowBuy(find)
     if not (snipe and find) then return end
     local pending = snipe.pending
     if pending and pending.find == find then
-        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+        if SnipeView.Payable(pending) then snipe:Pay() end
     elseif pending and pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then
         snipe:CancelBuy()
         snipe:Buy(find)
@@ -323,6 +370,8 @@ local function UpdateRow(row, find)
             -- Planned waits for the click too; "Asking..." here read as
             -- still working, and the buy was let go unclicked.
             row.badge:SetText(L.Format("Pay %s", Money(pending.total or pending.expected)))
+        elseif pending.phase == "expired" then
+            row.badge:SetText(L["Check Price Again"])
         else
             row.badge:SetText(L["Asking..."])
         end
@@ -343,6 +392,7 @@ local function UpdateRow(row, find)
     end
 
     DressRowBuy(row, find)
+    SnipeView:DressHold(row)
 
     Theme.SetItemIcon(row.icon, find.itemID)
     local label = ItemName(find.itemID)
@@ -372,7 +422,7 @@ local function ClickRow(find, _, mouseButton)
     if not find then return end
     local pending = snipe.pending
     if pending and pending.find == find then
-        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+        if SnipeView.Payable(pending) then snipe:Pay() end
     elseif pending and pending.auto and snipe.armed ~= pending then
         -- A quiet ready for another row gives way to the row clicked.
         snipe:CancelBuy()
@@ -714,7 +764,10 @@ function SnipeView:Build(body, frame, topAnchor, opts)
         since = since + (elapsed or 0)
         if since < 0.2 then return end
         since = 0
-        if SnipeView.shown then SnipeView:WatchMouse() end
+        if SnipeView.shown then
+            SnipeView:WatchMouse()
+            SnipeView:DressHold()
+        end
     end)
     self.watcher = watcher
 
@@ -727,7 +780,8 @@ end
 function SnipeView:BuyWidth(text)
     local width = 80
     if Theme.MeasureText then
-        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"], text }) do
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"],
+            L["Check Price Again"], text }) do
             local ok, measured = pcall(Theme.MeasureText, "small", word)
             if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
         end
@@ -742,6 +796,10 @@ function SnipeView:BuyState()
     if pending then
         if snipe.armed == pending then return L["Confirm"], true end
         if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        if pending.phase == "expired" then return L["Check Price Again"], true end
+        if pending.phase == "quoted" and not pending.item and pending.fromClick then
+            return L.Format("Pay %s", Money(pending.total)), true
+        end
         if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
         if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false

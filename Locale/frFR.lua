@@ -4068,3 +4068,9 @@ L["%s can learn this at %s %d"] = "%s peut apprendre ça à %s %d"
 L["Used to level %s's %s. Needs %d more."] = "Sert à %s pour monter %s. Il en faut encore %d."
 L["Make and change your shopping lists anywhere."] = "Crée et modifie tes listes d'achats où tu veux."
 L["open your shopping lists"] = "ouvre tes listes d'achats"
+
+-- Snipe: last scan finds, progress, run-out prices
+L["Checked %d of %d. A full pass takes about %s."] = "%d sur %d vérifiés. Un tour complet prend environ %s."
+L["Last Scan"] = "Dernier scan"
+L["From your last scan. Snipe checks it first."] = "De ton dernier scan. Snipe le vérifie en premier."
+L["Check Price Again"] = "Revoir le prix"

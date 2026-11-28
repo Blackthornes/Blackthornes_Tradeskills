@@ -577,7 +577,10 @@ end
 --- A deal readied in the background, waiting for the player's click.
 function Snipe:WaitingReady()
     local p = self.pending
-    return p ~= nil and p.auto == true and (p.phase == "quoted" or p.phase == "planned")
+    if p == nil then return false end
+    -- A run-out price waits for a click and holds nothing up.
+    if p.phase == "expired" then return true end
+    return p.auto == true and (p.phase == "quoted" or p.phase == "planned")
 end
 
 --- Is the top find's price check still getting too little room? It may
@@ -948,25 +951,61 @@ function Snipe:Ready()
     end
 end
 
+--- Seconds a stack's price still holds, or nil when the game won't say.
+function Snipe:QuoteLeft()
+    local p = self.pending
+    if not (p and p.phase == "quoted" and not p.item) then return nil end
+    if not (Util.HasFunction and Util.HasFunction("C_AuctionHouse.GetQuoteDurationRemaining")) then return nil end
+    local ok, left = pcall(C_AuctionHouse.GetQuoteDurationRemaining)
+    if ok and type(left) == "number" then
+        if not p.quoteFor or left > p.quoteFor then p.quoteFor = left end
+        return math.max(0, left)
+    end
+    return nil
+end
+
+--- Can a stack's price be asked for outside the player's click? Forever
+--- answers only inside one.
+function Snipe:AsksOnTimer()
+    return self.ASK_OUTSIDE_CLICK == true and not self.noAutoStack
+end
+
 --- Keep a readied quote fresh: ask again just before it runs out, and
 --- never keep one past READY_KEEP. A big buy the player is confirming waits.
+--- Where the game prices a stack only inside a click, nothing is asked on
+--- a timer: the price is marked run out, and the next click asks again.
 function Snipe:KeepFresh(pending)
     local wait = self.READY_KEEP
-    if not pending.item and Util.HasFunction
-        and Util.HasFunction("C_AuctionHouse.GetQuoteDurationRemaining") then
-        local ok, left = pcall(C_AuctionHouse.GetQuoteDurationRemaining)
-        if ok and type(left) == "number" and left > 0 then
-            wait = math.max(1, math.min(wait, left - self.REQUOTE_BEFORE))
+    local stack = not pending.item
+    local onTimer = not stack or self:AsksOnTimer()
+    if stack then
+        local left = self:QuoteLeft()
+        if left and left > 0 then
+            wait = onTimer and math.max(1, math.min(wait, left - self.REQUOTE_BEFORE)) or left
         end
     end
     After(wait, function()
         if Snipe.pending ~= pending or pending.phase ~= "quoted" then return end
+        if not onTimer then
+            local left = Snipe:QuoteLeft()
+            if left and left > 0.5 then return Snipe:KeepFresh(pending) end
+            return Snipe:Expire(pending)
+        end
         if Snipe.armed == pending then
             After(Snipe.CONFIRM_FOR, function() Snipe:KeepFresh(pending) end)
             return
         end
         Snipe:Refresh(pending)
     end)
+end
+
+--- A stack's price ran out before the click. The buy stays; the button
+--- says so, and the next click asks again from inside the click.
+function Snipe:Expire(pending)
+    if self.pending ~= pending or pending.phase ~= "quoted" then return end
+    pending.phase, pending.refreshing, pending.quoteFor = "expired", nil, nil
+    if self.armed == pending then self.armed = nil end
+    Moved()
 end
 
 --- A readied price got old: ask again in place, so the deal stays ready
@@ -1513,12 +1552,13 @@ end
 --- Pay: spend the quoted total. A big one needs a second click.
 function Snipe:Pay()
     local pending = self.pending
-    if pending and pending.phase == "planned" then
+    if pending and (pending.phase == "planned" or pending.phase == "expired") then
         -- This client asks for a stack's price only on a click: ask now,
-        -- and the next click pays.
+        -- and the next click pays. A run-out price is asked again for the
+        -- same units, and costing more now lets it go.
         self.pending = nil
         Intend(pending.find)
-        self:StartStack(pending.find, pending.count, pending.expected, false, true)
+        self:StartStack(pending.find, pending.count, pending.expected or pending.total, false, true)
         return "checking"
     end
     if not (pending and pending.phase == "quoted") then return false end
@@ -1631,7 +1671,9 @@ end
 function Snipe:BuyNext()
     local pending = self.pending
     if pending then
-        if pending.phase == "quoted" or pending.phase == "planned" then return self:Pay() end
+        if pending.phase == "quoted" or pending.phase == "planned" or pending.phase == "expired" then
+            return self:Pay()
+        end
         return
     end
     local top = self:Top()
