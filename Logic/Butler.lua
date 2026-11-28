@@ -1299,7 +1299,8 @@ end
 
 --- Fill the game's Send Mail page for one of the player's characters.
 -- `name` is a short name (as Advise gives it) or a name typed in Settings;
--- `items` is a list of { itemID, count }. Nothing is sent: the player
+-- `items` is a list of { itemID, count, link }; with a link only that
+-- version goes. Nothing is sent: the player
 -- presses Send. Never raises. Never fills a mail to the character playing
 -- (a player found one, 2026-10-11): that is "false" and why.
 -- @return true when filling started, or false and why; then the name the
@@ -1317,8 +1318,11 @@ function Butler:FillMail(name, items, money)
     for _, item in ipairs(items) do
         local itemID = type(item) == "table" and tonumber(item.itemID)
         local count = type(item) == "table" and tonumber(item.count)
+        -- The version Butler said to mail, by its link (since 2026-11-28).
+        local link = type(item) == "table" and type(item.link) == "string" and item.link ~= ""
+            and item.link or nil
         if itemID and count and count > 0 then
-            list[#list + 1] = { itemID = itemID, count = math.floor(count) }
+            list[#list + 1] = { itemID = itemID, count = math.floor(count), link = link }
         end
     end
     if #list == 0 and not money then return false, L["nothing to mail"] end

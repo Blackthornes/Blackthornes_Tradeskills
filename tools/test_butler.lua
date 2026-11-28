@@ -361,6 +361,9 @@ local started = Butler:FillMail("Ana", { { itemID = 3, count = 5 }, { itemID = "
 check("filling starts", started, true)
 check("to the character's full mail name", filled and filled.recipient, "Ana Smith")
 check("only real counts go in", filled and #filled.items, 1)
+Butler:FillMail("Ana", { { itemID = 3, count = 1, link = "|cff1eff00|Hitem:15012::::::::18:1485:::1:12731|h[Boots of the Bear]|h|r" } })
+check("the version Butler said to mail rides along by its link",
+    filled.items[1].link, "|cff1eff00|Hitem:15012::::::::18:1485:::1:12731|h[Boots of the Bear]|h|r")
 Butler:FillMail("Zed", { { itemID = 3, count = 1 } })
 check("a name not on record is used as typed", filled.recipient, "Zed")
 -- Two characters sharing a first name are "Ana S." and "Ana T." to Butler,

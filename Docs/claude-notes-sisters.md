@@ -407,7 +407,9 @@ _G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil;
 `FillMail` fills the Send Mail page through `QueueMail:Fill` for one of
 the player's characters (`name` as Advise gave it, resolved with
 `QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
-count }`, subject "From Blackthornes Butler"; `money`, optional copper,
+count, link }`, where a link (since 2026-11-28) sends only that version
+of the item, through `QueueMail.OnlyLink`, the same as Butler's
+MailFill; subject "From Blackthornes Butler"; `money`, optional copper,
 goes in the gold boxes through `QueueMail.PutMoney`, gold alone being a
 mail of its own, never with COD ticked and never more than the purse less
 postage); the player presses Send and
