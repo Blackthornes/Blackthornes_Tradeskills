@@ -367,12 +367,6 @@ function HouseKit.CreatePanelGems(header, opts)
         end
         if on then Tip(button, text()) elseif GameTooltip then GameTooltip:Hide() end
     end
-    fold:SetScript("OnEnter", function(self)
-        Hover(self, true, function()
-            return (gems.folded and not round) and Text("Expand this window") or Text("Collapse this window")
-        end)
-    end)
-    fold:SetScript("OnLeave", function(self) Hover(self, false) end)
     local round = opts.round
     local FoldWindow = ns.FoldWindow
     if type(round) == "table" and round.frame and FoldWindow and FoldWindow.Join then
@@ -380,6 +374,12 @@ function HouseKit.CreatePanelGems(header, opts)
     else
         round = nil
     end
+    fold:SetScript("OnEnter", function(self)
+        Hover(self, true, function()
+            return (gems.folded and not round) and Text("Expand this window") or Text("Collapse this window")
+        end)
+    end)
+    fold:SetScript("OnLeave", function(self) Hover(self, false) end)
     fold:SetScript("OnClick", function()
         if round then
             if GameTooltip then GameTooltip:Hide() end

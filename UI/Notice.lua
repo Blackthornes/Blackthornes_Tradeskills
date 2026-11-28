@@ -133,8 +133,19 @@ Notice.Remove = Remove
 
 local pool = {}
 
+-- A card goes back to the pool of the copy that made it (each copy's cards
+-- run that copy's code), or to this one's for a card from an older copy.
+local function Recycle(card)
+    local home = type(card.pool) == "table" and card.pool or pool
+    for _, other in ipairs(home) do
+        if other == card then return end
+    end
+    home[#home + 1] = card
+end
+
 local function CreateCard()
     local card = CreateFrame("Frame", nil, UIParent)
+    card.pool = pool
     pcall(card.SetFrameStrata, card, "HIGH")
     card:SetHeight(Notice.HEIGHT)
     pcall(card.EnableMouse, card, false)
@@ -165,7 +176,7 @@ local function CreateCard()
             self:SetAlpha(1 - (age - Notice.FADE_IN - hold) / Notice.FADE_OUT)
         else
             Remove(self)
-            pool[#pool + 1] = self
+            Recycle(self)
         end
     end)
     card:Hide()
@@ -188,6 +199,7 @@ function Notice:Show(text, opts)
         while #shared.cards > Notice.MOST do
             local oldest = shared.cards[#shared.cards]
             Remove(oldest)
+            Recycle(oldest)
         end
     end
     card.key = opts.key

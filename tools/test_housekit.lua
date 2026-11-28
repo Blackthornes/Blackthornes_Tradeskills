@@ -16,7 +16,7 @@
 --   7. Panel gems fold and close, and say which by a bar or a plus.
 
 local NAMES = { "CreateFrame", "UIParent", "GetTime", "C_Timer", "GetCursorPosition",
-    "BlackthornesNotice", "BlackthornesSharedChoices" }
+    "BlackthornesNotice", "BlackthornesSharedChoices", "GameTooltip" }
 local saved = {}
 for _, name in ipairs(NAMES) do saved[name] = _G[name] end
 BlackthornesNotice, BlackthornesSharedChoices = nil, nil
@@ -285,6 +285,55 @@ do
         assert(not path:find("Gem"), "no red gem on the plaque: " .. path)
     end
     assert(#(plaque.gems or {}) == 0, "the plaque keeps no end gems")
+end
+
+-- 9. With a round button, the fold gem's tip says Collapse even when the
+-- gems were set folded (it read `round` before the line that made it,
+-- found 2026-11-28).
+do
+    local tips = {}
+    local keepTip, keepFold = GameTooltip, ns.FoldWindow
+    GameTooltip = {
+        SetOwner = function() end,
+        SetText = function(_, text) tips[#tips + 1] = text end,
+        Show = function() end,
+        Hide = function() end,
+    }
+    local joined
+    ns.FoldWindow = { Join = function(_, frame) joined = frame end, Fold = function() end }
+    local window = Object(UIParent)
+    local roundGems = ns.Widgets.CreatePanelGems(Object(UIParent), { round = { frame = window } })
+    assert(joined == window, "the window joins the round button")
+    roundGems:SetFolded(true)
+    roundGems.fold:GetScript("OnEnter")(roundGems.fold)
+    GameTooltip, ns.FoldWindow = keepTip, keepFold
+    assert(tips[#tips] == "Collapse this window",
+        "a round button's gem always says Collapse: " .. tostring(tips[#tips]))
+end
+
+-- 10. A note pushed out past Notice.MOST goes back to be used again, so
+-- a long run of notes never makes new frames (found 2026-11-28).
+do
+    local function FadeAll()
+        now = now + 100
+        local cards = {}
+        for _, card in ipairs(BlackthornesNotice.cards) do cards[#cards + 1] = card end
+        for _, card in ipairs(cards) do card:GetScript("OnUpdate")(card) end
+    end
+    FadeAll()
+    assert(ns.Notice:Count() == 0, "every note has gone")
+    local made = 0
+    local keep = CreateFrame
+    CreateFrame = function(...) made = made + 1; return keep(...) end
+    local burst = ns.Notice.MOST + 2
+    for i = 1, burst do ns.Notice:Show("Note " .. i) end
+    assert(ns.Notice:Count() == ns.Notice.MOST, "no more than MOST show")
+    FadeAll()
+    local before = made
+    for i = 1, burst do ns.Notice:Show("Again " .. i) end
+    CreateFrame = keep
+    assert(made == before, "a pushed out note is used again: " .. (made - before) .. " new")
+    FadeAll()
 end
 
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
