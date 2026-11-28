@@ -4064,3 +4064,11 @@ L["%s at %s %d (has %d)"] = "%s 在%s %d 时（现在 %d）"
 L["%s can learn this"] = "%s 能学这个"
 L["%s can learn this at %s %d"] = "%s 在%s %d 时能学这个"
 L["Used to level %s's %s. Needs %d more."] = "%s 用来提升%s。还需要 %d 个。"
+
+-- Crafts with a wait on the Profit tab (2026-11-28)
+L["You can make one a day."] = "每天可以做一个。"
+L["You can make one every %d days."] = "每 %d 天可以做一个。"
+L["You can make one every %d hours."] = "每 %d 小时可以做一个。"
+L["So it counts %s a day."] = "所以每天按 %s 个算。"
+L["Ready in %s"] = "%s后就绪"
+L["It has a wait, so gold an hour doesn't count it."] = "它要等冷却，所以每小时金币不算它。"

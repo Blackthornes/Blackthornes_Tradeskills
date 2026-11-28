@@ -203,6 +203,10 @@ function CraftOrFarm:Work(analysis, cache)
         outputItemID = analysis.outputItemID,
         yield = analysis.yield or 1,
         via = analysis.via,
+        -- A craft with a wait (Profit:CooldownFor): the row's mark and a
+        -- tooltip line; the numbers stay, as one craft still takes the farming.
+        cooldown = analysis.cooldown,
+        owner = analysis.owner,
         made = made,
         buyProfit = analysis.profit,
         bought = 0,

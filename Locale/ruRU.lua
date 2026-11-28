@@ -4068,3 +4068,11 @@ L["%s at %s %d (has %d)"] = "%s при навыке %s %d (сейчас %d)"
 L["%s can learn this"] = "%s может это выучить"
 L["%s can learn this at %s %d"] = "%s может выучить это при навыке %s %d"
 L["Used to level %s's %s. Needs %d more."] = "Нужно %s для прокачки: %s. Ещё %d."
+
+-- Crafts with a wait on the Profit tab (2026-11-28)
+L["You can make one a day."] = "Можно делать одну штуку в день."
+L["You can make one every %d days."] = "Можно делать одну штуку раз в %d дн."
+L["You can make one every %d hours."] = "Можно делать одну штуку раз в %d ч."
+L["So it counts %s a day."] = "Поэтому считается %s в день."
+L["Ready in %s"] = "Будет готово через %s"
+L["It has a wait, so gold an hour doesn't count it."] = "Здесь есть ожидание, поэтому золото в час его не считает."

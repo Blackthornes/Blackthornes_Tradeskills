@@ -4067,3 +4067,11 @@ L["%s at %s %d (has %d)"] = "%s con %s %d (tiene %d)"
 L["%s can learn this"] = "%s puede aprender esto"
 L["%s can learn this at %s %d"] = "%s puede aprender esto con %s %d"
 L["Used to level %s's %s. Needs %d more."] = "Sirve para que %s suba %s. Le faltan %d."
+
+-- Crafts with a wait on the Profit tab (2026-11-28)
+L["You can make one a day."] = "Puedes hacer uno al día."
+L["You can make one every %d days."] = "Puedes hacer uno cada %d días."
+L["You can make one every %d hours."] = "Puedes hacer uno cada %d horas."
+L["So it counts %s a day."] = "Así que cuenta %s al día."
+L["Ready in %s"] = "Listo en %s"
+L["It has a wait, so gold an hour doesn't count it."] = "Tiene una espera, así que el oro por hora no lo cuenta."
