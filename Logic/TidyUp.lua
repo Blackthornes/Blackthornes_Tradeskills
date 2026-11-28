@@ -158,6 +158,13 @@ local function OldestTime(history)
     return nil
 end
 
+-- What a missing value is kept as, so later readings keep their place
+-- (`x == nil and false or x` gives nil back). The same as Data/Prices.lua.
+local function Kept(v)
+    if v == nil then return false end
+    return v
+end
+
 -- Readings in a history older than `cutoff`: how many, and the history
 -- with them left out (nil when none are old).
 local function OldReadings(entry, cutoff)
@@ -169,9 +176,9 @@ local function OldReadings(entry, cutoff)
         if type(t) == "number" and t < cutoff then
             old = old + 1
         else
-            kept[#kept + 1] = t == nil and false or t
-            kept[#kept + 1] = m == nil and false or m
-            kept[#kept + 1] = q == nil and false or q
+            kept[#kept + 1] = Kept(t)
+            kept[#kept + 1] = Kept(m)
+            kept[#kept + 1] = Kept(q)
         end
     end
     if old == 0 then return 0, nil end
