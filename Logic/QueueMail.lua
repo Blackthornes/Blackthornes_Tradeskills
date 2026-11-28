@@ -831,10 +831,29 @@ local function AttachedCount(slot)
     return copied and n or nil
 end
 
+--- Of the stacks of one item, the ones that are `link`: two versions of
+--- one item ("of the Monkey" kept, "of the Bear" to mail) share an item ID,
+--- and Butler's mail took the kept one (found 2026-11-28). A link the bags
+--- no longer hold still matches when only one version is there; with two,
+--- none. Butler's Logic/MailFill.lua has the same.
+function QueueMail.OnlyLink(stacks, link)
+    if type(link) ~= "string" or link == "" then return stacks end
+    local same, links, kinds = {}, {}, 0
+    for _, stack in ipairs(stacks) do
+        if stack.link == link then same[#same + 1] = stack end
+        local seen = stack.link or ""
+        if not links[seen] then links[seen] = true kinds = kinds + 1 end
+    end
+    if #same > 0 then return same end
+    if kinds == 1 then return stacks end
+    return {}
+end
+
 --- The bag stacks to take for `count` of an item: whole stacks first, the
 --- biggest first, and one split for the rest.
+-- With `link`, only that version of the item (QueueMail.OnlyLink).
 -- @return list of { bag, slot, count, split }
-function QueueMail:PlanStacks(itemID, count, taken)
+function QueueMail:PlanStacks(itemID, count, taken, link)
     local stacks = {}
     local bags = ns.Inventory.GetCarriedBags and ns.Inventory:GetCarriedBags() or {}
 
@@ -845,10 +864,13 @@ function QueueMail:PlanStacks(itemID, count, taken)
             local key = bag .. ":" .. slot
             if ok and type(info) == "table" and info.itemID == itemID
                 and not info.isBound and not info.isLocked and not taken[key] then
-                stacks[#stacks + 1] = { bag = bag, slot = slot, size = info.stackCount or 1, key = key }
+                local slotLink = type(info.hyperlink) == "string" and info.hyperlink or nil
+                stacks[#stacks + 1] = { bag = bag, slot = slot, size = info.stackCount or 1, key = key,
+                    link = slotLink }
             end
         end
     end
+    stacks = QueueMail.OnlyLink(stacks, link)
 
     table.sort(stacks, function(a, b)
         if a.size ~= b.size then return a.size > b.size end
@@ -968,7 +990,7 @@ function QueueMail:Fill(delivery, onDone)
 
     local steps, taken = {}, {}
     for _, item in ipairs(delivery.items or {}) do
-        for _, step in ipairs(self:PlanStacks(item.itemID, item.count, taken)) do
+        for _, step in ipairs(self:PlanStacks(item.itemID, item.count, taken, item.link)) do
             step.itemID = item.itemID
             steps[#steps + 1] = step
         end

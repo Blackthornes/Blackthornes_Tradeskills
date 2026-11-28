@@ -33,7 +33,7 @@ local function Reset(contents, sizes)
     end
     for key, stack in pairs(contents) do
         local bag, slot = key:match("(%d+):(%d+)")
-        bags[tonumber(bag)][tonumber(slot)] = { itemID = stack[1], count = stack[2] }
+        bags[tonumber(bag)][tonumber(slot)] = { itemID = stack[1], count = stack[2], link = stack[3] }
     end
 end
 
@@ -49,7 +49,8 @@ C_Container = {
     GetContainerItemInfo = function(bag, slot)
         local stack = bags[bag] and bags[bag][slot]
         if not stack then return nil end
-        return { itemID = stack.itemID, stackCount = stack.count, isLocked = stack.locked, isBound = false }
+        return { itemID = stack.itemID, stackCount = stack.count, isLocked = stack.locked, isBound = false,
+            hyperlink = stack.link }
     end,
     PickupContainerItem = function(bag, slot)
         local stack = bags[bag][slot]
@@ -258,5 +259,22 @@ ok, why = QueueMail:Fill({ recipient = "Bob Wither", items = {}, money = 100 }, 
 check("never into a COD mail", ok == false and why == "the mail is set to COD")
 GetMoney, SendMailCODButton, SendMailMoney = nil, nil, nil
 SendMailMoneyGold, SendMailMoneySilver, SendMailMoneyCopper = nil, nil, nil
+
+-- Two versions of one item share an item ID (2026-11-28): "of the Monkey"
+-- kept, "of the Bear" to mail. Only the one Butler named by link goes.
+local BOOTS = 15012
+local MONKEY = "|cff1eff00|Hitem:15012::::::::18:1485:::1:12722|h[Boots of the Monkey]|h|r"
+local BEAR = "|cff1eff00|Hitem:15012::::::::18:1485:::1:12731|h[Boots of the Bear]|h|r"
+Reset({ ["0:1"] = { BOOTS, 1, MONKEY }, ["0:2"] = { BOOTS, 1, BEAR } })
+started = QueueMail:Fill({ recipient = "Bob Wither", items = { { itemID = BOOTS, count = 1, link = BEAR } } },
+    function() end)
+RunTimers()
+check("the Bear goes in the mail", started == true and bags[0][2] and bags[0][2].inMail == true)
+check("the Monkey stays out", bags[0][1] and not bags[0][1].inMail)
+local stale = "|cff1eff00|Hitem:15012::::::::19:1485:::1:12731|h[Boots of the Bear]|h|r"
+check("a stale link with two versions takes neither", #QueueMail:PlanStacks(BOOTS, 1, {}, stale) == 0)
+Reset({ ["0:2"] = { BOOTS, 1, BEAR } })
+check("a stale link with one version there takes it", #QueueMail:PlanStacks(BOOTS, 1, {}, stale) == 1)
+check("no link takes any version", #QueueMail:PlanStacks(BOOTS, 1, {}) == 1)
 
 print(("\n%d passed, 0 failed"):format(checks))
