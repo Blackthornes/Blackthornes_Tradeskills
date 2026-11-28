@@ -1158,6 +1158,29 @@ do
     UI.ResetSettings = real
 end
 
+-- Vendor Price For (a player asked, the owner said build it, 2026-11-28):
+-- four boxes in quality colors, all ticked to start; unticking Green saves
+-- the other three.
+do
+    local boxes = {}
+    for _, box in ipairs(made.CreateCheckbox) do
+        local label = box:GetParent() and box:GetParent().strings and box:GetParent().strings[1]
+        if label and label.text == "Vendor Price For:" then boxes[#boxes + 1] = box end
+    end
+    check("Vendor Price For has four boxes", #boxes, 4)
+    local green = boxes[2]
+    check("the second is Green, in green", green and green.label.text, "|cff1eff00Green|r")
+    local ticked = 0
+    for _, box in ipairs(boxes) do if box:GetChecked() then ticked = ticked + 1 end end
+    check("all four start ticked", ticked, 4)
+    if green then
+        green:GetScript("OnClick")(green, "LeftButton")
+        check("unticking Green saves White, Blue and Purple", settings.vendorPriceFor, "134")
+        green:GetScript("OnClick")(green, "LeftButton")
+        check("ticking it again saves all four", settings.vendorPriceFor, "1234")
+    end
+end
+
 -- Plain Disenchant Results (the owner said build it, 2026-11-25): Move to
 -- Salvager and Clear, each through the Confirm window first.
 do

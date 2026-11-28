@@ -288,6 +288,63 @@ do
     prices[WOOL] = nil
 end
 
+-- A player asked (2026-11-28): "Vendor Price For:" picks the colors the
+-- vendor check counts for. A green belt a vendor pays more for gets the
+-- vendor note while Green is ticked, and lists at its auction price once
+-- Green is unticked. Grey has no box. The vendor floor follows it too.
+do
+    local BELT = 15520
+    prices[BELT] = { market = 20 }
+    vendorPaid[BELT] = 40
+    qualities[BELT] = 2
+    -- Priced like the rows above: this fake auction house prices stacks.
+    commodities[BELT] = true
+    bags[0][#bags[0] + 1] = { itemID = BELT, stackCount = 1, quality = 2 }
+    local oldGet = ns.Config.Get
+    local picked = nil
+    ns.Config.Get = function(self, k)
+        if k == "vendorPriceFor" then return picked end
+        return oldGet(self, k)
+    end
+    local function BeltLine()
+        local lines = Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
+        return LineFor(lines, BELT)
+    end
+
+    local line = BeltLine()
+    check("no choice saved: the belt gets the vendor note",
+        line and line.held, "A vendor pays more: 40c each.")
+    check("no choice saved: the vendor floor holds", (Posting:GetPriceFloor(BELT)), 40)
+
+    picked = "1234"
+    line = BeltLine()
+    check("Green ticked: the belt gets the vendor note",
+        line and line.held, "A vendor pays more: 40c each.")
+
+    picked = "1"
+    line = BeltLine()
+    check("Green unticked: the belt lists", line ~= nil, true)
+    check("with no vendor note", line and line.held, nil)
+    check("not as a loss", line and line.atALoss, false)
+    check("and the vendor floor stands aside", Posting:GetPriceFloor(BELT, true), nil)
+    check("List all can pick it",
+        (Posting:GetNextPostable({ includeAll = true }, Posting:GetPostable({ includeAll = true })) or {}).itemID ~= nil, true)
+    check("a white still gets the vendor check", Posting.VendorPriceFor(SCRAPS), true)
+
+    picked = ""
+    qualities[BELT] = 0
+    check("grey always counts, every box unticked", Posting.VendorPriceFor(BELT), true)
+    qualities[BELT] = 4
+    check("purple follows its box", Posting.VendorPriceFor(BELT), false)
+    picked = "4"
+    qualities[BELT] = 5
+    check("legendary follows Purple", Posting.VendorPriceFor(BELT), true)
+
+    ns.Config.Get = oldGet
+    bags[0][#bags[0]] = nil
+    prices[BELT], vendorPaid[BELT], qualities[BELT], commodities[BELT] = nil, nil, nil, nil
+end
+
 print("")
 
 if failures > 0 then

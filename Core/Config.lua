@@ -590,6 +590,12 @@ local DEFAULTS = {
         -- stock limit when it is listed for less (2026-10-13). Off: the
         -- shopping list sends you to the vendor. See Vendor:KeepsInStock.
         vendorItemsOnAuction = false,
+        -- The colors a vendor's price counts for on the Sell list
+        -- (2026-11-28), as the quality numbers ticked: 1 White, 2 Green,
+        -- 3 Blue, 4 Purple. Unticked, an item lists at its auction price
+        -- even when a vendor pays more. Grey always goes to a vendor.
+        -- See Posting.VendorPriceFor.
+        vendorPriceFor = "1234",
         -- A warning line on the auction house's buy window when buying a
         -- queue material costs this many percent more than the shopping list
         -- said (2026-10-11). 0 turns it off. See UI/BuyQuantity.lua.
