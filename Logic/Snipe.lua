@@ -80,6 +80,20 @@ Snipe.READS_A_FRAME = 20
 -- How long a find whose listings held nothing to buy stays off the list
 -- while its row still shows the same price.
 Snipe.GONE_FOR = 300
+-- A search whose answer came in parts is held open this long for the rest
+-- (AUCTION_HOUSE_BROWSE_RESULTS_ADDED) before it is read as it stands.
+Snipe.PART_WAIT = 2
+-- Likely deals come up every pass: the last scan's cheapest was within
+-- HOT_NEAR times the deal line, or LISTED_A_LOT or more were up. The rest
+-- come up every COLD_EVERY passes, a share of them each pass.
+Snipe.HOT_NEAR = 1.25
+Snipe.LISTED_A_LOT = 40
+Snipe.COLD_EVERY = 3
+-- Seconds a pass took for each item, kept from the player's own passes;
+-- a new pass is weighed in by this share.
+Snipe.PACE_WEIGHT = 0.5
+-- A first guess at a pass's length waits for this many items checked.
+Snipe.PACE_LEAST = 20
 
 Snipe.SOUND = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Sounds\snipe-bell-single.ogg]]
 
@@ -91,6 +105,9 @@ Snipe.pending = nil
 Snipe.armed = nil
 
 local pool, cursor, waiting, building, session = {}, 1, nil, false, 0
+-- The items this pass looks at, in order (likely deals and the last
+-- scan's finds first), and the pass count that picks the rest.
+local lane, passNo = {}, 0
 
 local function Now() return (GetTime and GetTime()) or 0 end
 
@@ -420,7 +437,8 @@ function Snipe:BuildListPool()
         if Snipe.Need(entry.want, id) > 0 then
             local limit = self:LimitFor(entry)
             if limit then
-                out[#out + 1] = { id = id, worth = limit, want = entry.want, listed = Snipe.InLastScan(id, since) }
+                -- Every list item is wanted: each comes up every pass.
+                out[#out + 1] = { id = id, worth = limit, want = entry.want, listed = Snipe.InLastScan(id, since), hot = true }
             end
         end
     end
@@ -454,6 +472,7 @@ function Snipe:BuildPool(done)
     local lastScan = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
     local since = lastScan and (lastScan - self.SCAN_SLACK) or nil
     local at = 1
+    local pct = self:Percent()
     local function Step()
         if mine ~= session or not self.running then return end
         local last = math.min(#ids, at + self.SLICE - 1)
@@ -464,7 +483,10 @@ function Snipe:BuildPool(done)
             if mode == "disenchant" and ReadGear(ids[i]) then reads = reads + 1 end
             local worth = self:WorthOf(ids[i], mode)
             if worth then
-                pool[#pool + 1] = { id = ids[i], worth = worth, listed = Snipe.InLastScan(ids[i], since) }
+                local listed = Snipe.InLastScan(ids[i], since)
+                pool[#pool + 1] = { id = ids[i], worth = worth, listed = listed,
+                    -- With no scan to go by, every item comes up every pass.
+                    hot = not since or (listed and Snipe.IsHot(ids[i], worth, mode, pct)) or false }
             end
             if reads >= self.READS_A_FRAME then last = i; break end
         end
@@ -492,6 +514,114 @@ function Snipe.OrderPool(list)
     return list
 end
 
+--- The cheapest listing anyone else had up in the last scan, a lone low
+--- one included (a snipe is just that), or nil.
+function Snipe.ScanPrice(record)
+    if type(record) ~= "table" or (tonumber(record.quantity) or 0) <= 0 then return nil end
+    local price = record.rivalMin
+    local lone = tonumber(record.ignoredLow)
+    if lone and lone > 0 and (not price or lone < price) then price = lone end
+    if not price and not record.ownMin then price = record.min end
+    price = tonumber(price)
+    if price and price > 0 then return price end
+end
+
+--- A likely deal: the last scan's cheapest came near the deal line, or
+--- many were listed. It comes up every pass.
+function Snipe.IsHot(itemID, worth, kind, pct)
+    local record = ns.Prices and ns.Prices.Get and ns.Prices:Get(itemID)
+    if type(record) ~= "table" then return false end
+    if (tonumber(record.quantity) or 0) >= Snipe.LISTED_A_LOT then return true end
+    local low = Snipe.ScanPrice(record)
+    if not (low and type(worth) == "number" and worth > 0) then return false end
+    local line = worth
+    if kind ~= "lists" and kind ~= "vendor" then line = worth * (pct or 70) / 100 end
+    return low <= line * Snipe.HOT_NEAR
+end
+
+--- Lay out the next pass: the last scan's finds first, then the likely
+--- deals, then this pass's share of the rest, each in the pool's order.
+function Snipe:NewPass(first)
+    passNo = passNo + 1
+    local front, hot, cold = {}, {}, {}
+    local every = math.max(1, math.floor(self.COLD_EVERY or 1))
+    local scanned = first and self.scanFirst or nil
+    for i, row in ipairs(pool) do
+        if scanned and scanned[row.id] then
+            front[#front + 1] = row
+        elseif row.hot then
+            hot[#hot + 1] = row
+        elseif i % every == passNo % every then
+            cold[#cold + 1] = row
+        end
+    end
+    lane = front
+    for _, row in ipairs(hot) do lane[#lane + 1] = row end
+    for _, row in ipairs(cold) do lane[#lane + 1] = row end
+    cursor = 1
+    self.pass = { total = #lane, checked = 0, started = Now() }
+end
+
+--- A pass ran to its end: keep how long each item took, for the next guess.
+function Snipe:NotePace()
+    local pass = self.pass
+    if not (pass and pass.total and pass.total > 0) then return end
+    local each = (Now() - pass.started) / pass.total
+    if each <= 0 then return end
+    local db = ns.db
+    local old = db and tonumber(db.snipePace)
+    local pace = old and (old * (1 - self.PACE_WEIGHT) + each * self.PACE_WEIGHT) or each
+    self.pace = pace
+    if db then db.snipePace = pace end
+end
+
+--- How far this pass is: items checked, items in it, and about how many
+--- seconds a whole pass takes (nil until it can be told).
+function Snipe:Progress()
+    local pass = self.pass
+    if not (self.running and pass) then return nil end
+    local pace = self.pace or (ns.db and tonumber(ns.db.snipePace))
+    if not pace and pass.checked >= self.PACE_LEAST then
+        pace = (Now() - pass.started) / pass.checked
+    end
+    local seconds = pace and pace * pass.total or nil
+    return math.min(pass.checked, pass.total), pass.total, seconds
+end
+
+--- Deals the last full scan already saw, put on the list at Start before
+--- any search. Each is marked fromScan until a live search sees it, and
+--- its item is searched first.
+function Snipe:FindsFromScan()
+    self.scanFirst = {}
+    local lastScan = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    if not (lastScan and ns.Prices.Get) then return end
+    local since = lastScan - self.SCAN_SLACK
+    local kind, pct = self:Watch(), self:Percent()
+    local fresh = false
+    for _, row in ipairs(pool) do
+        local record = ns.Prices:Get(row.id)
+        if type(record) == "table" and (tonumber(record.seen) or 0) >= since then
+            local price = Snipe.ScanPrice(record)
+            if price and not (ns.Prices.IsCredible and not ns.Prices.IsCredible(price))
+                and Snipe.IsDealFor(price, row.worth, kind, pct) and Snipe.Fits(price, self:Left())
+                and not self:WasGone(row.id, price) then
+                self.finds[#self.finds + 1] = {
+                    itemID = row.id, price = price, qty = tonumber(record.quantity) or 1, worth = row.worth,
+                    deal = Snipe.Deal(price, row.worth), kind = kind, want = row.want, fromScan = true,
+                }
+                self.scanFirst[row.id] = true
+                if self.dinged then self.dinged[row.id] = price end
+                fresh = true
+            end
+        end
+    end
+    if not fresh then return end
+    self:FitCap()
+    table.sort(self.finds, Snipe.Better)
+    self:Chime()
+    Moved()
+end
+
 --------------------------------------------------------------------------
 -- Start and Stop
 --------------------------------------------------------------------------
@@ -515,8 +645,13 @@ function Snipe:Start()
     self.running, self.spent, self.finds = true, 0, {}
     self.dinged, self.gone = {}, {}
     self.pending, self.armed, waiting = nil, nil, nil
+    self.pass, self.scanFirst, lane, passNo = nil, nil, {}, 0
     Moved()
-    self:BuildPool(function() Snipe:Next() end)
+    self:BuildPool(function()
+        Snipe:FindsFromScan()
+        Snipe:NewPass(true)
+        Snipe:Next()
+    end)
 end
 
 --- Stop searching. The finds stay on the list (they can still be bought)
@@ -533,7 +668,7 @@ function Snipe:Stop(reason, clear)
     session = session + 1
     self.running = false
     self.armed, waiting = nil, nil
-    pool, building = {}, false
+    pool, building, lane, self.pass = {}, false, {}, nil
     if ns.AHQueue and ns.AHQueue.Cancel then pcall(ns.AHQueue.Cancel, ns.AHQueue, "snipe") end
     if reason then Say(reason) end
     Moved()
@@ -577,7 +712,10 @@ end
 --- A deal readied in the background, waiting for the player's click.
 function Snipe:WaitingReady()
     local p = self.pending
-    return p ~= nil and p.auto == true and (p.phase == "quoted" or p.phase == "planned")
+    if p == nil then return false end
+    -- A run-out price waits for a click and holds nothing up.
+    if p.phase == "expired" then return true end
+    return p.auto == true and (p.phase == "quoted" or p.phase == "planned")
 end
 
 --- Is the top find's price check still getting too little room? It may
@@ -617,7 +755,14 @@ function Snipe:Next()
         self:Stop(self.emptyWhy or L["Nothing to snipe yet. Scan the auction house first."])
         return
     end
-    if cursor > #pool then cursor = 1 end
+    if cursor > #lane then
+        if self.pass and self.pass.total > 0 and cursor > 1 then self:NotePace() end
+        self:NewPass(false)
+        if #lane == 0 then
+            -- Nothing due this pass: the next one has its share.
+            return After(self.REST, function() Snipe:Next() end)
+        end
+    end
     if Busy() then
         if self:WantsReady() then self:ReadySoon() end
         After(self.REST * 2, function() Snipe:Next() end)
@@ -629,16 +774,16 @@ function Snipe:Next()
         -- A list changed while running: lay the pool out again.
         if Lists() and Lists().version ~= self.poolVersion then
             pool = self:BuildListPool()
-            cursor = 1
             self.poolVersion = Lists().version
+            self:NewPass(false)
         end
         if not self:DropMet() then return end
     end
 
     local batch, keys, wants = {}, {}, {}
-    local last = math.min(#pool, cursor + self:BatchSize() - 1)
+    local last = math.min(#lane, cursor + self:BatchSize() - 1)
     for i = cursor, last do
-        local row = pool[i]
+        local row = lane[i]
         local ok, key = pcall(C_AuctionHouse.MakeItemKey, row.id)
         if ok and key then
             keys[#keys + 1] = key
@@ -649,7 +794,7 @@ function Snipe:Next()
     cursor = last + 1
     if #keys == 0 then return After(self.REST, function() Snipe:Next() end) end
 
-    local mine = { batch = batch, wants = wants, at = Now() }
+    local mine = { batch = batch, wants = wants, at = Now(), count = #keys }
     waiting = mine
     local mineSession = session
     ns.AHQueue:Request({
@@ -761,6 +906,23 @@ function Snipe:OnBrowseResults()
     if not (ok and type(rows) == "table") then return end
     if not Snipe.OwnResults(rows, mine.batch) then return end
 
+    -- Only part of the answer is in: the rest comes with
+    -- AUCTION_HOUSE_BROWSE_RESULTS_ADDED, which calls this again and reads
+    -- every row so far. Wait a moment for it rather than close the search.
+    local full = FullResults()
+    if not full and not mine.partDone then
+        if not mine.partTimer then
+            mine.partTimer = true
+            After(self.PART_WAIT, function()
+                if waiting == mine then
+                    mine.partDone = true
+                    Snipe:OnBrowseResults()
+                end
+            end)
+        end
+        return
+    end
+
     local cheapest = {}
     for _, row in ipairs(rows) do
         local key = row.itemKey
@@ -780,10 +942,11 @@ function Snipe:OnBrowseResults()
     end
 
     waiting = nil
-    -- Only part of the rows came: a find the page left out may still be
-    -- there, so it stays, and the next search asks about fewer.
-    local full = FullResults()
-    if full then self:Grow() else self:Shrink() end
+    -- Still only part of the rows after the wait: a find the page left out
+    -- may still be there, so it stays. Only a search with no answer at all
+    -- asks about fewer next time (onGiveUp, REPLY_WAIT).
+    if full then self:Grow() end
+    if self.pass then self.pass.checked = self.pass.checked + (mine.count or 0) end
     local pct = self:Percent()
     local kind = self:Watch()
     -- A find still for sale stays the same find (its readied price, its
@@ -805,6 +968,8 @@ function Snipe:OnBrowseResults()
             local find = byItem[id]
             local want = mine.wants and mine.wants[id] or nil
             if find and find.kind == kind then
+                -- A live search saw it: no longer only from the last scan.
+                if find.fromScan then find.fromScan = nil; changed = true end
                 if find.price ~= hit.price then
                     find.price, find.deal, find.retryAt = hit.price, Snipe.Deal(hit.price, worth), nil
                     changed = true
@@ -948,25 +1113,61 @@ function Snipe:Ready()
     end
 end
 
+--- Seconds a stack's price still holds, or nil when the game won't say.
+function Snipe:QuoteLeft()
+    local p = self.pending
+    if not (p and p.phase == "quoted" and not p.item) then return nil end
+    if not (Util.HasFunction and Util.HasFunction("C_AuctionHouse.GetQuoteDurationRemaining")) then return nil end
+    local ok, left = pcall(C_AuctionHouse.GetQuoteDurationRemaining)
+    if ok and type(left) == "number" then
+        if not p.quoteFor or left > p.quoteFor then p.quoteFor = left end
+        return math.max(0, left)
+    end
+    return nil
+end
+
+--- Can a stack's price be asked for outside the player's click? Forever
+--- answers only inside one.
+function Snipe:AsksOnTimer()
+    return self.ASK_OUTSIDE_CLICK == true and not self.noAutoStack
+end
+
 --- Keep a readied quote fresh: ask again just before it runs out, and
 --- never keep one past READY_KEEP. A big buy the player is confirming waits.
+--- Where the game prices a stack only inside a click, nothing is asked on
+--- a timer: the price is marked run out, and the next click asks again.
 function Snipe:KeepFresh(pending)
     local wait = self.READY_KEEP
-    if not pending.item and Util.HasFunction
-        and Util.HasFunction("C_AuctionHouse.GetQuoteDurationRemaining") then
-        local ok, left = pcall(C_AuctionHouse.GetQuoteDurationRemaining)
-        if ok and type(left) == "number" and left > 0 then
-            wait = math.max(1, math.min(wait, left - self.REQUOTE_BEFORE))
+    local stack = not pending.item
+    local onTimer = not stack or self:AsksOnTimer()
+    if stack then
+        local left = self:QuoteLeft()
+        if left and left > 0 then
+            wait = onTimer and math.max(1, math.min(wait, left - self.REQUOTE_BEFORE)) or left
         end
     end
     After(wait, function()
         if Snipe.pending ~= pending or pending.phase ~= "quoted" then return end
+        if not onTimer then
+            local left = Snipe:QuoteLeft()
+            if left and left > 0.5 then return Snipe:KeepFresh(pending) end
+            return Snipe:Expire(pending)
+        end
         if Snipe.armed == pending then
             After(Snipe.CONFIRM_FOR, function() Snipe:KeepFresh(pending) end)
             return
         end
         Snipe:Refresh(pending)
     end)
+end
+
+--- A stack's price ran out before the click. The buy stays; the button
+--- says so, and the next click asks again from inside the click.
+function Snipe:Expire(pending)
+    if self.pending ~= pending or pending.phase ~= "quoted" then return end
+    pending.phase, pending.refreshing, pending.quoteFor = "expired", nil, nil
+    if self.armed == pending then self.armed = nil end
+    Moved()
 end
 
 --- A readied price got old: ask again in place, so the deal stays ready
@@ -1513,12 +1714,13 @@ end
 --- Pay: spend the quoted total. A big one needs a second click.
 function Snipe:Pay()
     local pending = self.pending
-    if pending and pending.phase == "planned" then
+    if pending and (pending.phase == "planned" or pending.phase == "expired") then
         -- This client asks for a stack's price only on a click: ask now,
-        -- and the next click pays.
+        -- and the next click pays. A run-out price is asked again for the
+        -- same units, and costing more now lets it go.
         self.pending = nil
         Intend(pending.find)
-        self:StartStack(pending.find, pending.count, pending.expected, false, true)
+        self:StartStack(pending.find, pending.count, pending.expected or pending.total, false, true)
         return "checking"
     end
     if not (pending and pending.phase == "quoted") then return false end
@@ -1631,7 +1833,9 @@ end
 function Snipe:BuyNext()
     local pending = self.pending
     if pending then
-        if pending.phase == "quoted" or pending.phase == "planned" then return self:Pay() end
+        if pending.phase == "quoted" or pending.phase == "planned" or pending.phase == "expired" then
+            return self:Pay()
+        end
         return
     end
     local top = self:Top()

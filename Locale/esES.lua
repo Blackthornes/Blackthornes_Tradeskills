@@ -4083,6 +4083,11 @@ L["Used to level %s's %s. Needs %d more."] = "Sirve para que %s suba %s. Le falt
 L["Make and change your shopping lists anywhere."] = "Crea y cambia tus listas de compra donde quieras."
 L["open your shopping lists"] = "abre tus listas de compra"
 
+-- Snipe: last scan finds, progress, run-out prices
+L["Checked %d of %d. A full pass takes about %s."] = "%d de %d revisados. Una vuelta completa tarda unos %s."
+L["Last Scan"] = "Último escaneo"
+L["From your last scan. Snipe checks it first."] = "De tu último escaneo. Snipe lo revisa primero."
+L["Check Price Again"] = "Ver el precio otra vez"
 
 -- Crafts with a wait on the Profit tab (2026-11-28)
 L["You can make one a day."] = "Puedes hacer uno al día."

@@ -212,6 +212,81 @@ local function CreateRow(row)
     end
     row.cells = row.cells or {}
     row.cells.buy = label
+
+    -- A thin gold bar under the button: how long a material's price holds.
+    local hold = row.buy:CreateTexture(nil, "OVERLAY")
+    hold:SetColorTexture(Theme.Unpack("accent"))
+    hold:SetHeight(2)
+    hold:SetPoint("BOTTOMLEFT", row.buy, "BOTTOMLEFT", 2, 2)
+    hold:Hide()
+    row.hold = hold
+
+    -- "Last Scan" after the name: a find the last full scan saw, not yet
+    -- seen by a live search.
+    if Widgets.CreateChip then
+        local chip = Widgets.CreateChip(row, L["Last Scan"], function()
+            if row.data and SnipeView.ClickFind then SnipeView.ClickFind(row.data, nil, "LeftButton") end
+        end, { height = 16 })
+        chip.label:SetText(L["Last Scan"])
+        chip:SetPoint("RIGHT", row, "RIGHT", NAME_RIGHT, 0)
+        chip:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(L["From your last scan. Snipe checks it first."], 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        chip:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        chip:Hide()
+        row.scanChip = chip
+    end
+end
+
+--- Show the Last Scan chip on a find from the last scan, and give the name
+--- the room left of it.
+local function DressScanChip(row, find)
+    local chip = row.scanChip
+    local on = chip and find and find.fromScan and true or false
+    if chip then chip:SetShown(on) end
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", row, "LEFT", 8 + ICON_SIZE + 8, 0)
+    if on then
+        row.name:SetPoint("RIGHT", chip, "LEFT", -4, 0)
+    else
+        row.name:SetPoint("RIGHT", row, "RIGHT", NAME_RIGHT, 0)
+    end
+end
+
+--- How much of a material's price time is left, 0 to 1, or nil.
+function SnipeView.HoldShare()
+    local snipe = Snipe()
+    local pending = snipe and snipe.pending
+    if not (pending and pending.phase == "quoted" and not pending.item and snipe.QuoteLeft) then return nil end
+    local left = snipe:QuoteLeft()
+    local whole = pending.quoteFor
+    if not (left and whole and whole > 0) then return nil end
+    return math.max(0, math.min(1, left / whole))
+end
+
+--- Size the price-time bar on the row being paid for. Only that one row
+--- is touched, a few times a second, never the whole list.
+function SnipeView:DressHold(row)
+    row = row or self.holdRow
+    if not (row and row.hold) then return end
+    local pending = Snipe().pending
+    local share = pending and row.data == pending.find and SnipeView.HoldShare()
+    if not share then
+        row.hold:Hide()
+        if row == self.holdRow then self.holdRow = nil end
+        return
+    end
+    local width = (row.buy.GetWidth and row.buy:GetWidth() or BUY_WIDTH) - 4
+    row.hold:SetWidth(math.max(1, width * share))
+    row.hold:Show()
+    self.holdRow = row
+end
+
+--- Can a click pay for (or ask again about) this buy?
+function SnipeView.Payable(pending)
+    return pending ~= nil and (pending.phase == "quoted" or pending.phase == "planned" or pending.phase == "expired")
 end
 
 --- What a row's own Buy button says, and whether it can be clicked.
@@ -224,6 +299,11 @@ function SnipeView.RowBuyState(find)
         if snipe.armed == pending then return L["Confirm"], true end
         -- An aged price is being checked again: wait for it.
         if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        -- A material's price ran out before the click: one click asks again.
+        if pending.phase == "expired" then return L["Check Price Again"], true end
+        if pending.phase == "quoted" and not pending.item and pending.fromClick then
+            return L.Format("Pay %s", Colored(pending.total)), true
+        end
         if pending.phase == "quoted" or pending.phase == "planned" then
             local count = pending.count or (find and find.qty) or 1
             return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
@@ -244,7 +324,7 @@ function SnipeView:RowBuy(find)
     if not (snipe and find) then return end
     local pending = snipe.pending
     if pending and pending.find == find then
-        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+        if SnipeView.Payable(pending) then snipe:Pay() end
     elseif pending and pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then
         snipe:CancelBuy()
         snipe:Buy(find)
@@ -323,6 +403,8 @@ local function UpdateRow(row, find)
             -- Planned waits for the click too; "Asking..." here read as
             -- still working, and the buy was let go unclicked.
             row.badge:SetText(L.Format("Pay %s", Money(pending.total or pending.expected)))
+        elseif pending.phase == "expired" then
+            row.badge:SetText(L["Check Price Again"])
         else
             row.badge:SetText(L["Asking..."])
         end
@@ -343,6 +425,8 @@ local function UpdateRow(row, find)
     end
 
     DressRowBuy(row, find)
+    SnipeView:DressHold(row)
+    DressScanChip(row, find)
 
     Theme.SetItemIcon(row.icon, find.itemID)
     local label = ItemName(find.itemID)
@@ -366,13 +450,15 @@ local function ShowTooltip(row, find)
     end
 end
 
+function SnipeView.ClickFind(...) return SnipeView.ClickRow(...) end
+
 local function ClickRow(find, _, mouseButton)
     if mouseButton == "RightButton" then return end
     local snipe = Snipe()
     if not find then return end
     local pending = snipe.pending
     if pending and pending.find == find then
-        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+        if SnipeView.Payable(pending) then snipe:Pay() end
     elseif pending and pending.auto and snipe.armed ~= pending then
         -- A quiet ready for another row gives way to the row clicked.
         snipe:CancelBuy()
@@ -381,6 +467,7 @@ local function ClickRow(find, _, mouseButton)
         snipe:Buy(find)
     end
 end
+SnipeView.ClickRow = ClickRow
 
 --------------------------------------------------------------------------------
 -- Settings strip
@@ -690,6 +777,20 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     note:SetWordWrap(true)
     self.note = note
 
+    -- How far this pass is: a thin gold bar just under the list.
+    local track = body:CreateTexture(nil, "ARTWORK")
+    track:SetColorTexture(Theme.Unpack("border"))
+    track:SetHeight(2)
+    track:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -1)
+    track:SetPoint("TOPRIGHT", list, "BOTTOMRIGHT", 0, -1)
+    track:Hide()
+    local fill = body:CreateTexture(nil, "OVERLAY")
+    fill:SetColorTexture(Theme.Unpack("accent"))
+    fill:SetHeight(2)
+    fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+    fill:Hide()
+    self.passTrack, self.passFill = track, fill
+
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
     empty:SetWidth(300)
@@ -714,7 +815,11 @@ function SnipeView:Build(body, frame, topAnchor, opts)
         since = since + (elapsed or 0)
         if since < 0.2 then return end
         since = 0
-        if SnipeView.shown then SnipeView:WatchMouse() end
+        if SnipeView.shown then
+            SnipeView:WatchMouse()
+            SnipeView:DressHold()
+            SnipeView:DressProgress()
+        end
     end)
     self.watcher = watcher
 
@@ -727,7 +832,8 @@ end
 function SnipeView:BuyWidth(text)
     local width = 80
     if Theme.MeasureText then
-        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"], text }) do
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"],
+            L["Check Price Again"], text }) do
             local ok, measured = pcall(Theme.MeasureText, "small", word)
             if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
         end
@@ -742,6 +848,10 @@ function SnipeView:BuyState()
     if pending then
         if snipe.armed == pending then return L["Confirm"], true end
         if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        if pending.phase == "expired" then return L["Check Price Again"], true end
+        if pending.phase == "quoted" and not pending.item and pending.fromClick then
+            return L.Format("Pay %s", Money(pending.total)), true
+        end
         if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
         if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false
@@ -773,6 +883,7 @@ function SnipeView:SetShown(on)
     if self.newChip and not self.shown then self.newChip:Hide() end
     for _, part in pairs(self.parts or {}) do part:SetShown(self.shown) end
     if self.empty and not self.shown then self.empty:Hide() end
+    self:DressProgress()
     if self.strip then self.strip:SetShown(self.shown and self:StripOpen()) end
     if self.shown then self.key = nil end
     local snipe = Snipe()
@@ -872,7 +983,8 @@ function SnipeView:Refresh(force)
         self.empty:Hide()
     end
 
-    self.note:SetText(self:Summary())
+    self.noteText = nil
+    self:DressProgress()
     self.go:SetText(running and L["Stop"] or L["Start Sniping"])
     self.go:SetEnabledState(true)
     local label, can = self:BuyState()
@@ -901,6 +1013,42 @@ function SnipeView:EmptyText()
         if Snipe().Need(items[id].want, id) > 0 then return "" end
     end
     return L["Got all you need"]
+end
+
+--- "Checked 420 of 1240. A full pass takes about 3m.", or nil before it
+--- can be told.
+function SnipeView.ProgressText()
+    local snipe = Snipe()
+    if not (snipe and snipe.Progress) then return nil end
+    local checked, total, seconds = snipe:Progress()
+    if not (checked and total and total > 0 and seconds) then return nil end
+    local age = Util.FormatAge and Util.FormatAge(math.max(60, seconds)) or tostring(math.floor(seconds))
+    return L.Format("Checked %d of %d. A full pass takes about %s.", checked, total, age)
+end
+
+--- The footer note and the pass bar. Run a few times a second while the
+--- tab shows: only the note's words and the bar's width change, never the
+--- list.
+function SnipeView:DressProgress()
+    if not self.note then return end
+    local snipe = Snipe()
+    local line = self.shown and SnipeView.ProgressText() or nil
+    local text = self:Summary()
+    if line then text = text .. "\n" .. line end
+    if text ~= self.noteText then
+        self.noteText = text
+        self.note:SetText(text)
+    end
+    local checked, total = nil, nil
+    if self.shown and snipe and snipe.Progress then checked, total = snipe:Progress() end
+    local on = checked and total and total > 0
+    self.passTrack:SetShown(on and true or false)
+    self.passFill:SetShown(on and checked > 0 or false)
+    if on and checked > 0 then
+        local ok, width = pcall(self.passTrack.GetWidth, self.passTrack)
+        width = (ok and type(width) == "number" and width > 0) and width or 300
+        self.passFill:SetWidth(math.max(1, width * checked / total))
+    end
 end
 
 function SnipeView:Summary()

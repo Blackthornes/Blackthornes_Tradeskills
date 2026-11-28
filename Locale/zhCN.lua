@@ -4080,6 +4080,11 @@ L["Used to level %s's %s. Needs %d more."] = "%s 用来提升%s。还需要 %d �
 L["Make and change your shopping lists anywhere."] = "随时随地创建和修改你的购物清单。"
 L["open your shopping lists"] = "打开你的购物清单"
 
+-- Snipe: last scan finds, progress, run-out prices
+L["Checked %d of %d. A full pass takes about %s."] = "已查看 %d / %d。查完一轮约需 %s。"
+L["Last Scan"] = "上次扫描"
+L["From your last scan. Snipe checks it first."] = "来自你上次的扫描。Snipe 会先查它。"
+L["Check Price Again"] = "再查一次价格"
 
 -- Crafts with a wait on the Profit tab (2026-11-28)
 L["You can make one a day."] = "每天可以做一个。"

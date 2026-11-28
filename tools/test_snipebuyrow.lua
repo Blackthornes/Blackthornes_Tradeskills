@@ -79,4 +79,33 @@ check("its own quiet ready still checking: Checking...", text == "Checking..." a
 View:RowBuy(finds[1])
 check("never buys before the price is known", #log == 0)
 
+-- A material priced by the player's click: Pay, with the price-time bar.
+log = {}
+local left = 12
+snipe.QuoteLeft = function() return left end
+snipe.pending = { find = finds[1], phase = "quoted", count = 20, total = 120, fromClick = true, quoteFor = 24 }
+text, can = View.RowBuyState(finds[1])
+check("material priced by a click: Pay and the cost", text == "Pay 120c" and can)
+check("the bar shows half the price time is left", View.HoldShare() == 0.5)
+View:RowBuy(finds[1])
+check("one click pays", log[1] == "pay")
+
+-- The price ran out before the click: one click asks again.
+log = {}
+snipe.pending = { find = finds[1], phase = "expired", count = 20, total = 120 }
+text, can = View.RowBuyState(finds[1])
+check("ran out: Check Price Again, clickable", text == "Check Price Again" and can)
+check("no bar once it ran out", View.HoldShare() == nil)
+View:RowBuy(finds[1])
+check("the click asks again", log[1] == "pay")
+snipe.QuoteLeft = nil
+
+-- The progress line, once a pass's length can be told.
+snipe.Progress = function() return 420, 1240, nil end
+check("no line before a pass's length is known", View.ProgressText() == nil)
+snipe.Progress = function() return 420, 1240, 185 end
+ns.Util.FormatAge = function(sec) return math.floor(sec / 60) .. "m" end
+check("progress line", View.ProgressText() == "Checked 420 of 1240. A full pass takes about 3m.")
+snipe.Progress = nil
+
 if failures > 0 then error(failures .. " snipe buy row checks failed") end

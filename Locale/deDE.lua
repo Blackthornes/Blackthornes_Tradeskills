@@ -3183,7 +3183,7 @@ L["Next Best"] = "Zweitbeste"
 L["No crate has a price yet. Scan the auction house first."] = "Noch keine Kiste hat einen Preis. Scanne zuerst das Auktionshaus."
 L["No price yet"] = "Noch kein Preis"
 L["Nobody is selling %d %s right now."] = "Gerade verkauft niemand %d %s."
-L["Pay %s"] = "Zahle %s"
+L["Pay %s"] = "%s zahlen"
 L["Pays Back"] = "Bringt ein"
 L["Shopping lists aren't ready yet."] = "Einkaufslisten sind noch nicht bereit."
 L["There's nothing to buy for your goal yet."] = "Für dein Ziel gibt es noch nichts zu kaufen."
@@ -4081,6 +4081,11 @@ L["Used to level %s's %s. Needs %d more."] = "Braucht %s zum Leveln von %s. Noch
 L["Make and change your shopping lists anywhere."] = "Erstelle und ändere deine Einkaufslisten, wo du willst."
 L["open your shopping lists"] = "öffnet deine Einkaufslisten"
 
+-- Snipe: last scan finds, progress, run-out prices
+L["Checked %d of %d. A full pass takes about %s."] = "%d von %d geprüft. Eine Runde dauert etwa %s."
+L["Last Scan"] = "Letzter Scan"
+L["From your last scan. Snipe checks it first."] = "Aus deinem letzten Scan. Snipe prüft es zuerst."
+L["Check Price Again"] = "Preis neu prüfen"
 
 -- Crafts with a wait on the Profit tab (2026-11-28)
 L["You can make one a day."] = "Du kannst eins am Tag machen."
