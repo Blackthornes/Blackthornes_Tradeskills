@@ -430,6 +430,18 @@ check("what the bank should give: no more than it holds", wants[3], 2)
 check("nothing for what it makes", wants[1], nil)
 ns.Inventory.GetBankCount = function(_, itemID) return itemID == 3 and 20 or 0 end
 check("up to what the crafts are short", Butler:FromBank()[3], 7)
+-- Keep on This Character holds what is in the bank too: a player kept 3
+-- Gold Power Cores there and one came out for a craft (2026-11-28).
+assert(loadfile(lfs_cwd .. "/Logic/KeepHere.lua"))("Blackthornes_TS", ns)
+ns.KeepHere:Set(3, 20)
+check("all the bank holds is kept: nothing taken", Butler:FromBank()[3], nil)
+ns.KeepHere:Set(3, 15)
+check("only what is past the keep comes out", Butler:FromBank()[3], 5)
+_G.BlackthornesButler = { KeepHere = { Count = function(_, itemID) return itemID == 3 and 9999 or nil end } }
+check("Butler's Keep All counts too", Butler:FromBank()[3], nil)
+_G.BlackthornesButler = nil
+ns.KeepHere:Set(3, 0)
+check("no keep: as before", Butler:FromBank()[3], 7)
 ns.Inventory.GetBagCount = function() return 10 end
 check("carried enough: nothing", Butler:FromBank()[3], nil)
 ns.QueueMail.GetPlan = function() error("boom") end

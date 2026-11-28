@@ -1611,6 +1611,16 @@ _G.BlackthornesTS.KeepHere.IsAll(count)    -- true for Keep All
 Keep both stable; if one changes, change Butler's `Logic/KeepHere.lua`
 too. Tested in `tools/test_sisterkeeps.lua`.
 
+The keep holds for crafting too (a player, 2026-11-28: 3 Gold Power Cores
+kept in the bank, and the queue and Take from bank still used one).
+`KeepHere:Kept(itemID)` is the bigger of this number and Butler's
+`KeepHere:Count`; `KeepHere:Spare(itemID, bags, bank, mail)` takes it off
+the bank first, then the bags, then the mail. The shopping list (its
+`inBags`, `inBank` and `have` are past the keep), sub-craft sizing,
+`Queue:HeldBy` for the character playing, `Butler:FromBank`, the mail
+plan's spare count and the holder for another character's craft read it.
+Tested in `tools/test_keepbanked.lua` and `tools/test_butler.lua`.
+
 ## Goblin Gold
 
 The owner said build it (2026-10-17, from a mockup): a small bar on

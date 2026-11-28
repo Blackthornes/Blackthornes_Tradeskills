@@ -132,6 +132,15 @@ local function SelfKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
 end
 
+--- What the character playing owns of an item (bags, bank and mail) less
+--- what it keeps on this character (Logic/KeepHere.lua): a kept item is
+--- never counted as there to craft with (2026-11-28).
+local function SpareOwned(itemID)
+    local owned = ns.Inventory:GetOwnedCount(itemID)
+    if not (ns.KeepHere and ns.KeepHere.Kept) then return owned end
+    return math.max(0, owned - ns.KeepHere:Kept(itemID))
+end
+
 local function CharacterRecord(characterKey)
     local characters = ns.db and ns.db.characters
     local record = characterKey and characters and characters[characterKey]
@@ -251,7 +260,7 @@ function Queue:HeldBy(characterKey, itemID)
         -- for any other character. Logged in before opening the mailbox, the
         -- crafter saw none of the Medium Leather sent to it and the queue
         -- made it again, with its Light Leather to mail (2026-10-11).
-        local held = ns.Inventory:GetOwnedCount(itemID)
+        local held = SpareOwned(itemID)
         if ns.QueueMail and ns.QueueMail.InFlight then
             held = held + ns.QueueMail:InFlight(characterKey or SelfKey(), itemID)
         end
@@ -849,7 +858,7 @@ function Queue:RebuildDependencies()
 
                 if subRecipe then
                     local short = HeldPool(pool, itemID,
-                        ns.Inventory:GetOwnedCount(itemID) + BoughtBeyondMail(itemID), need.units)
+                        SpareOwned(itemID) + BoughtBeyondMail(itemID), need.units)
 
                     if short > 0 then
                         -- Missing units become crafts, since one craft can
@@ -2341,7 +2350,6 @@ function Queue:BuildShoppingList()
             -- already own it, it just needs collecting.
             local inBags = ns.Inventory:GetBagCount(itemID)
             local inBank = ns.Inventory:GetBankCount(itemID)
-            local have = inBags + inBank
 
             -- A sub-craft was sized against everything owned, mail included, so
             -- whatever of this it leaves over is already owned. Counting it the
@@ -2355,8 +2363,15 @@ function Queue:BuildShoppingList()
             -- not to be bought again. A mail count already taken holds the
             -- ones the mailbox showed; only the rest are added.
             local bought = ns.AHBuys and ns.AHBuys:GetPending(itemID) or 0
-            inMail = inMail + BoughtBeyondMail(itemID, inMail)
-            have = have + inMail
+            local boughtMore = BoughtBeyondMail(itemID, inMail)
+
+            -- What it keeps on this character is not there to craft with,
+            -- in the bank least of all (Logic/KeepHere.lua, 2026-11-28).
+            if ns.KeepHere and ns.KeepHere.Spare then
+                inBags, inBank, inMail = ns.KeepHere:Spare(itemID, inBags, inBank, inMail)
+            end
+            inMail = inMail + boughtMore
+            local have = inBags + inBank + inMail
 
             local shortfall = math.max(0, needed - have)
 
