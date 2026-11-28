@@ -655,6 +655,97 @@ function CraftPanel:SetQueued(line, wanted)
     end
 end
 
+--- Is Shift held? Read in a pcall, as every client value is.
+local function ShiftDown()
+    local ok, down = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
+    return ok and down == true
+end
+
+CraftPanel.ShiftDown = ShiftDown
+
+--- A short side to side shake: Shift-click on + with nothing to make.
+-- An animation the game plays, so the button's anchors never move.
+function CraftPanel.Shake(button)
+    if not (button and button.CreateAnimationGroup) then return end
+    local group = rawget(button, "shakeGroup")
+    if not group then
+        local ok, made = pcall(button.CreateAnimationGroup, button)
+        if not ok or type(made) ~= "table" then return end
+        group = made
+        local steps = { 3, -6, 6, -3 }
+        for order, x in ipairs(steps) do
+            local okAnim, move = pcall(group.CreateAnimation, group, "Translation")
+            if okAnim and type(move) == "table" then
+                pcall(move.SetOffset, move, x, 0)
+                pcall(move.SetDuration, move, 0.05)
+                pcall(move.SetOrder, move, order)
+            end
+        end
+        button.shakeGroup = group
+    end
+    pcall(group.Stop, group)
+    pcall(group.Play, group)
+end
+
+--- The Shift-click line for a + button's tooltip: how many the bags can
+--- make, or a grey line when they can make none.
+function CraftPanel.ShiftClickLine(craftable)
+    if (craftable or 0) > 0 then
+        return L.Format("Shift-click to queue all %d your bags can make.", craftable)
+    end
+    return "|cff9a9a9a" .. L["Shift-click queues all you can make. Your bags have the materials for none right now."] .. "|r"
+end
+
+--- Shift-click on +: queue as many as the bags can make right now.
+--
+-- Sets the total rather than adding: 3 queued with room for 10 makes 10,
+-- and more than that queued already is left alone. Bags only, the same
+-- count as the Craft button, and the max on hand still stops it, as + does.
+-- With nothing to make, nothing is queued: the button shakes and chat says
+-- why.
+-- @return how many were asked for on top of what was queued
+function CraftPanel:QueueAll(line, button)
+    local craftable = ns.Profit:GetCraftableCount(line.recipeID) or 0
+    if craftable <= 0 then
+        CraftPanel.Shake(button)
+        ns.Print(L.Format("Your bags don't have the materials for any %s.", line.name or ""))
+        return 0
+    end
+
+    local _, entry = ns.Queue:Find(line.recipeID, true)
+    local current = entry and entry.quantity or 0
+    if craftable <= current then return 0 end
+
+    QueueMore(line, craftable - current)
+    return craftable - current
+end
+
+--- Shift-click on a Queue tab +: the same, for a queued craft.
+--
+-- A sub-craft's count comes from the crafts it serves, so it is left alone.
+-- The row there carries no limit figures, so they are read here, the way
+-- the craft pane reads them.
+function CraftPanel:QueueAllForEntry(entry, button)
+    if not entry or entry.isDependency then return 0 end
+
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+    local outputItemID = recipe and recipe.outputItemID
+    local line = {
+        recipeID = entry.recipeID,
+        name = (recipe and recipe.name) or tostring(entry.recipeID),
+        outputItemID = outputItemID,
+    }
+
+    if outputItemID and ns.Auctions and ns.Auctions.GetRoom then
+        local room, posted, onHand, _, limit = ns.Auctions:GetRoom(outputItemID)
+        line.stock = (posted or 0) + (onHand or 0)
+        line.postLimit = limit or 0
+        line.roomInCrafts = RoomInCrafts(room, recipe)
+    end
+
+    return self:QueueAll(line, button)
+end
+
 --- The row's Craft button: make this recipe's queued crafts now.
 --
 -- A real click, so the game accepts it, the same as Craft next. One click
@@ -718,9 +809,16 @@ local function CreateRow(row)
     -- Reads - [box] +, the way a number you nudge up and down usually looks.
     -- The box is how many are queued: + and - change it by one, or type the
     -- number you want.
+    -- Shift-click queues all the bags can make (a player asked, the owner
+    -- said build it, 2026-11-28).
     row.add = Widgets.CreateButton(row, "+", function()
-        if row.data and not CraftPanel.ClickMeantElsewhere() then QueueMore(row.data, 1) end
-    end, { width = STEP_WIDTH, height = 15, primary = true })
+        if not row.data or CraftPanel.ClickMeantElsewhere() then return end
+        if ShiftDown() then
+            CraftPanel:QueueAll(row.data, row.add)
+        else
+            QueueMore(row.data, 1)
+        end
+    end,{ width = STEP_WIDTH, height = 15, primary = true })
     row.add:SetPoint("TOPRIGHT", -8, -1)
 
     row.quantity = Widgets.CreateNumberBox(row, {
@@ -923,6 +1021,7 @@ local function UpdateRow(row, line)
                 line.stock or 0, line.name))
     else
         row.add.tooltipText = L.Format("Queue one more %s, or type how many in the box.", line.name)
+            .. "\n" .. CraftPanel.ShiftClickLine(line.craftable)
     end
 
     -- Greyed out with nothing of this recipe's own in the queue, so the

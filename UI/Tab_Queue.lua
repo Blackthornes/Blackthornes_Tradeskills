@@ -226,6 +226,37 @@ local function PlaceNameAndTime(row, perHour)
     row.perHour:SetShown(perHour)
 end
 
+--- The + on a queued craft. A click adds one; Shift-click queues all the
+--- bags can make (2026-11-28), through the craft pane, so both + buttons
+--- count and cap it the same way.
+local QueuePlus = {}
+ns.QueuePlus = QueuePlus
+
+function QueuePlus.Click(row)
+    local entry = row.data
+    if not entry then return end
+    local pane = ns.CraftPanel
+    if pane and pane.ShiftDown and pane.ShiftDown() then
+        pane:QueueAllForEntry(entry, row.plus)
+        return
+    end
+    ns.Queue:SetQuantity(entry.recipeID, entry.quantity + 1)
+end
+
+--- Its hover, read when the mouse comes over it, so the count is what the
+--- bags hold now. A sub-craft has no + and no hover.
+function QueuePlus.Tooltip(row, tooltip)
+    local entry = row.data
+    if not entry or entry.isDependency then return false end
+    local text = L["Add one more."]
+    local pane = ns.CraftPanel
+    if pane and pane.ShiftClickLine and ns.Profit and ns.Profit.GetCraftableCount then
+        text = text .. "\n" .. pane.ShiftClickLine(ns.Profit:GetCraftableCount(entry.recipeID) or 0)
+    end
+    tooltip:SetText(text, 1, 1, 1, 1, true)
+    return true
+end
+
 local function CreateCraftRow(row)
     row.up = CreateMoveArrow(row, "up")
     row.down = CreateMoveArrow(row, "down")
@@ -323,10 +354,9 @@ local function CreateCraftRow(row)
     row.count:SetPoint("RIGHT", -45, 0)
     row.count:SetWidth(QUANTITY_WIDTH)
 
-    row.plus = Widgets.CreateButton(row, "+", function()
-        if not row.data then return end
-        ns.Queue:SetQuantity(row.data.recipeID, row.data.quantity + 1)
-    end, { width = 18, height = 16 })
+    row.plus = Widgets.CreateButton(row, "+", function() QueuePlus.Click(row) end,
+        { width = 18, height = 16 })
+    row.plus.tooltipFunc = function(_, tooltip) return QueuePlus.Tooltip(row, tooltip) end
     row.plus:SetPoint("RIGHT", -24, 0)
 
     -- On a sub-craft the x means never make it as one (2026-10-07):
