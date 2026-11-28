@@ -207,6 +207,23 @@ check("packed", type(prices[7000].history), "string")
 TidyUp:Apply(30, now)
 check("old reading gone from the packed one", Count(7000), 1)
 
+print("\na kept reading with no count keeps its place")
+Fresh()
+prices = ns.db.prices["Realm-Alliance"]
+prices[7000].history = { old, 900, 5, recent - 100, 900, false, recent, 900, 7 }
+TidyUp:Apply(30, now)
+check("two readings kept", Count(7000), 2)
+local readings = {}
+for _, t, m, q in P.EachReading(prices[7000].history) do
+    readings[#readings + 1] = { t, m, q }
+end
+check("first kept time", readings[1] and readings[1][1], recent - 100)
+check("first kept price", readings[1] and readings[1][2], 900)
+check("first kept has no count", readings[1] and readings[1][3] or nil, nil)
+check("second kept time", readings[2] and readings[2][1], recent)
+check("second kept price", readings[2] and readings[2][2], 900)
+check("second kept count", readings[2] and readings[2][3], 7)
+
 print("\nthe next login")
 local queued = {}
 C_Timer = { After = function(_, fn) queued[#queued + 1] = fn end }
