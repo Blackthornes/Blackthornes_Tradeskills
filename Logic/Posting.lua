@@ -1238,8 +1238,58 @@ end
 --- this addon would hold back or refuse stops a listing. The price floor,
 --- the cost guards, the queue's keeps, the other addons' keeps, list rules
 --- and When Cheaper all step aside; the game's own limits stay.
-function Posting:PostsAnyway()
-    return ns.Config:Get("postAnyway") == true
+---
+--- Shift-click List on the Sell list (the owner said build it, 2026-11-28):
+--- the same for that one item only, until it is listed, a plain click on it
+--- comes, or ANYWAY_ONCE_SECONDS pass. Asked with an itemID, the one-shot
+--- counts; asked without, only the setting does, so the list itself, List
+--- Next, List All and the Far Under ask never see it.
+function Posting:PostsAnyway(itemID)
+    if ns.Config:Get("postAnyway") == true then return true end
+    local once = rawget(self, "anywayOnce")
+    if itemID == nil or type(once) ~= "table" or once.itemID ~= itemID then return false end
+    if GetTime() - (once.at or 0) > Posting.ANYWAY_ONCE_SECONDS then
+        self.anywayOnce = nil
+        return false
+    end
+    return true
+end
+
+-- How long a Shift-click waits for its price check and the confirm box.
+Posting.ANYWAY_ONCE_SECONDS = 120
+
+--- List this one item as if "Bypass Disallowed Postings" were ticked.
+function Posting:ListAnywayOnce(itemID)
+    self.anywayOnce = itemID and { itemID = itemID, at = GetTime() } or nil
+end
+
+--- The one-shot for this item is used up (listed, or a plain click came).
+function Posting:EndAnywayOnce(itemID)
+    local once = rawget(self, "anywayOnce")
+    if type(once) == "table" and once.itemID == itemID then self.anywayOnce = nil end
+end
+
+--- After a "not listing" line while the Sell list is open: how to list it
+--- anyway.
+function Posting:HintShiftClick()
+    local panel = ns.PostPanel
+    if not (panel and panel.IsShown and panel.view == "sell") then return end
+    local ok, shown = pcall(panel.IsShown, panel)
+    if ok and shown then ns.Print(L["Shift-click List to list it anyway."]) end
+end
+
+--- How many one listing of this item could take with nothing held back:
+--- every free copy for a commodity or copies the auction house lists one
+--- each, else the stack in the first slot. Nil when it cannot be listed.
+function Posting:WholeStack(itemID)
+    local sellable, count = self:GetSellInfo(itemID)
+    if not sellable or not count or count < 1 then return nil end
+    local bag, slot, slotStack = FindInBags(itemID)
+    if not bag then return nil end
+    if ns.Scanner:IsCommodity(itemID) then return count end
+    local okLink, link = pcall(C_Container.GetContainerItemLink, bag, slot)
+    if self:CanPostMany(itemID, okLink and link or nil) then return count end
+    return math.min(count, slotStack or 1)
 end
 
 --- Items in your bags worth listing.
@@ -1344,6 +1394,8 @@ function Posting:GetPostable(opts)
             if keep and count then
                 count = count - (type(keep) == "number" and keep or count)
             end
+            -- Some kept back for the queue: Shift-click List lists them too.
+            local queueKept = keep and bagCount and count and count < bagCount or nil
 
             -- What the other Blackthornes addons want kept (a Farmer goal,
             -- an upgrade, pet food, Butler's lists, a quest, a clam worth
@@ -1380,13 +1432,14 @@ function Posting:GetPostable(opts)
 
             -- Keep Listed: no more up than the list allows. Full, it waits
             -- (dimmed, as a keep: its List button still lists it).
-            local listRoom, listUp
+            local listRoom, listUp, listCapped
             if listRule and count and count > 0 and not heldAll and not anyway then
                 listRoom, listUp = ns.ListRules:ListedRoom(itemID)
                 if listRoom and listRoom <= 0 then
                     heldAll = L.Format("Waiting, already %d up", listUp)
                 elseif listRoom and listRoom < count then
                     count = listRoom
+                    listCapped = true
                 end
             end
 
@@ -1534,6 +1587,10 @@ function Posting:GetPostable(opts)
                     butlerWait = butlerWait,
                     kept = kept,
                     keptWhy = keptWhy,
+                    -- Fewer offered than the bags hold, for the queue or
+                    -- Keep Listed (Shift-click List lists the rest too).
+                    queueKept = queueKept or nil,
+                    listCapped = listCapped,
                     -- The copy itself when it has a random suffix: the item
                     -- ID alone names only "Lead Band".
                     link = held and Util.LinkSuffix(held.link) and held.link or nil,
@@ -1861,7 +1918,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- A nonsense price is caught before anything irreversible happens. This
     -- is separate from the material-cost check below: that one is about
     -- profit, this one is about the number being wrong.
-    local anyway = self:PostsAnyway()
+    local anyway = self:PostsAnyway(itemID)
     local floor, why
     if not anyway then floor, why = self:GetPriceFloor(itemID, byHand) end
 
@@ -1870,6 +1927,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or L["the price looks wrong"]))
         ns.Warn(L.Format("expected at least %s. Run a scan, or list it by hand.",
             Util.FormatMoney(floor)))
+        self:HintShiftClick()
         self:PassOver(itemID)
         return false
     end
@@ -1883,6 +1941,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
             Util.GetItemLabel(itemID),
             Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
         ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
+        self:HintShiftClick()
         return false
     end
 
@@ -1892,6 +1951,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, unitPrice, paid, net))
         ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
+        self:HintShiftClick()
         return false
     end
 
@@ -1982,6 +2042,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- settles this, which is what VerifyPending goes and asks for.
     ns.Print(L.Format("listing %dx %s at %s each",
         quantity, Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice)))
+    self:EndAnywayOnce(itemID)
 
     if ns.CraftedCost then ns.CraftedCost:NotePosted(itemID, unitPrice) end
 
@@ -2333,7 +2394,7 @@ end
 --- same answer, one click later and after a question it had no use for.
 -- @return true when it would be refused (and was said)
 function Posting:RefusesEarly(itemID, price, byHand)
-    if self:PostsAnyway() then return false end
+    if self:PostsAnyway(itemID) then return false end
 
     -- Under what a vendor pays, or a fraction of market after a dump.
     local floor, why = self:GetPriceFloor(itemID, byHand)
@@ -2341,6 +2402,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s: %s. Expected at least %s.",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), why or L["the price looks wrong"],
             Util.FormatMoney(floor)))
+        self:HintShiftClick()
         self:PassOver(itemID)
         return true
     end
@@ -2351,6 +2413,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s, the materials cost %s",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
         ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
+        self:HintShiftClick()
         self:PassOver(itemID)
         return true
     end
@@ -2360,6 +2423,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, price, paid, net) .. ".")
         ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
+        self:HintShiftClick()
         self:PassOver(itemID)
         return true
     end
@@ -2743,7 +2807,17 @@ end
 -- deliberate: search, show the fresh number, and let the click commit it.
 -- With "Ask Before Listing" off (the default since 2026-10-28) there is no
 -- box: the answer marks the price checked and the next click lists it.
-function Posting:Request(itemID, quantity, unitPrice)
+--
+-- @param opts.anyway  Shift-click List: this one listing goes up as if
+--   "Bypass Disallowed Postings" were ticked (ListAnywayOnce). A plain click
+--   on the item ends that.
+function Posting:Request(itemID, quantity, unitPrice, opts)
+    if type(opts) == "table" and opts.anyway then
+        self:ListAnywayOnce(itemID)
+    else
+        self:EndAnywayOnce(itemID)
+    end
+
     local allowed, reason = self:CanPost(itemID)
     if not allowed then
         ns.Print(reason or L["cannot post right now"])
