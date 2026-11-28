@@ -222,6 +222,62 @@ ns.Snipe = nil
 handlers.AUCTION_HOUSE_CLOSED()
 check("the auction house closing stops the run", ListSets.run == nil)
 
+-- 10. An item sold one at a time is on the list (a sword a craft needs).
+-- Forever's GetItemCommodityStatus takes an item in the bags and raises for
+-- an item ID, so the ID alone read as "sold in stacks": the sword was
+-- searched as a stack, its answer came on the event for single items, and
+-- the run stopped with "the auction house is busy" every time.
+do
+    local SWORD = 2488
+    functions["C_AuctionHouse.GetItemCommodityStatus"] = true
+    C_AuctionHouse.GetItemCommodityStatus = function(item)
+        if type(item) ~= "table" then error("bad argument #1 to 'GetItemCommodityStatus'") end
+        return 1
+    end
+    lines[#lines + 1] = { itemID = SWORD, want = 1 }
+
+    -- The scanner remembers it from a time it was in the bags.
+    local remembered = { [SWORD] = false }
+    ns.Scanner.GetCommodityStatus = function(_, itemID) return remembered[itemID] end
+    said = {}
+    local before = #requests
+    ListSets:Start(1, 200)
+    requests[#requests].send()
+    handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, HERB)
+    requests[#requests].send()
+    handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, VIAL)
+    check("an item known to sell one at a time is not searched as a stack", #requests == before + 2)
+    check("and the run is worked out, not left waiting", ListSets.run and ListSets.run.phase == "ready")
+    Flush()
+    check("no busy notice follows", ListSets.run ~= nil and #said == 0)
+    ListSets:Stop()
+
+    -- Nobody knows yet: it is searched, and the game answers for a single item.
+    remembered[SWORD] = nil
+    timers = {}
+    ListSets:Start(1, 200)
+    requests[#requests].send()
+    handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, HERB)
+    requests[#requests].send()
+    handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, VIAL)
+    requests[#requests].send()
+    check("an item nobody knows yet is searched", ListSets.run.reading and ListSets.run.reading.itemID == SWORD)
+    check("the answer for single items is listened for", handlers.ITEM_SEARCH_RESULTS_UPDATED ~= nil)
+    handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = HERB })
+    check("another item's answer is not taken", ListSets.run.reading and ListSets.run.reading.itemID == SWORD)
+    handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = SWORD })
+    check("its answer ends the wait", ListSets.run and ListSets.run.phase == "ready")
+    check("with no sets, since it can't be bought by the unit", ListSets.run.sets == 0)
+    Flush()
+    check("and the run is not stopped as busy", ListSets.run ~= nil and #said == 0)
+    ListSets:Stop()
+
+    lines[#lines] = nil
+    ns.Scanner.GetCommodityStatus = nil
+    functions["C_AuctionHouse.GetItemCommodityStatus"] = nil
+    C_AuctionHouse.GetItemCommodityStatus = nil
+end
+
 -- 9. The view's entries.
 do
     local L = ns.L

@@ -145,12 +145,15 @@ end
 
 --- The text to put beside the name, or nil to leave the row alone.
 function RecipeValue:TextFor(recipeID)
-    -- "Craft Cost and Profit:" (Trent, 2026-11-14): the craft's profit in
+    -- "Craft Cost and Profit:": the craft's profit in
     -- place of what it sells for, "No price" when any price is missing.
     if self:ShowsProfit() and ns.CraftProfit then
         local figures = ns.CraftProfit:For(recipeID)
         if not figures then return nil end
-        return ns.CraftProfit.RowText(figures)
+        -- The figures are one kept table until a price or setting moves, so
+        -- the text is spelled once for them, not four times a second a row.
+        if figures.rowText == nil then figures.rowText = ns.CraftProfit.RowText(figures) end
+        return figures.rowText
     end
 
     local value = self:ValueFor(recipeID)
@@ -805,7 +808,18 @@ local function PositionLabel(label, row, region)
     -- and why `/bts value` counts it -- but a name with a price written
     -- across its last word is not readable either, and the whole name is
     -- still there in the recipe pane beside the list.
-    if ShortenName(region, valueLeft - NAME_GAP) then
+    --
+    -- Blizzard's list hangs the "[13]" count off the name's right edge, so
+    -- it moves with the name. Narrowing the name to the value's edge slid
+    -- the count under the value (a player's screenshot, 2026-11-22). The
+    -- name gives way by whatever reaches past its own words as well.
+    local nameRight = region and TextRight(region)
+    local trailing = 0
+    if type(nameRight) == "number" and textRight > nameRight then
+        trailing = textRight - nameRight
+    end
+
+    if ShortenName(region, valueLeft - NAME_GAP - trailing) then
         return "shortened"
     end
 
@@ -826,15 +840,20 @@ RecipeValue.MIN_NAME_WIDTH = MIN_NAME_WIDTH
 local drawn = setmetatable({}, { __mode = "k" })
 
 --- One string for what a row's value placement depends on: the recipe, the
---- value, the row's edges, and every piece of text on it with where it sits.
+--- value, the row's edges, and every piece of text showing on it.
+---
+--- The text regions' own edges are left out. Asking a region where it sits
+--- makes the game work out the row's layout there and then, and on every
+--- visible row four times a second, while a craft finishes and the list
+--- redraws, that was a stutter (Craft Cost and Profit, 2026-11-17). A region
+--- only moves when the row does, its words change or it shows or hides, and
+--- each of those is still in the key; the name's width is ours to set.
 local function RowKey(row, label, recipeID, text)
     local parts = { tostring(recipeID), text,
         tostring(Try(Field(row, "GetLeft"), row)), tostring(Try(Field(row, "GetRight"), row)) }
 
     for _, region in ipairs(TextRegions(row, label)) do
         parts[#parts + 1] = TextOf(region) or ""
-        parts[#parts + 1] = tostring(Try(Field(region, "GetLeft"), region))
-        parts[#parts + 1] = tostring(Try(Field(region, "GetWidth"), region))
     end
 
     return table.concat(parts, "\031")
@@ -874,7 +893,7 @@ function RecipeValue:AddHoverLines(row, tooltip)
     local white, label = 1, 0.78
     for _, line in ipairs(ns.CraftProfit.Lines(figures)) do
         local left = line.label
-        if line.makes then left = left .. "  |cffa0a4ab" .. line.makes .. "|r" end
+        if line.makes then left = left .. "  |cffa89f88" .. line.makes .. "|r" end
         Try(Field(tooltip, "AddDoubleLine"), tooltip, left, line.value, label, label, label, white, white, white)
     end
     Try(Field(tooltip, "Show"), tooltip)
@@ -1035,12 +1054,31 @@ function RecipeValue:HookContainer(container)
     end
 
     local ok = pcall(hook, container, "Update", function()
-        RecipeValue:Refresh()
+        RecipeValue:RefreshSoon()
     end)
 
     self.hooked[container] = ok
 
     return ok
+end
+
+--- One refresh on the next frame, however many times the list redraws first.
+--
+-- A finished craft changes the bags and the counts beside many recipes, and
+-- the game redraws the list several times for it in one go. Refreshing on
+-- each redraw read and placed every row again and again (2026-11-17). The
+-- ticker stays the backstop either way.
+function RecipeValue:RefreshSoon()
+    if self.soon then return end
+    if not C_Timer or type(C_Timer.After) ~= "function" then
+        self:Refresh()
+        return
+    end
+    self.soon = true
+    C_Timer.After(0, function()
+        RecipeValue.soon = nil
+        RecipeValue:Refresh()
+    end)
 end
 
 function RecipeValue:Start()
@@ -1087,6 +1125,11 @@ function RecipeValue:PrintReport()
     ns.Print(("|c%sRecipe values in the profession window|r"):format(ns.COLORS.accent))
 
     ns.PrintRaw(("  |c%srows found|r  %s"):format(ns.COLORS.muted, report.source or "none"))
+
+    if ns.UpgradesOnly and ns.UpgradesOnly.ReportText then
+        local ok, text = pcall(ns.UpgradesOnly.ReportText, ns.UpgradesOnly)
+        ns.PrintRaw(("  |c%supgrades only box|r  %s"):format(ns.COLORS.muted, ok and text or "?"))
+    end
 
     if report.rows == 0 then
         ns.PrintRaw(("  |c%sOpen a profession window and run this again.|r"):format(

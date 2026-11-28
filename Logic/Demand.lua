@@ -32,6 +32,12 @@ local OWN_HIGH, OWN_SOME = 0.6, 0.3
 
 -- Share of the listed stock gone per day.
 local MARKET_HIGH, MARKET_SOME = 0.30, 0.10
+-- Listings gone from the auction house before the market's reading says
+-- anything. With one or two up, one going away (sold, expired or pulled)
+-- read as "100% of stock sells daily" (a player's report, 2026-11-22; the
+-- owner said build it from a mockup).
+local MARKET_MIN_GONE = 3
+Demand.MARKET_MIN_GONE = MARKET_MIN_GONE
 
 local LEVELS = {
     high = { label = L["High"], color = "profit", rank = 3 },
@@ -157,17 +163,136 @@ function Demand:Get(itemID)
 
     local ok, rate = pcall(ns.Prices.GetSalesPerDay, ns.Prices, itemID)
     if not ok or not rate then return nil end
+    if ns.Prices.GetListingsGone then
+        local okGone, gone = pcall(ns.Prices.GetListingsGone, ns.Prices, itemID)
+        if not okGone or (tonumber(gone) or 0) < MARKET_MIN_GONE then return nil end
+    end
 
     return {
-        level = Demand.MarketLevel(rate),
+        level = Demand.MarketLevel(rate, itemID),
         source = "market",
         rate = rate,
     }
 end
 
---- The level for a share of the listed stock gone each day.
-function Demand.MarketLevel(share)
-    return share >= MARKET_HIGH and "high" or share >= MARKET_SOME and "some" or "low"
+--------------------------------------------------------------------------------
+-- High among its own kind
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-11-16) why every potion read High. Potions, food and
+-- bandages sell in many small stacks, so nearly all of them clear the one
+-- market bar, and gear seldom does. So a market High also has to be in the
+-- top KIND_TOP of its own kind (consumables against consumables, gear
+-- against gear, trade goods against trade goods); the rest of the old Highs
+-- read Some. Low and your own sales record are untouched, so the queue's
+-- "rarely sells" warning and the Sell list's checks stay as they were. A
+-- kind with fewer than KIND_MIN items read keeps the plain bar.
+local KIND_TOP = 1 / 3
+local KIND_MIN = 8
+local KINDS = { [0] = "consumable", [2] = "gear", [4] = "gear", [5] = "goods", [7] = "goods" }
+
+local kindOf = {}
+
+--- "consumable", "gear", "goods" or "other", from the item's class. nil
+--- when the game won't say yet (not cached, so it is asked again later).
+function Demand.Kind(itemID)
+    local known = kindOf[itemID]
+    if known then return known end
+
+    local instant = _G.C_Item and _G.C_Item.GetItemInfoInstant
+    if type(instant) ~= "function" then return nil end
+    local ok, _, _, _, _, _, classID = pcall(instant, itemID)
+    if not ok or type(classID) ~= "number" then return nil end
+
+    local kind = KINDS[classID] or "other"
+    kindOf[itemID] = kind
+    return kind
+end
+
+-- Each kind's bar: the share an item must reach to be in its kind's top
+-- KIND_TOP. Worked out again when a scan finishes or the hour turns, over
+-- frames (the smooth play rule: the price table holds thousands of items);
+-- the last bars stand until the new ones are done.
+local cutoffs, cutoffKey, building
+
+local function CutoffsFrom(shares)
+    local result = {}
+    for kind, list in pairs(shares) do
+        if #list >= KIND_MIN then
+            table.sort(list)
+            local index = math.max(1, #list - math.floor(#list * KIND_TOP) + 1)
+            result[kind] = list[index]
+        end
+    end
+    return result
+end
+
+local function ReadShare(shares, itemID)
+    local kind = Demand.Kind(itemID)
+    if not kind then return end
+    local ok, share = pcall(ns.Prices.GetSalesPerDay, ns.Prices, itemID)
+    if not ok or type(share) ~= "number" then return end
+    local list = shares[kind]
+    if not list then
+        list = {}
+        shares[kind] = list
+    end
+    list[#list + 1] = share
+end
+
+local function Cutoffs()
+    if not (ns.Prices and ns.Prices.GetTable and ns.Prices.GetSalesPerDay) then return nil end
+
+    local key = ("%s:%d"):format(tostring(ns.Prices.scanCount or 0), math.floor(time() / 3600))
+    if cutoffKey == key or building == key then return cutoffs end
+
+    local ok, priceTable = pcall(ns.Prices.GetTable, ns.Prices)
+    if not ok or type(priceTable) ~= "table" then return cutoffs end
+
+    local itemIDs = {}
+    for itemID in pairs(priceTable) do
+        if type(itemID) == "number" then itemIDs[#itemIDs + 1] = itemID end
+    end
+
+    local Util = ns.Util
+    if not (Util and Util.NewWorker) then
+        local shares = {}
+        for _, itemID in ipairs(itemIDs) do ReadShare(shares, itemID) end
+        cutoffs, cutoffKey = CutoffsFrom(shares), key
+        return cutoffs
+    end
+
+    local shares = {}
+    building = key
+    local worker = Util.NewWorker({
+        budgetMs = 2,
+        onItem = function(itemID) ReadShare(shares, itemID) end,
+        onDone = function()
+            cutoffs, cutoffKey, building = CutoffsFrom(shares), key, nil
+        end,
+        onCancel = function() building = nil end,
+    })
+    worker:Start(itemIDs)
+    return cutoffs
+end
+
+--- The level for a share of the listed stock gone each day. With an item,
+--- High also needs the item to be in the top of its own kind.
+function Demand.MarketLevel(share, itemID)
+    if share < MARKET_SOME then return "low" end
+    if share < MARKET_HIGH then return "some" end
+    if itemID then
+        local bars = Cutoffs()
+        local kind = bars and Demand.Kind(itemID)
+        local bar = kind and bars[kind]
+        if bar and share < bar then return "some" end
+    end
+    return "high"
+end
+
+--- Forget the kinds' bars. Tests call it; a scan or the hour redoes them.
+function Demand:ForgetKinds()
+    cutoffs, cutoffKey, building = nil, nil, nil
 end
 
 --- "High", "Some" or "Low".

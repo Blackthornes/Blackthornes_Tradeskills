@@ -170,7 +170,16 @@ local function AuctionOpen()
 end
 
 --- Sold one at a time (not a stack): Buy Sets can't buy it by the unit.
+--- Forever's GetItemCommodityStatus takes an item in the bags and raises for
+--- an item ID, so the ID alone read as "sold in stacks" for everything. The
+--- scanner's memory is asked first. What nobody knows yet is searched as a
+--- stack, and the event that answers settles it (SingleResults).
 local function IsStack(itemID)
+    local scanner = ns.Scanner
+    if scanner and scanner.GetCommodityStatus then
+        local ok, known = pcall(scanner.GetCommodityStatus, scanner, itemID)
+        if ok and type(known) == "boolean" then return known end
+    end
     if not Util.HasFunction("C_AuctionHouse.GetItemCommodityStatus") then return true end
     local ok, status = pcall(function()
         local value = C_AuctionHouse.GetItemCommodityStatus(itemID)
@@ -309,6 +318,20 @@ function ListSets:Results(itemID)
     if not (reading and reading.sent) then return end
     if itemID and itemID ~= reading.itemID then return end
     run.listings[reading.itemID] = ReadListings(reading.itemID) or {}
+    run.reading = nil
+    self:ReadNext()
+end
+
+--- The game answered for an item sold one at a time, so it was not a
+--- stack after all: nothing of it can be bought by the unit. Before, only
+--- the stacks' event was listened for, so the read waited out READ_WAIT and
+--- the run stopped as "busy".
+function ListSets:SingleResults(itemKey)
+    local run = self.run
+    local reading = run and run.reading
+    if not (reading and reading.sent) then return end
+    if type(itemKey) ~= "table" or itemKey.itemID ~= reading.itemID then return end
+    run.listings[reading.itemID] = {}
     run.reading = nil
     self:ReadNext()
 end
@@ -472,6 +495,7 @@ end
 
 function ListSets:Init()
     ns.RegisterEvent(self, "COMMODITY_SEARCH_RESULTS_UPDATED", function(_, _, itemID) ListSets:Results(itemID) end)
+    ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) ListSets:SingleResults(itemKey) end)
     ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, _, total) ListSets:PriceUpdated(total) end)
     ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() ListSets:Failed() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() ListSets:Bought() end)

@@ -4,9 +4,9 @@
 -- What this pins down:
 --   * crate names are read whole word by whole word, whatever the order;
 --   * a favor costs the crate + its cheapest bundle - the silver back, over
---     the favor it pays, and a bundle over one stack is left out when asked;
---   * the rewards players report stand in until a turn-in is seen, and
---     Artisan crates, which nobody has handed in, have none and sort last;
+--     the favor it pays, a bundle over one stack counting like any other;
+--   * the rewards players report stand in until a turn-in is seen, and a
+--     crate nobody knows the reward of has none and sorts last;
 --   * filling a crate says which sealed crate it becomes, and a sealed crate
 --     leaving the bags with favor and money coming in is what it paid; the
 --     smallest favor seen is kept, as a perk doubles some turn-ins;
@@ -15,7 +15,10 @@
 --     vendor price is marked;
 --   * the game's item ID for a crate beats the typed one;
 --   * the Deals tab's Show menu swaps in the view, which lists, sorts and
---     explains the crates, and its tick box is kept in Settings.
+--     explains the crates;
+--   * the Buy tab's crate list asks each crate in the bags for its cheapest
+--     bundle you can buy, adds crates needing the same, and takes off what
+--     you have after the queue's share.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -196,6 +199,12 @@ Crate("apprentice-herbs").id = nil
 Crate("expert-ore").id = nil
 Crate("artisan-ore").id = nil
 
+check("Artisan crates pay 20 favor and 10s, 40 and 20s for crafted goods",
+    Crate("artisan-ore").favor == 20 and Crate("artisan-ore").silver == 1000
+    and Crate("artisan-parts").favor == 40 and Crate("artisan-parts").silver == 2000)
+-- Artisan Ore stands in below for a crate whose reward nobody knows yet.
+Crate("artisan-ore").favor, Crate("artisan-ore").silver = nil, nil
+
 --------------------------------------------------------------------------------
 print("\nreading crate names")
 
@@ -218,25 +227,26 @@ check("a filled crate is sealed", MerchantsFavor.IsSealedName("Sealed Apprentice
 --------------------------------------------------------------------------------
 print("\nwhat a favor costs")
 
-local rows = MerchantsFavor:GetRows({ skipOverStack = true })
+local rows = MerchantsFavor:GetRows()
 check("every crate is a row", #rows == #ns.WAYLAID_CRATES)
 
 local textiles = Row(rows, "apprentice-textiles")
 check("the crate is priced from the auction house", textiles.cratePrice == 2000)
-check("40 Linen Cloth is over a stack", textiles.bundles[1].overStack == true and textiles.bundles[1].cost == 1200)
-check("so the cheapest bundle is the leather", textiles.best.itemID == LEATHER and textiles.bundleCost == 1600)
+check("40 Linen Cloth counts, though it is over a stack", textiles.bundles[1].overStack == nil
+    and textiles.bundles[1].cost == 1200)
+check("so the cheapest bundle is the linen", textiles.best.itemID == LINEN and textiles.bundleCost == 1200)
 check("with the reported 5 favor and 2s 50c", textiles.favor == 5 and textiles.money == 250
     and textiles.source == "reported")
-check("total is crate + bundle - silver back", textiles.total == 2000 + 1600 - 250)
-check("and a favor is a fifth of that", textiles.perFavor == 670)
+check("total is crate + bundle - silver back", textiles.total == 2000 + 1200 - 250)
+check("and a favor is a fifth of that", textiles.perFavor == 590)
 
 -- None on the auction house: no crate to buy, so no price (a player asked,
 -- 2026-10-11, for the column to go blank rather than show the average).
 noneListed[textiles.itemID] = true
-local gone = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles")
+local gone = Row(MerchantsFavor:GetRows(), "apprentice-textiles")
 check("with none listed the crate column is blank", gone.cratePrice == nil and gone.noneListed == true
     and gone.total == nil and gone.perFavor == nil)
-check("but its bundle is still worked out", gone.bundleCost == 1600)
+check("but its bundle is still worked out", gone.bundleCost == 1200)
 noneListed[textiles.itemID] = nil
 
 local herbs = Row(rows, "apprentice-herbs")
@@ -245,27 +255,22 @@ check("a crate the game has not shown yet has no price", herbs.itemID == nil and
 check("but its cheapest bundle is still worked out", herbs.bundleCost == 100 and herbs.best.itemID == SILVERLEAF)
 
 local artisan = Row(rows, "artisan-ore")
-check("Artisan crates have no reward", artisan.favor == nil and artisan.source == nil)
+check("a crate nobody knows the reward of has none", artisan.favor == nil and artisan.source == nil)
 check("unknown and unpriced crates sort after priced ones", rows[1].key == "apprentice-textiles"
     and rows[#rows].tier == 4)
-
-rows = MerchantsFavor:GetRows({ skipOverStack = false })
-textiles = Row(rows, "apprentice-textiles")
-check("counting over-stack bundles, the linen is cheapest", textiles.best.itemID == LINEN
-    and textiles.perFavor == (2000 + 1200 - 250) / 5)
 
 -- Performance Bonus (a Legacy perk): a 15% chance of double favor at 3
 -- ranks, so each favor costs less on average; the favor shown stays 5.
 local savedLegacy = ns.Legacy
 ns.Legacy = { FavorBonus = function() return 0.15 end }
-rows = MerchantsFavor:GetRows({ skipOverStack = true })
+rows = MerchantsFavor:GetRows()
 textiles = Row(rows, "apprentice-textiles")
 check("Performance Bonus keeps the favor shown", textiles.favor == 5)
 check("and counts the favor to expect", math.abs(textiles.expected - 5.75) < 1e-9)
-check("so each favor costs less", math.abs(textiles.perFavor - (2000 + 1600 - 250) / 5.75) < 1e-9)
+check("so each favor costs less", math.abs(textiles.perFavor - (2000 + 1200 - 250) / 5.75) < 1e-9)
 ns.Legacy = { FavorBonus = function() return 0 end }
-textiles = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles")
-check("no ranks spent: as before", textiles.perFavor == 670 and textiles.expected == 5)
+textiles = Row(MerchantsFavor:GetRows(), "apprentice-textiles")
+check("no ranks spent: as before", textiles.perFavor == 590 and textiles.expected == 5)
 ns.Legacy = savedLegacy
 
 --------------------------------------------------------------------------------
@@ -275,7 +280,7 @@ print("\nvendor prices in a bundle")
 -- auction house wanted 10s 58c.
 shops[SILVERLEAF] = { 1, true }
 shops[PEACEBLOOM] = { 2, false }
-herbs = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-herbs")
+herbs = Row(MerchantsFavor:GetRows(), "apprentice-herbs")
 local silverleaf, peacebloom = herbs.bundles[2], herbs.bundles[1]
 check("a shop with limited stock gives way to the auction house", silverleaf.itemID == SILVERLEAF
     and silverleaf.unit == 5 and silverleaf.cost == 100 and not silverleaf.vendor)
@@ -283,7 +288,7 @@ check("a shop that never runs out keeps its price, marked", peacebloom.itemID ==
     and peacebloom.unit == 2 and peacebloom.vendor == true and herbs.best == peacebloom)
 
 prices[SILVERLEAF] = nil
-herbs = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-herbs")
+herbs = Row(MerchantsFavor:GetRows(), "apprentice-herbs")
 check("with nothing listed, the limited shop is all there is", herbs.bundles[2].unit == 1
     and herbs.bundles[2].vendor == true)
 
@@ -306,7 +311,7 @@ ns.db.merchantsFavor.crateIDs["apprentice-textiles"] = 248699
 check("the game's item ID beats the typed one", MerchantsFavor:GetCrateID(ns.WAYLAID_CRATES[4]) == 248699)
 ns.db.merchantsFavor.crateIDs["apprentice-textiles"] = nil
 
-rows = MerchantsFavor:GetRows({ skipOverStack = true })
+rows = MerchantsFavor:GetRows()
 herbs = Row(rows, "apprentice-herbs")
 check("found, it is priced", herbs.cratePrice == 1000 and herbs.total == 1000 + 100 - 250 and herbs.perFavor == 170)
 check("and now the cheapest favor", rows[1].key == "apprentice-herbs")
@@ -382,6 +387,47 @@ check("a secret currency is ignored, not an error", ok)
 C_CurrencyInfo.GetCurrencyInfo = raising
 
 --------------------------------------------------------------------------------
+print("\nthe crate list on the auction house's Buy tab")
+
+-- Two Apprentice Textiles and one Apprentice Herbs in the bags, 23 Linen
+-- Cloth with them, and the craft queue wanting 3 of the linen.
+local keptHeld = MerchantsFavor.held
+bags = { [TEXTILES] = 2, [HERBS] = 1, [LINEN] = 23 }
+MerchantsFavor.held = nil
+MerchantsFavor:OnBags()
+local queueLines = { { itemID = LINEN, needed = 3 } }
+local crateLines, crateCount = MerchantsFavor:CrateShoppingLines(queueLines)
+local function CrateLine(itemID)
+    for _, line in ipairs(crateLines) do if line.itemID == itemID then return line end end
+end
+check("every crate in the bags is counted", crateCount == 3 and #crateLines == 2)
+local linen = CrateLine(LINEN)
+check("both textiles crates share the linen, the cheapest bundle", linen and linen.needed == 80
+    and linen.fills[1].count == 2 and linen.fills[1].label == "Apprentice Textiles")
+check("what the queue needs is taken off what you have", linen.have == 20 and linen.shortfall == 60)
+check("and the rest is priced", linen.unitCost == 30 and linen.estimatedCost == 1800)
+check("the hover's other choice is the leather", linen.others[1].itemID == LEATHER
+    and linen.others[1].count == 20 and linen.others[1].cost == 1600)
+local silverleaf = CrateLine(SILVERLEAF)
+check("the herbs crate takes Silverleaf", silverleaf and silverleaf.needed == 20 and silverleaf.shortfall == 20
+    and silverleaf.estimatedCost == 100)
+
+makes[LINEN] = { 999, 1 }
+crateLines = MerchantsFavor:CrateShoppingLines(queueLines)
+check("a craft that makes it cheaper does not change the list", CrateLine(LINEN).unitCost == 30)
+makes[LINEN] = nil
+
+bags[LINEN], bags[SILVERLEAF] = 83, 20
+crateLines = MerchantsFavor:CrateShoppingLines(queueLines)
+check("with enough on hand nothing is short", CrateLine(LINEN).shortfall == 0
+    and CrateLine(SILVERLEAF).shortfall == 0 and CrateLine(LINEN).estimatedCost == nil)
+
+bags = {}
+MerchantsFavor:OnBags()
+crateLines, crateCount = MerchantsFavor:CrateShoppingLines(queueLines)
+check("no crates, no list", #crateLines == 0 and crateCount == 0)
+MerchantsFavor.held = keptHeld
+
 print("\nthe view on the Deals tab")
 
 bags = { [HERBS] = 1 }
@@ -520,7 +566,7 @@ tab.build(Stub())
 local show = pages[1]
 check("the Deals tab has pages", show and #show.options == 3 and show.options[2].value == "favor")
 check("the flips stay the first view", #lists == 1)
-check("the tick box starts ticked, as Settings has nothing yet", checkboxes["Skip bundles over a stack"].initial == true)
+check("no over-a-stack box: the game fills a crate from two stacks", checkboxes["Skip bundles over a stack"] == nil)
 
 show.onSelect("favor")
 local list = lists[#lists]
@@ -538,7 +584,7 @@ check("ON AH counts the crates listed at this price", row.cells[6].text == "4" a
 
 local unknown = Row(list.data, "artisan-ore")
 list.opts.updateRow(row, unknown)
-check("an Artisan crate's favor is a question mark", row.cells[5].text == "?" and row.cells[5].color == "warn"
+check("an unknown crate's favor is a question mark", row.cells[5].text == "?" and row.cells[5].color == "warn"
     and row.cells[1].text == "")
 
 local function Showing(pattern)
@@ -549,9 +595,9 @@ end
 
 list.opts.onClick(Row(list.data, "apprentice-textiles"), 1, "LeftButton")
 check("the detail says the reward is reported", Showing("^Players report 5 favor") ~= nil)
-check("and lists the bundles, the over-stack one marked", Showing("^40 Linen Cloth %*$") ~= nil
+check("and lists the bundles, none marked", Showing("^40 Linen Cloth$") ~= nil
     and Showing("^20 Light Leather$") ~= nil)
-check("and says why it is left out", Showing("Needs more than one stack") ~= nil)
+check("with no over-a-stack note", Showing("more than one stack") == nil)
 
 list.opts.onClick(Row(list.data, "apprentice-herbs"), 1, "LeftButton")
 check("a learned reward says how often it was seen", Showing("seen on 2 turn%-ins") ~= nil)
@@ -573,7 +619,7 @@ buyBox.opts.onChange(1)
 
 -- Light Leather made for 50 each beats 80 bought.
 makes[LEATHER] = { LEATHER_RECIPE, 50 }
-local made = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles").best
+local made = Row(MerchantsFavor:GetRows(), "apprentice-textiles").best
 check("a bundle cheaper made is priced made", made.itemID == LEATHER and made.made == true
     and made.cost == 1000 and made.buy == 1600 and made.recipeID == LEATHER_RECIPE)
 searched("")
@@ -582,6 +628,13 @@ check("BUNDLE says Make, pinned at the column's left", row.make and row.make.tex
     and row.cells[3].text:find("Make") == nil)
 list.opts.onClick(Row(list.data, "apprentice-textiles"), 1, "LeftButton")
 check("the detail says making is cheaper", Showing("^Cheaper to make:") ~= nil)
+
+-- A craft with a cooldown is never Make (Discord, 2026-11-27: 10 Gold Bars
+-- by transmute, one an hour at most). Cost:FindRecipeToMake leaves it out.
+ns.Cost.FindRecipeToMake = function(_, itemID) return itemID ~= LEATHER and makes[itemID] and makes[itemID][1] or nil end
+local bought = Row(MerchantsFavor:GetRows(), "apprentice-textiles").best
+check("a cooldown craft is not made for a crate", not bought.made and bought.make == nil)
+ns.Cost.FindRecipeToMake = nil
 many = nil
 buttons["Search Both"].onClick()
 check("Search Both looks for what makes the bundle", many and many.ids[1] == TEXTILES
@@ -597,9 +650,8 @@ printed = {}
 buttons["Search crate"].onClick()
 check("a crate never seen says to type its name", #printed == 1 and printed[1]:find("type its name") ~= nil)
 
-checkboxes["Skip bundles over a stack"].onToggle(false)
-check("unticking is kept in Settings", config.favorSkipOverStack == false)
-check("and counts the linen", Row(list.data, "apprentice-textiles").best.itemID == LINEN)
+check("the over-a-stack box is gone", checkboxes["Skip bundles over a stack"] == nil)
+check("and the linen counts", Row(list.data, "apprentice-textiles").best.itemID == LINEN)
 
 searched("textiles")
 check("search narrows the crates", #list.data == 4)

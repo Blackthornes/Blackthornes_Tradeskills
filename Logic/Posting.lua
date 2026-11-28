@@ -43,7 +43,11 @@ local VERIFY_GIVE_UP = 15
 -- clicks from piling up more checks than the auction house can answer. Six
 -- since fast listing (2026-10-14): listings close together share one read
 -- back (VERIFY_SHARE), so more of them cost no more requests.
-local MAX_CONFIRMING = 6
+-- Thirty since 2026-11-21: at six, a steady run of listings (the wheel)
+-- reached the cap in about three seconds and every click after it was
+-- refused until a read back came in. A read sent after a listing settles
+-- it (VerifyPending), so thirty waiting cost no more reads than six did.
+local MAX_CONFIRMING = 30
 Posting.MAX_CONFIRMING = MAX_CONFIRMING
 
 -- A listing's read back waits for a newer listing's when that one is due
@@ -59,6 +63,15 @@ local VERIFY_SHARE_MOST = 3
 -- wants. Older, it is checked again first.
 local FRESH_FOR = 600
 Posting.FRESH_FOR = FRESH_FOR
+
+-- A quick scan or full scan that finished this recently prices the whole
+-- Sell list: nothing on it is searched again before it lists (the owner,
+-- 2026-11-23: rechecking after a quick scan "is just adding too much time
+-- and extra clunkiness to posting items"). Fifteen minutes, the same as the
+-- wait before the game allows the next quick scan, so there is no gap
+-- between one scan going stale and the next being possible.
+local SCAN_FRESH_FOR = 900
+Posting.SCAN_FRESH_FOR = SCAN_FRESH_FOR
 
 -- One search for the whole Sell list asks about this many items at most.
 local CHECK_ALL_MOST = 50
@@ -219,6 +232,13 @@ function Posting:SecondsUntilPostable(itemID)
     return seconds, reason
 end
 
+--- The sell lists look again on the next frame (UI:SellListSoon), not at
+--- the next tick of their one-second ticker.
+local function SellListSoon()
+    local ui = ns.UI
+    if ui and ui.SellListSoon then ui:SellListSoon() end
+end
+
 --- The listing of this item still being confirmed, if any.
 --
 -- `pending` is the newest listing; older ones of other items wait in
@@ -256,6 +276,7 @@ end
 --- takes its place as `pending`, so whatever reads that still sees one.
 function Posting:DropPending(pending)
     if not pending then return end
+    SellListSoon()
     local others = rawget(self, "others")
     if type(others) == "table" and others[pending.itemID] == pending then
         others[pending.itemID] = nil
@@ -312,6 +333,27 @@ end
 -- Finding stock
 --------------------------------------------------------------------------------
 
+--- What one of a recipe's output cost to make, for a sale: only the cost,
+--- not the whole analysis (Profit:UnitCostForSale).
+local function UnitCostOf(recipeID)
+    local profit = ns.Profit
+    if profit.UnitCostForSale then return profit:UnitCostForSale(recipeID) end
+    local analysis = profit:Analyse(recipeID)
+    return analysis and analysis.costPerUnit
+end
+
+--- What one of this item cost to make, to hold a listing back: nil for a
+--- trade good. Light Leather is also made from scraps, and Medium Leather
+--- from Light, but most in the bags were gathered and sell at the market's
+--- price. Held to the scraps' worth, Light Leather never listed (the owner,
+--- 2026-11-23). See Profit.IsTradeGood.
+local function MadeCostOf(itemID, recipeID)
+    if not recipeID then return nil end
+    local isTradeGood = ns.Profit and ns.Profit.IsTradeGood
+    if isTradeGood and isTradeGood(itemID) then return nil end
+    return UnitCostOf(recipeID)
+end
+
 --- Bag slot holding an item, skipping locked slots.
 -- @return bag, slot, stackCount
 local function FindInBags(itemID)
@@ -325,7 +367,8 @@ local function FindInBags(itemID)
             for slot = 1, slots do
                 local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
 
-                if infoOk and info and info.itemID == itemID and not info.isLocked then
+                if infoOk and info and info.itemID == itemID and not info.isLocked
+                        and info.isBound ~= true then
                     return bag, slot, info.stackCount or 1
                 end
             end
@@ -366,7 +409,13 @@ local function IndexBags()
                         order[#order + 1] = itemID
                     end
 
-                    if not entry.bag and not info.isLocked then
+                    -- A soulbound copy can't be listed, so it is never
+                    -- the slot a listing comes from: one bound bag among
+                    -- six hid all six from the Sell list (2026-11-27).
+                    local free = info.isBound ~= true
+                    if free then entry.free = (entry.free or 0) + (info.stackCount or 1) end
+
+                    if not entry.bag and not info.isLocked and free then
                         entry.bag, entry.slot = bag, slot
                         entry.stackCount = info.stackCount or 1
                         -- The copy that will be listed, so a random suffix
@@ -445,6 +494,10 @@ function Posting:GetSearchKey(itemID)
 
     local ok, key = pcall(C_AuctionHouse.GetItemKeyFromItem, location)
     if not ok or type(key) ~= "table" or key.itemID ~= itemID then return nil end
+
+    -- The copy's link beside the game's own key for it: from here on this
+    -- suffix is known wherever the copy is seen (Prices:LearnSuffix).
+    if ns.Prices and ns.Prices.LearnSuffix then ns.Prices:LearnSuffix(link, key.itemSuffix) end
 
     ns.Debug(("searching %s by its suffix (%s)"):format(link, tostring(key.itemSuffix)))
     return key
@@ -534,7 +587,23 @@ end
 --   building many of these does not re-walk the bags for each one. A table
 --   with no bag means the caller looked and there is no slot to list from.
 -- @return sellable, postableCount
-function Posting:GetSellInfo(itemID, held)
+-- The last time the auction house said an item could be listed, this visit:
+-- sellSeen[itemID] = { bags = what the bags held then, count = how many }.
+local sellSeen = {}
+
+--- Forget what the auction house said this visit (it closed).
+function Posting:ForgetSellInfo()
+    sellSeen = {}
+end
+
+--- Whether an item can be listed, and how many.
+---
+--- `steady` (the Sell list): while the auction house is busy sending your
+--- auctions or a scan, it can answer "cannot be sold" or "none" for a stack
+--- it took a moment before, and the row went away and came back (the owner,
+--- 2026-11-24). So the last yes this visit stands while the bags still hold
+--- the same number. Listing asks without it and takes the game's answer.
+function Posting:GetSellInfo(itemID, held, steady)
     local bag, slot
 
     if held then
@@ -556,10 +625,23 @@ function Posting:GetSellInfo(itemID, held)
         sellable = not LooksBound(itemID)
     end
 
-    local count = ns.Inventory:GetBagCount(itemID)
+    local inBags = ns.Inventory:GetBagCount(itemID)
+    local count = inBags
     if Util.HasFunction("C_AuctionHouse.GetAvailablePostCount") then
         local ok, available = pcall(C_AuctionHouse.GetAvailablePostCount, location)
         if ok and available then count = available end
+    end
+    -- Soulbound copies never go up: offer only the free ones.
+    local free = held and tonumber(held.free)
+    if free and count and count > free then count = free end
+
+    if steady then
+        local seen = sellSeen[itemID]
+        if sellable and count and count > 0 then
+            sellSeen[itemID] = { bags = inBags, count = count }
+        elseif seen and inBags and inBags > 0 and seen.bags == inBags then
+            return true, math.min(seen.count, inBags)
+        end
     end
 
     return sellable, count
@@ -583,7 +665,7 @@ end
 -- `link` false says the caller already knows the copy has none.
 function Posting:GetPostPrice(itemID, link)
     if link == nil then link = self:ListedCopy(itemID) end
-    return ns.Profit:ChoosePostPrice(itemID, nil, link or nil)
+    return ns.Profit:ChoosePostPrice(itemID, nil, link or nil, true)
 end
 
 -- The link of the copy each item would be listed from, when it names a random
@@ -915,14 +997,14 @@ end
 -- as a tick box and never sets on its own.
 Posting.chosenPrice = {}
 
---- A price the auction house will take for this item: whole silver for an
---- item auction, any copper for a commodity. Rounded down, since the point
+--- A price the auction house will take for this item: one silver or more
+--- for an item auction, any copper for a commodity. Rounded down, since the point
 --- of a price typed by hand is that it sells at or under what was asked.
 function Posting:NormalisePrice(price, isCommodity)
     price = tonumber(price)
     if not price or price < 1 then return nil end
     price = math.floor(price)
-    if isCommodity == false then return Util.RoundToSilver(price) end
+    if isCommodity == false then return Util.ItemAuctionPrice(price) end
     return price
 end
 
@@ -1021,21 +1103,40 @@ end
 --- house after its cut, so it is better sold to a vendor. A player asked
 --- (2026-10-17) for Tradeskills to say so, rather than list it as a loss.
 ---
---- The deposit a listing risks counts too (a player asked, the owner said
---- build it, 2026-11-09): a listing that runs out keeps it, so beating the
---- vendor by less than one deposit is not worth the risk. When
---- `NetFromListing` already takes lost deposits off (more relists expected,
---- or slow demand), it is not taken twice. Both live in
---- `Profit:NetAfterRisk`, which Butler's `auction` reads too.
+--- Only the auction house cut counts here. A deposit a listing might lose
+--- never sends an item to the vendor (the owner, 2026-11-16, after a player
+--- saw "A vendor pays more" while the auction house paid more).
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
-    local Profit = ns.Profit
-    local net
-    if Profit and Profit.NetAfterRisk then
-        local ok, value = pcall(Profit.NetAfterRisk, Profit, itemID, price)
-        if ok and type(value) == "number" then net = value end
+    -- Breaking it into enchanting materials can pay more than the vendor.
+    -- When a known disenchant value beats the vendor, the vendor does not pay more.
+    local DE = ns.Disenchant
+    if DE and DE.GetValue then
+        local ok, de = pcall(DE.GetValue, DE, itemID)
+        if ok and type(de) == "number" and de > vendorPrice then return false end
     end
-    return (net or price) <= vendorPrice
+    local cut = 0.05
+    local Config = ns.Config
+    if Config and Config.Get then
+        local ok, value = pcall(Config.Get, Config, "auctionCut")
+        if ok and type(value) == "number" then cut = value end
+    end
+    return price * (1 - cut) <= vendorPrice
+end
+
+--- True when the item's usual price (its smoothed market value) beats a
+--- vendor after the cut. A player's report (2026-11-17): one cheap Wool
+--- Cloth listing made the Sell list say "A vendor pays more: 33c each"
+--- while thousands sold near 1s 33c, and Butler said to wait for a better
+--- price. Butler weighs the same market value (Logic/Butler.lua `auction`
+--- against `auctionNow`), so the two now agree: wait, don't vendor it.
+function Posting.UsuallyPaysMore(itemID, vendorPrice)
+    if not itemID or not vendorPrice or vendorPrice <= 0 then return false end
+    local prices = ns.Prices
+    if not (prices and prices.GetValue) then return false end
+    local ok, market = pcall(prices.GetValue, prices, itemID, "market")
+    if not ok or type(market) ~= "number" or market <= 0 then return false end
+    return not Posting.VendorPaysMore(itemID, market, vendorPrice)
 end
 
 function Posting:GetLossFloor(itemID, unitCost)
@@ -1199,7 +1300,7 @@ function Posting:GetPostable(opts)
         if wanted then
             local held = slots[itemID]
 
-            local sellable, count = self:GetSellInfo(itemID, held)
+            local sellable, count = self:GetSellInfo(itemID, held, opts.showNoted)
             local copy = held and held.link and Util.LinkSuffix(held.link) and held.link or nil
             local price, basis, _, _, waits = self:GetPostPrice(itemID, copy or false)
 
@@ -1223,24 +1324,27 @@ function Posting:GetPostable(opts)
             -- row still shows dimmed with why when the caller asks
             -- (showHeld), so the player can list it by hand, but List all
             -- and Post Crafted never pick it (GetNextPostable).
-            local heldAll, kept, keptWhy
+            local heldAll, kept, keptWhy, craftHeld
             -- The list the item is on (Logic/ListRules.lua): its Keep in
             -- Bags is one more keep, the bigger one wins.
             local listRule = ns.ListRules and ns.ListRules:For(itemID)
             if count and count > 0 and not anyway then
-                local hold, why = 0, nil
+                local hold, why, kind = 0, nil, nil
                 if ns.SisterKeeps then
-                    local ok, sister, sisterWhy = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
+                    local ok, sister, sisterWhy, sisterKind = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
                     sister = ok and tonumber(sister) or 0
-                    if sister > 0 and type(sisterWhy) == "string" then hold, why = sister, sisterWhy end
+                    if sister > 0 and type(sisterWhy) == "string" then hold, why, kind = sister, sisterWhy, sisterKind end
                 end
                 local bags = listRule and listRule.rules.bags
                 if bags and bags > hold then
-                    hold, why = bags, L.Format("Following your %s list.", listRule.name)
+                    hold, why, kind = bags, L.Format("Following your %s list.", listRule.name), nil
                 end
                 if hold > 0 and why then
                     if hold >= count then
                         heldAll = why
+                        -- Kept by Craft First: the row can be queued
+                        -- (Queue From Sell List, UI/PostPanel.lua).
+                        craftHeld = kind == "craft" or nil
                     else
                         count, kept, keptWhy = count - hold, hold, why
                     end
@@ -1293,9 +1397,7 @@ function Posting:GetPostable(opts)
 
             -- What it cost to make one, so a listing below that can be
             -- flagged rather than quietly recommended.
-            local analysis = outputs[itemID]
-                and ns.Profit:Analyse(outputs[itemID])
-            local unitCost = analysis and analysis.costPerUnit
+            local unitCost = MadeCostOf(itemID, outputs[itemID])
 
             local lossFloor, lossReason, vendorPrice =
                 self:GetLossFloor(itemID, unitCost)
@@ -1304,6 +1406,16 @@ function Posting:GetPostable(opts)
             -- cut: it goes to the vendor pile, not this list. A price the
             -- player typed this session still lists.
             local toVendor = not anyway and basis ~= "chosen" and Posting.VendorPaysMore(itemID, price, vendorPrice)
+
+            -- Only today's cheapest loses to the vendor, and the usual price
+            -- beats it: wait, as Butler does, rather than sell to a vendor.
+            if toVendor and Posting.UsuallyPaysMore(itemID, vendorPrice) then
+                toVendor = false
+                if not chosen and count and count > 0 and not heldAll then
+                    heldAll = L["Waiting, others are selling for less"]
+                    if not opts.showHeld then skipped[itemID] = "waiting, others sell for less than usual" end
+                end
+            end
             if toVendor and sellable and count and count > 0
                     and not (heldAll and not opts.showHeld) then
                 vendorPile = vendorPile + 1
@@ -1317,7 +1429,7 @@ function Posting:GetPostable(opts)
             -- Under what the last craft of it cost, with that guard on.
             local belowCrafted = price ~= nil
                 and self:BelowCraftedCost(itemID, price) ~= nil
-            local madeFor = ns.CraftedCost and ns.CraftedCost:Get(itemID)
+            local madeFor = ns.CraftedCost and (ns.CraftedCost.ForStock and ns.CraftedCost:ForStock(itemID) or nil)
 
             local isCommodity = ns.Scanner:IsCommodity(itemID)
 
@@ -1385,6 +1497,7 @@ function Posting:GetPostable(opts)
                     -- Why another addon wants it all kept, or how many it
                     -- kept back and why (SisterKeeps).
                     held = heldAll,
+                    craftHeld = craftHeld,
                     -- Left out of List all for the Sell tab's own reasons
                     -- (opts.showNoted), not another addon's keep.
                     noted = noted or nil,
@@ -1394,6 +1507,9 @@ function Posting:GetPostable(opts)
                     -- The copy itself when it has a random suffix: the item
                     -- ID alone names only "Lead Band".
                     link = held and Util.LinkSuffix(held.link) and held.link or nil,
+                    -- Where that copy sits, for its card (UI/PostPanel.lua).
+                    bag = held and held.bag or nil,
+                    slot = held and held.slot or nil,
                     label = held and Util.LinkSuffix(held.link) and held.link
                         or Util.GetItemLabel(itemID),
                     -- The list whose rules it follows, for the row's tag,
@@ -1530,7 +1646,8 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not line.carried
+            and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID)
             and (anyway or not self:ButlerWaitsNow(line.itemID)) then
             if skipSettling and self:PendingFor(line.itemID) then
@@ -1552,7 +1669,8 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not line.carried
+            and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID) then
             count = count + 1
             total = total + (line.total or 0)
@@ -1588,14 +1706,15 @@ function Posting:OnEnable()
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         -- Prices move while away: the next visit checks them again.
         Posting:ForgetChecks()
+        Posting:ForgetSellInfo()
 
         local data = Posting.confirming
         Posting.confirming = nil
 
-        local okVisible, visible = pcall(StaticPopup_Visible, "BLACKTHORNES_TS_CONFIRM_POST")
-        if not (okVisible and visible) then return end
+        local ask = ns.PostConfirm
+        if not (ask and ask:IsShown()) then return end
 
-        pcall(StaticPopup_Hide, "BLACKTHORNES_TS_CONFIRM_POST")
+        ask:Close()
         if data then
             ns.Print(L.Format("the auction house closed, so %s was not listed.",
                 Util.GetItemLabel(data.itemID)))
@@ -1696,13 +1815,12 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         return false
     end
 
-    -- Last line of defence on the price, wherever it came from. PostItem takes
-    -- whole gold and silver and silently swallows anything with copper in it,
-    -- which is the internal error the client shows for a listing that never
-    -- happens. A price arriving here from a caller has not necessarily been
-    -- through the chooser, so it is rounded again rather than trusted.
-    if not isCommodity and not Util.IsWholeSilver(unitPrice) then
-        local rounded = Util.RoundToSilver(unitPrice)
+    -- Last line of defence on the price, wherever it came from. An item
+    -- auction needs at least a silver. A price arriving here
+    -- from a caller has not necessarily been through the chooser, so it is
+    -- checked again rather than trusted.
+    if not isCommodity and not Util.IsItemAuctionPrice(unitPrice) then
+        local rounded = Util.ItemAuctionPrice(unitPrice)
 
         ns.Print(L.Format("item auctions only take whole silver, so %s becomes %s",
             Util.FormatMoney(unitPrice), Util.FormatMoney(rounded)))
@@ -1777,6 +1895,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
+    SellListSoon()
 
     -- Joining a listing still being confirmed: measured from before the
     -- first of them, and checked once for all of them, a few seconds after
@@ -1808,8 +1927,10 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- The listing went down the auction house's throttled channel like any
-    -- other request, so our own requests space themselves out after it.
-    if ns.AHQueue.NoteSend then ns.AHQueue:NoteSend() end
+    -- other request, so our own background requests space themselves out
+    -- after it. The read back that confirms it does not wait on it.
+    local noteListing = ns.AHQueue.NoteListing or ns.AHQueue.NoteSend
+    if noteListing then noteListing(ns.AHQueue) end
 
     if not ok then
         -- The earlier copies are still up and still to be confirmed.
@@ -1937,57 +2058,28 @@ end
 -- Confirmation
 --------------------------------------------------------------------------------
 
--- Blizzard's own popup rather than a custom frame: it is already the thing
--- players trust for "are you sure", and its button click is a hardware event,
--- which posting requires.
+-- Asked in Tradeskills' own window (UI/PostConfirm.lua), never the game's
+-- pop-up: showing that box from an addon leaves it marked as ours, and the
+-- game's own next question in it (replace a weapon's enchant, say) is then
+-- blocked as "Blackthornes_TS has been blocked from an action only available
+-- to the Blizzard UI" (a Spellstone, 2026-11-19). Its List It button
+-- is a click, which posting needs.
 
--- Adding a key is fine. Assigning the global itself is not: writing
--- "StaticPopupDialogs = StaticPopupDialogs or {}" from addon code taints the
--- global variable, and then Blizzard's own popup machinery reads a tainted
--- value and gets "blocked from an action only available to the Blizzard UI"
--- the next time it shows any dialog of its own.
-if type(StaticPopupDialogs) == "table" then
+--- List It in the confirmation.
+function Posting:AcceptConfirm(data)
+    data = data or self.confirming
+    if not data then return end
 
-StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
-    text = "%s",
-    button1 = L["List It"],
-    button2 = L["Skip"],
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    -- Above the default dialogs, so it is not buried by the auction house.
-    preferredIndex = 3,
-    -- Widens the popup and keeps the text to the middle, which leaves room
-    -- on the left for the item's icon beside the four lines. The icon is
-    -- drawn over the alert sign that goes there (ShowConfirmIcon).
-    showAlert = true,
+    self.confirming = nil
+    self:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
+end
 
-    OnAccept = function(self)
-        local data = (self and self.data) or Posting.confirming
-        if not data then return end
-
-        Posting.confirming = nil
-        Posting:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
-    end,
-
-    -- "override" is the game replacing this dialog with the next one (a
-    -- second List click while it was open): not a skip, and clearing the
-    -- listing here left the new dialog's Yes with nothing to list.
-    OnCancel = function(self, _, reason)
-        if reason == "override" then return end
-        local data = (self and self.data) or Posting.confirming
-        Posting.confirming = nil
-        if data then Posting:PassOver(data.itemID) end
-        ns.Print(L["skipped."])
-    end,
-
-    -- The game lends this popup frame to other dialogs later, so the icon
-    -- goes with this one.
-    OnHide = function(self)
-        Posting:HideConfirmIcon(self)
-    end,
-}
-
+--- Skip in the confirmation (or Escape, or its close gem).
+function Posting:SkipConfirm(data)
+    data = data or self.confirming
+    self.confirming = nil
+    if data then self:PassOver(data.itemID) end
+    ns.Print(L["skipped."])
 end
 
 --- Show the confirmation for a listing whose price is already settled.
@@ -2069,8 +2161,7 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     -- character's recipe, so a bank alt listing the crafter's work is told
     -- as well.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = MadeCostOf(itemID, recipeID)
 
     if unitCost and unitPrice < unitCost then
         text = text .. "\n|cffE5604F" .. L.Format("Below the %s it cost to make.", Money(unitCost)) .. "|r"
@@ -2096,76 +2187,19 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     return text .. "\n\n" .. L["List it at this price, or skip it."]
 end
 
--- The item's icon in the confirmation, one texture per popup frame it has
--- been shown in. Kept here rather than written onto the game's frames.
-local confirmIcons = setmetatable({}, { __mode = "k" })
-
--- The question mark icon, for an item whose icon the game has not got yet.
-local UNKNOWN_ICON = 134400
-
--- Narrower than this, the popup did not make room beside its text, and an
--- icon would sit on top of the words.
-local WIDE_POPUP = 400
-
---- Put the item's icon beside the confirmation's text. It is not a line of
---- its own: the four lines stay exactly as they were.
-function Posting:ShowConfirmIcon(dialog, itemID)
-    if type(dialog) ~= "table" or type(dialog.CreateTexture) ~= "function" then return false end
-
-    local ok, shown = pcall(function()
-        local width = dialog:GetWidth()
-        if not width or width < WIDE_POPUP then return false end
-
-        local icon = confirmIcons[dialog]
-        if not icon then
-            icon = dialog:CreateTexture(nil, "OVERLAY", nil, 7)
-            confirmIcons[dialog] = icon
-        end
-
-        -- Over the alert sign when there is one, so the sign never shows
-        -- through; otherwise where it would have been.
-        local name = dialog.GetName and dialog:GetName()
-        local alert = dialog.AlertIcon or (name and _G[name .. "AlertIcon"])
-
-        icon:ClearAllPoints()
-        if type(alert) == "table" and alert.IsShown and alert:IsShown() then
-            icon:SetAllPoints(alert)
-        else
-            icon:SetSize(36, 36)
-            icon:SetPoint("LEFT", dialog, "LEFT", 24, 0)
-        end
-
-        icon:SetTexture(Util.GetItemIcon(itemID) or UNKNOWN_ICON)
-        icon:Show()
-        return true
-    end)
-
-    return ok and shown or false
-end
-
-function Posting:HideConfirmIcon(dialog)
-    local icon = dialog and confirmIcons[dialog]
-    if icon then pcall(icon.Hide, icon) end
-end
-
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text, byHand)
     local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice, byHand = byHand or nil }
     self.confirming = confirming
 
-    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
-    if dialog then
-        -- Set again after showing: replacing an open dialog cancels the old
-        -- one first, on clients that do not say it was an override.
-        self.confirming = confirming
-        dialog.data = confirming
-
-        -- Only the dialog now showing carries an icon, whichever frame an
-        -- earlier one used.
-        for frame in pairs(confirmIcons) do
-            if frame ~= dialog then self:HideConfirmIcon(frame) end
-        end
-        self:ShowConfirmIcon(dialog, itemID)
-    else
+    local ask = ns.PostConfirm
+    local shown = ask and ask:Show({
+        text = text,
+        itemID = itemID,
+        data = confirming,
+        accept = function(data) Posting:AcceptConfirm(data) end,
+        skip = function(data) Posting:SkipConfirm(data) end,
+    })
+    if not shown then
         self.confirming = nil
         ns.Warn(L["could not open the confirmation dialog; nothing was listed."])
     end
@@ -2249,8 +2283,7 @@ function Posting:BelowCost(itemID, price)
     -- Any character's recipe, so a bank alt holds back a craft the crafter
     -- mailed it just as the crafter would.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = MadeCostOf(itemID, recipeID)
 
     if unitCost and price < unitCost then return unitCost end
     return nil
@@ -2350,23 +2383,34 @@ function Posting:NoteScanned(itemIDs, whole)
     end
 end
 
---- A scan of the whole auction house just finished. For FRESH_FOR (ten
---- minutes, five until 2026-11-14) every price counts as checked, also for an item the scan did
+--- A scan of the whole auction house just finished. For SCAN_FRESH_FOR
+--- (fifteen minutes since 2026-11-23, ten until then, five until
+--- 2026-11-14) every price counts as checked, also for an item the scan did
 --- not see (nobody is selling it) and for a copy with a random suffix, so
 --- a click or wheel turn lists with no second search first (the owner,
 --- 2026-11-12: "I do not want double scans before posting if I've had a
 --- scan in the last 5 minutes"). Before, only the items the scan priced
 --- were marked, so one nobody else sold cost a search of the list, a
 --- search of its own and a "Click again". Kept through closing the auction
---- house: coming back inside ten minutes is still inside ten minutes.
+--- house: coming back inside fifteen minutes is still inside them.
 function Posting:NoteWholeScan()
     self.wholeScanAt = GetTime()
 end
 
---- Did a scan of the whole auction house finish in the last ten minutes?
+--- Did a quick scan or full scan finish in the last fifteen minutes
+--- (SCAN_FRESH_FOR)? Read from this session's own mark, and from the saved
+--- scan stamp of this realm and faction, so a /reload or a relog inside the
+--- fifteen minutes still counts (the quick scan cannot run again then). A
+--- sweep that ran to the page limit counts; one cut short does not stamp.
 function Posting:ScannedLately()
     local at = rawget(self, "wholeScanAt")
-    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+    if type(at) == "number" and (GetTime() - at) <= SCAN_FRESH_FOR then return true end
+    local prices = ns.Prices
+    if not (prices and prices.GetLastScan) then return false end
+    local ok, last = pcall(prices.GetLastScan, prices)
+    if not ok or type(last) ~= "number" then return false end
+    local age = time() - last
+    return age >= 0 and age <= SCAN_FRESH_FOR
 end
 
 --- Does a running scan hold listing back? Only one the player asked for.
@@ -2650,8 +2694,7 @@ function Posting:CanListOnClick(itemID, price)
     if self:GetSearchKey(itemID) then return false end
 
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
-    local analysis = recipeID and ns.Profit:Analyse(recipeID)
-    local unitCost = analysis and analysis.costPerUnit
+    local unitCost = MadeCostOf(itemID, recipeID)
     if unitCost and price and price < unitCost then return false end
 
     return true
@@ -2837,10 +2880,15 @@ function Posting:VerifyPending(target)
     if not self:IsPending(target) then return end
     if GetTime() - (target.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
 
+    -- A read of your auctions that went out after this listing was made,
+    -- and is still being looked at, settles this one as it stands: no wait
+    -- for a newer listing's, and no second read.
+    local out = self:ReadOutSince(target)
+
     -- A newer listing whose own read back is moments away reads this one
     -- too (a read settles every listing made before it went out), so a run
     -- of quick listings costs one request, not one each.
-    local share = self:ShareVerify(target)
+    local share = not out and self:ShareVerify(target)
     if share then
         C_Timer.After(share, function() Posting:VerifyPending(target) end)
         return
@@ -2865,7 +2913,9 @@ function Posting:VerifyPending(target)
     -- listing was made, so it settles this one too, and no second read is
     -- spent. Out already, it is good for this one as it stands.
     local riding = self:NewerVerifying(target)
-    if riding then
+    if out then
+        target.awaiting = nil
+    elseif riding then
         target.awaiting = riding.awaiting
     else
         ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
@@ -2885,6 +2935,19 @@ function Posting:VerifyPending(target)
             Posting:ResolvePending(nil, nil, token)
         end
     end)
+end
+
+--- Did a read of your auctions go out after this listing was made, with
+--- its answers still being read (Auctions.sentAt, Auctions.READ_FOR)? Then
+--- it settles this listing too. A little short of the last reading, so one
+--- that joins late is not called missing by a reading already under way.
+function Posting:ReadOutSince(target)
+    local Auctions = ns.Auctions
+    local sentAt = Auctions and rawget(Auctions, "sentAt")
+    local span = Auctions and rawget(Auctions, "READ_FOR")
+    if type(sentAt) ~= "number" or type(span) ~= "number" then return false end
+    if sentAt <= (target.startedAt or 0) then return false end
+    return (GetTime() - sentAt) < span - 1.5
 end
 
 --- How long this listing's read back should wait for a newer listing's,
@@ -3004,6 +3067,17 @@ function Posting:ResolvePending(posted, appeared, target)
         ns.UI:RefreshActiveTab()
         ns.UI:UpdatePostButton()
     end
+end
+
+--- A gear listing with copper in its price that did not go up.
+--- Forever takes copper on gear (tried in game 2026-11-16), and the owner
+--- asked (2026-11-19) that gear always lists to the copper, so a miss never
+--- switches to whole silver: one missed listing, often only a slow or
+--- misread auctions list, had rounded every gear price after it up to a
+--- silver for the rest of the session. Always false; the caller warns as
+--- for any other miss. `Util.wholeSilverOnly` stays for the tests only.
+function Posting:FallBackToWholeSilver(pending)
+    return false
 end
 
 --- Sample the auction house throttle over a few seconds.

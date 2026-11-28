@@ -1,4 +1,8 @@
--- The price step an item auction imposes, and what to do about it.
+-- The price step an item auction imposed, and what to do about it.
+--
+-- Forever takes copper on item auctions now (tried in game 2026-11-16).
+-- This is kept as the fallback, run with Util.wholeSilverOnly set, for a
+-- session where a listing with copper in it fails to go up.
 --
 -- C_AuctionHouse.PostItem takes whole gold and silver only. A price with any
 -- copper in it is swallowed silently: no listing, no error worth reading, and
@@ -84,6 +88,11 @@ assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 
 local Util, Profit = ns.Util, ns.Profit
 
+-- Forever takes copper on item auctions, so all of this is the fallback
+-- after a copper listing fails: whole silver steps (Util.wholeSilverOnly).
+-- tools/test_coppergear.lua covers copper prices.
+Util.wholeSilverOnly = true
+
 local function Reset()
     settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 1, minProfit = 0 }
     prices = {}
@@ -107,24 +116,24 @@ end
 print("")
 print("rounding on its own")
 
-check("2s 99c is not a price an item auction takes", Util.IsWholeSilver(299), false)
-check("3s is", Util.IsWholeSilver(300), true)
-check("2s 99c rounds down to 2s", Util.RoundToSilver(299), 200)
-check("2s 50c rounds down to 2s", Util.RoundToSilver(250), 200)
-check("3s is already there", Util.RoundToSilver(300), 300)
-check("1g 0s 1c loses the copper", Util.RoundToSilver(10001), 10000)
+check("2s 99c is not a price an item auction takes", Util.IsItemAuctionPrice(299), false)
+check("3s is", Util.IsItemAuctionPrice(300), true)
+check("2s 99c rounds down to 2s", Util.ItemAuctionPrice(299), 200)
+check("2s 50c rounds down to 2s", Util.ItemAuctionPrice(250), 200)
+check("3s is already there", Util.ItemAuctionPrice(300), 300)
+check("1g 0s 1c loses the copper", Util.ItemAuctionPrice(10001), 10000)
 
 -- Below a silver there is nothing to round down to. Listing above market
 -- value is bad; sending a price the server discards is worse.
-check("50c has no lower step, so one silver", Util.RoundToSilver(50), 100)
-check("1c likewise", Util.RoundToSilver(1), 100)
-check("nothing in, nothing out", Util.RoundToSilver(nil), nil)
+check("50c has no lower step, so one silver", Util.ItemAuctionPrice(50), 100)
+check("1c likewise", Util.ItemAuctionPrice(1), 100)
+check("nothing in, nothing out", Util.ItemAuctionPrice(nil), nil)
 
 -- Upwards, for a price with no rival under it to worry about.
-check("2s 99c rounds up to 3s", Util.CeilToSilver(299), 300)
-check("3s is already there", Util.CeilToSilver(300), 300)
-check("50c has no lower step, so one silver", Util.CeilToSilver(50), 100)
-check("nothing in, nothing out", Util.CeilToSilver(nil), nil)
+check("2s 99c rounds up to 3s", Util.ItemAuctionPriceUp(299), 300)
+check("3s is already there", Util.ItemAuctionPriceUp(300), 300)
+check("50c has no lower step, so one silver", Util.ItemAuctionPriceUp(50), 100)
+check("nothing in, nothing out", Util.ItemAuctionPriceUp(nil), nil)
 
 --------------------------------------------------------------------------------
 print("")
@@ -140,7 +149,7 @@ do
     check("no cost known: matches the rival at 3s", price, 300)
     check("no cost known: and says so", basis, "match")
     check("never the price that was refused", price ~= 299, true)
-    check("always a price the server takes", Util.IsWholeSilver(price), true)
+    check("always a price the server takes", Util.IsItemAuctionPrice(price), true)
 end
 
 do

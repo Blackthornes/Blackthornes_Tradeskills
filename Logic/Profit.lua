@@ -89,6 +89,8 @@ local DEFAULT_MARKUP_PERCENT = 50
 function Profit:DeriveFromMaterials(itemID, knownCost)
     if not itemID then return nil end
     if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
+    -- A trade good sells at the market's price, not what it is made of.
+    if Profit.IsTradeGood(itemID) then return nil end
 
     -- Any character's recipe: an alt's craft is worth as much to sell.
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
@@ -136,24 +138,20 @@ end
 --- Round a no-competition price for the kind of auction it will be listed as.
 --
 -- Upwards on an item auction, unlike an undercut. There is no rival to get
--- beneath, and rounding down by up to a silver can put a cheap craft under
--- what its materials cost, which Posting would then refuse to list.
+-- beneath, and rounding down (to a whole silver, if the server ever stops
+-- taking copper) can put a cheap craft under what its materials cost.
 local function RoundForSale(price, isCommodity)
     if isCommodity then return price end
-    return Util.CeilToSilver(price)
+    return Util.ItemAuctionPriceUp(price)
 end
 
 --- The unit price to list an item at, and why.
 --
--- Commodities take any price down to the copper, so undercutting works the way
--- it always has. Item auctions only take whole gold and silver, which makes
--- the smallest undercut available a whole silver rather than a copper. On a
--- cheap item that is a large fraction of the price to give away in order to
--- beat sellers you could simply have matched.
---
--- So an item auction matches the cheapest rival at the silver it is listed at,
--- and only drops the extra silver when the sale would still clear the minimum
--- profit setting. Anything the profit cannot be worked out for matches, since
+-- Commodities and item auctions both take any price down to the copper
+-- (item auctions from one silver up; see Util.ItemAuctionPrice for the whole
+-- silver fallback). An item auction matches the cheapest rival, and only
+-- undercuts it when the sale would still clear the minimum profit
+-- setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
 -- @return price, basis, why, uncertain  -- basis is "undercut", "match",
@@ -173,15 +171,20 @@ end
 --   there for when it is used and when it is ignored.
 -- @param link optional: the copy to be listed. A random suffix ("of the
 --   Monkey") is priced as that suffix sells, when a recent price is kept.
-function Profit:ChoosePostPrice(itemID, knownCost, link)
+-- @param forSale optional: true only when listing something already in the
+--   bags (Posting:GetPostPrice). Post at Minimum Profit has its say only
+--   then, so the Profit tab and other craft lists keep the market's price.
+function Profit:ChoosePostPrice(itemID, knownCost, link, forSale)
     if not itemID then return nil, nil end
 
     -- A price the player set on the Prices tab (2026-10-06): "use"
     -- lists at it, "floor" undercuts as usual but never goes below it.
     -- A "floor" may also carry Highest and When Cheaper (2026-10-28).
+    -- A random suffix's own price, when the link names one that has it.
+    local suffix = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link) or nil
     local mine, mode, high, wait
-    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
-    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID) end
+    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID, suffix) end
+    if mode == "floor" and ns.Prices.GetMyLimits then high, wait = ns.Prices:GetMyLimits(itemID, suffix) end
 
     -- Else its list's Lowest Price (Logic/ListRules.lua, 2026-10-19):
     -- undercuts as usual, never below it; and its Highest Price and When
@@ -197,7 +200,7 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
             listName = listName or limitsName
         end
     end
-    if not mine and not high then return self:ChooseMarketPostPrice(itemID, knownCost, link) end
+    if not mine and not high then return self:ChooseMarketPostPrice(itemID, knownCost, link, forSale) end
 
     local status
     if ns.Scanner.GetCommodityStatus then
@@ -211,11 +214,11 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
         return floor, "mine", L["your own price, set on the Prices tab"], status == nil
     end
 
-    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link)
+    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link, forSale)
 
-    -- Highest: never list above it. An item auction takes whole silver only,
-    -- so it rounds down. Under the Lowest Price it means nothing and is left out.
-    local top = high and (status == false and Util.RoundToSilver(high) or high)
+    -- Highest: never list above it, rounded down to a price an item
+    -- auction takes. Under the Lowest Price it means nothing and is left out.
+    local top = high and (status == false and Util.ItemAuctionPrice(high) or high)
     if top and floor and top < floor then top = nil end
 
     if floor and (not price or price < floor) then
@@ -242,8 +245,252 @@ end
 local MATCH_BY_CHOICE = L["your Undercut By is set to 0c, so it matches the cheapest listing"]
 
 --- ChoosePostPrice from the auction house alone, before the player's own
---- price is applied. Same returns.
-function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
+--- price is applied. Same returns. Post at Minimum Profit only when
+--- `forSale` (see ChoosePostPrice).
+function Profit:ChooseMarketPostPrice(itemID, knownCost, link, forSale)
+    local price, basis, why, uncertain = self:ChooseRivalPostPrice(itemID, knownCost, link)
+    if not forSale then return price, basis, why, uncertain end
+    local least, leastWhy = self:MinimumProfitPrice(itemID, price, basis)
+    if least then return least, "minprofit", leastWhy, uncertain end
+    return price, basis, why, uncertain
+end
+
+--------------------------------------------------------------------------------
+-- Minimums by profession
+--------------------------------------------------------------------------------
+
+-- The owner said build it (2026-11-17, from a mockup): each profession can
+-- have its own Minimum Profit and Minimum Margin. Account wide in
+-- `professionMinimums` (never rename it):
+--   [a profession's English name] = { profit = copper, margin = percent }
+-- Either can be missing, and a missing one uses minProfit or
+-- minMarginPercent. The Profit tab, Queue All, Level Up's "worth it" pick,
+-- Post at Minimum Profit and the undercut check follow it. Deals and
+-- Vendor Flips stay on the usual numbers.
+--
+-- The owner asked (2026-11-22, from a mockup): a "Disenchanting" row
+-- (Profit.DISENCHANTING, saved under that name in the same table) sets the
+-- numbers for buying gear on the auction house to disenchant (the
+-- Disenchanting tab's deals, Disenchant:AuctionContext). It is not a
+-- craft, so the crafts' checks (HasProfessionMinimums) leave it out.
+Profit.DISENCHANTING = "Disenchanting"
+
+--- A profession's name as the client shows it.
+local function ProfessionLabel(profession)
+    if ns.Auctions and ns.Auctions.ProfessionLabel then
+        local ok, name = pcall(ns.Auctions.ProfessionLabel, ns.Auctions, profession)
+        if ok and name then return name end
+    end
+    return L[profession] or profession
+end
+
+--- A profession's own numbers, either one nil when it uses the usual.
+-- @return profit (copper) or nil, margin (percent) or nil
+function Profit:GetProfessionMinimums(profession)
+    local all = ns.db and ns.db.professionMinimums
+    local own = type(profession) == "string" and type(all) == "table" and all[profession]
+    if type(own) ~= "table" then return nil, nil end
+    return tonumber(own.profit), tonumber(own.margin)
+end
+
+--- Set one of a profession's numbers: field "profit" (copper) or "margin"
+--- (percent). nil puts it back to the usual; 0 shows everything.
+function Profit:SetProfessionMinimum(profession, field, value)
+    if not ns.db or type(profession) ~= "string" or profession == "" then return end
+    if field ~= "profit" and field ~= "margin" then return end
+
+    value = tonumber(value)
+    if value then
+        value = math.max(0, math.floor(value))
+        if field == "margin" then value = math.min(100, value) end
+    end
+
+    ns.db.professionMinimums = ns.db.professionMinimums or {}
+    local own = ns.db.professionMinimums[profession] or {}
+    own[field] = value
+    ns.db.professionMinimums[profession] = (own.profit or own.margin) and own or nil
+
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- Put both of a profession's numbers back to the usual.
+function Profit:ClearProfessionMinimums(profession)
+    if not ns.db or not ns.db.professionMinimums or type(profession) ~= "string" then return end
+    ns.db.professionMinimums[profession] = nil
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- Does any profession have a number of its own? (Disenchanting is not
+--- a craft and doesn't count.)
+function Profit:HasProfessionMinimums()
+    for profession in pairs(ns.db and ns.db.professionMinimums or {}) do
+        if profession ~= Profit.DISENCHANTING then
+            local profit, margin = self:GetProfessionMinimums(profession)
+            if profit or margin then return true end
+        end
+    end
+    return false
+end
+
+--- The Minimum Profit (copper) and Minimum Margin (percent) a gear piece
+--- bought to disenchant must clear: the Disenchanting row's own, else the
+--- usual. The third value is true when one of its own was used.
+function Profit:DisenchantMinimums()
+    local profit = ns.Config:Get("minProfit") or 0
+    local margin = ns.Config:Get("minMarginPercent") or 0
+    local ownProfit, ownMargin = self:GetProfessionMinimums(Profit.DISENCHANTING)
+    return ownProfit or profit, ownMargin or margin, (ownProfit or ownMargin) ~= nil
+end
+
+--- The English name of the profession a recipe, an analysis, an item or a
+--- profession name is about, or nil.
+function Profit:ProfessionFor(what)
+    local recipes = ns.Recipes
+    local english = recipes and recipes.EnglishProfessionName
+    if type(what) == "string" then
+        if english then
+            local ok, name = pcall(english, what)
+            if ok and name then return name end
+        end
+        return what
+    end
+    if type(what) == "table" then
+        if what.skillLineID and english then
+            local ok, name = pcall(english, { skillLineID = what.skillLineID })
+            if ok and name then return name end
+        end
+        what = what.outputItemID or what.itemID
+    end
+    if type(what) ~= "number" then return nil end
+
+    if ns.Auctions and ns.Auctions.ProfessionOf then
+        local name = ns.Auctions:ProfessionOf(what)
+        if name then return name end
+    end
+    -- The character playing's own recipes, when the shared index has none.
+    local recipeID = ns.Cost and ns.Cost.FindAnyRecipeForItem and ns.Cost:FindAnyRecipeForItem(what)
+    local recipe = recipeID and recipes and recipes.GetAny and recipes:GetAny(recipeID)
+    if recipe and recipe.skillLineID and english then
+        local ok, name = pcall(english, { skillLineID = recipe.skillLineID })
+        if ok and name then return name end
+    end
+    return nil
+end
+
+--- The Minimum Profit and Minimum Margin a craft must clear: its
+--- profession's own numbers first, else minProfit and minMarginPercent.
+-- @param what a recipe or analysis (by its skill line), an itemID, or a
+--             profession's name
+-- @return profit (copper), margin (percent), and the profession's English
+--         name when one of its own numbers was used (nil otherwise)
+function Profit:MinimumsFor(what)
+    local profit = ns.Config:Get("minProfit") or 0
+    local margin = ns.Config:Get("minMarginPercent") or 0
+
+    local profession = what ~= nil and self:ProfessionFor(what) or nil
+    local ownProfit, ownMargin = self:GetProfessionMinimums(profession)
+    if ownProfit == nil and ownMargin == nil then return profit, margin, nil end
+
+    return ownProfit or profit, ownMargin or margin, profession
+end
+
+--------------------------------------------------------------------------------
+-- Post at Minimum Profit
+--------------------------------------------------------------------------------
+
+-- The owner asked (2026-11-16): when others sell a craft for less than it
+-- can earn, list it at the least that still makes the Minimum Profit
+-- instead of following them down. Off unless ticked (`postAtMinProfit`,
+-- never rename it). Only when a rival set the price (matched, undercut or
+-- overcut) and the craft's cost is known; the Prices tab and list prices
+-- still come first, since ChoosePostPrice applies them after this.
+-- Only for listing what is already in the bags (the owner, 2026-11-17):
+-- the Profit tab, Queue, Level Up and the other craft lists keep the
+-- market's price, so turning it on never makes every craft look worth it.
+Profit.RIVAL_BASES = { match = true, undercut = true, overcut = true }
+
+function Profit:PostAtMinimumProfit()
+    return ns.Config:Get("postAtMinProfit") == true
+end
+
+--- The lowest price one craft can list at and still earn `minProfit`
+--- (after the cut and the deposits ProfitAtPrice counts), rounded up to a
+--- price the auction takes. Nil when the recipe or its cost is unknown.
+function Profit:LeastProfitablePrice(itemID, minProfit)
+    if not itemID then return nil end
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    local recipe = recipeID and ns.Recipes:GetAny(recipeID)
+    local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
+    if not recipe or not cost or not cost.priceable then return nil end
+
+    local yield = cost.yield or 1
+    local keep = 1 - (ns.Config:Get("auctionCut") or 0.05)
+    if yield <= 0 or keep <= 0 then return nil end
+
+    -- Profit grows in a straight line with the price, so the break point
+    -- is worked out once, then nudged up past any rounding.
+    local zero = ProfitAtPrice(recipe, cost, 0)
+    if not zero then return nil end
+    local price = math.max(1, math.ceil(((minProfit or 0) - zero) / (yield * keep)))
+
+    local status
+    if ns.Scanner.GetCommodityStatus then
+        status = ns.Scanner:GetCommodityStatus(itemID)
+    else
+        status = ns.Scanner:IsCommodity(itemID)
+    end
+    local function Round(p)
+        if status == false then return Util.ItemAuctionPriceUp(p) end
+        return p
+    end
+    price = Round(price)
+    for _ = 1, 3 do
+        local profit = ProfitAtPrice(recipe, cost, price)
+        if not profit or profit >= (minProfit or 0) then break end
+        price = Round(price + 1)
+    end
+    return price
+end
+
+--- Is this a trade good (leather, cloth, bars, herbs and the like)?
+-- Many are also a craft (Light Leather from Ruined Leather Scraps, a bolt
+-- from cloth), but most in the bags were gathered, and a material sells at
+-- the market's price. Reported 2026-11-20: with a 20s Minimum Profit, Light
+-- Leather listed at 21s 44c while the auction house sold it at 34c.
+local TRADE_GOODS = 7
+function Profit.IsTradeGood(itemID)
+    local items = rawget(_G, "C_Item")
+    local instant = type(items) == "table" and items.GetItemInfoInstant or rawget(_G, "GetItemInfoInstant")
+    if type(instant) ~= "function" or not itemID then return false end
+    local ok, _, _, _, _, _, classID = pcall(instant, itemID)
+    return ok and classID == TRADE_GOODS
+end
+
+--- When Post at Minimum Profit is on and a rival's price leaves less than
+--- the Minimum Profit, the price to list at instead and why. Trade goods
+--- are left at the market's price (see IsTradeGood).
+-- @return price, why  -- nil when the rival's price is fine or it is off
+function Profit:MinimumProfitPrice(itemID, price, basis)
+    if not price or not Profit.RIVAL_BASES[basis] or not self:PostAtMinimumProfit() then return nil end
+    if Profit.IsTradeGood(itemID) then return nil end
+    local minProfit, _, profession = self:MinimumsFor(itemID)
+    minProfit = math.max(0, minProfit or 0)
+    local least = self:LeastProfitablePrice(itemID, minProfit)
+    if not least or price >= least then return nil end
+    if minProfit <= 0 then
+        return least, L["others sell for less, so it lists where you break even"]
+    end
+    -- Named when the profession's own number was the one used.
+    if profession then
+        return least, L.Format("others sell for less, so it lists at the least that still makes your %s profit for %s",
+            Util.FormatMoney(minProfit, { noColor = true }), ProfessionLabel(profession))
+    end
+    return least, L.Format("others sell for less, so it lists at the least that still makes your %s profit",
+        Util.FormatMoney(minProfit, { noColor = true }))
+end
+
+--- The market's price before Post at Minimum Profit has its say.
+function Profit:ChooseRivalPostPrice(itemID, knownCost, link)
     if not itemID then return nil, nil end
 
     -- The copy's own suffix price when the link names one with a recent
@@ -315,7 +562,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
 
         if isCommodity then return market, "market", nil, uncertain end
 
-        return Util.RoundToSilver(market), "market"
+        return Util.ItemAuctionPrice(market), "market"
     end
 
     local undercut = ns.Config:Get("undercutCopper") or 0
@@ -331,13 +578,12 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
     -- Discord, 2026-10-09): list at the cheapest rival's own price, for
     -- commodities and item auctions alike, and say that is why.
     --
-    -- An item auction only takes whole silver, so a rival at 38s 99c can't be
-    -- matched to the copper. Rounding down there was a 99c undercut the player
-    -- had turned off (a player's report, 2026-11-14), so it rounds up to the
-    -- next silver instead: never below the rival's own price.
+    -- An item auction matches to the copper too: a rival at 2g 45s 37c is
+    -- matched at 2g 45s 37c (a player's report, 2026-11-16). Only in the
+    -- whole silver fallback does it round up, never below the rival.
     if undercut <= 0 then
         local price = math.max(1, math.floor(rival))
-        if not isCommodity then price = Util.CeilToSilver(price) end
+        if not isCommodity then price = Util.ItemAuctionPriceUp(price) end
         return price, "match", MATCH_BY_CHOICE, uncertain
     end
 
@@ -345,8 +591,8 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
         return math.max(1, math.floor(rival - undercut)), "undercut", nil, uncertain
     end
 
-    local matchPrice = Util.RoundToSilver(rival)
-    local underPrice = Util.RoundToSilver(math.max(1, math.floor(rival - undercut)))
+    local matchPrice = Util.ItemAuctionPrice(rival)
+    local underPrice = Util.ItemAuctionPrice(math.max(1, math.floor(rival - undercut)))
 
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
@@ -365,10 +611,18 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
                 Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
-    local minProfit = ns.Config:Get("minProfit") or 0
+    local minProfit, _, profession = self:MinimumsFor(itemID)
 
     if profit >= minProfit then return underPrice, "undercut" end
 
+    if profession then
+        return matchPrice, "match",
+            L.Format("undercutting to %s leaves %s profit, below your %s minimum for %s",
+                Util.FormatMoney(underPrice, { noColor = true }),
+                Util.FormatMoney(profit, { noColor = true }),
+                Util.FormatMoney(minProfit, { noColor = true }),
+                ProfessionLabel(profession))
+    end
     return matchPrice, "match",
         L.Format("undercutting to %s leaves %s profit, below your %s minimum",
             Util.FormatMoney(underPrice, { noColor = true }),
@@ -697,17 +951,14 @@ local NO_WAY_REASON = {
 
 --- Can one of your characters disenchant this? Read from what each last
 --- recorded, so an alt counts without logging in. nil when nobody knows
---- Enchanting, false when nobody has the skill for this item yet.
+--- Enchanting. On Forever any Enchanting skill breaks any item.
 local function CanDisenchant(itemID)
     local Disenchant = ns.Disenchant
     if not (Disenchant and Disenchant.GetBestEnchanter) then return nil end
 
     local skill = Disenchant:GetBestEnchanter()
     if skill == nil then return nil end
-
-    local facts = Disenchant.GetItemFacts and Disenchant:GetItemFacts(itemID)
-    local needs = type(facts) == "table" and facts.skill or nil
-    return needs == nil or skill >= needs
+    return true
 end
 
 --- The method the Profit tab and its commands rank by: Settings' choice,
@@ -718,6 +969,61 @@ function Profit:GetMethod()
         if known == method then return method end
     end
     return "best"
+end
+
+--- The Profit: drop-down's choices, in Profit.METHODS order. My Crafts and
+--- Recipes to Learn show the same drop-down (a player saw "(Vendor)" on
+--- every Recipes to Learn row and could not tell why, 2026-11-21).
+function Profit.MethodOptions()
+    local labels = Profit.WAY_LABELS or {}
+    local options = { { text = L["Profit: Best"], value = "best" } }
+    for _, method in ipairs(Profit.METHODS) do
+        if labels[method] then
+            options[#options + 1] = { text = L.Format("Profit: %s", labels[method]), value = method }
+        elseif method == "vendordisenchant" then
+            -- The AH left out, for a player who finds it slow (asked 2026-11-12).
+            options[#options + 1] = { text = L["Profit: Vendor and DE"], value = method,
+                tooltip = L["Counts vendor and disenchant money. Leaves the AH out."] }
+        end
+    end
+    return options
+end
+
+--- The profession picked on the Profit tab, shared by My Crafts, All
+--- Recipes and Recipes to Learn (a player's ask, 2026-11-27: pick
+--- Engineering on one and the others jumped to another profession). Kept
+--- by English name, false for All professions, for this session only.
+--- Each view keeps the version it last took and takes a newer pick on its
+--- next redraw; a view that lacks the profession falls back on its own.
+local picked = { version = 0, english = nil }
+
+--- A view's profession drop-down was changed.
+-- @param english  the English profession name, or nil/false for all
+function Profit.PickProfession(english)
+    picked.version = picked.version + 1
+    picked.english = type(english) == "string" and english or false
+end
+
+--- The shared pick: its version (0 until one is made) and the English
+--- name, or false for All professions.
+function Profit.PickedProfession()
+    return picked.version, picked.english
+end
+
+--- The English name of a skill line's profession, or nil.
+function Profit.ProfessionOfLine(skillLineID)
+    local lines = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+    return type(lines) == "table" and skillLineID ~= nil and lines[skillLineID] or nil
+end
+
+--- Set the Profit: choice, from either drop-down. The pane beside the
+--- profession window counts the same way, so it redraws too.
+function Profit:SetMethod(method)
+    ns.Config:Set("profitBy", method)
+    local pane = ns.CraftPanel
+    if pane and pane.RequestRefresh and pane.IsShown and pane:IsShown() then
+        pane:RequestRefresh()
+    end
 end
 
 --- The ways a craft can be turned into gold, for the row tooltip, the
@@ -778,6 +1084,30 @@ function Profit:PerDay(analysis, itemID)
     return analysis.profitPerUnit * sells, sells, capped
 end
 
+--- What one of a recipe's output cost to make, as Analyse gives it in
+--- `costPerUnit` for the sale the Sell tab would make (method nil), and
+--- nothing else. The Sell list and a List click ask only this, for every
+--- crafted stack in the bags, and the whole analysis (stock, skill-ups,
+--- disenchanting, craft time, sales) was worked out each time to get it.
+--- nil wherever Analyse leaves costPerUnit unset: no recipe or output, a
+--- craft that binds on pickup, an output nothing prices, a reagent with no
+--- price. Checked against Analyse in tools/test_salecost.lua.
+function Profit:UnitCostForSale(recipeID)
+    local recipe = ns.Recipes:GetAny(recipeID)
+    if not recipe or not recipe.outputItemID then return nil end
+
+    local itemID = recipe.outputItemID
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(itemID) == true then return nil end
+
+    local cost = ns.Cost:GetCraftCost(recipeID)
+    if not cost or not cost.priceable then return nil end
+
+    -- Priced by a vendor or by a listing; either is enough for Analyse.
+    if not Util.GetVendorSellPrice(itemID) and not self:ChoosePostPrice(itemID, cost) then return nil end
+
+    return cost.perUnit
+end
+
 function Profit:Analyse(recipeID, characterKey, method)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
@@ -835,25 +1165,36 @@ function Profit:Analyse(recipeID, characterKey, method)
             analysis.disenchantValue, analysis.disenchantPartial, breakdown =
                 ns.Disenchant:GetValue(recipe.outputItemID)
 
-            -- The material the value is read off, whose price's age is the
-            -- age of a disenchant profit.
+            -- The material a disenchant most often gives, whose price's
+            -- age is the age of a disenchant profit. Every outcome counts
+            -- toward the average now, so `counted` no longer picks one out:
+            -- read that way, the age was the rarest material's (the shard).
             for _, outcome in ipairs((breakdown and breakdown.outcomes) or {}) do
-                if outcome.counted then analysis.disenchantMaterial = outcome.itemID end
+                if outcome.likely or (outcome.likely == nil and outcome.counted) then
+                    analysis.disenchantMaterial = outcome.itemID
+                    break
+                end
             end
         end
     end
 
     -- Binds on pickup: the thing made is soulbound the moment it exists, so
-    -- there is no sale to cost and no profit to rank on. Out of the list the
-    -- same way an unpriced craft is, which keeps it off the skill-up star too,
-    -- while "Show unpriced" and the craft pane still show it with its skill-up
-    -- colour for anyone levelling on it. Unknown (not cached yet) is kept: the
-    -- tab redraws when the item arrives, and a craft that may well sell should
-    -- not vanish on a guess.
-    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) then
+    -- it can never be listed. A vendor still buys it and it can still be
+    -- disenchanted (a player's report, 2026-11-17), so only the auction
+    -- house is left out: ranked by AH, or as the sale the Sell tab would
+    -- make (method nil), it stays out of the list and off the skill-up star,
+    -- while "Show unpriced" and the craft pane still show it with its
+    -- skill-up colour. Under Best, Vendor, DE and Vendor and DE it is costed
+    -- like any craft, from the ways left. Unknown (not cached yet) is kept:
+    -- the tab redraws when the item arrives, and a craft that may well sell
+    -- should not vanish on a guess.
+    local soulbound = Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) == true
+    if soulbound then
         analysis.soulbound = true
-        analysis.reason = SOULBOUND_REASON
-        return analysis
+        if method == nil or method == "auction" then
+            analysis.reason = SOULBOUND_REASON
+            return analysis
+        end
     end
 
     -- Revenue is what you will actually be paid, which means undercutting the
@@ -863,7 +1204,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- "rival" excludes your own auctions. If the only listing is yours there is
     -- nobody to undercut, so we hold at market rather than walking our own
     -- price down a copper at a time.
-    local competitor = ns.Prices:GetValue(recipe.outputItemID, "rival")
+    local competitor = not soulbound and ns.Prices:GetValue(recipe.outputItemID, "rival") or nil
 
     -- Shown for context so the full picture is visible: the overall cheapest
     -- listing and your own, alongside the rival price actually being undercut.
@@ -874,9 +1215,26 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- Priced through the same chooser the Sell tab posts at, so the profit
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
-    -- the server will not take a price with copper in it.
-    local unitRevenue, basis, _, uncertain =
-        self:ChoosePostPrice(recipe.outputItemID, cost)
+    -- the server will not take a price with copper in it. No sale flag:
+    -- Post at Minimum Profit is for listing what is in the bags, and here it
+    -- would make every craft look worth making.
+    local unitRevenue, basis, _, uncertain
+    if not soulbound then
+        unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID, cost)
+    end
+
+    -- When nobody else is selling ("uncontested") the Sell tab lists at the
+    -- materials plus the markup, but nobody has paid that. Profit is counted
+    -- at the market value, what it last sold for, as Level Up and the
+    -- tooltip do (a player's report, 2026-11-22: a helm ranked first at 8g
+    -- that sold for 5g). The listing price is kept in listsAt for showing.
+    if basis == "uncontested" then
+        local market = ns.Prices:GetValue(recipe.outputItemID, "market")
+        if type(market) == "number" and market > 0 then
+            analysis.listsAt = unitRevenue
+            unitRevenue = math.floor(market)
+        end
+    end
 
     -- The listing on its own, kept for analysis.ways before a vendor that
     -- pays more takes its place below.
@@ -919,7 +1277,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         analysis.matchedRival = basis == "match"
     else
         analysis.undercut = false
-        analysis.youHoldLowest = ns.Prices:HoldsLowest(recipe.outputItemID)
+        analysis.youHoldLowest = not soulbound and ns.Prices:HoldsLowest(recipe.outputItemID) or nil
     end
 
     -- What you already hold, listed or otherwise. Crafting past this gets
@@ -965,7 +1323,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
         -- covers both, since the output is what has no price in each.
-        analysis.reason = L["output has no price data"]
+        analysis.reason = soulbound and SOULBOUND_REASON or L["output has no price data"]
         return analysis
     end
 
@@ -1019,7 +1377,7 @@ function Profit:Analyse(recipeID, characterKey, method)
             depositKnown = true, basis = "vendor", profit = revenue - cost.total }
     end
 
-    -- The most likely result, less the cut on selling the materials. No
+    -- The average result, less the cut on selling the materials. No
     -- deposit: the materials' is small, and nobody can say which listing
     -- they would join.
     if analysis.disenchantValue and analysis.disenchantValue > 0 then
@@ -1125,6 +1483,188 @@ function Profit:Analyse(recipeID, characterKey, method)
 end
 
 --------------------------------------------------------------------------------
+-- How a profit adds up (the owner said build it, 2026-11-26)
+--------------------------------------------------------------------------------
+--
+-- One sum, read by every place that shows a craft's profit: the Profit tab,
+-- the Queue and the craft pane all ask Counted, so the three can't disagree,
+-- and the How This Profit Adds Up card (UI/ProfitCard.lua) shows Sum's parts.
+-- Sum adds no new math: it lays out what Analyse already worked out, and its
+-- parts add up to analysis.profit to the copper.
+
+--- How the Profit tab's "Profit:" choice is counted outside the tab: the
+--- craft pane and the Queue. Auction stays the sale (max(auction, vendor)),
+--- as the craft pane always counted it.
+-- @return "best", "vendor", "disenchant", "vendordisenchant", or nil
+function Profit:CountedMethod()
+    local method = self:GetMethod()
+    if method == "auction" then return nil end
+    return method
+end
+
+--- One craft's profit as the Queue and the craft pane show it.
+function Profit:Counted(recipeID, characterKey)
+    return self:Analyse(recipeID, characterKey, self:CountedMethod())
+end
+
+--- What a material line's note says about where it comes from.
+local function MaterialNote(reagent)
+    local source = reagent.source
+    if source == "craft" then
+        local name = reagent.madeBy and ns.Cost and ns.Cost.MadeByName
+            and ns.Cost.MadeByName(reagent.madeBy) or nil
+        if not name and ns.Recipes and ns.Recipes.GetCharacterName and ns.Config then
+            local ok, mine = pcall(ns.Recipes.GetCharacterName, ns.Recipes, ns.Config:GetCharacterKey())
+            name = ok and type(mine) == "string" and mine ~= "" and mine or nil
+        end
+        -- Made, as the cheaper way, unless nothing sells it to compare.
+        local bought = ns.Cost and ns.Cost.GetReagentUnitCost
+            and select(1, ns.Cost:GetReagentUnitCost(reagent.itemID)) or nil
+        local cheaper = type(bought) == "number" and type(reagent.unitCost) == "number"
+            and reagent.unitCost < bought
+        if name and cheaper then return L.Format("Made by %s, cheaper than buying", name) end
+        if name then return L.Format("Made by %s", name) end
+        return L["Made by you"]
+    elseif source == "vendor" then
+        return L["From a vendor"]
+    elseif source == "mine" then
+        return L["Your own price"]
+    elseif source == "owned" then
+        return L["In your bags"]
+    end
+    return L["Bought, at today's price"]
+end
+
+--- What the Sells For line's note says.
+local function SaleNote(analysis)
+    local via = analysis.via
+    if via == "vendor" then return L["What a vendor pays"] end
+    if via == "disenchant" then return L["What it disenchants into"] end
+    local basis = analysis.priceBasis
+    if basis == "uncontested" then return L["What it last sold for"] end
+    if basis == "derived" then return L["Materials plus your markup"] end
+    return L["The lowest posting right now"]
+end
+
+--- Low and high profit for a craft whose output comes with random rolls
+--- (of the Bear, of the Eagle...): the same sum at each roll's lowest
+--- posting, cheapest roll to dearest. Only for the auction sale, and only
+--- with two or more rolls priced. Worked out once per analysis.
+-- @return low, high (copper for one craft), or nil
+function Profit:RollRange(analysis)
+    if type(analysis) ~= "table" then return nil end
+    if analysis.rollRange ~= nil then
+        if analysis.rollRange == false then return nil end
+        return analysis.rollRange[1], analysis.rollRange[2]
+    end
+    analysis.rollRange = false
+    if not analysis.priceable or analysis.via ~= "auction" then return nil end
+    local itemID = analysis.outputItemID
+    local prices = ns.Prices
+    if not (itemID and prices and prices.GetTable and prices.SuffixCount) then return nil end
+    local okCount, count = pcall(prices.SuffixCount, prices, itemID)
+    if not okCount or type(count) ~= "number" or count < 2 then return nil end
+
+    local okTable, all = pcall(prices.GetTable, prices)
+    local record = okTable and type(all) == "table" and all[itemID] or nil
+    local suffixes = type(record) == "table" and record.suffixes or nil
+    if type(suffixes) ~= "table" then return nil end
+
+    local oldest = time() - (prices.SUFFIX_KEEP or 0)
+    local yield = analysis.yield or 1
+    local cutRate = ns.Config:Get("auctionCut") or 0.05
+    local deposit = analysis.deposit or 0
+    local cost = analysis.totalCost or 0
+    local low, high
+    for _, entry in pairs(suffixes) do
+        local price = type(entry) == "table" and (tonumber(entry.seen) or 0) >= oldest
+            and tonumber(entry.min or entry.market) or nil
+        if price and price > 0 then
+            local revenue = price * yield
+            local profit = revenue - revenue * cutRate - deposit - cost
+            if not low or profit < low then low = profit end
+            if not high or profit > high then high = profit end
+        end
+    end
+    if not low or low == high then return nil end
+    analysis.rollRange = { low, high }
+    return low, high
+end
+
+--- The parts of one craft's profit, for the How This Profit Adds Up card.
+-- @param analysis  a Profit:Analyse result
+-- @return { itemID, name, lines = { { label, note, amount } }, yield, profit,
+--           low, high }, or nil for a craft with no profit worked out.
+--           Each amount is copper, signed: the sale counts up, the rest down.
+function Profit:Sum(analysis)
+    if type(analysis) ~= "table" or not analysis.priceable or type(analysis.profit) ~= "number" then
+        return nil
+    end
+    local lines = {}
+    lines[#lines + 1] = { label = L["Sells For"], note = SaleNote(analysis),
+        amount = analysis.revenue or 0, sale = true }
+
+    if (analysis.cut or 0) > 0 then
+        local rate = ns.Config:Get("auctionCut") or 0.05
+        local percent = math.floor(rate * 1000 + 0.5) / 10
+        local shown = percent == math.floor(percent) and tostring(math.floor(percent)) or tostring(percent)
+        lines[#lines + 1] = { label = L["Auction Cut"],
+            note = L.Format("%s%% of the sale", shown), amount = -analysis.cut }
+    end
+
+    if analysis.via == "auction" then
+        lines[#lines + 1] = { label = L["Deposit"], note = L["Lost if it doesn't sell the first time"],
+            amount = -(analysis.deposit or 0) }
+    end
+
+    local cost = analysis.cost
+    for _, reagent in ipairs((cost and cost.reagents) or {}) do
+        local name = Util.GetItemLabel and Util.GetItemLabel(reagent.itemID) or tostring(reagent.itemID)
+        lines[#lines + 1] = {
+            label = ("%d %s"):format(reagent.quantity or 0, name),
+            note = MaterialNote(reagent),
+            amount = -(reagent.lineCost or 0),
+            itemID = reagent.itemID,
+        }
+    end
+
+    -- Each line is shown to the copper, so the cut, the one part with a
+    -- fraction in it, takes what rounding leaves: the lines add up to the
+    -- profit as it is shown, on every row of the card.
+    local function Round(value) return math.floor((value or 0) + 0.5) end
+    local profit = Round(analysis.profit)
+    local rest, cutLine = 0, nil
+    for _, line in ipairs(lines) do
+        if line.label == L["Auction Cut"] then
+            cutLine = line
+        else
+            line.amount = line.sale and Round(line.amount) or -Round(-line.amount)
+            rest = rest + line.amount
+        end
+    end
+    if cutLine then cutLine.amount = profit - rest end
+
+    local low, high = self:RollRange(analysis)
+    return {
+        recipeID = analysis.recipeID,
+        itemID = analysis.outputItemID,
+        name = analysis.name,
+        lines = lines,
+        yield = analysis.yield or 1,
+        profit = analysis.profit,
+        low = low,
+        high = high,
+    }
+end
+
+--- A yield for the Makes line: whole numbers plain, an average to one place.
+function Profit.YieldText(yield)
+    yield = tonumber(yield) or 1
+    if yield == math.floor(yield) then return tostring(math.floor(yield)) end
+    return ("%.1f"):format(yield)
+end
+
+--------------------------------------------------------------------------------
 -- Ignored crafts
 --------------------------------------------------------------------------------
 
@@ -1180,56 +1720,105 @@ end
 --               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi",
 --               method = see Analyse }
 function Profit:GetRanked(opts)
+    local ranking = self:BeginRanked(opts)
+    for _, item in ipairs(ranking.items) do
+        self:RankOne(ranking, item)
+    end
+    return self:FinishRanked(ranking)
+end
+
+-- GetRanked in three steps, so a list that need not answer at once can
+-- analyse a few recipes a frame (the smooth play rule; the Profit tab does
+-- when it is picked): BeginRanked lists the recipes, RankOne analyses one
+-- and keeps it if it belongs, FinishRanked sorts what was kept. Run straight
+-- through they are GetRanked.
+
+--- @return ranking { items = { { recipeID, recipe }, ... }, results = {} }
+function Profit:BeginRanked(opts)
     opts = opts or {}
 
-    local minProfit = opts.minProfit or ns.Config:Get("minProfit") or 0
-    local minMargin = (opts.minMargin or ns.Config:Get("minMarginPercent") or 0) / 100
-
-    local results = {}
+    -- Numbers given by the caller hold for every craft; otherwise each
+    -- craft clears its own profession's (MinimumsFor), read once a
+    -- profession.
+    local fixedProfit, fixedMargin = opts.minProfit, opts.minMargin
+    local usualProfit = ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config:Get("minMarginPercent") or 0
+    local anyOwn = self:HasProfessionMinimums()
+    local bySkillLine = {}
+    local function Minimums(analysis)
+        local profit, margin = usualProfit, usualMargin
+        if anyOwn and analysis.skillLineID then
+            local known = bySkillLine[analysis.skillLineID]
+            if not known then
+                local p, m = self:MinimumsFor({ skillLineID = analysis.skillLineID })
+                known = { p, m }
+                bySkillLine[analysis.skillLineID] = known
+            end
+            profit, margin = known[1], known[2]
+        end
+        return fixedProfit or profit, (fixedMargin or margin) / 100
+    end
 
     -- Account-wide pulls in every character's cached recipes, each analysed
     -- against the bags of whoever actually knows it.
     -- Crafts of a profession the character has dropped are left out.
     local source = opts.accountWide and ns.Recipes:GetAccountWide(true) or ns.Recipes:GetAll()
 
+    local items = {}
     for recipeID, recipe in pairs(source) do
-        local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
-            and ns.Recipes:IsDropped(recipe)
-        -- An ignored craft is never analysed, so it is gone everywhere this
-        -- list is used: the rows, Queue All and the empty-list message.
-        local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
-        local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
+        items[#items + 1] = { recipeID = recipeID, recipe = recipe }
+    end
 
-        if analysis then
-            local keep = true
+    return { opts = opts, items = items, results = {}, Minimums = Minimums }
+end
 
-            if not analysis.priceable then
-                keep = opts.includeUnpriceable == true
-            else
-                if analysis.profit < minProfit then keep = false end
-                if keep and analysis.margin < minMargin then keep = false end
-                if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+--- Analyse one recipe of a ranking and keep it if it belongs on the list.
+function Profit:RankOne(ranking, item)
+    local opts, results, Minimums = ranking.opts, ranking.results, ranking.Minimums
+    local recipeID, recipe = item.recipeID, item.recipe
 
-                -- Already holding as many as you want listed. Not a row
-                -- already on screen, though: queueing up to the limit would
-                -- make it vanish under the cursor.
-                if keep and analysis.atPostLimit
-                   and ns.Config:Get("hideAtPostLimit") ~= false
-                   and not opts.ignorePostLimit
-                   and not (opts.keepOrder and opts.keepOrder[recipeID]) then
-                    keep = false
-                end
-            end
+    local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
+        and ns.Recipes:IsDropped(recipe)
+    -- An ignored craft is never analysed, so it is gone everywhere this
+    -- list is used: the rows, Queue All and the empty-list message.
+    local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
+    local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
 
-            if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+    if analysis then
+        local keep = true
+
+        if not analysis.priceable then
+            keep = opts.includeUnpriceable == true
+        else
+            local minProfit, minMargin = Minimums(analysis)
+            if analysis.profit < minProfit then keep = false end
+            if keep and analysis.margin < minMargin then keep = false end
+            if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
+
+            -- Already holding as many as you want listed. Not a row
+            -- already on screen, though: queueing up to the limit would
+            -- make it vanish under the cursor.
+            if keep and analysis.atPostLimit
+               and ns.Config:Get("hideAtPostLimit") ~= false
+               and not opts.ignorePostLimit
+               and not (opts.keepOrder and opts.keepOrder[recipeID]) then
                 keep = false
             end
+        end
 
-            if keep then
-                results[#results + 1] = analysis
-            end
+        if keep and opts.skillLineID and analysis.skillLineID ~= opts.skillLineID then
+            keep = false
+        end
+
+        if keep then
+            results[#results + 1] = analysis
         end
     end
+end
+
+--- Sort what a ranking kept. @return the list GetRanked gives
+function Profit:FinishRanked(ranking)
+    local opts, results = ranking.opts, ranking.results
 
     local sortBy = opts.sortBy or "profit"
 
@@ -1266,6 +1855,26 @@ function Profit:GetRanked(opts)
     end)
 
     return results
+end
+
+--- A ranking already worked out, put in order again for new options with
+--- no recipe analysed. For a list whose search changed: the search is not
+--- part of the ranking, but a changed search lets go of the rows held in
+--- place (opts.keepOrder), so a row kept only because it was on screen,
+--- past its listing limit, leaves as RankOne would leave it out.
+-- @param results  what GetRanked gave for the same options, keepOrder aside
+-- @return a new list; results is left as it was
+function Profit:RankAgain(results, opts)
+    opts = opts or {}
+    local hideAtLimit = ns.Config:Get("hideAtPostLimit") ~= false and not opts.ignorePostLimit
+    local again = {}
+    for _, analysis in ipairs(results or {}) do
+        local held = opts.keepOrder and opts.keepOrder[analysis.recipeID]
+        if not (analysis.priceable and analysis.atPostLimit and hideAtLimit and not held) then
+            again[#again + 1] = analysis
+        end
+    end
+    return self:FinishRanked({ opts = opts, results = again })
 end
 
 --------------------------------------------------------------------------------
@@ -1426,7 +2035,7 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
     ns.PrintRaw(L.Format("  material cost   %s", Util.FormatMoney(analysis.totalCost)))
 
     if analysis.priceBasis == "disenchant" then
-        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at its most likely result|r",
+        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at what it gives on average|r",
             ns.COLORS.profit))
         ns.PrintRaw(L.Format("  disenchants to  %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
@@ -1460,7 +2069,7 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
         ns.PrintRaw(L.Format("  |c%snobody else is listing one, so this is priced off your materials|r",
             ns.COLORS.profit))
         ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
-            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+            Util.FormatMoney(analysis.listsAt or analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
         ns.PrintRaw(L.Format("  |c%syou already have the cheapest listing, so staying at market price|r",
             ns.COLORS.profit))

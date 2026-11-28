@@ -83,11 +83,14 @@ ns.Theme = {
 }
 
 local checkboxes, dropdown, buttons, pages = {}, nil, {}, nil
+local salvagerSwitch
 
 ns.Widgets = {
     CreateTabStrip = function(_, tabs, onSelect)
-        pages = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
-        return pages
+        local strip = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
+        -- The Salvager switch in the detail panel is a strip too.
+        if tabs[1].key == "plain" then salvagerSwitch = strip else pages = strip end
+        return strip
     end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function(_, options, onSelect)
@@ -124,6 +127,7 @@ ns.Util = {
     GetItemLabel = function(itemID) return "item" .. tostring(itemID) end,
     GetItemQualityColor = function() end,
     Round = function(v) return v end,
+    ColorItemName = function(_, name) return name end,
 }
 
 ns.Prices = { Count = function() return 1 end, changes = 0,
@@ -271,6 +275,58 @@ check("and it says why", disenchant.tooltipText == "This character does not know
 check("the secure button is taken away", ns.Disenchanter.anchor == nil and disarmed > 0)
 knows = true
 
+print("\nat an Arcane Salvager")
+-- The owner said build it, 2026-11-24: a switch above Breaks Into and a
+-- purple line, only with Keep Salvager Results Apart ticked.
+check("with the box off there is no switch", salvagerSwitch and not salvagerSwitch.shown)
+check("and no Stop button", not buttons["Stop"].shown)
+
+local salvagerUp, stopped = true, false
+local Log, Dis = ns.DisenchantLog, ns.Disenchant
+Log.SalvagerApart = function() return true end
+Log.SalvagerUp = function() return salvagerUp, false end
+Log.StopSalvager = function() stopped = true; salvagerUp = false end
+Log.GetItem = function() return { casts = 40 } end
+Log.GetBand = function() return { casts = 60 } end
+Dis.SALVAGER_LEARN_AFTER = 5
+Dis.GetOutcomes = function() return {}, { key = "2:weapon:25" } end
+Dis.GetValue = function() return 300 end
+Dis.MaterialName = function() return "Strange Dust" end
+Dis.GetMaterialPrice = function() return 10 end
+local salvaged = { outcomes = {}, facts = { casts = 2, need = 3,
+    seen = { casts = 2, got = { [10940] = { times = 2, min = 1, max = 2 } } } } }
+local salvagerValue
+Dis.GetSalvagerValue = function() return salvagerValue, nil, salvaged end
+
+tab.refresh()
+check("ticked, the switch shows", salvagerSwitch.shown and salvagerSwitch.tabs[3].text == "Side by Side")
+check("it opens on Side by Side", salvagerSwitch.selected == "side")
+check("the purple line has Stop when only the cast turned it on", buttons["Stop"].shown)
+check("too few: each Salvager cell says how many so far", Showing("^2 so far$") ~= nil)
+check("and the note says how many more", Showing("Disenchant 3 more at a Salvager to see its chances.") ~= nil)
+
+salvagerValue = 600   -- the Belt's plain value is 500
+salvaged = { outcomes = { { itemID = 10940, chance = 1, average = 2, min = 2, max = 2 } },
+    facts = { casts = 5, byItem = true } }
+tab.refresh()
+check("enough: the compare line", Showing("^The Salvager gives$") ~= nil and Showing("^100 more %(20%%%)$") ~= nil)
+salvagerValue = 400
+tab.refresh()
+check("and says so when it gave less", Showing("^100 less %(20%%%)$") ~= nil)
+check("with both counts in the note",
+    Showing("From your own 40 plain and 5 Salvager disenchants of this item.") ~= nil)
+
+salvagerSwitch.onSelect("salvager")
+check("Salvager shows its own chances",
+    Showing("Chances come from your own 5 Salvager disenchants of this item.") ~= nil)
+
+buttons["Stop"].onClick()
+check("Stop ends Salvager mode", stopped)
+
+Log.SalvagerApart = function() return false end
+tab.refresh()
+check("unticked, the switch goes again", not salvagerSwitch.shown)
+
 print("\nall done")
 bagRows = {}
 tab.refresh()
@@ -284,3 +340,28 @@ check("the deals come back", list.data == auctionRows)
 check("and the Disenchant button goes", not disenchant.shown)
 
 print(("\n%d check(s) passed\n"):format(checks))
+
+print("\nan auction deal on the Salvager view")
+-- A player's report, 2026-11-25: after Move to Salvager the plain record
+-- was empty, so the plain value fell back to the rough chances. The
+-- Salvager view showed its own Disenchant value but kept the plain cut and
+-- profit under it, so a deal showed a big cut and a loss.
+Log.SalvagerApart = function() return true end
+salvagerUp = true
+salvagerValue = 1000      -- the Listed Chest's plain value is 800, net 760
+salvaged = { outcomes = { { itemID = 10940, chance = 1, average = 2, min = 2, max = 2 } },
+    facts = { casts = 5, byItem = true } }
+ns.Config.Get = function(_, key) if key == "auctionCut" then return 0.05 end return 0 end
+list.opts.onClick(auctionRows[1], 1, "LeftButton")
+salvagerSwitch.onSelect("salvager")
+check("the Salvager value shows", Showing("^1000$") ~= nil)
+check("the cut comes off the Salvager value", Showing("^950$") ~= nil and Showing("^760$") == nil)
+check("and the profit follows it", Showing("^450  %(") ~= nil and Showing("^260  %(") == nil)
+
+ns.Config.Get = function() return 0 end
+tab.refresh()
+check("with no cut nothing comes off", Showing("^500  %(") ~= nil)
+
+salvagerSwitch.onSelect("plain")
+check("the plain view keeps the plain profit", Showing("^260  %(") ~= nil)
+ns.Config.Get = function() return 0 end

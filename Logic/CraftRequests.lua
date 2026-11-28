@@ -20,7 +20,7 @@
 --
 -- Read only: nothing is saved and nothing is sent. The player's own lines
 -- are skipped, and one asker is told about one item once every REPEAT_GAP.
--- "Craft requests in Trade" on the Look page (`tradeRequests`, off unless
+-- "Craft requests in Trade" on the Tooltips page (`tradeRequests`, off unless
 -- ticked; the owner, 2026-10-12) and /bts requests.
 --
 -- Smooth play: a line without an asking word costs a few string finds; the

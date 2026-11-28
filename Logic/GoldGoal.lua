@@ -109,7 +109,7 @@ end
 --- The realm and side of the character playing, as its record has them
 --- when the client will not say.
 function GoldGoal:Here()
-    local realm = Plain(GetRealmName)
+    local realm = Plain(GetRealmName) or (ns.Config and ns.Config.RealmName and ns.Config:RealmName())
     local faction = Plain(UnitFactionGroup, "player")
 
     if (not realm or not faction) and ns.db and ns.db.characters and ns.Config then

@@ -192,21 +192,92 @@ local function Estimate(cache, itemID)
     return each
 end
 
+--------------------------------------------------------------------------------
+-- Bought or made
+--------------------------------------------------------------------------------
+
+-- A player's report (2026-11-26): Medium Leather bought on the auction house
+-- at 1s 15c and sold at 1s 52c showed as a Leatherworking loss, costed at
+-- the 4s 60c of a craft made days before. Something you can make may also
+-- be bought, so whichever came last is what the stock in your bags cost:
+-- a buy after the last craft makes it bought stock, costed at what you paid.
+
+--- A sale written down before the craft's time was kept on it, from after
+--- a later craft: the craft behind its cost came at some unknown time before
+--- it. A buy this close before the sale is taken as the newer of the two.
+CraftedCost.FLIP_WINDOW = 3 * 86400
+
+--- What one cost on the auction house, when a buy of `itemID` at or before
+--- `at` came after the craft at `madeAt` (nil: never made). nil otherwise.
+function CraftedCost:BoughtCost(itemID, at, madeAt)
+    local profit = ns.MethodProfit
+    if not (itemID and profit and profit.BuyBefore) then return nil end
+    local boughtAt, each = profit:BuyBefore(itemID, at or time())
+    if not boughtAt then return nil end
+    if madeAt == nil or boughtAt > madeAt then return each end
+    return nil
+end
+
+--- The last craft of the stock you hold now: Get's record, or nil when the
+--- item was bought on the auction house since (or never made).
+function CraftedCost:ForStock(itemID)
+    local record = self:Get(itemID)
+    if not record then return nil end
+    if self:BoughtCost(itemID, time(), tonumber(record.at) or 0) then return nil end
+    return record
+end
+
+--- Write on a sale, as it is read from the mail, what one cost then: the
+--- last craft, or what was paid on the auction house when that came later
+--- (`bought` set). `madeAt` keeps the craft's time, so a later read agrees.
+function CraftedCost:CostTheSale(entry)
+    if type(entry) ~= "table" or not entry.itemID then return end
+    local made = self:Get(entry.itemID)
+    local paid = self:BoughtCost(entry.itemID, entry.t, made and (tonumber(made.at) or 0) or nil)
+    if paid then
+        entry.cost = paid
+        entry.bought = true
+    elseif made then
+        entry.cost = made.cost
+        entry.madeAt = tonumber(made.at)
+    end
+end
+
+--- When the craft behind a sale's written cost was made, as best known.
+local function MadeAtFor(self, entry, itemID)
+    if tonumber(entry.madeAt) then return tonumber(entry.madeAt) end
+    local record = self:Get(itemID)
+    local at, t = record and tonumber(record.at), tonumber(entry.t)
+    if not t then return at or 0 end
+    if at and at <= t then return at end
+    -- Crafted again since: the craft behind it is older than we can say.
+    return t - self.FLIP_WINDOW
+end
+
 --- What one of a sold item cost, and where that figure came from.
 -- @param itemID  the sale's item, resolved by the caller when the entry has none
--- @return each, source ("made" | "est"), or nil when it cannot be costed
+-- @return each, source ("made" | "bought" | "est"), or nil when it cannot be costed
 function CraftedCost:SaleCost(entry, itemID, cache)
     if type(entry) ~= "table" then return nil end
 
-    if type(entry.cost) == "number" then return entry.cost, "made" end
-
     itemID = itemID or entry.itemID
+
+    if type(entry.cost) == "number" then
+        if entry.bought then return entry.cost, "bought" end
+        -- Written down as a craft. A sale from before buys were weighed
+        -- against crafts may have been bought stock after all.
+        local paid = itemID and self:BoughtCost(itemID, entry.t, MadeAtFor(self, entry, itemID))
+        if paid then return paid, "bought" end
+        return entry.cost, "made"
+    end
+
     if not itemID then return nil end
 
     local record = self:Get(itemID)
-    if record and (not record.at or not entry.t or record.at <= entry.t) then
-        return record.cost, "made"
-    end
+    local usable = record and (not record.at or not entry.t or record.at <= entry.t)
+    local paid = self:BoughtCost(itemID, entry.t, usable and (tonumber(record.at) or 0) or nil)
+    if paid then return paid, "bought" end
+    if usable then return record.cost, "made" end
 
     local each = Estimate(cache or self:NewSaleCache(), itemID)
     if each then return each, "est" end
@@ -253,13 +324,15 @@ function CraftedCost:ProfitAt(itemID, price)
 end
 
 --- The last craft cost when the setting is on and `price` brings in less
---- than it after the cut; nil when the listing may go ahead.
+--- than it after the cut; nil when the listing may go ahead, or when the
+--- stock was bought on the auction house after it was last made.
 -- @return cost, net
 function CraftedCost:Refuses(itemID, price)
     if ns.Config:Get("neverBelowCraftedCost") ~= true then return nil end
     if type(price) ~= "number" then return nil end
 
-    local record = self:Get(itemID)
+    -- A craft guard: stock bought on the auction house since is no craft.
+    local record = self:ForStock(itemID)
     if not record then return nil end
 
     local net = self:NetOf(price)
@@ -273,38 +346,112 @@ function CraftedCost:RefusalText(itemID, price, cost, net)
         Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(cost), Util.FormatMoney(net))
 end
 
---- Lines for a tooltip, each { label, value, color }: what it cost to make,
---- what it last went up at, and what listing it now makes over that cost.
---- Nothing for an item never crafted since this was added.
+--- What one costs to make today, at today's material prices and the
+--- player's own "Charge for Own Materials" choice, as the craft queue
+--- prices a craft: copper each, or nil when no character's recipe makes it,
+--- it binds when made, or a material has no price.
+function CraftedCost:CostNow(itemID)
+    if not (itemID and ns.Cost and ns.Cost.GetCraftCost) then return nil end
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(itemID) then return nil end
+    local find = ns.Cost.FindAnyRecipeForItem or ns.Cost.FindRecipeForItem
+    local recipeID = find and find(ns.Cost, itemID)
+    if not recipeID then return nil end
+    local ok, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID)
+    if not ok or type(cost) ~= "table" or not cost.priceable then return nil end
+    local each = cost.perUnit
+    if type(each) ~= "number" or each <= 0 then return nil end
+    return math.floor(each + 0.5)
+end
+
+--- What one listing at `price` brings in: the price less the cut and the
+--- deposits a sale is expected to lose, the same sum the Profit tab counts
+--- (Profit:NetFromListing, the owner said build it 2026-11-26). Without
+--- Profit loaded, the price less the cut.
+function CraftedCost:NetOfListing(itemID, price)
+    local Profit = ns.Profit
+    if Profit and Profit.NetFromListing then
+        local ok, net = pcall(Profit.NetFromListing, Profit, itemID, price)
+        if ok and type(net) == "number" then return math.floor(net) end
+    end
+    return self:NetOf(price)
+end
+
+--- What one sale at `price` makes over what one costs to make today, after
+--- the cut and the deposit. The owner (2026-11-25): Profit Now always shows
+--- the current amount, so it agrees with the craft queue, not with the last
+--- craft. `toVendor` sells it to a vendor: no cut, no deposit.
+-- @return profit (copper, negative for a loss), or nil when either is unknown
+function CraftedCost:ProfitNowAt(itemID, price, toVendor)
+    if type(price) ~= "number" then return nil end
+    local cost = self:CostNow(itemID)
+    if not cost then return nil end
+    if toVendor then return math.floor(price) - cost end
+    return self:NetOfListing(itemID, price) - cost
+end
+
+--- Lines for a tooltip, each { label, value, color }: what it cost the last
+--- time you made one, what it last went up at, what one costs to make today,
+--- and what a listing now makes over that. The first two only for an item
+--- crafted since this was kept; the profit for anything a recipe makes.
 --
 -- @param price  what it would list at now; looked up when not given
 function CraftedCost:Lines(itemID, price)
     local lines = {}
 
     local record = self:Get(itemID)
-    if not record then return lines end
 
     local function Ago(at)
         if type(at) ~= "number" then return "" end
         return "  (" .. Util.FormatAgeAgo(math.max(0, time() - at)) .. ")"
     end
 
-    lines[#lines + 1] = { L["Made for"], Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
+    if record then
+        lines[#lines + 1] = { L["Made for"], Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
 
-    local posted = self:GetLastPosted(itemID)
-    if posted then
-        lines[#lines + 1] = { L["Last posted"], Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
+        local posted = self:GetLastPosted(itemID)
+        if posted then
+            lines[#lines + 1] = { L["Last posted"], Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
+        end
     end
+
+    -- Nothing to make it from today: no profit line, and no price looked up.
+    local costNow = self:CostNow(itemID)
+    if not costNow then return lines end
+    local toVendor = false
 
     -- An estimate from the materials is not a price anyone pays, so no
     -- profit is worked out on it.
-    if not price and ns.Posting and ns.Posting.GetPostPrice then
-        local ok, chosen, basis = pcall(ns.Posting.GetPostPrice, ns.Posting, itemID)
-        if ok and basis ~= "derived" then price = chosen end
+    -- The market's price, not Post at Minimum Profit's, so this says what
+    -- others pay now.
+    -- When every listing is yours ("uncontested") the price is that same
+    -- materials-plus-markup estimate, so the market value stands instead,
+    -- as on Level Up (a player's report, 2026-11-22: 8g shown, 5g paid).
+    if not price and ns.Profit and ns.Profit.ChoosePostPrice then
+        local ok, chosen, basis = pcall(ns.Profit.ChoosePostPrice, ns.Profit, itemID)
+        if ok and basis == "uncontested" then
+            local okMarket, market = false, nil
+            if ns.Prices and ns.Prices.GetValue then
+                okMarket, market = pcall(ns.Prices.GetValue, ns.Prices, itemID, "market")
+            end
+            price = okMarket and type(market) == "number" and market > 0 and math.floor(market) or nil
+        elseif ok and basis ~= "derived" then
+            price = chosen
+        end
+        -- Worth whichever pays more, as the Profit tab counts the sale:
+        -- a vendor that pays more than the listing brings in is the sale.
+        local vendor = Util.GetVendorSellPrice and Util.GetVendorSellPrice(itemID)
+        if type(vendor) == "number" and vendor > 0
+            and (not price or vendor >= self:NetOfListing(itemID, price)) then
+            price, toVendor = vendor, true
+        end
     end
 
-    local profit = price and self:ProfitAt(itemID, price)
+    local profit = price and self:ProfitNowAt(itemID, price, toVendor)
     if profit then
+        -- Today's cost on its own line, the one Profit Now takes off, so
+        -- the sum can be checked by eye (a player's report, 2026-11-26:
+        -- Made For under the price, yet Profit Now a loss).
+        lines[#lines + 1] = { L["Costs now"], Util.FormatMoney(costNow, { short = true }) }
         local sign = profit > 0 and "+" or (profit < 0 and "-" or "")
         lines[#lines + 1] = {
             L["Profit now"],

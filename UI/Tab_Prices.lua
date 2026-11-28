@@ -21,7 +21,15 @@ local DETAIL_WIDTH = 300
 -- left a sliver (a player's report, 2026-10-18), so the gaps are a little
 -- smaller and the three rows below go under the Market value row's hover.
 local ROW_GAP = 6
+-- A search opens items to show their suffixes when it finds this many or fewer.
+local AUTO_OPEN_MOST = 30
 local FOLDED_ROWS = { quantity = true, scans = true, confidence = true }
+-- The price graph's plot never gets less than this. In a short window a
+-- "Never below" price (with its Highest and When Cheaper rows) left it one
+-- line tall (a player's report, 2026-11-23), so while it would be shorter
+-- these rows go under the Market value row's hover too, in this order.
+local GRAPH_MIN = 60
+local SQUEEZE_ORDER = { "bags", "liquidity", "rival", "own" }
 
 -- Right to left. Money sits to the right, so its coins line up; the rest is
 -- centred under its heading. `width` is the least each gets:
@@ -49,6 +57,9 @@ local state = {
     enchantingOnly = false,
     sortBy = "market",
     selected = nil,
+    -- Items opened or closed by hand to show their suffixes, by item ID
+    -- (true or false). Unset means open while searching, else closed.
+    open = {},
 }
 
 local widgets = {}
@@ -134,13 +145,138 @@ local function IsFavourite(itemID)
     return ns.Prices.IsFavourite ~= nil and ns.Prices:IsFavourite(itemID)
 end
 
---- The price the player set on an item, and its kind, or nil.
-local function Mine(itemID)
+--- The price the player set on an item (or one suffix of it), its kind,
+--- and true when it was the suffix's own; or nil.
+local function Mine(itemID, suffix)
     if not ns.Prices.GetMine then return nil end
-    return ns.Prices:GetMine(itemID)
+    return ns.Prices:GetMine(itemID, suffix)
 end
 
-local function BuildList()
+--- The item or any of its suffixes has a price the player set.
+local function AnyMine(itemID)
+    if ns.Prices.HasMine then return ns.Prices:HasMine(itemID) end
+    return Mine(itemID) ~= nil
+end
+
+local SortRows, SuffixMatcher, AddSuffixRows, Refresh
+
+-- Picking the tab built a row for every priced item (thousands after a
+-- scan), read each one's stock history and trend, and sorted them all, in
+-- one frame (the owner's report, 2026-11-21, swapping tabs at the auction
+-- house). The sorted rows are now kept until something they are built from
+-- changes: the prices (Prices.changes, counted for stars, own prices and
+-- pruning too), a setting, the day the trend is measured from, or the
+-- filters and sort. Kept rows get their age and suffix count read again,
+-- since those move with the clock. Not kept while names are wanted (a
+-- search or a sort by name: names arrive late from the game) or under
+-- Reagents Only (it follows the recipes).
+--
+-- A price or two changing (a search or a post at the auction house) built
+-- and sorted every row again on the next pick. When the prices say which
+-- items changed (Prices:TouchedSince) and no heading is clicked, only those
+-- items' rows are taken out and put back in their sorted place (2026-11-26).
+local keptRows = { key = nil, changes = nil, rows = nil }
+
+local function KeptKey(prices, trendDays)
+    local sorter = widgets.sorter
+    return table.concat({
+        tostring(prices),
+        tostring(ns.Config and ns.Config.changes or 0),
+        tostring(math.floor(time() / 86400)), tostring(trendDays),
+        tostring(state.sortBy), tostring(sorter and sorter.key), tostring(sorter and sorter.ascending),
+        tostring(state.favouritesOnly), tostring(state.mineOnly), tostring(state.enchantingOnly),
+        tostring(Util.Count and Util.Count(ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {})),
+        tostring(Util.Count and Util.Count(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {})),
+    }, ":")
+end
+
+--- The kept rows with what the clock moves read again, or nil. An age is
+--- taken off the record the row holds, and a suffix count is counted again
+--- only once the first of its suffixes has turned too old (it walked every
+--- suffix of every item on each pick, 2026-11-26).
+local function KeptRows(key, changes)
+    if keptRows.key ~= key or keptRows.changes ~= changes or not keptRows.rows then return nil end
+    local now = time()
+    local Prices = ns.Prices
+    for _, row in ipairs(keptRows.rows) do
+        local seen = row.record.seen
+        row.age = seen and now - seen or math.huge
+        local holds = row.suffixHolds
+        if holds == nil or now > holds then
+            if type(row.record.suffixes) == "table" and Prices.SuffixCount then
+                row.suffixCount, row.suffixHolds = Prices:SuffixCount(row.itemID)
+            else
+                row.suffixCount = 0
+            end
+            if not row.suffixHolds then row.suffixHolds = math.huge end
+        end
+        row.open = nil
+    end
+    return keptRows.rows
+end
+
+--- Forget the kept rows (for the tests, whose pretend prices change).
+function UI._PricesForget() keptRows.key, keptRows.changes, keptRows.rows = nil, nil, nil end
+
+--- Pick the menu's sort (for the tests).
+function UI._PricesSort(sortBy) state.sortBy = sortBy end
+
+local RowBefore
+
+-- Picked after a change that names no item (a full scan), the tab built and
+-- sorted every row in that one frame. Once rows are kept, such a pick leaves
+-- the rows it had up and builds a few a frame, then draws the list an
+-- at-once build gives. The rows are sorted in runs as they are built and the
+-- runs merged two at a time in later frames: the sort has no ties (RowBefore
+-- ends on the item), so the order is table.sort's. Any other refresh (a click, a filter, a
+-- search) still answers at once and drops a build under way, and so does the
+-- first draw, so the list never opens empty. The same way Level Up and
+-- Profit build when picked (2026-11-26).
+local SLICE_MS = 4
+local RUN = 1000
+-- A step of the build that merges two runs, where the others add an item.
+local MERGE = {}
+local spreadNext = false
+local building = nil
+-- Still on this tab's list; set once the views are made.
+local StillShowing = function() return true end
+
+local function StopBuilding()
+    local worker = building
+    building = nil
+    if worker then worker:Cancel() end
+end
+
+--- Two sorted runs as one.
+local function MergeTwo(a, b, Before)
+    local out, x, y, n = {}, 1, 1, 0
+    local countA, countB = #a, #b
+    while x <= countA and y <= countB do
+        n = n + 1
+        if Before(b[y], a[x]) then
+            out[n] = b[y]
+            y = y + 1
+        else
+            out[n] = a[x]
+            x = x + 1
+        end
+    end
+    for i = x, countA do n = n + 1; out[n] = a[i] end
+    for i = y, countB do n = n + 1; out[n] = b[i] end
+    return out
+end
+
+--- Merge the two oldest runs, the smallest there are. False with one left.
+local function MergeOnce(runs, Before)
+    if #runs < 2 then return false end
+    local a, b = table.remove(runs, 1), table.remove(runs, 1)
+    runs[#runs + 1] = MergeTwo(a, b, Before)
+    return true
+end
+
+--- The list to draw, or nil when `spread` was asked and the rows are being
+--- built over frames: they draw themselves when done.
+local function BuildList(spread)
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
     local favourites = ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {}
@@ -153,6 +289,12 @@ local function BuildList()
 
     local prices = ns.Prices:GetTable()
     local trendDays = ns.Prices.TrendDays and ns.Prices:TrendDays() or 7
+
+    local keepKey = not wantNames and not reagents and type(time) == "function"
+        and Util and Util.Count and KeptKey(prices, trendDays) or nil
+    local changes = ns.Prices.changes or 0
+    local kept = keepKey and KeptRows(keepKey, changes)
+    if kept then return AddSuffixRows(kept) end
 
     -- The Enchanting tab's materials list lives here now
     -- (2026-10-07): every enchanting material, priced or not.
@@ -167,68 +309,213 @@ local function BuildList()
         end
     end
 
+    -- A search is settled on the name before the row is built: a row reads
+    -- its item's stock history and trend, and each key typed read them for
+    -- every priced item only to drop most of the rows.
+    local needle = state.search ~= "" and state.search:lower() or nil
+    local matcher
+
+    -- How fast an item moves and its trend are read when first asked for:
+    -- by the rows on screen, or by every row under a sort on that column.
+    -- Reading both for every priced item was most of the tab's first draw
+    -- after each scan (2026-11-26).
+    local lazy = { __index = function(row, key)
+        if key == "liquidity" then
+            if rawget(row, "readMoves") then return nil end
+            rawset(row, "readMoves", true)
+            local value = ns.Prices:GetSalesPerDay(row.itemID)
+            if value ~= nil then rawset(row, "liquidity", value) end
+            return value
+        elseif key == "trend" then
+            if rawget(row, "readTrend") then return nil end
+            rawset(row, "readTrend", true)
+            local value = ns.Prices.GetTrend and (ns.Prices:GetTrend(row.itemID, trendDays)) or nil
+            if value ~= nil then rawset(row, "trend", value) end
+            return value
+        end
+        return nil
+    end }
+
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
         if materials and not materials[itemID] then return end
         if state.favouritesOnly and favourites[itemID] == nil then return end
-        if state.mineOnly and not Mine(itemID) then return end
+        if state.mineOnly and not AnyMine(itemID) then return end
 
-        rows[#rows + 1] = {
+        local name = wantNames and (PlainName(itemID) or stored[itemID]
+            or ("~item %d"):format(itemID)) or ""
+        local suffixCount, suffixHolds = 0, nil
+        if type(record.suffixes) == "table" and ns.Prices.SuffixCount then
+            suffixCount, suffixHolds = ns.Prices:SuffixCount(itemID)
+            suffixCount = suffixCount or 0
+        end
+        local onlySuffixes
+        if needle and not name:lower():find(needle, 1, true) then
+            -- "of the Bear" finds the item, showing only its Bear.
+            if suffixCount <= 0 then return end
+            matcher = matcher or SuffixMatcher(needle)
+            onlySuffixes = matcher({ itemID = itemID, record = record, name = name })
+            if not onlySuffixes then return end
+        end
+
+        rows[#rows + 1] = setmetatable({
             itemID = itemID,
             record = record,
             market = record.market or 0,
             min = record.min or 0,
             quantity = record.quantity or 0,
             age = ns.Prices:GetAge(itemID) or math.huge,
-            liquidity = ns.Prices:GetSalesPerDay(itemID),
-            trend = ns.Prices.GetTrend and (ns.Prices:GetTrend(itemID, trendDays)) or nil,
-            name = wantNames and (PlainName(itemID) or stored[itemID]
-                or ("~item %d"):format(itemID)) or "",
-        }
+            name = name,
+            suffixCount = suffixCount,
+            suffixHolds = suffixHolds or math.huge,
+            onlySuffixes = onlySuffixes,
+        }, lazy)
+    end
+
+    -- Only a few items' prices moved since the kept rows were built: their
+    -- rows alone are made again. Each goes back where the sort would put
+    -- it, so the list is the one a full build gives.
+    local mine = ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}
+    if keepKey and keptRows.key == keepKey and keptRows.rows
+        and not (widgets.sorter and widgets.sorter.key) and ns.Prices.TouchedSince then
+        local touched = ns.Prices:TouchedSince(keptRows.changes)
+        if touched then
+            local old, stay = keptRows.rows, {}
+            for _, row in ipairs(old) do
+                if not touched[row.itemID] then stay[#stay + 1] = row end
+            end
+            for itemID in pairs(touched) do
+                local record = prices[itemID]
+                if type(itemID) == "number" and not record and (favourites[itemID] ~= nil
+                    or (mine[itemID] ~= nil and AnyMine(itemID))
+                    or (materials and materials[itemID])) then
+                    record = {}
+                end
+                if record then Add(itemID, record) end
+            end
+            local Before = RowBefore(state.sortBy)
+            for _, row in ipairs(rows) do
+                -- The first row this one goes before.
+                local low, high = 1, #stay + 1
+                while low < high do
+                    local middle = math.floor((low + high) / 2)
+                    if Before(row, stay[middle]) then high = middle else low = middle + 1 end
+                end
+                table.insert(stay, low, row)
+            end
+            keptRows.rows, keptRows.changes = stay, changes
+            return AddSuffixRows(KeptRows(keepKey, changes))
+        end
+    end
+
+    local function AddUnpriced()
+        -- A starred item with no price yet (never scanned, or pruned for age)
+        -- still shows, with dashes, so it never quietly drops off the list.
+        local added = {}
+        for itemID in pairs(favourites) do
+            if type(itemID) == "number" and not prices[itemID] then
+                Add(itemID, {})
+                added[itemID] = true
+            end
+        end
+
+        -- So does an item given its own price.
+        for itemID in pairs(mine) do
+            if type(itemID) == "number" and not prices[itemID] and not added[itemID] and AnyMine(itemID) then
+                Add(itemID, {})
+                added[itemID] = true
+            end
+        end
+
+        -- And, with Enchanting materials ticked, a material never scanned.
+        for itemID in pairs(materials or {}) do
+            if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
+        end
+    end
+
+    if spread and keepKey and keptRows.rows and type(Util.NewWorker) == "function" then
+        -- Every priced item, then a step for each merge its runs can need.
+        local ids = {}
+        for itemID in pairs(prices) do ids[#ids + 1] = itemID end
+        for _ = 1, math.floor(#ids / RUN) + 3 do ids[#ids + 1] = MERGE end
+
+        -- One clock for every row's age, so a second ticking over between
+        -- frames cannot put two rows of one scan out of order.
+        local now = time()
+        local Before = RowBefore(state.sortBy)
+        local runs = {}
+        local function CloseRun()
+            if #rows == 0 then return end
+            for _, row in ipairs(rows) do
+                local seen = row.record.seen
+                row.age = seen and now - seen or math.huge
+            end
+            table.sort(rows, Before)
+            runs[#runs + 1] = rows
+            rows = {}
+        end
+
+        local allAdded = false
+        local function Merge()
+            if not allAdded then
+                allAdded = true
+                AddUnpriced()
+                CloseRun()
+            end
+            MergeOnce(runs, Before)
+        end
+
+        local worker
+        worker = Util.NewWorker({
+            budgetMs = SLICE_MS,
+            onItem = function(itemID)
+                if building ~= worker then return end
+                -- Another tab or view was picked, or the window shut: the
+                -- next time this one shows it builds afresh.
+                if not StillShowing() then
+                    StopBuilding()
+                    return
+                end
+                if itemID == MERGE then return Merge() end
+                local record = prices[itemID]
+                if record then Add(itemID, record) end
+                if #rows >= RUN then CloseRun() end
+            end,
+            onDone = function()
+                if building ~= worker then return end
+                building = nil
+                if not StillShowing() then return end
+
+                repeat Merge() until #runs < 2
+                local sorted = runs[1] or {}
+                -- A clicked heading's order over the menu's.
+                if widgets.sorter then sorted = widgets.sorter:Sort(sorted) end
+
+                -- Kept as of when the build began. The draw then mends
+                -- whatever moved since, as it does for any kept rows: the
+                -- items named, or a fresh build at once.
+                keptRows.key, keptRows.changes, keptRows.rows = keepKey, changes, sorted
+                Refresh()
+            end,
+        })
+        building = worker
+        worker:Start(ids)
+        return nil
     end
 
     for itemID, record in pairs(prices) do
         Add(itemID, record)
     end
+    AddUnpriced()
 
-    -- A starred item with no price yet (never scanned, or pruned for age)
-    -- still shows, with dashes, so it never quietly drops off the list.
-    local added = {}
-    for itemID in pairs(favourites) do
-        if type(itemID) == "number" and not prices[itemID] then
-            Add(itemID, {})
-            added[itemID] = true
-        end
-    end
+    rows = SortRows(rows)
+    if keepKey then keptRows.key, keptRows.changes, keptRows.rows = keepKey, changes, rows end
+    return AddSuffixRows(rows)
+end
 
-    -- So does an item given its own price.
-    for itemID in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
-        if type(itemID) == "number" and not prices[itemID] and not added[itemID] and Mine(itemID) then
-            Add(itemID, {})
-            added[itemID] = true
-        end
-    end
-
-    -- And, with Enchanting materials ticked, a material never scanned.
-    for itemID in pairs(materials or {}) do
-        if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
-    end
-
-    if state.search ~= "" then
-        local needle = state.search:lower()
-        local filtered = {}
-
-        for _, row in ipairs(rows) do
-            if row.name:lower():find(needle, 1, true) then
-                filtered[#filtered + 1] = row
-            end
-        end
-        rows = filtered
-    end
-
-    local sortBy = state.sortBy
-
-    table.sort(rows, function(a, b)
+--- Whether row a goes before row b under the menu's sort.
+function RowBefore(sortBy)
+    return function(a, b)
         -- Age sorts ascending: freshest first is the useful direction.
         if sortBy == "age" then
             -- One scan prices many items at once; ties go by item so those
@@ -245,9 +532,17 @@ local function BuildList()
         local left = a[sortBy] or 0
         local right = b[sortBy] or 0
 
-        if left == right then return a.itemID < b.itemID end
+        if left == right then
+            if a.itemID ~= b.itemID then return a.itemID < b.itemID end
+            return (tonumber(a.suffix) or 0) < (tonumber(b.suffix) or 0)
+        end
         return left > right
-    end)
+    end
+end
+
+--- Sort item rows, or one item's suffix rows, by the picked column.
+function SortRows(rows)
+    table.sort(rows, RowBefore(state.sortBy))
 
     -- A clicked heading's order over the menu's.
     if widgets.sorter then rows = widgets.sorter:Sort(rows) end
@@ -256,10 +551,144 @@ local function BuildList()
 end
 
 --------------------------------------------------------------------------------
+-- Suffix rows (a player's report, the owner said build it, 2026-11-20): an
+-- item whose random suffixes have prices of their own ("of the Bear") opens
+-- to show each one as a row under it, sorted the same way. Open while
+-- searching, closed otherwise, unless the player opened or closed it.
+--------------------------------------------------------------------------------
+
+--- A suffix's name without its item's ("of the Bear"), else "Suffix 14322".
+local function ShortSuffixName(itemID, suffix, full, tails)
+    local tail = tails and (tails[tonumber(suffix) or suffix] or tails[suffix])
+    if type(tail) == "string" then
+        tail = tail:gsub("^%s+", "")
+        if tail ~= "" then return tail end
+    end
+    if type(full) == "string" then
+        local base = PlainName(itemID)
+        if base and full:sub(1, #base) == base and #full > #base then
+            local tail = full:sub(#base + 1):gsub("^%s+", "")
+            if tail ~= "" then return tail end
+        end
+        return full
+    end
+    return L.Format("Suffix %d", tonumber(suffix) or 0)
+end
+
+--- Whether the search finds an item by one of its suffixes' names, read
+--- from the names the addon keeps (no client calls, so typing stays quick).
+--- Gives a function(row) answering the set of suffixes that match, or nil.
+function SuffixMatcher(needle)
+    local tails = ns.Prices.SuffixTails and ns.Prices:SuffixTails() or {}
+    local byTail, spans = {}, {}
+    for suffix, tail in pairs(tails) do
+        if type(tail) == "string" then
+            local lower = tail:lower()
+            local key = tonumber(suffix) or suffix
+            if lower:find(needle, 1, true) then
+                byTail[key] = true
+            else
+                -- The search runs from the item's name into the suffix's
+                -- ("chestpiece of the b"): what must end the item's name.
+                for cut = 2, #needle do
+                    local rest = needle:sub(cut)
+                    if lower:sub(1, #rest) == rest then
+                        local list = spans[key] or {}
+                        list[#list + 1] = needle:sub(1, cut - 1)
+                        spans[key] = list
+                    end
+                end
+            end
+        end
+    end
+    if not next(byTail) and not next(spans) then
+        return function() return nil end
+    end
+
+    return function(row)
+        local record = row.record
+        local suffixes = type(record) == "table" and record.suffixes
+        if type(suffixes) ~= "table" then return nil end
+        local lowerName = row.name:lower()
+        local found
+        for suffix in pairs(suffixes) do
+            local key = tonumber(suffix) or suffix
+            local hit = byTail[key]
+            if not hit and spans[key] then
+                for _, head in ipairs(spans[key]) do
+                    if lowerName:sub(-#head) == head then hit = true; break end
+                end
+            end
+            if hit then
+                found = found or {}
+                found[key] = true
+            end
+        end
+        return found
+    end
+end
+
+--- The item rows with each open item's suffix rows put in under it.
+function AddSuffixRows(rows)
+    -- A short search ("c") finds hundreds of items: those stay closed, so
+    -- the list stays readable and no name is looked up for each suffix.
+    local searching = state.search ~= "" and #rows <= AUTO_OPEN_MOST
+    local anyOpen = false
+    for _, row in ipairs(rows) do
+        if row.suffixCount and row.suffixCount > 0 then
+            local open = state.open[row.itemID]
+            if open == nil then open = searching end
+            row.open = open
+            anyOpen = anyOpen or open
+        end
+    end
+    if not anyOpen or not ns.Prices.SuffixRows then return rows end
+
+    local now = time()
+    local tails = ns.Prices.SuffixTails and ns.Prices:SuffixTails() or nil
+    local out = {}
+    for _, row in ipairs(rows) do
+        out[#out + 1] = row
+        if row.open then
+            local kids = {}
+            for _, suffixRow in ipairs(ns.Prices:SuffixRows(row.itemID)) do
+                local key = tonumber(suffixRow.suffix) or suffixRow.suffix
+                if not row.onlySuffixes or row.onlySuffixes[key] then
+                    kids[#kids + 1] = {
+                        kid = true,
+                        parent = row,
+                        itemID = row.itemID,
+                        suffix = suffixRow.suffix,
+                        fullName = suffixRow.name,
+                        record = { market = suffixRow.market, min = suffixRow.min,
+                                   rivalMin = suffixRow.rival, quantity = suffixRow.quantity,
+                                   seen = suffixRow.seen },
+                        market = suffixRow.market or 0,
+                        min = suffixRow.min or 0,
+                        quantity = suffixRow.quantity or 0,
+                        age = suffixRow.seen and (now - suffixRow.seen) or math.huge,
+                        name = ShortSuffixName(row.itemID, suffixRow.suffix, suffixRow.name, tails),
+                    }
+                end
+            end
+            for _, kid in ipairs(SortRows(kids)) do out[#out + 1] = kid end
+        end
+    end
+    return out
+end
+
+--- The same row: an item, or one suffix of it.
+local function SameEntry(a, b)
+    if a == nil or b == nil then return false end
+    if a.itemID ~= b.itemID then return false end
+    if a.kid or b.kid then return a.kid == b.kid and a.suffix == b.suffix end
+    return true
+end
+
+--------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
 
-local Refresh
 local BuildMyPrice
 
 --- The favourite star: a gold star when the item is starred, a grey one when
@@ -368,6 +797,29 @@ local function CreateRow(row)
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 46, 0)
 
+    -- The gold + or - that opens an item's suffix rows, after its icon.
+    local fold = CreateFrame("Button", nil, row)
+    fold:SetSize(14, 18)
+    fold:SetPoint("LEFT", 44, 0)
+    fold.text = Theme.CreateLabel(fold, "small", "accent", "CENTER")
+    fold.text:SetPoint("CENTER")
+    fold:SetScript("OnClick", function()
+        local entry = row.data
+        if not (entry and not entry.kid and (entry.suffixCount or 0) > 0) then return end
+        state.open[entry.itemID] = not entry.open
+        if Refresh then Refresh() end
+        if GameTooltip:IsOwned(fold) then fold:GetScript("OnEnter")(fold) end
+    end)
+    fold:SetScript("OnEnter", function(self)
+        local entry = row.data
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(entry and entry.open and L["Hide the suffixes"] or L["Show each suffix"], 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    fold:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    fold:Hide()
+    row.fold = fold
+
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
         row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
@@ -380,14 +832,42 @@ local function UpdateRow(row, entry)
     if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
 
     entry.label = Util.GetItemLabel(entry.itemID)
-    -- An item with its own price says so, in gold, beside its name.
-    if Mine(entry.itemID) then
-        Theme.SetRowName(row.name, L.Format("%s  |c%smy price|r", entry.label, ns.COLORS.warn))
+    local count = not entry.kid and entry.suffixCount or 0
+
+    -- A suffix row sits under its item, past the + or -, with no star or
+    -- icon: the item's colour and the suffix's name ("of the Bear").
+    row.star:SetShown(not entry.kid)
+    row.icon:SetShown(not entry.kid)
+    row.fold:SetShown(count > 0)
+    if count > 0 then row.fold.text:SetText(entry.open and "-" or "+") end
+    row.name:SetPoint("LEFT", (entry.kid or count > 0) and 60 or 46, 0)
+
+    if entry.kid then
+        row.waitsFor = nil
+        local color = type(entry.label) == "string" and entry.label:match("^|c%x%x%x%x%x%x%x%x") or ""
+        local label = color .. entry.name .. (color ~= "" and "|r" or "")
+        -- A suffix with its own price says so, as its item does.
+        if select(3, Mine(entry.itemID, entry.suffix)) then
+            label = L.Format("%s  |c%smy price|r", label, ns.COLORS.warn)
+        end
+        Theme.SetRowName(row.name, label)
     else
-        Theme.SetRowName(row.name, entry.label)
+        -- An item the game had not loaded yet shows "item 1234". The row
+        -- remembers it, so its name is put in once the game sends it.
+        row.waitsFor = entry.label == L.Format("item %d", entry.itemID) and entry.itemID or nil
+        local label = entry.label
+        -- An item with its own price says so, in gold, beside its name.
+        if Mine(entry.itemID) then
+            label = L.Format("%s  |c%smy price|r", label, ns.COLORS.warn)
+        end
+        if count > 0 then
+            local words = count == 1 and L["1 suffix"] or L.Format("%d suffixes", count)
+            label = ("%s  |c%s%s|r"):format(label, ns.COLORS.muted, words)
+        end
+        Theme.SetRowName(row.name, label)
+        Theme.SetItemIcon(row.icon, entry.itemID)
+        row.star:SetItem(entry.itemID)
     end
-    Theme.SetItemIcon(row.icon, entry.itemID)
-    row.star:SetItem(entry.itemID)
 
     local stale = ns.Prices:IsStale(entry.itemID)
     row.name:SetTextColor(Theme.Unpack(stale and "muted" or "text"))
@@ -412,7 +892,11 @@ local function UpdateRow(row, entry)
     cells.quantity:SetText(listed and Util.Comma(entry.quantity) or L["none"])
     cells.quantity:SetTextColor(Theme.Unpack(listed and "muted" or "dim"))
 
-    if entry.liquidity then
+    if entry.kid then
+        -- Movement and trend are kept for the item as a whole.
+        cells.liquidity:SetText("--")
+        cells.liquidity:SetTextColor(Theme.Unpack("dim"))
+    elseif entry.liquidity then
         cells.liquidity:SetText(("%d%%"):format(math.floor(entry.liquidity * 100)))
         cells.liquidity:SetTextColor(Theme.Unpack(entry.liquidity >= 0.30 and "profit" or "muted"))
     else
@@ -422,7 +906,8 @@ local function UpdateRow(row, entry)
     end
 
     -- Up in green, down in red; "--" until a few days were scanned.
-    local trendText, trendColor = ns.Prices.TrendText and ns.Prices.TrendText(entry.trend)
+    local trendText, trendColor
+    if not entry.kid and ns.Prices.TrendText then trendText, trendColor = ns.Prices.TrendText(entry.trend) end
     cells.trend:SetText(trendText or "--")
     cells.trend:SetTextColor(Theme.Unpack(trendColor or "dim"))
 
@@ -496,7 +981,7 @@ local function SaveMyPrice()
     local itemID = my and my.itemID
     if not itemID then return end
 
-    ns.Prices:SetMine(itemID, MyPriceTyped(my), my.mode:GetValue() or "use", PlainName(itemID))
+    ns.Prices:SetMine(itemID, MyPriceTyped(my), my.mode:GetValue() or "use", PlainName(itemID), my.suffix)
     if Refresh then Refresh() end
 end
 
@@ -512,9 +997,9 @@ local function SaveMyLimits(field)
     local itemID = my and my.itemID
     if not itemID or not ns.Prices.SetMyHigh then return end
     if field == "high" then
-        ns.Prices:SetMyHigh(itemID, MyHighTyped(my))
+        ns.Prices:SetMyHigh(itemID, MyHighTyped(my), my.suffix)
     else
-        ns.Prices:SetMyWait(itemID, my.under:GetValue() == "wait")
+        ns.Prices:SetMyWait(itemID, my.under:GetValue() == "wait", my.suffix)
     end
     if Refresh then Refresh() end
 end
@@ -564,7 +1049,7 @@ BuildMyPrice = function(detail, anchor)
 
     my.clear = Widgets.CreateButton(detail, L["Clear"], function()
         if not my.itemID then return end
-        ns.Prices:SetMine(my.itemID, nil)
+        ns.Prices:SetMine(my.itemID, nil, nil, nil, my.suffix)
         if Refresh then Refresh() end
     end, { width = 64, height = 22, tooltip = L["Back to the auction house price"] })
     my.clear:SetPoint("TOPRIGHT", my.mode, "BOTTOMRIGHT", 0, -6)
@@ -671,18 +1156,21 @@ BuildMyPrice = function(detail, anchor)
         return type(edit.HasFocus) == "function" and edit:HasFocus() == true
     end
 
-    function my:Show(itemID)
+    function my:Show(itemID, suffix)
         -- Another item: a box still being typed in saves first, to its own.
-        if self.itemID ~= itemID then
+        if self.itemID ~= itemID or self.suffix ~= suffix then
             for _, box in ipairs({ self.gold, self.silver, self.copper }) do
                 if Focused(box) then box.editBox:ClearFocus() end
             end
         end
-        self.itemID = itemID
+        self.itemID, self.suffix = itemID, suffix
 
         -- A redraw while typing (the auction house redraws often) leaves
-        -- the box being typed in alone.
-        local price, mode = Mine(itemID)
+        -- the box being typed in alone. A suffix row shows only its own
+        -- price; one it takes from its item is named on the status line.
+        local price, mode, own = Mine(itemID, suffix)
+        local fromItem = suffix ~= nil and price ~= nil and not own
+        if fromItem then price, mode = nil, nil end
         local gold, silver, copper = Util.SplitMoney(price or 0)
         if not Focused(self.gold) then self.gold:SetValue(gold, true) end
         if not Focused(self.silver) then self.silver:SetValue(silver, true) end
@@ -692,7 +1180,7 @@ BuildMyPrice = function(detail, anchor)
 
         local limited = price ~= nil and mode == "floor" and ns.Prices.GetMyLimits ~= nil
         local high, wait
-        if limited then high, wait = ns.Prices:GetMyLimits(itemID) end
+        if limited then high, wait = ns.Prices:GetMyLimits(itemID, suffix) end
         ShowLimits(limited)
         if limited then
             local hg, hs, hc = Util.SplitMoney(high or 0)
@@ -709,6 +1197,9 @@ BuildMyPrice = function(detail, anchor)
                     Util.FormatMoney(high, { noColor = true })))
             end
             status:SetTextColor(Theme.Unpack("warn"))
+        elseif fromItem then
+            status:SetText(L["Not set, the item's price is used"])
+            status:SetTextColor(Theme.Unpack("dim"))
         else
             status:SetText(L["Not set, the AH price is used"])
             status:SetTextColor(Theme.Unpack("dim"))
@@ -780,6 +1271,13 @@ local function BuildDetail(parent)
     AddRow("bags", L["In your bags"])
     AddRow("suffixes", L["Random suffixes"])
 
+    -- With a suffix row picked: what on the pane is the whole item's.
+    AddRow("suffixNote", L["Stock movement is for every suffix together."])
+    detail.labels.suffixNote:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.labels.suffixNote:SetWordWrap(true)
+    detail.labels.suffixNote:SetTextColor(Theme.Unpack("dim"))
+    detail.values.suffixNote:SetText("")
+
     -- Each suffix's own price ("of the Monkey"), listed on hover.
     local suffixHover = CreateFrame("Frame", nil, detail)
     suffixHover:SetPoint("TOPLEFT", detail.labels.suffixes, "TOPLEFT", 0, 2)
@@ -811,7 +1309,7 @@ local function BuildDetail(parent)
         GameTooltip:AddDoubleLine(detail.labels.market:GetText(), detail.values.market:GetText(),
             1, 1, 1, 1, 1, 1)
         for _, key in ipairs(detail.rowOrder) do
-            if FOLDED_ROWS[key] then
+            if FOLDED_ROWS[key] or (detail.squeezed and detail.squeezed[key]) then
                 GameTooltip:AddDoubleLine(detail.labels[key]:GetText(), detail.values[key]:GetText(),
                     0.7, 0.7, 0.7, 1, 1, 1)
             end
@@ -882,6 +1380,45 @@ local function LayoutRows(detail)
     end
 end
 
+--- Which rows to fold so the plot gets GRAPH_MIN, given its height now, the
+--- rows shown and how much room each frees. Least needed first.
+local function Squeeze(plotHeight, shown, step)
+    local fold = {}
+    plotHeight = tonumber(plotHeight) or 0
+    for _, key in ipairs(SQUEEZE_ORDER) do
+        if plotHeight >= GRAPH_MIN then break end
+        if shown[key] then
+            fold[#fold + 1] = key
+            plotHeight = plotHeight + step
+        end
+    end
+    return fold, plotHeight
+end
+
+--- Fold rows while the price graph is squeezed. Only once the pane has a
+--- size: before that every plot measures nothing.
+local function FitGraph(detail)
+    detail.squeezed = {}
+    local graph = rawget(detail, "graph")
+    if type(graph) ~= "table" or type(graph.plot) ~= "table" then return end
+    local paneHeight = tonumber(detail:GetHeight()) or 0
+    local plotHeight = tonumber(graph.plot:GetHeight())
+    if paneHeight < 1 or not plotHeight then return end
+
+    local shown = {}
+    for _, key in ipairs(SQUEEZE_ORDER) do shown[key] = detail.labels[key]:IsShown() end
+    local rowHeight = tonumber(detail.labels.market:GetHeight()) or 0
+    if rowHeight < 1 then rowHeight = 12 end
+    local fold = Squeeze(plotHeight, shown, rowHeight + ROW_GAP)
+    if #fold == 0 then return end
+    for _, key in ipairs(fold) do
+        detail.squeezed[key] = true
+        detail.labels[key]:Hide()
+        detail.values[key]:Hide()
+    end
+    LayoutRows(detail)
+end
+
 local function UpdateDetail(entry)
     local detail = widgets.detail
     local shown = entry ~= nil
@@ -914,11 +1451,24 @@ local function UpdateDetail(entry)
     end
 
     local record = ns.Prices:Get(entry.itemID) or entry.record
+    local itemLabel = Util.GetItemLabel(entry.itemID)
+    local title = itemLabel
 
-    detail.title:SetText(Util.GetItemLabel(entry.itemID))
+    -- A suffix row picked: its own prices, under its own name.
+    if entry.kid then
+        local item = record
+        record = {}
+        for key, value in pairs(entry.record) do record[key] = value end
+        record.scans = item.scans
+        local color = type(itemLabel) == "string" and itemLabel:match("^|c%x%x%x%x%x%x%x%x") or ""
+        local name = entry.fullName or ((PlainName(entry.itemID) or "") .. " " .. entry.name)
+        title = color .. name .. (color ~= "" and "|r" or "")
+    end
+
+    detail.title:SetText(title)
     Theme.SetItemIcon(detail.icon, entry.itemID)
     detail.star:SetItem(entry.itemID)
-    detail.myPrice:Show(entry.itemID)
+    detail.myPrice:Show(entry.itemID, entry.kid and entry.suffix or nil)
 
     -- A name that wraps to two lines pushes the rows down with it.
     local titleHeight = detail.title.GetStringHeight and detail.title:GetStringHeight() or 0
@@ -1007,14 +1557,20 @@ local function UpdateDetail(entry)
     detail.labels.suffixes:SetShown(hasSuffixes)
     detail.values.suffixes:SetShown(hasSuffixes)
     if detail.suffixHover then detail.suffixHover:SetShown(hasSuffixes) end
+    -- Your listing is read by item, so a suffix row leaves it out.
+    detail.labels.own:SetShown(not entry.kid)
+    detail.values.own:SetShown(not entry.kid)
+    detail.labels.suffixNote:SetShown(entry.kid == true)
+    detail.values.suffixNote:SetShown(entry.kid == true)
     LayoutRows(detail)
+    FitGraph(detail)
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
         and L["Looks up every listing of this item."]
         or L["The auction house must be open"]
 
-    if type(graph) == "table" then graph:SetItem(entry.itemID) end
+    if type(graph) == "table" then graph:SetItem(ns.PricesUI.Subject(entry)) end
 end
 
 --- The list a search would show, for the tests.
@@ -1032,7 +1588,11 @@ end
 function Refresh()
     if not widgets.list then return end
 
-    local data = BuildList()
+    StopBuilding()
+    local spread = spreadNext
+    spreadNext = false
+    local data = BuildList(spread)
+    if not data then return end
     widgets.list:SetData(data)
 
     widgets.emptyLabel:SetShown(#data == 0)
@@ -1050,12 +1610,93 @@ function Refresh()
         end
     end
 
+    -- Suffix rows are not counted as items of their own.
+    local items = 0
+    for _, entry in ipairs(data) do
+        if not entry.kid then items = items + 1 end
+    end
     local starredText = starred > 0 and L.Format(", %d starred", starred) or ""
-    widgets.countLabel:SetText(#data == 1
-        and L.Format("%s item priced%s", Util.Comma(#data), starredText)
-        or L.Format("%s items priced%s", Util.Comma(#data), starredText))
+    widgets.countLabel:SetText(items == 1
+        and L.Format("%s item priced%s", Util.Comma(items), starredText)
+        or L.Format("%s items priced%s", Util.Comma(items), starredText))
 
     UpdateDetail(state.selected)
+end
+
+--------------------------------------------------------------------------------
+-- Names that arrive late
+--------------------------------------------------------------------------------
+
+-- A player's report (2026-11-19): moving between tabs, mostly during a scan,
+-- the rows read "item 1234" until something redrew them. A scan pulls in
+-- thousands of items and the game drops older ones from its cache, so a row
+-- can be drawn before its name is back. When the game sends the name of an
+-- item a row on screen is waiting for, the rows on screen are drawn again
+-- (a few dozen, not the whole list), a burst of names in one pass.
+local namesQueued = false
+
+local function ListShown()
+    local list = widgets.list
+    return list ~= nil and (not list.IsVisible or list:IsVisible())
+end
+
+local function WaitingOnScreen(itemID)
+    local rows = widgets.list and widgets.list.rows
+    if type(rows) ~= "table" then return false end
+    for index = 1, #rows do
+        local row = rows[index]
+        if row and row.waitsFor and row.data and (not row.IsShown or row:IsShown())
+            and (itemID == nil or row.waitsFor == itemID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function DrawArrivedNames()
+    namesQueued = false
+    if not ListShown() then return end
+    widgets.list:Refresh()
+    local picked = state.selected
+    if picked and widgets.detail and widgets.detail.title then
+        local title = widgets.detail.title.GetText and widgets.detail.title:GetText()
+        if title == L.Format("item %d", picked.itemID) then UpdateDetail(picked) end
+    end
+end
+
+--- The game sent an item's name (GET_ITEM_INFO_RECEIVED).
+function UI._PricesNameArrived(itemID, success)
+    if success == false or namesQueued or not ListShown() then return end
+    local picked = state.selected
+    local forDetail = picked and itemID and picked.itemID == itemID
+    if not forDetail and not WaitingOnScreen(itemID) then return end
+    namesQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.2, DrawArrivedNames)
+    else
+        DrawArrivedNames()
+    end
+end
+
+--- For the tests: the tab's widgets and state.
+function UI._PricesWidgets() return widgets, state, UpdateRow end
+
+--- The hover on a row: the item's own card. A suffix row shows that suffix
+--- (its link when its bonus is known, else its full name on top); the
+--- item's own row stays the plain item.
+function UI._PricesRowTooltip(row, entry)
+    if not (entry and entry.itemID) then return end
+    local link, name = nil, entry.label
+    if entry.kid then
+        local suffixLink = ns.Prices and ns.Prices.SuffixLink
+        if suffixLink then
+            local ok, found = pcall(suffixLink, entry.itemID, entry.suffix)
+            link = ok and found or nil
+        end
+        name = entry.fullName
+    end
+    Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, name, link)
+    GameTooltip:Show()
 end
 
 --------------------------------------------------------------------------------
@@ -1182,11 +1823,11 @@ local function BuildDetails(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, entry) Widgets.ShowItemOnly(row, entry.itemID, entry.label) end,
+        onEnter = function(row, entry) UI._PricesRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
-            return state.selected ~= nil and entry.itemID == state.selected.itemID
+            return SameEntry(entry, state.selected)
         end,
 
         onClick = function(entry)
@@ -1213,8 +1854,23 @@ local function BuildDetails(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+    -- A pane resized (the window dragged taller or shorter) fits again.
+    detail:SetScript("OnSizeChanged", function()
+        if detail.fitSoon then return end
+        detail.fitSoon = true
+        C_Timer.After(0, function()
+            detail.fitSoon = nil
+            if state.selected then UpdateDetail(state.selected) end
+        end)
+    end)
 
     UpdateDetail(nil)
+
+    if ns.RegisterEvent then
+        ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+            UI._PricesNameArrived(itemID, success)
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -1225,6 +1881,7 @@ end
 
 local PricesUI = {}
 ns.PricesUI = PricesUI
+PricesUI.Squeeze = Squeeze
 PricesUI.view = "details"
 
 local VIEW_TOP = 32
@@ -1238,6 +1895,14 @@ local function SelectedItem()
     return state.selected and state.selected.itemID
 end
 
+--- What a row stands for: its item, and its random suffix when it is a
+--- suffix row, so the graph and Stats show that suffix (a player's report,
+--- 2026-11-21: they showed the plain item).
+function PricesUI.Subject(entry)
+    if type(entry) ~= "table" then return nil end
+    return entry.itemID, entry.kid and tonumber(entry.suffix) or nil
+end
+
 --- Show Details or Stats. Stats opens on the item Details had picked.
 function PricesUI:ShowView(key, itemID)
     if key ~= "stats" or not StatsView() then key = "details" end
@@ -1248,11 +1913,78 @@ function PricesUI:ShowView(key, itemID)
     if key == "stats" then
         local stats = StatsView()
         if stats.onShow then stats.onShow() end
-        if ns.StatsUI.Pick then ns.StatsUI:Pick(itemID or SelectedItem()) end
+        if ns.StatsUI.Pick then
+            if itemID then
+                ns.StatsUI:Pick(itemID)
+            else
+                ns.StatsUI:Pick(PricesUI.Subject(state.selected))
+            end
+        end
         if stats.refresh then stats.refresh() end
     else
         Refresh()
     end
+end
+
+--- Open the window on the Prices tab's Details, with `itemID` picked: the
+--- auction house Sell list's Price History button (2026-11-26, the owner
+--- said build it from a mockup). Its row is scrolled into sight when the
+--- list shows it; the filters are left as the player set them, and the
+--- details still show the item when they hide its row.
+---
+--- `link` is the copy picked on the Sell list. When it has a random suffix
+--- its own row is opened and picked, so the details show "of the Monkey"
+--- and that suffix's prices, not the plain item (a player's report,
+--- 2026-11-27: it showed the plain item). A suffix with no price of its
+--- own still shows under its own name.
+function PricesUI:ShowItem(itemID, link)
+    if type(itemID) ~= "number" then return end
+    local suffix = link ~= nil and Util.LinkSuffix and tonumber((Util.LinkSuffix(link))) or nil
+    if suffix == 0 then suffix = nil end
+    if suffix then state.open[itemID] = true end
+    UI:Show()
+    UI:SelectTab("prices")
+    self:ShowView("details")
+    local list = widgets.list
+    if not list then return end
+    local found, plain
+    for index, entry in ipairs(list:GetData() or {}) do
+        if entry.itemID == itemID then
+            if entry.kid then
+                if suffix and tonumber(entry.suffix) == suffix then found = index break end
+            elseif not plain then
+                plain = index
+                if not suffix then break end
+            end
+        end
+    end
+    found = found or (not suffix and plain) or nil
+    if found then
+        state.selected = list:GetData()[found]
+        list.offset = math.max(0, found - 1)
+    else
+        local record = ns.Prices:Get(itemID) or {}
+        state.selected = { itemID = itemID, record = record }
+        if suffix then
+            local own
+            for _, row in ipairs(ns.Prices.SuffixRows and ns.Prices:SuffixRows(itemID) or {}) do
+                if tonumber(row.suffix) == suffix then own = row break end
+            end
+            local name = own and own.name
+                or (ns.Prices.SuffixName and ns.Prices.SuffixName(itemID, suffix))
+                or (type(link) == "string" and link:match("|h%[(.-)%]|h"))
+            own = own or {}
+            state.selected = {
+                kid = true, itemID = itemID, suffix = suffix, fullName = name, name = name or "",
+                record = { market = own.market, min = own.min, rivalMin = own.rival,
+                           quantity = own.quantity, seen = own.seen },
+                market = own.market or 0, min = own.min or 0, quantity = own.quantity or 0,
+            }
+        end
+        if plain then list.offset = math.max(0, plain - 1) end
+    end
+    list:Refresh()
+    UpdateDetail(state.selected)
 end
 
 --- True while the Stats view is the one showing.
@@ -1298,12 +2030,31 @@ local function RefreshShown()
     end
 end
 
+StillShowing = function()
+    if UI.activeTab ~= "prices" or PricesUI.view == "stats" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- The tab was picked (UI:SelectTab): a list that must be built whole again
+--- builds a few rows a frame.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(RefreshShown)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
+--- Pick the tab, and whether a build is under way (for the tests).
+function UI._PricesPicked() RefreshPicked() end
+function UI._PricesBuilding() return building ~= nil end
+
 UI:RegisterTab({
     key = "prices",
     text = L["Prices"],
     order = 8,
     build = Build,
     refresh = RefreshShown,
+    refreshPicked = RefreshPicked,
     onShow = function()
         if PricesUI.view == "stats" and StatsView() and StatsView().onShow then StatsView().onShow() end
     end,

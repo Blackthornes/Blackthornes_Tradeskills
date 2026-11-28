@@ -430,7 +430,7 @@ local lw = ns.LEARN_SPOTS.TRAINERS[165]
 ns.LEARN_SPOTS.TRAINERS[165] = {
   { "Far Horde Expert", "Arathi Highlands", 28.3, 45.1, "H", 250 },
   { "Bloodhoof Journey", "Mulgore", 45.4, 57.9, "H", 150 },
-  { "Bluff Expert", "Mulgore", 38.2, 25.5, "H", 225 },
+  { "Bluff Expert", "Mulgore", 38.9, 34.0, "H", 225 },
 }
 local expertRecipe = { trainerCost = 2800, skillLineID = 165, classicSkill = 180, skill = 175 }
 UnitFactionGroup = function() return "Horde" end
@@ -439,7 +439,8 @@ check("Horde out in a zone goes to Thunder Bluff, not Arathi", LN:Place(expertRe
 check("its pin stays on the Mulgore map", LN:Place(expertRecipe).zone, "Mulgore")
 zoneHere = "Thunder Bluff"
 check("standing in Thunder Bluff", LN:Place(expertRecipe).name, "Bluff Expert")
-check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.8, y = 60.8 }), "Mulgore")
+check("a spot in the city counts as the city", LN.CityOf({ zone = "Mulgore", x = 38.9, y = 34.0 }), "Thunder Bluff")
+check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.1, y = 63.9 }), "Mulgore")
 UnitFactionGroup = function() return "Alliance" end
 ns.LEARN_SPOTS.TRAINERS[165] = {
   { "Far Alli Expert", "Feralas", 30, 40, "A", 250 },
@@ -475,28 +476,154 @@ check("Horde Expert Enchanting", Trainer(333, 225), "Hgarth")
 zoneHere = "Thunder Bluff"
 check("Thunder Bluff Expert Leatherworking stays in the city", Trainer(165, 225), "Una")
 check("Thunder Bluff Artisan Leatherworking stays on Kalimdor", Trainer(165, 300), "Hahrana Ironhide")
+-- Specialty trainers teach only their own recipes, not a rank (2026-11-18:
+-- players were sent to Arathi for Expert Leatherworking and Cured Thick
+-- Hide, and to Undercity for Artisan Tailoring).
 zoneHere = "Undercity"
-check("Undercity Artisan Leatherworking stays on the Eastern Kingdoms",
-  LN.ContinentOf((LN:TrainerFor(165, 300) or {}).zone), "E")
+check("Undercity Artisan Leatherworking is Feralas, the Horde's only one", Trainer(165, 300), "Hahrana Ironhide")
+zoneHere = "Arathi Highlands"
+check("Arathi Expert Leatherworking is Una, not an Elemental trainer", Trainer(165, 225), "Una")
+zoneHere = "Undercity"
+check("Undercity Expert Tailoring", Trainer(197, 225), "Josef Gregorian")
+check("Horde Artisan Tailoring is Tarren Mill's", Trainer(197, 300), "Daryl Stack")
+check("Tarren Mill is named for its town", LN.ZoneName(LN:TrainerFor(197, 300)), "Tarren Mill")
+check("its pin keeps the map it is on", (LN:TrainerFor(197, 300) or {}).zone, "Alterac Mountains")
+check("Horde Artisan Blacksmithing is Booty Bay's", Trainer(164, 300), "Brikk Keencraft")
+check("Horde Artisan Engineering is Gadgetzan's", Trainer(202, 300), "Buzzek Bracketswing")
+zoneHere = "Arathi Highlands"
+do
+  local hide = { skillLineID = 165, skill = 175, trainerCost = 2800, name = "Cured Thick Hide" }
+  check("Cured Thick Hide is learned from Una", (LN:Place(hide) or {}).name, "Una")
+  local weave = { skillLineID = 197, skill = 235, trainerCost = 5000, name = "Shadoweave Gloves" }
+  zoneHere = "Undercity"
+  check("Shadoweave stays with its own trainer", (LN:Place(weave) or {}).name, "Josephine Lister")
+  local plain = { skillLineID = 197, skill = 235, trainerCost = 5000, name = "Runecloth Robe" }
+  check("a plain Artisan recipe goes to the Artisan trainer", (LN:Place(plain) or {}).name, "Daryl Stack")
+  local elemental = { skillLineID = 165, skill = 240, trainerCost = 5000, name = "Volcanic Leggings" }
+  check("a recipe only a specialist teaches still finds one", (LN:Place(elemental) or {}).name ~= nil, true)
+  -- Orgrimmar's and Stormwind's weapon and armor crafters teach only a few
+  -- Truesilver recipes on Forever (2026-11-22: Mithril Coif sent a Horde
+  -- smith to Kelgruk Bloodaxe; only Brikk Keencraft teaches it).
+  zoneHere = "Orgrimmar"
+  local coif = { skillLineID = 164, skill = 230, trainerCost = 15000, name = "Mithril Coif" }
+  check("Mithril Coif is learned from Brikk Keencraft", (LN:Place(coif) or {}).name, "Brikk Keencraft")
+  local plate = { skillLineID = 164, skill = 230, trainerCost = 15000, name = "Truesilver Breastplate" }
+  local armorer = (LN:Place(plate) or {}).name
+  check("Truesilver Breastplate stays with an Orgrimmar armor crafter",
+    armorer == "Okothos Ironrager" or armorer == "Shayis Steelfury", true)
+  local blade = { skillLineID = 164, skill = 235, trainerCost = 15000, name = "Phantom Blade" }
+  local smith = (LN:Place(blade) or {}).name
+  check("Phantom Blade stays with an Orgrimmar weapon crafter",
+    smith == "Kelgruk Bloodaxe" or smith == "Borgosh Corebender", true)
+  UnitFactionGroup = function() return "Alliance" end
+  zoneHere = "Stormwind City"
+  check("Alliance Mithril Coif is Brikk Keencraft's too", (LN:Place(coif) or {}).name, "Brikk Keencraft")
+  check("Stormwind's Phantom Blade is Borgus Steelhand's", (LN:Place(blade) or {}).name, "Borgus Steelhand")
+  UnitFactionGroup = function() return "Horde" end
+end
+UnitFactionGroup = function() return "Alliance" end
+zoneHere = "Ironforge"
+check("Alliance Expert Leatherworking is Telonis", Trainer(165, 225), "Telonis")
+check("Alliance Artisan Leatherworking is Aerie Peak's", Trainer(165, 300), "Drakk Stonehand")
+check("Alliance Artisan Tailoring is Theramore's", Trainer(197, 300), "Timothy Worthington")
+check("Alliance Expert Blacksmithing", Trainer(164, 225), "Bengus Deepforge")
+check("Alliance Artisan Alchemy is Feathermoon's", Trainer(171, 300), "Kylanna Windwhisper")
+UnitFactionGroup = function() return "Horde" end
+zoneHere = "Undercity"
+for line, list in pairs(LN.SPECIALISTS) do
+  for name in pairs(list) do
+    for _, side in ipairs({ "Alliance", "Horde" }) do
+      UnitFactionGroup = function() return side end
+      for _, cap in ipairs({ 150, 225, 300 }) do
+        check(string.format("%s %d to %d is never the specialist %s", side, line, cap, name),
+          Trainer(line, cap) ~= name, true)
+      end
+    end
+  end
+end
+UnitFactionGroup = function() return "Horde" end
 check("Darnassus is on Kalimdor", LN.ContinentOf("Darnassus"), "K")
 check("an island is on neither", LN.ContinentOf("Zephras Isle"), nil)
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Elwynn Forest"
 check("Alliance Expert Enchanting", Trainer(333, 225), "Kitta Firewind")
+-- Artisan Enchanting is taught only inside Uldaman (2026-11-16: the step
+-- named no trainer): its door in the Badlands is pinned, Uldaman named.
+for _, side in ipairs({ "Alliance", "Horde" }) do
+  UnitFactionGroup = function() return side end
+  local annora = LN:TrainerFor(333, 300) or {}
+  check(side .. " Artisan Enchanting is Annora", annora.name, "Annora")
+  check(side .. " Annora is inside Uldaman", annora.inside, "Uldaman")
+  check(side .. " Annora's pin is the Badlands door", annora.zone == "Badlands" and annora.x ~= nil, true)
+  check(side .. " Annora's place reads Uldaman", LN.ZoneName(annora), "Uldaman")
+end
+UnitFactionGroup = function() return "Horde" end
+check("an outdoor trainer still wins where one teaches the rank", (LN:TrainerFor(171, 300) or {}).inside, nil)
 for _, line in ipairs({ 164, 165, 171, 186, 197, 202, 333 }) do
   for _, side in ipairs({ "Alliance", "Horde" }) do
     UnitFactionGroup = function() return side end
-    for _, cap in ipairs({ 150, 225 }) do
+    for _, cap in ipairs({ 150, 225, 300 }) do
       local name = Trainer(line, cap)
       check(string.format("%s %d to %d has a trainer", side, line, cap), name ~= nil, true)
+      local top = name and (TopOf(line, name) or (LN:TrainerFor(line, cap) or {}).inside and 300)
       check(string.format("%s %d to %d trainer teaches that rank", side, line, cap),
-        name and TopOf(line, name) > cap - 75, true)
+        top and top > cap - 75, true)
     end
   end
 end
 ns.LEARN_SPOTS = fake
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Elwynn Forest"
+
+print("\nHave Skill and Learn From (2026-11-17)")
+do
+  local book, items = ns.RECIPE_BOOK.RECIPES, ns.RECIPE_BOOK.ITEMS
+  book[11] = { 165, 100, 111, 1, 1, { LEATHER, 1 }, "Quest Bracer" }
+  items[5002] = { 11, 300 }
+  book[12] = { 165, 100, 112, 1, 1, { LEATHER, 1 }, "Both Bracer", t = 200 }
+  items[5003] = { 12, 50, v = { "Alli", "Wetlands", "A" } }
+  prices[5001] = 240
+  ns.RecipeBook.merged = nil
+
+  local plain = LN:GetRows({ skills = { [165] = 100 } })
+  local all = LN:GetRows({ skills = { [165] = 100 }, anyWay = true })
+  local kept, counts = LN.Filter(all, {})
+  check("the default keeps today's list", Names(kept), Names(plain))
+  check("drop and quest rows are built for the filter", #all, #plain + 2)
+  local vest = Find(all, "Dropped Vest")
+  check("a drop row says Drop", (LN.WhereText(vest and vest.place)), "Drop")
+  check("a drop row shows its auction price", vest and vest.price, 240)
+  check("a drop row has no Show the Way", LN.CanShowWay(vest), false)
+  local quest = Find(all, "Quest Bracer")
+  check("a quest row says Quest or other", (LN.WhereText(quest and quest.place)), "Quest or other")
+  check("a quest row with no price shows none", quest and quest.price, nil)
+  check("a trainer row still shows the way", LN.CanShowWay(Find(all, "Trained Boots")), true)
+
+  check("Drop keeps only drops", Names((LN.Filter(all, { learnFrom = "drop" }))), "Dropped Vest")
+  check("Quest or Other keeps only quests", Names((LN.Filter(all, { learnFrom = "quest" }))), "Quest Bracer")
+  local both = Find(all, "Both Bracer")
+  check("taught by a trainer and a vendor: under Trainer",
+    Find((LN.Filter(all, { learnFrom = "trainer" })), "Both Bracer") == both, true)
+  check("and under Vendor", Find((LN.Filter(all, { learnFrom = "vendor" })), "Both Bracer") == both, true)
+  check("Any Way keeps every row", #(LN.Filter(all, { learnFrom = "any" })), #all)
+  check("an unknown choice falls back to the default", Names((LN.Filter(all, { learnFrom = "nope" }))), Names(plain))
+  check("count for Any Way", counts.any, #all)
+  check("count for Drop", counts.drop, 1)
+  check("count for Trainer or Vendor", counts.trainerVendor, #plain)
+
+  local locked = 0
+  for _, row in ipairs(plain) do if row.locked then locked = locked + 1 end end
+  check("the list has a row out of reach to hide", locked > 0, true)
+  local reach, reachCounts = LN.Filter(all, { haveSkill = true })
+  local anyLocked = false
+  for _, row in ipairs(reach) do if row.locked then anyLocked = true end end
+  check("Have Skill leaves out rows out of reach", anyLocked, false)
+  check("and only those", #reach, #plain - locked)
+  check("counts follow Have Skill", reachCounts.trainerVendor, #plain - locked)
+
+  book[11], items[5002], book[12], items[5003], prices[5001] = nil, nil, nil, nil, nil
+  ns.RecipeBook.merged = nil
+end
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

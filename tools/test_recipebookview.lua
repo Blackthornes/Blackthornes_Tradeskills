@@ -10,7 +10,7 @@
 --   6. The Level Up tab's copy keeps its own filters and asks for skill
 --      order; the switch shows one view at a time and redraws only that one.
 --   7. With showSkill it shows the picked profession's skill, or all of
---      yours under All professions; the Profit tab's copy shows none.
+--      yours under All professions; the Profit tab's copy shows it too.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -51,7 +51,10 @@ ns.Theme = {
   AccentStripe = function() end,
   CreateHeading = function() return Label() end,
   CreateDivider = function() return Stub() end,
-  SetMoneyText = function(label, copper) label:SetText(tostring(copper) .. "c") end,
+  SetMoneyText = function(label, copper, opts)
+    label.moneyShort = opts and opts.short or false
+    label:SetText(tostring(copper) .. "c")
+  end,
   ProfitColor = function() return 1, 1, 1 end,
   Unpack = function() return 1, 1, 1, 1 end,
 }
@@ -82,6 +85,11 @@ ns.Util = {
     if id == 5 then return 0, 0.44, 0.87 end
   end,
 }
+do -- the real sort, so the materials order is the game's
+  local real = {}
+  assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", real)
+  ns.Util.CostliestFirst = real.Util.CostliestFirst
+end
 ns.RegisterEvent = function() end
 
 local record = { recipeID = 1, name = "Fine Leather Boots", profession = "Leatherworking", skill = 90,
@@ -156,6 +164,11 @@ check("disenchant", boots.disenchant.text, "120c")
 check("profit", boots.profit.text, "120c")
 check("recipe price", boots.price.text, "900c")
 check("learn from", boots.learn.text, "Drop")
+-- A player missed a big profit shown as one coin ("1g"): every amount in
+-- the list shows its gold, silver and copper, as the other lists do.
+for _, key in ipairs({ "cost", "sells", "disenchant", "profit", "price" }) do
+  check(key .. " shows every coin", boots[key].moneyShort, false)
+end
 local ench = Draw(rows[2])
 check("an enchant makes no item", ench.sells.text, "no item")
 check("an unpriced profit is a dash", ench.profit.text, "--")
@@ -192,6 +205,33 @@ check("materials", View._widgets.detail.materials[1].label.text, "7x item2318")
 check("where to learn", View._widgets.detail.learn.text, "World drop (569 kinds of creature)")
 list.opts.onClick(rows[1])
 check("picking it again goes back", View._state.selected, nil)
+
+-- A player saw "and 3 more" under a 7 material recipe and could not tell
+-- what made up the cost (2026-11-25): every material shows, costliest
+-- first, and one with no price goes last.
+local oneValue = ns.RecipeBook.Value
+ns.RecipeBook.Value = function()
+  local value = oneValue()
+  value.costDetail = { reagents = {
+    { itemID = 1, quantity = 6, lineCost = 1000 },
+    { itemID = 2, quantity = 10, lineCost = 3700 },
+    { itemID = 3, quantity = 20, lineCost = 9700 },
+    { itemID = 4, quantity = 10, lineCost = 260 },
+    { itemID = 5, quantity = 2 },
+    { itemID = 6, quantity = 1, lineCost = 5000 },
+    { itemID = 7, quantity = 4, lineCost = 40 },
+  } }
+  return value
+end
+list.opts.onClick(rows[1])
+local mats = View._widgets.detail.materials
+local seen = {}
+for index = 1, 7 do seen[index] = mats[index] and mats[index].label.text or "none" end
+check("all seven materials show", table.concat(seen, ", "),
+  "20x item3, 1x item6, 10x item2, 6x item1, 10x item4, 4x item7, 2x item5")
+check("no line says how many more", mats[8], nil)
+ns.RecipeBook.Value = oneValue
+list.opts.onClick(rows[1])
 check("to the overview", View._widgets.detail.title.text, "Recipes to learn")
 
 print("\npicking a profession by name")
@@ -238,13 +278,23 @@ check("its own profession", second._state.profession, "Enchanting")
 check("does not move the other's", View._state.profession, "Leatherworking")
 
 print("\nthe skill at the top right")
-check("the Profit copy shows none", View._widgets.skill, nil)
+check("the Profit copy shows it too", View._widgets.skill ~= nil, true)
 ns.Recipes.GetLearnedProfessions = function()
   return { { name = "Enchanting", skillLevel = 206, maxSkillLevel = 225 },
            { name = "Tailoring", skillLevel = 150, maxSkillLevel = 150 } }
 end
 local third = View.New({ order = "skill", showSkill = true })
+local fitted
+ns.Widgets.FitColumns = function(columns) fitted = columns end
+ns.Profit = ns.Profit or {}
+local oldLabels = ns.Profit.WAY_LABELS
+ns.Profit.WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" }
 third.Build(Frame())
+local samples = {}
+for _, column in ipairs(fitted or {}) do samples[column.key] = column.sample end
+check("PROFIT is measured whole, with its longest tag", samples.profit, "-99g 99s 99c (Vendor)")
+check("money columns are measured with two gold digits", samples.sells, "99g 99s 99c")
+ns.Widgets.FitColumns, ns.Profit.WAY_LABELS = nil, oldLabels
 third.SetProfession("ench")
 third.Refresh()
 check("the picked profession's skill", third._widgets.skill.text, "ENCHANTING  206 / 225")
@@ -281,6 +331,207 @@ check("no profit at the average, no line", View.PaybackAt(info, 50), nil)
 check("no average, no line", View.PaybackAt(info, nil), nil)
 check("a recipe with no price, no line", View.PaybackAt({ outputItemID = 9, cost = 50 }, 100), nil)
 ns.Profit = savedProfit
+
+print("\nrecipes to learn: the recipe wishlist")
+-- Its star column and Wishlist First (2026-11-17), only while it is on.
+local starredSet, wishOn = { [2] = true }, true
+local savedProfitForWish = ns.Profit
+ns.Profit = setmetatable({ WayTag = function() return nil end }, { __index = savedProfitForWish })
+local savedWishlist, savedWishlistUI = ns.Wishlist, ns.WishlistUI
+ns.Wishlist = { IsOn = function() return wishOn end, Prune = function() return 0 end,
+  Has = function(_, id) return starredSet[id] == true end }
+local boxes = {}
+local savedCheckbox = ns.Widgets.CreateCheckbox
+ns.Widgets.CreateCheckbox = function(_, text)
+  local box = Stub({ text = text, SetShown = function(self, v) self.shownNow = v end,
+    SetChecked = function(self, v) self.checkedNow = v end })
+  boxes[text] = box
+  return box
+end
+local savedNewModule = ns.NewModule
+ns.NewModule = ns.NewModule or function(name) local m = {} ns[name] = m return m end
+assert(loadfile(lfs_cwd .. "/UI/Wishlist.lua"))("Blackthornes_TS", ns)
+ns.NewModule = savedNewModule
+local wish = View.New()
+wish.Build(Frame())
+wish.Refresh()
+check("Wishlist First shows while it is on", boxes["Wishlist First"].shownNow, true)
+check("starred recipes go first", list.data[1].recipeID, 2)
+check("the rest keep their order", list.data[2].recipeID .. "," .. list.data[3].recipeID, "1,3")
+local starRow = Frame()
+list.opts.createRow(starRow)
+starRow.star.SetShown = function(self, v) self.shownNow = v end
+starRow.data = list.data[1]   -- the list sets it before each draw
+list.opts.updateRow(starRow, list.data[1])
+check("each row wears a star", starRow.star.shownNow, true)
+check("a right-click offers to take it off", list.opts.menu(list.data[1])[1].text, "Take Off Wishlist")
+wishOn = false
+wish.Refresh()
+check("off, the box hides", boxes["Wishlist First"].shownNow, false)
+check("off, the order is as before", list.data[1].recipeID, 1)
+starRow.data = list.data[1]
+list.opts.updateRow(starRow, list.data[1])
+check("off, no star", starRow.star.shownNow, false)
+check("off, no menu line", list.opts.menu(list.data[1]), nil)
+ns.Widgets.CreateCheckbox = savedCheckbox
+ns.Wishlist, ns.WishlistUI = savedWishlist, savedWishlistUI
+ns.Profit = savedProfitForWish
+
+print("\nrecipes to learn: a narrow list keeps the name readable")
+-- The Level Up tab's Learn Next showed "Encha..." in tall rows: every
+-- column took its room and the name had about 60 (2026-11-17).
+ns.Profit = ns.Profit or {}
+ns.Profit.WayTag = ns.Profit.WayTag or function() return nil end
+local narrow = View.New({ order = "skill" })
+narrow.Build(Frame())
+local headings = narrow._widgets.headings
+headings.GetWidth = function() return 560 end
+narrow.Refresh()
+local set = narrow._squeezed()
+check("DEMAND steps aside first", set.demand, true)
+check("then DISENCHANT", set.disenchant, true)
+check("SKILL stays", set.skill, nil)
+check("LEARN FROM stays", set.learn, nil)
+local row = Frame()
+local savedCreateLabel = ns.Theme.CreateLabel
+ns.Theme.CreateLabel = function()
+  local label = Label()
+  label.SetPoint = function(self, a, _, _, x) if a == "RIGHT" then self.right = x end end
+  return label
+end
+list.opts.createRow(row)
+ns.Theme.CreateLabel = savedCreateLabel
+list.opts.updateRow(row, list.data[1])
+check("the name keeps its least room", 560 + row.name.right - 30 >= View.NAME_MIN, true)
+headings.GetWidth = function() return 2000 end
+narrow.Refresh()
+check("a wide list shows every column again", next(narrow._squeezed()), nil)
+
+print("\nrecipes to learn: Have Skill and Learn From")
+-- On the Level Up tab's copy only, shared with its LEARN NEXT line.
+local config = { levelUpHaveSkill = false, levelUpLearnFrom = "trainerVendor" }
+local savedConfig = ns.Config
+ns.Config = { Get = function(_, k) return config[k] end, Set = function(_, k, v) config[k] = v end }
+local filterAsked
+ns.LearnNext = {
+  LEARN_FROM = { "trainerVendor", "trainer", "vendor", "drop", "quest", "any" },
+  LEARN_FROM_DEFAULT = "trainerVendor",
+  Filter = function(input, o)
+    filterAsked = o
+    local kept, counts = {}, { drop = 0 }
+    for _, entry in ipairs(input) do
+      local ways = entry.place.ways
+      if not (o.haveSkill and entry.locked) and (o.learnFrom == "any"
+          or (o.learnFrom == "trainerVendor" and (ways.trainer or ways.vendor))
+          or ways[o.learnFrom]) then
+        kept[#kept + 1] = entry
+      end
+      if ways.drop then counts.drop = counts.drop + 1 end
+    end
+    return kept, counts
+  end,
+}
+ns.RecipeBook.AllWays = function(_, rec)
+  if rec == enchant then return { trainer = true } end
+  return { drop = true }
+end
+ns.Recipes.GetLearnedProfessions = function()
+  return { { name = "Enchanting", skillLevel = 50, maxSkillLevel = 75 } }
+end
+rows[2].profession = "Enchanting"
+local plain = View.New({ order = "skill" })
+plain.Build(Frame())
+check("the Profit copy has no filters", plain._widgets.haveSkill, nil)
+local made = {}
+ns.Widgets.CreateCheckbox = function(_, text)
+  local box = Stub({ text = text, SetChecked = function(self, v) self.checkedNow = v end })
+  made[text] = box
+  return box
+end
+local filtered = View.New({ order = "skill", showSkill = true, filters = true })
+filtered.Build(Frame())
+filtered._state.profession = "all"
+filtered.Refresh()
+check("Have Skill shows", made["Have Skill"] ~= nil, true)
+check("Learn From shows", filtered._widgets.learnFrom ~= nil, true)
+check("it starts on the shared choice", filterAsked.learnFrom, "trainerVendor")
+check("trainer or vendor keeps the trainer's recipe", #list.data, 1)
+check("which is the enchant", list.data[1].recipeID, 2)
+check("each way counted in the menu", filtered._widgets.learnFrom.options[4].note, 2)
+config.levelUpLearnFrom = "any"
+filtered.Refresh()
+check("a choice made on LEARN NEXT is read here too", #list.data, 3)
+config.levelUpHaveSkill = true
+filtered.Refresh()
+check("Have Skill leaves out what you can't learn yet", #list.data, 1)
+check("an Enchanting recipe within 50 stays", list.data[1].recipeID, 2)
+ns.Config, ns.LearnNext = savedConfig, nil
+
+print("\nthe Profit: choice")
+-- A player saw "(Vendor)" on every row: the PROFIT column follows the
+-- Profit: choice from My Crafts, which this view did not show (2026-11-21).
+local made = {}
+ns.Widgets.CreateDropdown = function(_, options, onSelect)
+  local box = Stub({ options = options, onSelect = onSelect,
+    SetOptions = function(self, o) self.options = o end,
+    SetValue = function(self, v) self.value = v end })
+  made[#made + 1] = box
+  return box
+end
+local method, listed = "vendor", 0
+local savedProfit, savedList = ns.Profit, ns.RecipeBook.List
+ns.Profit = {
+  WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" },
+  MethodOptions = function() return { { value = "best" }, { value = "vendor" } } end,
+  GetMethod = function() return method end,
+  SetMethod = function(_, value) method = value end,
+}
+ns.RecipeBook.List = function(_, opts) listed = listed + 1 return rows end
+local learn = View.New({ showSkill = true, methodChoice = true })
+learn.Build(Frame())
+learn.Refresh()
+local picker = learn._widgets.method
+check("Recipes to Learn shows it", picker ~= nil, true)
+check("beside the profession list", picker == made[2], true)
+check("showing the choice in use", picker and picker.value, "vendor")
+listed = 0
+picker.onSelect("best")
+check("picking Best keeps it", method, "best")
+check("and the list counts again", listed, 1)
+method = "auction"
+learn.Refresh()
+check("a pick made on My Crafts shows here", picker.value, "auction")
+local learnNext = View.New({ order = "skill", showSkill = true })
+learnNext.Build(Frame())
+check("Level Up's Learn Next has none", learnNext._widgets.method, nil)
+ns.Profit, ns.RecipeBook.List = savedProfit, savedList
+
+print("\nthe profession picked on another Profit view")
+do
+  local side = { modules = {}, moduleOrder = {}, Util = {}, Recipes = ns.Recipes,
+    RegisterCommand = function() end, Config = { Get = function() end } }
+  function side.NewModule(name) local m = {}; side[name] = m; return m end
+  assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", side)
+  local savedPick = ns.Profit
+  ns.Profit = setmetatable({ PickProfession = side.Profit.PickProfession,
+    PickedProfession = side.Profit.PickedProfession }, { __index = savedPick })
+
+  side.Profit.PickProfession("Enchanting"); View.Refresh()
+  check("carries over to Recipes to Learn", View._state.profession, "Enchanting")
+  side.Profit.PickProfession("Leatherworking"); View.Refresh()
+  check("each new pick", View._state.profession, "Leatherworking")
+  side.Profit.PickProfession("Cooking"); View.Refresh()
+  check("one it does not list leaves it", View._state.profession, "Leatherworking")
+  side.Profit.PickProfession(false); View.Refresh()
+  check("All professions carries over", View._state.profession, "all")
+  second.Refresh()
+  check("Level Up's copy keeps its own", second._state.profession, "Enchanting")
+  View.SetProfession("ench")
+  check("a pick here is shared", select(2, side.Profit.PickedProfession()), "Enchanting")
+  second.SetProfession("leath")
+  check("Level Up's pick is not", select(2, side.Profit.PickedProfession()), "Enchanting")
+  ns.Profit = savedPick
+end
 
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")

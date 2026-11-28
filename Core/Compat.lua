@@ -322,11 +322,62 @@ function Compat:IsSupported()
     return caps.auction.mode ~= "unknown" and caps.tradeskill.mode ~= "unknown"
 end
 
+--------------------------------------------------------------------------------
+-- The gamepad's window cursor
+--------------------------------------------------------------------------------
+
+-- With a gamepad, the game moves a cursor over the buttons of the window you
+-- are in. When that cursor enters or leaves a piece of ours, the game runs our
+-- code inside its own steps, and the step after that is blocked: a player got
+-- "Blackthornes_TS tried to call the protected function
+-- SetPreferredGamepadInteractTarget()" each time they closed a window with the
+-- gamepad (2026-11-22), and the gamepad stopped working right. So every piece
+-- we put inside a game window carries the game's own "skip this" mark, and the
+-- cursor never lands on it. The mouse works on it as before.
+--
+-- The mark exists only once the game's gamepad code is loaded, and is refused
+-- in a fight. A frame that can't be marked yet is tried again after the fight
+-- and when an addon loads (the gamepad code is one). Each frame is marked once.
+Compat.offGamepad = setmetatable({}, { __mode = "k" })
+Compat.offGamepadWaiting = setmetatable({}, { __mode = "k" })
+
+function Compat.KeepOffGamepad(frame)
+    if type(frame) ~= "table" then return false end
+    if Compat.offGamepad[frame] then return true end
+    Compat.offGamepadWaiting[frame] = true
+    local mark = rawget(_G, "SmartNavigation_MarkFrameIgnored")
+    if type(mark) ~= "function" then return false end
+    local fight = rawget(_G, "InCombatLockdown")
+    if type(fight) == "function" then
+        local ok, on = pcall(fight)
+        if ok and on then return false end
+    end
+    if pcall(mark, frame) then
+        Compat.offGamepad[frame] = true
+        Compat.offGamepadWaiting[frame] = nil
+        return true
+    end
+    return false
+end
+
+--- Try the frames still waiting for their mark.
+function Compat.KeepWaitingOffGamepad()
+    if next(Compat.offGamepadWaiting) == nil then return end
+    local waiting = {}
+    for frame in pairs(Compat.offGamepadWaiting) do waiting[#waiting + 1] = frame end
+    for i = 1, #waiting do Compat.KeepOffGamepad(waiting[i]) end
+end
+
 function Compat:OnInitialize()
     self:Detect()
 end
 
 function Compat:OnEnable()
+    if ns.RegisterEvent then
+        ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function() Compat.KeepWaitingOffGamepad() end)
+        ns.RegisterEvent(self, "ADDON_LOADED", function() Compat.KeepWaitingOffGamepad() end)
+    end
+
     local caps = self:Detect()
 
     if not self:IsSupported() then

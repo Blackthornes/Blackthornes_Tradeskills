@@ -33,18 +33,60 @@ function Vendor:GetTable()
     return ns.db.vendorPrices
 end
 
+--------------------------------------------------------------------------------
+-- Bartering (a Legacy perk)
+--------------------------------------------------------------------------------
+
+-- Bartering takes 5% a rank off what every vendor charges in gold
+-- (Logic/Legacy.lua). The shipped prices are full price, so they take
+-- today's discount. A price seen at a merchant already had the discount of
+-- that moment, kept beside it as `off` (never rename it), so it is moved to
+-- today's: seen at 10% off and now with no ranks, it goes back up. A price
+-- seen before `off` was kept, or while the perks could not be read yet, is
+-- left as seen, so a discount is never taken twice. Vendors' payouts for
+-- what you sell do not change.
+
+--- How much less vendors charge now, 0 to 0.1, and whether it is known.
+function Vendor:Discount()
+    local legacy = ns.Legacy
+    if not (legacy and legacy.VendorDiscount and legacy.Known) then return 0, false end
+    local okKnown, known = pcall(legacy.Known, legacy)
+    if not (okKnown and known) then return 0, false end
+    local ok, off = pcall(legacy.VendorDiscount, legacy)
+    if not ok or type(off) ~= "number" or off < 0 or off >= 1 then return 0, true end
+    return off, true
+end
+
+local function Round(copper)
+    return math.max(1, math.floor(copper + 0.5))
+end
+
+--- A full shop price (the shipped data's) with today's discount.
+function Vendor:Discounted(price)
+    if type(price) ~= "number" or price <= 0 then return price end
+    local off = self:Discount()
+    if off <= 0 then return price end
+    return Round(price * (1 - off))
+end
+
 --- Copper for one unit, or nil if no vendor sells it.
 function Vendor:GetUnitPrice(itemID)
     local record = self:GetTable()[itemID]
     if not record then
-        return ns.VENDOR_PRICES and ns.VENDOR_PRICES[itemID] or nil
+        return self:Discounted(ns.VENDOR_PRICES and ns.VENDOR_PRICES[itemID] or nil)
     end
 
     -- Items bought with honour, tokens or similar are not purchasable with
     -- gold, so they have no meaningful cash price.
     if record.extendedCost then return nil end
 
-    return record.price
+    local was = record.off
+    if type(was) ~= "number" or was < 0 or was >= 1 or type(record.price) ~= "number" then
+        return record.price
+    end
+    local now, known = self:Discount()
+    if not known or now == was then return record.price end
+    return Round(record.price * (1 - now) / (1 - was))
 end
 
 function Vendor:IsLimited(itemID)
@@ -207,6 +249,7 @@ local function GetMerchantItemID(index, info)
 
     return nil, "unresolved"
 end
+Vendor.GetMerchantItemID = GetMerchantItemID
 
 -- The game's item class for recipes.
 local CLASS_RECIPE = 9
@@ -327,7 +370,11 @@ function Vendor:Scan()
         if ok and info then
             local recipeID = GetMerchantItemID(index, info)
             local offered, offer = pcall(Vendor.RecipeOffer, index, info, recipeID)
-            if offered and offer then self.merchantRecipes[recipeID] = offer end
+            if offered and offer then
+                -- Its place in the list, for the wishlist card's Buy (Logic/Wishlist.lua).
+                offer.index = index
+                self.merchantRecipes[recipeID] = offer
+            end
         end
 
         if ok and info and info.price and info.price > 0 then
@@ -347,11 +394,15 @@ function Vendor:Scan()
                     seenAt = time(),
                     method = method,
                 }
+                -- The Bartering discount this price has, once it can be read.
+                local off, known = self:Discount()
+                if known then record.off = off end
                 -- Learned means changed: every buy and sale at a vendor
                 -- scans it again, and reading the same prices back is not
                 -- news worth throwing the cost index away for.
                 local was = prices[itemID]
                 if type(was) ~= "table" or was.price ~= record.price or was.stack ~= record.stack
+                    or was.off ~= record.off
                     or was.limited ~= record.limited or was.extendedCost ~= record.extendedCost then
                     learned = learned + 1
                 end
@@ -461,8 +512,23 @@ local function CheaperAtAuction(itemID, stock, shortfall)
     return auction < vendorUnit
 end
 
+--- How much of a shopping line this character's own crafts still need.
+--
+-- The queue is shared with the alts, so a line can hold an alt's part too
+-- (`forOthers`, less what the alts already hold). That part is bought when
+-- the alt stands at a vendor. Bought here it had to be mailed over, with
+-- postage (2026-11-27: Heavy Silken Thread for an alt's bag).
+local function MyShortfall(line)
+    local shortfall = tonumber(line.shortfall) or 0
+    if type(line.forOthers) ~= "table" then return shortfall end
+    local others = 0
+    for _, units in pairs(line.forOthers) do others = others + (tonumber(units) or 0) end
+    others = math.max(0, others - (tonumber(line.othersHold) or 0))
+    return math.max(0, shortfall - others)
+end
+
 --- Queue shortfalls that this vendor can actually supply, where it is the
---- cheaper place to buy them.
+--- cheaper place to buy them. Only this character's part (MyShortfall).
 -- @return lines, totalCost, how many were left for the auction house because
 --   they are cheaper there
 function Vendor:GetNeeded()
@@ -474,20 +540,21 @@ function Vendor:GetNeeded()
 
     for _, line in ipairs(ns.Queue:GetShoppingList()) do
         local stock = self.merchantItems[line.itemID]
+        local shortfall = MyShortfall(line)
 
         -- Items bought with tokens or honour cannot be paid for in gold.
-        local buyable = line.shortfall > 0 and stock and not stock.extendedCost
+        local buyable = shortfall > 0 and stock and not stock.extendedCost
 
-        if buyable and CheaperAtAuction(line.itemID, stock, line.shortfall) then
+        if buyable and CheaperAtAuction(line.itemID, stock, shortfall) then
             cheaperElsewhere = cheaperElsewhere + 1
         elseif buyable then
-            local affordable = line.shortfall
+            local affordable = shortfall
 
             -- Limited stock: never ask for more than the vendor has.
             if stock.numAvailable >= 0 then
                 affordable = math.min(affordable, stock.numAvailable * stock.stack)
             end
-            local limited = affordable < line.shortfall
+            local limited = affordable < shortfall
 
             if affordable > 0 then
                 local cost = affordable * stock.price
@@ -617,7 +684,7 @@ function Vendor:BuyStep()
     local liveShortfall
     for _, current in ipairs(ns.Queue:GetShoppingList()) do
         if current.itemID == line.itemID then
-            liveShortfall = current.shortfall
+            liveShortfall = MyShortfall(current)
             break
         end
     end
@@ -822,7 +889,7 @@ ns.RegisterCommand("vendor", L["show learned vendor prices"], function()
             ns.PrintRaw(("  %s  %s%s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(record.price),
-                record.limited and ("  |cff7a8089" .. L["(limited stock)"] .. "|r") or ""))
+                record.limited and ("  |cff857c68" .. L["(limited stock)"] .. "|r") or ""))
             shown = shown + 1
         end
     end

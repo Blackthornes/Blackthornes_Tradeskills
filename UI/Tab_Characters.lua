@@ -173,7 +173,9 @@ local function HereRealm(characters)
         local name = GetRealmName()
         if type(name) == "string" and name ~= "" then return name .. "" end
     end)
-    return ok and realm or nil
+    if ok and realm then return realm end
+    -- Forever 1.60.1 gives an empty realm name: the one remembered.
+    return ns.Config and ns.Config.RealmName and ns.Config:RealmName() or nil
 end
 
 --- Does this character belong under the realm picked? A character saved
@@ -249,7 +251,7 @@ end
 
 local function Disarm(button)
     button.armed = false
-    button:SetText(button.label or L["Forget character"])
+    button:SetText(button.baseText or L["Forget character"])
     button:SetConfirming(false)
 end
 
@@ -316,7 +318,7 @@ local function BuildCard(row)
     end, { width = 140, height = 20,
            tooltip = L["Delete this character's saved recipes and inventory"] })
     card.forget:SetPoint("BOTTOMRIGHT", 0, 0)
-    card.forget.label = L["Forget character"]
+    card.forget.baseText = L["Forget character"]
 
     -- Clear Items (2026-11-10): forget only what the character carried,
     -- its saved bags, bank, mail and gold, so old counts stop sending
@@ -344,7 +346,7 @@ local function BuildCard(row)
         end)
     end, { width = 140, height = 20,
            tooltip = L["Forget this character's saved bags, bank, mail and gold. Log in on them to read it again."] })
-    card.clear.label = L["Clear Items"]
+    card.clear.baseText = L["Clear Items"]
     card.clear:SetPoint("RIGHT", card.forget, "LEFT", -8, 0)
 
     row.card = card

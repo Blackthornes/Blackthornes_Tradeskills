@@ -27,8 +27,8 @@ ns.Util = {
     GetMaxStackSize = function() return 20 end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function() return false end,
-    RoundToSilver = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
-    IsWholeSilver = function(p) return p >= 100 and p % 100 == 0 end,
+    ItemAuctionPrice = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
+    IsItemAuctionPrice = function(p) return p >= 100 and p % 100 == 0 end,
     -- No AHQueue here, so the search goes out at once.
     WhenAuctionReady = function(action) action() end,
 }
@@ -150,6 +150,7 @@ check("no market value reads none", unknown[1] == "Average Market Value: none")
 ns.Cost.FindRecipeForItem = function() return 1 end
 ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Profit.Analyse = function() return { costPerUnit = 600 } end
+ns.Profit.UnitCostForSale = function() return 600 end
 local loss = lines(Posting:BuildConfirmText(3530, 1, 240, { state = "fresh" }))
 check("a loss adds one line", #loss == 5 and loss[4]:find("Below the 600 it cost to make", 1, true) ~= nil)
 check("and the question stays last", loss[5] == "List it at this price, or skip it.")

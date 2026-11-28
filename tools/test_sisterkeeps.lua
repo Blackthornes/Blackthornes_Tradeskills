@@ -87,6 +87,7 @@ ns.Config = {
         if k == "allowPostingAtALoss" then return false end
         if k == "sellHoldsSisterKeeps" then return sisterKeepsOn end
         if k == "sellHoldsAltUpgrades" then return altUpgradesOn end
+        if k == "sellHoldsCraftFirst" then return craftFirstOn end
         return nil
     end,
     GetPriceTable = function() return {} end,
@@ -266,6 +267,7 @@ do
     check("the upgrade shows", LineFor(lines, UPGRADE) and LineFor(lines, UPGRADE).held, "An upgrade for you, +6%")
     check("the alt's, by full name", LineFor(lines, ALTGEAR).held, "An upgrade for Ana Stormwood, +9%")
     check("pet food", LineFor(lines, FOOD).held, "Your pet eats this")
+    check("another addon's keep is not a craft to queue", LineFor(lines, FOOD).craftHeld, nil)
     check("Always keep", LineFor(lines, KEEP).held, "On your Always keep list")
     check("the set", LineFor(lines, SET).held, "In your Tank equipment set")
     check("the quest", LineFor(lines, QUEST).held, "Spider's Silk needs 4 more")
@@ -434,6 +436,117 @@ check("a second build asks nothing again", asked, first)
 ns.Inventory.changes = 2
 Posting:GetPostable({ includeAll = true })
 check("a bag change asks again", asked > first, true)
+
+print("\nCraft First: what a known craft makes worth more stays in the bags")
+-- A player's Truesilver Ore went up while Butler said smelt it (2026-11-17).
+local BAR = 6037
+local barWorth
+ns.Butler = { CraftFor = function(_, id)
+    if id == PLAIN and barWorth then return { recipeID = 1, name = "Smelt", itemID = BAR, perItem = barWorth } end
+end }
+Reset()
+craftFirstOn, barWorth = nil, 2000
+check("off unless ticked", ns.SisterKeeps:CraftFirst(), false)
+check("unticked, the ore sells", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+Reset()
+craftFirstOn = true
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    local line = LineFor(lines, PLAIN)
+    check("ticked, the ore is held whole", line and line.held ~= nil, true)
+    check("and says what it is worth as", line and line.held and line.held:find("Worth more as item6037: ", 1, true) == 1, true)
+    check("it keeps its count for its own List button", line and line.count, 7)
+    check("the row knows Craft First kept it, so it can be queued", line and line.craftHeld, true)
+    check("List all never picks it", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
+end
+Reset()
+craftFirstOn, sisterKeepsOn = true, false
+check("held without Keep What Other Addons Need", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
+do
+    local line = LineFor(Posting:GetPostable({ includeAll = true, showHeld = true }), PLAIN)
+    check("Craft First's mark comes with it", line and line.craftHeld, true)
+end
+Reset()
+craftFirstOn, barWorth = true, 900
+check("worth less made than listed after the cut, it sells",
+    LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+Reset()
+craftFirstOn = true
+ns.Butler = { CraftFor = Boom }
+check("a craft check that raises changes nothing", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+ns.Butler, craftFirstOn = nil, nil
+
+print("\nmaterials and recipes an alt needs (2026-11-27)")
+local altOn, recipesOn = false, false
+ns.Butler = {
+    AltLevelUp = function() return { [PLAIN] = { to = "Mira Ashvale", count = 3, profession = "Tailoring" } } end,
+    RecipeFor = function(_, id) if id == CLAM then return { to = "Mira Ashvale", now = true } end end,
+}
+Reset()
+BlackthornesButler.Verdicts.AltLevelUpOn = function() return altOn end
+BlackthornesButler.Verdicts.AltRecipesOn = function() return recipesOn end
+check("off in Butler, the cloth all sells", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN).count, 7)
+Reset()
+altOn, recipesOn = true, true
+BlackthornesButler.Verdicts.AltLevelUpOn = function() return altOn end
+BlackthornesButler.Verdicts.AltRecipesOn = function() return recipesOn end
+sisterKeepsOn = false
+do
+    local lines = Posting:GetPostable({ includeAll = true })
+    check("ticked, the alt's 3 are held, the rest sells", LineFor(lines, PLAIN) and LineFor(lines, PLAIN).count, 4)
+    check("and says why", LineFor(lines, PLAIN) and LineFor(lines, PLAIN).keptWhy,
+        "Used to level Mira Ashvale's Tailoring. Needs 3 more.")
+    local clam = LineFor(lines, CLAM)
+    check("one recipe is held for the alt", clam and clam.count, 2)
+end
+ns.Butler = nil
+
+print("\na new copy sells while the set's own copy is worn (2026-11-27)")
+-- Packed spots as the game keeps them: worn in hands (10), or bag 0 slot 6.
+local WORN, INBAG = 0x00100000 + 10, 0x00300000 + 6
+local setSpots = { [10] = WORN }
+C_EquipmentSet = {
+    GetEquipmentSetIDs = function() return { 1 } end,
+    GetItemIDs = function() return { [10] = SET } end,
+    GetItemLocations = function() return setSpots end,
+}
+EquipmentManager_UnpackLocation = function(location)
+    if location == WORN then return true, false, false, false, 10, nil end
+    if location == INBAG then return true, false, true, false, 6, 0 end
+end
+Reset()
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the bag copy is not held", LineFor(lines, SET) and LineFor(lines, SET).held, nil)
+end
+Reset()
+setSpots = { [10] = INBAG }
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the set's own copy in the bags is still held", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+Reset()
+setSpots = { [10] = -1 }
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("a set copy the game can't find is still held", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+Reset()
+setSpots = { [10] = WORN }
+EquipmentManager_UnpackLocation = nil
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("a client that won't say still holds it", LineFor(lines, SET).held, "In your Tank equipment set")
+end
+EquipmentManager_GetLocationData = function(location)
+    if location == WORN then return { isPlayer = true, isBags = false, slot = 10 } end
+end
+Reset()
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("the newer helper reads it worn too", LineFor(lines, SET).held, nil)
+end
+C_EquipmentSet, EquipmentManager_GetLocationData = nil, nil
 
 BlackthornesFarmer, BlackthornesEquipment, BlackthornesPets, BlackthornesButler = nil, nil, nil, nil
 sisterKeepsOn = nil

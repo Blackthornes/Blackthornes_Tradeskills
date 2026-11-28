@@ -568,10 +568,18 @@ local function Title(trim, text)
 end
 
 --- The round portrait: the addon's emblem on a dark disc in a silver ring.
-local function Portrait(trim)
+-- The slim frame's portrait (opts.slim): about the game's own size,
+-- inside the top left corner.
+local SLIM_PORTRAIT = 40
+local SLIM_PORTRAIT_OUT = 6
+local SLIM_EMBLEM = 24
+
+local function Portrait(trim, slim)
+    local size = slim and SLIM_PORTRAIT or PORTRAIT
+    local out = slim and SLIM_PORTRAIT_OUT or PORTRAIT_OUT
     local portrait = CreateFrame("Frame", nil, trim)
-    portrait:SetSize(PORTRAIT, PORTRAIT)
-    portrait:SetPoint("TOPLEFT", trim, "TOPLEFT", -PORTRAIT_OUT, PORTRAIT_OUT)
+    portrait:SetSize(size, size)
+    portrait:SetPoint("TOPLEFT", trim, "TOPLEFT", -out, out)
 
     local media = ns.Titanforged and ns.Titanforged.MEDIA
         or ([[Interface\AddOns\%s\Media\Frame\]]):format(ADDON)
@@ -586,7 +594,8 @@ local function Portrait(trim)
     if not (ok and desaturated) then ring:SetVertexColor(0.75, 0.75, 0.78) end
 
     local emblem = portrait:CreateTexture(nil, "ARTWORK", nil, 2)
-    emblem:SetSize(EMBLEM, EMBLEM)
+    local emblemSize = slim and SLIM_EMBLEM or EMBLEM
+    emblem:SetSize(emblemSize, emblemSize)
     emblem:SetPoint("CENTER", 0, 1)
     emblem:SetTexture(media .. "Emblem")
     return portrait
@@ -623,10 +632,24 @@ function Look.Dress(frame, opts)
     pcall(trim.EnableMouse, trim, false)
     trim.corners = {}
 
-    if opts.title then trim.plate = Title(trim, opts.title) end
-    if opts.portrait then trim.portrait = Portrait(trim) end
+    local TF = ns.Titanforged
+    if opts.title and opts.slim and TF and TF.TitleBar then
+        -- The slim frame: the name in the game's gold in one dark bar
+        -- inside the top rim, a silver line under it.
+        trim.plate = TF.TitleBar(frame, trim, opts.title, {
+            color = GOLD,
+            draw = function(band, line)
+                Gradient(band, "VERTICAL", { 0.055, 0.055, 0.060 }, { 0.150, 0.150, 0.160 })
+                line:SetColorTexture(SILVER[1], SILVER[2], SILVER[3], 0.6)
+            end,
+        })
+    elseif opts.title then
+        trim.plate = Title(trim, opts.title)
+    end
+    if opts.portrait then trim.portrait = Portrait(trim, opts.slim) end
     if opts.close then trim.closeButton = CloseButton(trim, opts.close) end
 
+    trim.slim = opts.slim and TF and TF.TitleBar and true or nil
     trim.blizzard = true
     frame.titan = trim
     return trim

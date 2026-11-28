@@ -5,21 +5,27 @@
 --   1. Off by default: nothing joins, nothing goes out, nothing is taken.
 --   2. On: the channel is joined, and its join and leave lines are hidden.
 --   3. A scan goes out one message at a time, only on our channel.
---   4. A price is used only once 3 players sent one, and the middle is taken.
+--   4. One player's price is used (the owner, 2026-11-18); with several,
+--      the middle is taken.
 --   5. Names are never kept, only a hash of them.
---   6. A price far from a fresh one of your own is refused; your own fresh
---      scan wins, and so does a guild price.
+--   6. A price under 5% or over 10 times the one you know (your own, even
+--      old, else your guild's) is refused; your own fresh scan wins, and so
+--      does a guild price.
 --   7. Not shared again within the hour, or when 3 others covered the scan.
 --   8. Whispers, the guild and other channels are not listened to.
 --   9. Old prices are pruned.
 --  10. When the channel refuses a send, the line is hidden, sending stops
 --      a while (for good after three), and prices still come in.
+--  11. The game's own channels keep /1, /2 and /3: ours waits for them at
+--      login, never joins in a dungeon, and moves behind them when it got
+--      in first (a player's report, 2026-11-21).
 
 local saved = {}
 for _, name in ipairs({ "time", "GetTime", "UnitName", "C_ChatInfo", "C_Timer", "InCombatLockdown",
                         "IsInGuild", "SendAddonMessage", "ERR_CHAT_PLAYER_NOT_FOUND_S", "GetChannelName",
                         "JoinTemporaryChannel", "JoinChannelByName", "LeaveChannelByName",
-                        "ChatFrame_AddMessageEventFilter", "UnitFactionGroup" }) do
+                        "ChatFrame_AddMessageEventFilter", "UnitFactionGroup", "GetChannelList",
+                        "EnumerateServerChannels", "IsInInstance" }) do
     saved[name] = _G[name]
 end
 
@@ -202,7 +208,7 @@ check("our notice is filtered", ana.ns.RealmPrices.FilterNotice(nil, "CHAT_MSG_C
 check("trade chat's is not", ana.ns.RealmPrices.FilterNotice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_CHANGED",
     "", "", "2. Trade", "", 0, 2, "", "Trade"), false)
 check("nothing heard yet", ana.ns.RealmPrices:Describe(),
-    "Listening for prices from your realm. A price is used once 3 players agree on it.")
+    "Listening for prices from your realm. They fill in prices you don't have yet.")
 
 --------------------------------------------------------------------------------
 print("\nleft by hand, joined again")
@@ -247,6 +253,122 @@ do
 end
 
 --------------------------------------------------------------------------------
+print("\nthe game's channels keep their numbers")
+--------------------------------------------------------------------------------
+
+do
+    current = ana
+    local Realm = ana.ns.RealmPrices
+    local savedFns = { GetChannelName = GetChannelName, JoinTemporaryChannel = JoinTemporaryChannel,
+        JoinChannelByName = JoinChannelByName, LeaveChannelByName = LeaveChannelByName,
+        After = C_Timer.After, Swap = C_ChatInfo.SwapChatChannelsByChannelIndex }
+    -- The client's channel slots: a join takes the lowest free number.
+    local slots = {}
+    local function Number(name)
+        for id, joined in pairs(slots) do
+            if joined:lower() == tostring(name):lower() then return id end
+        end
+        return 0
+    end
+    local function JoinSlot(name)
+        if Number(name) > 0 then return end
+        local id = 1
+        while slots[id] do id = id + 1 end
+        slots[id] = name
+    end
+    GetChannelName = function(name) local id = Number(name) return id, id > 0 and name or nil end
+    JoinTemporaryChannel = JoinSlot
+    JoinChannelByName = JoinSlot
+    LeaveChannelByName = function(name) local id = Number(name) if id > 0 then slots[id] = nil end end
+    GetChannelList = function()
+        local out = {}
+        for id = 1, 10 do
+            if slots[id] then out[#out + 1] = id; out[#out + 1] = slots[id]; out[#out + 1] = false end
+        end
+        return (table.unpack or unpack)(out)
+    end
+    EnumerateServerChannels = function() return "General", "Trade", "LocalDefense", "LookingForGroup" end
+    local inside = false
+    IsInInstance = function() return inside, inside and "party" or "none" end
+    local later = {}
+    C_Timer.After = function(_, fn) later[#later + 1] = fn end
+    local function Login()
+        for id in pairs(slots) do slots[id] = nil end
+        later = {}
+        Realm.stepAside, Realm.waitingForGame, Realm.triedTemporary = nil, nil, nil
+        Realm.loginAt = uptime
+    end
+    local function GameJoins()
+        JoinSlot("General - Elwynn Forest")
+        JoinSlot("Trade - City")
+        JoinSlot("LocalDefense - Elwynn Forest")
+        Realm:OnNotice("YOU_JOINED", "1. General - Elwynn Forest", "General - Elwynn Forest")
+    end
+
+    -- Logging in: the timer fires before General, Trade and LocalDefense are in.
+    Login()
+    Realm:Join()
+    check("before the game's channels, ours waits", Number("BTSPricesA"), 0)
+    GameJoins()
+    check("General keeps /1", slots[1], "General - Elwynn Forest")
+    check("a game channel coming in starts a short wait", #later, 1)
+    later[1]()
+    check("then ours joins behind them", Number("BTSPricesA"), 4)
+
+    -- In a dungeon General is left; ours never takes its number.
+    Login()
+    inside = true
+    Realm:Join()
+    check("in a dungeon ours waits", Number("BTSPricesA"), 0)
+    inside = false
+    GameJoins()
+    Realm:Join()
+    check("out again, it joins behind them", Number("BTSPricesA"), 4)
+
+    -- Every game channel left by hand: ours joins after a while anyway.
+    Login()
+    Realm:Join()
+    check("nothing in yet, ours waits", Number("BTSPricesA"), 0)
+    uptime = uptime + Realm.GAME_CHANNELS_WAIT
+    Realm:Join()
+    check("after the wait it joins", Number("BTSPricesA"), 1)
+    uptime = uptime - Realm.GAME_CHANNELS_WAIT
+
+    -- A login from before this fix (or a remembered channel) left ours on /1.
+    Login()
+    slots[1] = "BTSPricesA"
+    slots[2] = "General - Elwynn Forest"
+    slots[3] = "Trade - City"
+    slots[5] = "MyFriends"
+    C_ChatInfo.SwapChatChannelsByChannelIndex = function(a, b) slots[a], slots[b] = slots[b], slots[a] end
+    for _ = 1, 5 do Realm:Join() end
+    check("General moves back to /1", slots[1], "General - Elwynn Forest")
+    check("Trade moves back to /2", slots[2], "Trade - City")
+    check("ours moves behind them", Number("BTSPricesA"), 3)
+    check("a player's own channel behind it keeps its number", slots[5], "MyFriends")
+    check("still in, sharing goes on", Realm:InChannel(), true)
+
+    -- No way to move it: ours steps out for this session and stays out.
+    Login()
+    slots[1] = "BTSPricesA"
+    slots[2] = "General - Elwynn Forest"
+    C_ChatInfo.SwapChatChannelsByChannelIndex = nil
+    Realm:Join()
+    check("with no way to move it, ours steps out", Number("BTSPricesA"), 0)
+    check("its leave does not join again", Realm:OnNotice("YOU_LEFT", "1. BTSPricesA", "BTSPricesA"), true)
+    Realm:Join()
+    check("and it stays out this session", Number("BTSPricesA"), 0)
+    check("General keeps its number", slots[2], "General - Elwynn Forest")
+
+    Login()
+    GetChannelName, JoinTemporaryChannel = savedFns.GetChannelName, savedFns.JoinTemporaryChannel
+    JoinChannelByName, LeaveChannelByName = savedFns.JoinChannelByName, savedFns.LeaveChannelByName
+    C_Timer.After, C_ChatInfo.SwapChatChannelsByChannelIndex = savedFns.After, savedFns.Swap
+    GetChannelList, EnumerateServerChannels, IsInInstance = nil, nil, nil
+    Realm:Join()
+end
+
+--------------------------------------------------------------------------------
 print("\nsharing a scan")
 --------------------------------------------------------------------------------
 
@@ -278,7 +400,7 @@ end)(), true)
 
 current = bob
 local Realm = bob.ns.RealmPrices
-check("one player is not enough", Realm:GetValue(2589), nil)
+check("one player's price is used", (Realm:GetValue(2589)), 1000)
 check("Bob heard Ana's announcement", Realm:Covering(clock - 60), 1)
 
 current = carl
@@ -290,10 +412,11 @@ Run()
 current = bob
 check("three players: the middle is used", (Realm:GetValue(2589)), 1100)
 check("the cheapest listing comes too", (Realm:GetValue(2589, "lowest")), 1090)
-check("two players are still not enough", Realm:GetValue(2592), nil)
+check("two players: the middle of the two", (Realm:GetValue(2592)), 510)
 check("rival is never answered", Realm:GetValue(2589, "rival"), nil)
 check("Bob has no scan: GetValue uses the realm's", bob.ns.Prices:GetValue(2589), 1100)
-check("Ana does not keep her own echo", ana.ns.RealmPrices:GetValue(2589), nil)
+-- Ana keeps Carl's price only: not her own echo, and Dora's is 900 times hers.
+check("Ana does not keep her own echo", #ana.ns.db.realmPrices["Forever-Alliance"][2589] / 4, 1)
 check("the status counts prices and players", Realm:Describe(), "2 realm prices kept, from 3 players.")
 
 do
@@ -362,6 +485,37 @@ bob.settings.guildPrices = false
 bob.settings.realmPrices = false
 check("realm prices off: his own again", bob.ns.Prices:GetValue(2589), 1500)
 bob.settings.realmPrices = true
+
+do
+    -- One player's price is guarded by the price you know, even an old one
+    -- of your own (the owner, 2026-11-18): under 5% or over 10 times it is
+    -- refused.
+    local Comm = bob.ns.Comm
+    local function Send(sender, itemID, value)
+        Realm:OnPrices(sender, Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(itemID) .. ","
+            .. Comm.ToBase36(value) .. ";", "CHANNEL", "BTSPricesA", "4. BTSPricesA")
+    end
+    bob.ns.Prices:GetTable()[2600] = { market = 1000, minBuyout = 1000, seen = clock - 10 * 86400 }
+    Send("Eve-Realm", 2600, 40)
+    check("under 5% of his old price is refused", Realm:GetValue(2600), nil)
+    Send("Eve-Realm", 2600, 60)
+    check("a bit over 5% is taken", (Realm:GetValue(2600)), 60)
+    Send("Fay-Realm", 2600, 12000)
+    check("over 10 times his old price is refused", (Realm:GetValue(2600)), 60)
+    check("his old price gives way to one player's newer one", bob.ns.Prices:GetValue(2600), 60)
+
+    bob.ns.GuildPrices.GetValue = function(_, itemID) if itemID == 2601 then return 2000, clock end end
+    Send("Eve-Realm", 2601, 50)
+    check("with no price of his own, under 5% of the guild's is refused", Realm:GetValue(2601), nil)
+    Send("Eve-Realm", 2601, 25000)
+    check("and over 10 times it", Realm:GetValue(2601), nil)
+    Send("Eve-Realm", 2601, 1500)
+    check("a price near the guild's is kept", (Realm:GetValue(2601)), 1500)
+    bob.ns.GuildPrices.GetValue = function() return nil end
+
+    Send("Eve-Realm", 2602, 7)
+    check("nothing known: one player's price fills the gap", bob.ns.Prices:GetValue(2602), 7)
+end
 
 --------------------------------------------------------------------------------
 print("\nwhat is not listened to")

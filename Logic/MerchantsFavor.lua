@@ -16,7 +16,7 @@
 -- sealed crate's item ID. Filling a crate is seen the same way (a Waylaid
 -- Crate goes, a Sealed one comes), which says which sealed crate each kind
 -- turns into. Until a turn-in is seen, the rewards players report stand in,
--- marked as such; Artisan crates have none. None of this has been seen in
+-- marked as such; a crate with none typed has none. None of this has been seen in
 -- game yet: Merchant's Favor may be a currency or an item, so both are
 -- watched.
 --
@@ -197,7 +197,7 @@ end
 --
 -- @return favor, money (copper), source, turnIns
 --   source is "learned" (seen paid, turnIns times), "reported" (what players
---   say, not seen here yet) or nil when nobody knows (Artisan crates).
+--   say, not seen here yet) or nil when nobody knows.
 function MerchantsFavor:GetReward(crate)
     local store = Store()
     local sealed = store and store.links[crate.key]
@@ -376,11 +376,14 @@ local function UnitCost(itemID)
 end
 
 --- What one of an item costs made from bought materials, and the recipe,
---- when one of the player's characters knows a craft for it.
+--- when one of the player's characters knows a craft for it. Never a craft
+--- with a cooldown (FindRecipeToMake): one transmute an hour can't fill a
+--- crate of ten.
 function MerchantsFavor.MakeCost(itemID)
     local cost = ns.Cost
-    if not (itemID and cost and cost.FindAnyRecipeForItem and cost.GetMaterialValue) then return nil end
-    local recipeID = cost:FindAnyRecipeForItem(itemID)
+    local find = cost and (cost.FindRecipeToMake or cost.FindAnyRecipeForItem)
+    if not (itemID and find and cost.GetMaterialValue) then return nil end
+    local recipeID = find(cost, itemID)
     if not recipeID then return nil end
     local perUnit = cost:GetMaterialValue(recipeID)
     if not perUnit then return nil end
@@ -415,15 +418,6 @@ function MerchantsFavor.Owned(itemID)
     return inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
 end
 
---- Every crate, with what it costs to buy and fill and what a favor costs.
---
--- A bundle needing more than one stack of its material is marked overStack:
--- the game cannot fill a crate from more than one stack (a known Forever
--- issue, 2026-09-18), so with opts.skipOverStack it is never the cheapest.
---
--- @param opts { skipOverStack }
--- @return rows, cheapest favor first; crates nobody knows the reward for,
---   or that are not priced, come last
 --- Performance Bonus's chance of double favor (a Legacy perk): 0 with no
 --- ranks spent or nothing read.
 function MerchantsFavor.Bonus()
@@ -434,8 +428,15 @@ function MerchantsFavor.Bonus()
     return 0
 end
 
-function MerchantsFavor:GetRows(opts)
-    opts = opts or {}
+--- Every crate, with what it costs to buy and fill and what a favor costs.
+--
+-- The game fills a crate from two stacks now (the owner, 2026-11-16), so a
+-- bundle bigger than one stack, like 40 Linen Cloth, counts like any other.
+-- Old saves may still hold favorSkipOverStack; it is left alone and unread.
+--
+-- @return rows, cheapest favor first; crates nobody knows the reward for,
+--   or that are not priced, come last
+function MerchantsFavor:GetRows()
     local rows = {}
     local bonus = MerchantsFavor.Bonus()
 
@@ -455,7 +456,6 @@ function MerchantsFavor:GetRows(opts)
         for _, bundle in ipairs(crate.bundles) do
             local materialID, count = bundle[1], bundle[2]
             local unit, from = UnitCost(materialID)
-            local stack = Util.GetMaxStackSize(materialID)
 
             local entry = {
                 itemID = materialID,
@@ -463,9 +463,11 @@ function MerchantsFavor:GetRows(opts)
                 unit = unit,
                 cost = unit and unit * count or nil,
                 vendor = from == "vendor",
-                overStack = (stack ~= nil and count > stack) or false,
             }
             entry.buy = entry.cost
+            -- Bought, before a craft may beat it: the crate list on the
+            -- Buy tab sticks to things you can buy.
+            entry.buyUnit, entry.buyVendor = entry.unit, entry.vendor
 
             -- Made from bought materials, when that is cheaper (a player
             -- asked, 2026-10-18): only for a craft one of the player's
@@ -480,8 +482,7 @@ function MerchantsFavor:GetRows(opts)
             end
             bundles[#bundles + 1] = entry
 
-            local usable = not (entry.overStack and opts.skipOverStack)
-            if entry.cost and usable and (not best or entry.cost < best.cost) then best = entry end
+            if entry.cost and (not best or entry.cost < best.cost) then best = entry end
         end
         if best then best.best = true end
 
@@ -543,12 +544,107 @@ function MerchantsFavor:RowForItem(itemID)
     local now = Now()
     local kept = self.tipRows
     if not kept or kept.version ~= MerchantsFavor.version or now - kept.at > ROW_KEEP then
-        local rows = self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+        local rows = self:GetRows()
         kept = { version = MerchantsFavor.version, at = now, byKey = {} }
         for _, row in ipairs(rows) do kept.byKey[row.key] = row end
         self.tipRows = kept
     end
     return kept.byKey[kind.crate.key]
+end
+
+--------------------------------------------------------------------------------
+-- The crate list on the auction house's Buy tab (the owner said build it,
+-- 2026-11-16, from a mockup)
+--------------------------------------------------------------------------------
+
+--- The bundles a crate can take that you can buy, cheapest first.
+local function BoughtBundles(row)
+    local bought = {}
+    for _, bundle in ipairs(row and row.bundles or {}) do
+        if bundle.buy then bought[#bought + 1] = bundle end
+    end
+    table.sort(bought, function(a, b)
+        if a.buy ~= b.buy then return a.buy < b.buy end
+        return a.itemID < b.itemID
+    end)
+    return bought
+end
+
+--- What the Waylaid Crates in your bags still need, one line per material,
+--- in the Buy list's shape (Queue:BuildShoppingList), so the same rows and
+--- Search all take them. Each crate takes its cheapest bundle you can buy;
+--- crates needing the same material share a line. What you have in your
+--- bags and bank, and bought and waiting in the mail, is taken off, after
+--- what the craft queue needs of it.
+--
+-- @param queueLines  the craft queue's shopping list, or nil
+-- @return lines, crates (how many crates are in the bags)
+function MerchantsFavor:CrateShoppingLines(queueLines)
+    local held = self.held
+    if not held then return {}, 0 end
+
+    local counts, crates = {}, 0
+    for itemID, count in pairs(held) do
+        local kind = self:Classify(itemID)
+        if kind and kind.kind == "crate" and (count or 0) > 0 then
+            counts[kind.crate.key] = (counts[kind.crate.key] or 0) + count
+            crates = crates + count
+        end
+    end
+    if crates == 0 then return {}, 0 end
+
+    local queued = {}
+    for _, line in ipairs(queueLines or {}) do
+        if type(line.itemID) == "number" then queued[line.itemID] = (queued[line.itemID] or 0) + (line.needed or 0) end
+    end
+
+    local byItem, order = {}, {}
+    for _, row in ipairs(self:GetRows()) do
+        local count = counts[row.key]
+        local bought = count and BoughtBundles(row)
+        local best = bought and bought[1]
+        if best then
+            local line = byItem[best.itemID]
+            if not line then
+                line = { kind = "crate", itemID = best.itemID, needed = 0, fills = {}, others = {},
+                    unitCost = best.buyUnit, fromVendor = best.buyVendor == true }
+                byItem[best.itemID] = line
+                order[#order + 1] = line
+            end
+            line.needed = line.needed + best.count * count
+            line.fills[#line.fills + 1] = { label = L[row.crate.label], count = count }
+            local other = bought[2]
+            if other then
+                line.others[#line.others + 1] = { itemID = other.itemID, count = other.count, cost = other.buy }
+            end
+        end
+    end
+
+    local inventory, buys = ns.Inventory, ns.AHBuys
+    for _, line in ipairs(order) do
+        local itemID = line.itemID
+        local inBags = inventory and inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
+        local inBank = inventory and inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        local waiting = buys and buys.GetPending and buys:GetPending(itemID) or 0
+        local spare = math.max(0, inBags + inBank + waiting - (queued[itemID] or 0))
+
+        line.have = spare
+        line.inBags, line.inBank = inBags, inBank
+        line.shortfall = math.max(0, line.needed - spare)
+        line.needsBankTrip = line.shortfall == 0 and inBags < line.needed and inBags + inBank >= line.needed
+        line.vendorLimited = not line.fromVendor and ns.Vendor and ns.Vendor.IsLimited
+            and ns.Vendor:IsLimited(itemID) == true or false
+
+        if line.shortfall > 0 and line.unitCost then
+            local cost
+            if not line.fromVendor and ns.Prices and ns.Prices.GetCostFor then
+                cost = ns.Prices:GetCostFor(itemID, line.shortfall, 0)
+            end
+            line.estimatedCost = cost or line.unitCost * line.shortfall
+        end
+    end
+
+    return order, crates
 end
 
 --------------------------------------------------------------------------------
@@ -627,7 +723,7 @@ function MerchantsFavor:GetPlan(goal, rows)
     plan.reached = have ~= nil and have >= goal
     if plan.need <= 0 then return plan end
 
-    rows = rows or self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+    rows = rows or self:GetRows()
     for _, row in ipairs(rows) do
         if row.perFavor and row.favor and row.favor > 0 and row.best then
             plan.best = row
@@ -830,6 +926,9 @@ function MerchantsFavor:OnEnable()
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(function(module)
         module:OnBags()
         module:CheckGoal()
+        -- A crate filled or a buy came in: the Buy tab's crate list.
+        local panel = ns.PostPanel
+        if panel and panel.CrateBagsChanged then panel:CrateBagsChanged() end
     end))
     ns.RegisterEvent(self, "PLAYER_MONEY", Quietly(self.OnMoney))
     ns.RegisterEvent(self, "CURRENCY_DISPLAY_UPDATE", Quietly(self.OnCurrency))

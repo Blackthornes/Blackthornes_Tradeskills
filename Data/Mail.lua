@@ -34,10 +34,16 @@ local Util = ns.Util
 -- bag had in Data/Inventory.lua.
 local MAX_ATTACHMENTS = tonumber(_G.ATTACHMENTS_MAX_RECEIVE) or 16
 
--- How many ledger entries to keep per realm. Long enough to see a pattern,
--- short enough not to bloat saved variables, which on this client are already
--- fragile -- see Core/Persist.lua.
-local MAX_LEDGER = 400
+-- Ledger entries kept per realm: every one from the last LEDGER_KEEP_DAYS, up
+-- to MAX_LEDGER. A busy seller filled the old 400 in a day or three. Each
+-- entry is small, so two thousand weigh little. A player back from a long
+-- break still keeps their last LEDGER_KEEP_ANYWAY.
+local MAX_LEDGER = 2000
+local LEDGER_KEEP_DAYS = 60
+local LEDGER_KEEP_ANYWAY = 400
+Mail.MAX_LEDGER = MAX_LEDGER
+Mail.LEDGER_KEEP_DAYS = LEDGER_KEEP_DAYS
+Mail.LEDGER_KEEP_ANYWAY = LEDGER_KEEP_ANYWAY
 
 --------------------------------------------------------------------------------
 -- Storage
@@ -539,10 +545,19 @@ function Mail:ResolveItemName(name)
         return self.nameCache[name] or nil
     end
 
+    -- A stack's mail names it with its count ("Silk Cloth (20)"), which no
+    -- item is called. The plain name is what is looked for.
+    local wanted = Mail.PlainName(name) or name
     local found
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     -- Each output once.
     local outputs, seen = {}, {}
@@ -570,7 +585,18 @@ function Mail:ResolveItemName(name)
 
         if cached then
             local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
-            if ok and itemName == name then found = itemID end
+            if ok and itemName == wanted then found = itemID end
+        end
+    end
+
+    -- Not something you craft (cloth, shards, bars): the game knows an item
+    -- by name once it is in its item cache, as anything you posted is. A
+    -- name can't make it fetch anything, so this costs the cache nothing.
+    local getInfo = not found and C_Item and C_Item.GetItemInfo
+    if getInfo then
+        local ok, itemName, link = pcall(getInfo, wanted)
+        if ok and itemName == wanted and type(link) == "string" then
+            found = tonumber(link:match("item:(%d+)"))
         end
     end
 
@@ -589,8 +615,14 @@ end
 function Mail:OutputSet()
     if self.outputSet then return self.outputSet end
 
-    local source = ns.Recipes and ns.Recipes.GetAccountWide
-        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+    -- Only each recipe's output is read, so the list that copies nothing
+    -- is asked first: GetAccountWide copies every recipe of every
+    -- character, and this ran once for each name not yet matched (a slow
+    -- frame five seconds after login, 2026-11-26).
+    local Recipes = ns.Recipes
+    local source = Recipes and Recipes.GetAccountWideOutputs and Recipes:GetAccountWideOutputs()
+        or Recipes and Recipes.GetAccountWide and Recipes:GetAccountWide()
+        or (Recipes and Recipes:GetAll()) or {}
 
     local set = {}
     for _, recipe in pairs(source) do
@@ -621,17 +653,20 @@ function Mail:FillItemID(itemID)
 
     -- The names still waiting, worked out again only when the ledger gains
     -- an entry. Nothing waiting is the usual case, and costs nothing.
-    if self.unresolvedFor ~= ledger then
+    local last = ledger.entries[#ledger.entries]
+    local key = #ledger.entries .. "|" .. tostring(last and last.t or 0)
+    if self.unresolvedFor ~= ledger or self.unresolvedKey ~= key then
         self.unresolved = {}
         for _, entry in ipairs(ledger.entries) do
-            if entry.kind == "sold" and not entry.itemID and entry.name then
-                self.unresolved[entry.name] = true
-            end
+            local plain = not entry.itemID and Mail.PlainName(entry.name)
+            if plain then self.unresolved[plain] = true end
         end
-        self.unresolvedFor = ledger
+        self.unresolvedFor, self.unresolvedKey = ledger, key
     end
 
-    if not next(self.unresolved) or not self:OutputSet()[itemID] then return end
+    -- Any item, not only crafted ones: cloth, shards and bars sold from the
+    -- bags were filed by name too, and showed with no icon or link.
+    if not next(self.unresolved) then return end
 
     -- The game just loaded this item, so reading its name asks for nothing.
     local ok, name = pcall(C_Item.GetItemInfo, itemID)
@@ -639,7 +674,7 @@ function Mail:FillItemID(itemID)
 
     local filled = 0
     for _, entry in ipairs(ledger.entries) do
-        if entry.kind == "sold" and not entry.itemID and entry.name == name then
+        if not entry.itemID and Mail.PlainName(entry.name) == name then
             entry.itemID = itemID
             filled = filled + 1
         end
@@ -678,7 +713,7 @@ local function Describe(mail, kind, itemName, invoice)
             entry.buyer = invoice.buyer
         end
 
-        entry.itemID = ns.Mail:ResolveItemName(entry.name)
+        entry.itemID = ns.Mail:ResolveItemName(entry.name) or ns.Mail:NameIndex()[entry.name]
 
         -- How many sold. A stack was counted as one, so its cost came out a
         -- fraction of what it was. The invoice says where the client gives
@@ -690,19 +725,12 @@ local function Describe(mail, kind, itemName, invoice)
         end
         if units and units > 1 then entry.quantity = units end
 
-        -- What one cost to make, as it stood when this sold, so a later craft
-        -- at a different price does not rewrite what this sale made.
-        local made = entry.itemID and ns.CraftedCost and ns.CraftedCost:Get(entry.itemID)
-        if made then
-            entry.cost = made.cost
-        elseif entry.itemID and ns.MethodProfit then
-            -- Not made by you: what it cost on the auction house, if you
-            -- bought it there. Kept as it stood, like a craft's cost.
-            local paid = ns.MethodProfit:BuyCost(entry.itemID)
-            if paid then
-                entry.cost = paid
-                entry.bought = true
-            end
+        -- What one cost, as it stood when this sold, so a later craft or
+        -- buy at a different price does not rewrite what this sale made:
+        -- the last craft, or what was paid on the auction house when that
+        -- came after it (CraftedCost:CostTheSale).
+        if entry.itemID and ns.CraftedCost and ns.CraftedCost.CostTheSale then
+            ns.CraftedCost:CostTheSale(entry)
         end
     else
         -- An expired or cancelled auction comes back as the item itself, so
@@ -908,6 +936,32 @@ end
 
 Mail._ShrunkFrom = ShrunkFrom
 
+--- Drop the oldest entries once there are more than MAX_LEDGER, or once they
+--- are older than LEDGER_KEEP_DAYS, keeping at least LEDGER_KEEP_ANYWAY. Each
+--- one dropped is handed to Profit by method, which keeps it small.
+function Mail:TrimLedger(ledger, now)
+    local entries = ledger and ledger.entries
+    if type(entries) ~= "table" or #entries <= LEDGER_KEEP_ANYWAY then return end
+    local cutoff = (tonumber(now) or time()) - LEDGER_KEEP_DAYS * 86400
+    local drop = 0
+    local count = #entries
+    while count - drop > LEDGER_KEEP_ANYWAY do
+        local oldest = entries[drop + 1]
+        -- Oldest first, so the first one young enough ends the trim.
+        if count - drop <= MAX_LEDGER and (tonumber(oldest and oldest.t) or 0) >= cutoff then break end
+        drop = drop + 1
+    end
+    if drop == 0 then return end
+    local keep = ns.MethodProfit and ns.MethodProfit.KeepOlderSale
+    for i = 1, drop do
+        if keep then pcall(keep, ns.MethodProfit, entries[i]) end
+    end
+    -- One shift, not a table.remove per entry.
+    for i = 1, count - drop do entries[i] = entries[i + drop] end
+    for i = count, count - drop + 1, -1 do entries[i] = nil end
+end
+
+
 function Mail:Reconcile(mails, complete)
     local ledger = self:GetLedger()
     local who = ns.Config:GetCharacterKey()
@@ -1075,9 +1129,13 @@ function Mail:Reconcile(mails, complete)
         end
     end
 
-    while #ledger.entries > MAX_LEDGER do
-        table.remove(ledger.entries, 1)
-    end
+    -- A sale trimmed off here is kept, small, for Profit by method's longer
+    -- periods (Logic/MethodProfit.lua), so they don't all show one day.
+    self:TrimLedger(ledger, time())
+
+    -- A new sale filed by name may match an item another entry knows, and a
+    -- new return may name the item for older sales.
+    if wrote then self:FoldNamedSales() end
 
     -- With Share Sales ticked, the other account hears in a few seconds.
     if wrote and ns.AccountLink and ns.AccountLink.SalesChanged then
@@ -1192,14 +1250,64 @@ end
 -- from the item that came back. Without this, anything not crafted (cloth
 -- sold from the whole-bag Post tab) showed as two rows on the Sales tab, one
 -- with the sales and one with the expiries, each with the wrong sell-through.
+--
+-- A stack's mail names it with its count ("Silk Cloth (20)") and a sale's
+-- invoice may not, so the two kinds of entry could carry different names for
+-- the same item. Each name is filed as written and as its plain name, and a
+-- name looked up that isn't there is tried as its plain name.
+local NAME_INDEX_META = {
+    __index = function(index, name)
+        local plain = Mail.PlainName(name)
+        if plain and plain ~= name then return rawget(index, plain) end
+    end,
+}
+
 function Mail:NameIndex()
     local index = {}
     for _, entry in ipairs(self:Entries()) do
-        if entry.itemID and entry.name and not index[entry.name] then
-            index[entry.name] = entry.itemID
+        if entry.itemID and type(entry.name) == "string" then
+            if rawget(index, entry.name) == nil then index[entry.name] = entry.itemID end
+            local plain = Mail.PlainName(entry.name)
+            if plain and rawget(index, plain) == nil then index[plain] = entry.itemID end
         end
     end
-    return index
+    return setmetatable(index, NAME_INDEX_META)
+end
+
+--- Give every entry filed by name only its item, where it can be told.
+--
+-- From another entry for the same item (an expired stack of it came back
+-- with its id), else from the game's item cache. Only adds the missing id:
+-- nothing is removed and no other field changes. Run at login and after a
+-- mailbox read adds entries, so a sale and its returns land on one row with
+-- the item's icon, colour and link.
+-- @return how many entries got their item
+function Mail:FoldNamedSales()
+    if not ns.db then return 0 end
+
+    local ledger = self:GetLedger()
+    local index, tried, filled = nil, {}, 0
+
+    for _, entry in ipairs(ledger.entries) do
+        if type(entry) == "table" and not entry.itemID and type(entry.name) == "string" then
+            local plain = Mail.PlainName(entry.name) or entry.name
+            if tried[plain] == nil then
+                index = index or self:NameIndex()
+                tried[plain] = index[entry.name] or self:ResolveItemName(entry.name) or false
+            end
+            if tried[plain] then
+                entry.itemID = tried[plain]
+                filled = filled + 1
+            end
+        end
+    end
+
+    if filled > 0 then
+        self.mergedEntries = nil
+        self.unresolvedKey = nil
+        ns.Debug(("mail: %d sale(s) filed by name now know their item"):format(filled))
+    end
+    return filled
 end
 
 function Mail:GetSummary(itemID)
@@ -1333,7 +1441,7 @@ function Mail:GetItems(from, to)
         -- Two different unresolved names must not share a row, and an
         -- unresolved name must not collide with item 0 either, so the string
         -- key is prefixed rather than used bare.
-        local key = itemID or ("?" .. tostring(name or "unknown"))
+        local key = Mail.ItemKey(itemID, name)
         local bucket = byKey[key]
 
         if not bucket then
@@ -1390,7 +1498,7 @@ function Mail:GetItems(from, to)
 
             if profit then
                 bucket.profit = bucket.profit + profit
-                if source == "made" then
+                if source == "made" or source == "bought" then
                     bucket.costed = bucket.costed + 1
                 else
                     bucket.guessed = bucket.guessed + 1
@@ -1519,11 +1627,34 @@ function Mail:NoteHeardSale(name)
         who = ns.Config:GetCharacterKey(),
         itemID = self:ResolveItemName(name),
     }
+    heard.quantity = self:HeardQuantity(name, heard.itemID, heard.who)
 
     list[#list + 1] = heard
     while #list > MAX_HEARD do table.remove(list, 1) end
 
     return heard
+end
+
+--- How many a heard sale sold: the count on the line ("Linen Cloth (5)"),
+--- else the stack of the cheapest listing of it, the one a buyer takes
+--- first, else 1.
+function Mail:HeardQuantity(name, itemID, who)
+    local count = type(name) == "string"
+        and (name:match("%((%d+)%)%s*$") or name:match("%s[xX]%s?(%d+)%s*$"))
+    if tonumber(count) then return tonumber(count) end
+    if not itemID or not (ns.Auctions and ns.Auctions.GetListings) then return 1 end
+
+    local ok, listings = pcall(ns.Auctions.GetListings, ns.Auctions)
+    if not ok or type(listings) ~= "table" then return 1 end
+    local best
+    for _, listing in ipairs(listings) do
+        if listing.itemID == itemID and not listing.ended
+            and (who == nil or listing.who == who)
+            and (not best or (listing.unit or math.huge) < (best.unit or math.huge)) then
+            best = listing
+        end
+    end
+    return best and tonumber(best.quantity) or 1
 end
 
 --- An item name as the two sides of a sale both mean it.
@@ -1533,19 +1664,55 @@ end
 -- own. Compared as written, a stack's sale never found its mail and said "gold
 -- waiting in the mail" for a month. Only for comparing: what is saved keeps
 -- the name it was written down with.
+-- A name always comes out the same, and the Sales tab asks for every
+-- ledger entry's on each draw, so answers are kept (false for none). The
+-- few thousand names a ledger holds; started over past PLAIN_KEPT_MOST.
+local plainKept, plainCount = {}, 0
+local PLAIN_KEPT_MOST = 20000
+
+local function Strip(name)
+    local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    t = t:match("|h%[(.-)%]|h") or t
+    t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
+    t = t:gsub("^%s+", ""):gsub("%s+$", "")
+    return t
+end
+
 function Mail.PlainName(name)
     if type(name) ~= "string" then return nil end
 
-    local ok, plain = pcall(function()
-        local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-        t = t:match("|h%[(.-)%]|h") or t
-        t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
-        t = t:gsub("^%s+", ""):gsub("%s+$", "")
-        return t
-    end)
+    local known = plainKept[name]
+    if known ~= nil then return known or nil end
 
-    if not ok or type(plain) ~= "string" or plain == "" then return nil end
+    local ok, plain = pcall(Strip, name)
+    if not ok or type(plain) ~= "string" or plain == "" then plain = nil end
+
+    if plainCount >= PLAIN_KEPT_MOST then plainKept, plainCount = {}, 0 end
+    plainKept[name] = plain or false
+    plainCount = plainCount + 1
     return plain
+end
+
+--- The name a mail gave one random suffix copy ("Royal Cape of the
+--- Sorcerer"), when it is the item's own name with words added after it;
+--- nil for the plain item, or while the client has no name for it.
+function Mail.SuffixName(itemID, name)
+    local plain = itemID and Mail.PlainName(name)
+    if not plain or not (C_Item and C_Item.GetItemInfo) then return nil end
+    local ok, base = pcall(C_Item.GetItemInfo, itemID)
+    if not ok or type(base) ~= "string" or base == "" then return nil end
+    if #plain <= #base + 1 or plain:sub(1, #base + 1) ~= base .. " " then return nil end
+    return plain
+end
+
+--- The key By item files an entry under: the item, and each random suffix
+--- of it on a row of its own (a player's report, 2026-11-23). An entry
+--- with no item is keyed by its name.
+function Mail.ItemKey(itemID, name)
+    if not itemID then return "?" .. tostring(name or "unknown") end
+    local suffixName = Mail.SuffixName(itemID, name)
+    if suffixName then return itemID .. ":" .. suffixName end
+    return itemID
 end
 
 local function SameItem(heard, entry)
@@ -1592,6 +1759,8 @@ function Mail:SettleHeard()
                     and (heard.who == nil or entry.who == heard.who)
                     and SameItem(heard, entry) then
                     entry.heard = true
+                    -- When it sold, for Keep in stock (Auctions:GetPostedCount).
+                    entry.heardAt = heard.t
                     settled = true
                     break
                 end
@@ -1699,6 +1868,10 @@ function Mail:OnEnable()
     ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
         if success ~= false then Mail:FillItemID(itemID) end
     end)
+
+    -- Sales saved by name only before this fix get their item once, a moment
+    -- after login when the item cache has settled.
+    C_Timer.After(5, function() pcall(Mail.FoldNamedSales, Mail) end)
 
     -- Taking an attachment moves stock from the mailbox to the bags, and both
     -- counts have to move together or the item is briefly counted twice.

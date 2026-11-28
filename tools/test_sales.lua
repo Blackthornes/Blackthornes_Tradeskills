@@ -191,11 +191,12 @@ end
 -- The carried-over history is read from the saved database; stand in for it.
 ns.Mail.GetRestoredRollup = function() return restoredRollup end
 
-local createRow, updateRow, listData, clickRow
+local createRow, updateRow, listData, clickRow, listOpts
 
 ns.Widgets.CreateScrollList = function(_, opts)
     createRow, updateRow = opts.createRow, opts.updateRow
     clickRow = opts.onClick
+    listOpts = opts
 
     return Stub({
         SetData = function(_, data) listData = data end,
@@ -368,7 +369,7 @@ tab.refresh()  -- still in the Recent view: sales only
 check("the event list shows only what sold", #listData, 3)
 
 assert(selectView, "Tab_Sales did not hand over its view pages' callback")
-check("the views are pages", #viewTabs, 7)
+check("the views are pages", #viewTabs, 8)
 check("the periods are pages", #periodTabs, 8)
 check("with Pick dates last", periodTabs[8].key, "pick")
 check("whose gold: this character or all", whoTabs and #whoTabs, 2)
@@ -475,6 +476,72 @@ contains("names the best sale", visitRow.detail.text, "best Bolt of Linen Cloth"
 contains("and the character, first name and all", visitRow.detail.text, "Tester Surname")
 
 contains("the footer counts the visits", LabelStartingWith("2 visits").text, "best haul")
+
+print("")
+print("Leave Out of Report")
+
+-- The real rule lives in Logic/MailHaul.lua (tools/test_mailhaul.lua); here
+-- only what the tab draws and asks for.
+local history = { { t = NOW - 7200, total = 900 }, savedHaul }
+local leftOutCalls = {}
+ns.MailHaul = {
+    GetHistory = function() return history end,
+    Records = function() return 900 end,
+    IsLeftOut = function(haul) return type(haul) == "table" and haul.leftOut == true end,
+    SetLeftOut = function(_, haul, on)
+        leftOutCalls[#leftOutCalls + 1] = { haul = haul, on = on }
+        haul.leftOut = on or nil
+        return true
+    end,
+}
+local menuLines, menuOpts
+ns.RowMenu = { Open = function(_, lines, opts) menuLines, menuOpts = lines, opts end }
+
+selectView("visits")
+clickRow(listData[1], 1, "RightButton")
+check("a right-click opens the row menu", menuLines ~= nil, true)
+check("titled for the visit", menuOpts and menuOpts.title, "MAILBOX VISIT")
+check("See Report first", menuLines[1].text, "See Report")
+check("then Leave Out of Report", menuLines[2].text, "Leave Out of Report")
+check("a right-click does not open the report", reopened, nil)
+
+menuLines[1].run()
+check("See Report opens it", reopened ~= nil and reopened.total, 52000)
+reopened = nil
+
+menuLines[2].run()
+check("leaving it out marks the saved visit itself", leftOutCalls[1].haul, savedHaul)
+check("as left out", savedHaul.leftOut, true)
+check("not the row's view of it", rawget(listData[1], "leftOut"), nil)
+
+tab.refresh()
+local leftRow = Row(listData[1])
+contains("the row is tagged Left Out", leftRow.name.text, "Left Out")
+check("not best haul", (leftRow.name.text:find("best haul", 1, true)) == nil, true)
+local footer = LabelStartingWith("2 visits").text
+contains("the footer leaves it out of collected", footer, "collected " .. ns.Util.FormatMoney(900, { short = true }):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+contains("and says how many are left out", footer, "1 left out")
+
+-- Hover lines.
+local tipLines = {}
+GameTooltip.AddLine = function(_, text) tipLines[#tipLines + 1] = text end
+listOpts.onEnter(Stub(), listData[1])
+check("the hover says it is left out", tipLines[1], "This visit is left out of your totals.")
+check("and how to count it again", tipLines[2], "Right-click to count it again.")
+tipLines = {}
+listOpts.onEnter(Stub(), listData[2])
+check("a counted visit says how to leave it out", tipLines[1], "Right-click to leave it out of your totals.")
+
+clickRow(listData[1], 1, "RightButton")
+check("on a left out visit the menu says Count It Again", menuLines[2].text, "Count It Again")
+menuLines[2].run()
+check("which counts it again", savedHaul.leftOut, nil)
+tab.refresh()
+check("the footer drops the left out count", (LabelStartingWith("2 visits").text:find("left out", 1, true)) == nil, true)
+
+clickRow(listData[1], 1, "LeftButton")
+check("a left click still opens the report", reopened ~= nil, true)
+ns.RowMenu = nil
 
 ns.MailHaul, ns.MailReport = nil, nil
 selectView("sales")

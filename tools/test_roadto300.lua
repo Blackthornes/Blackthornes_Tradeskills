@@ -6,7 +6,9 @@
 --   2. Each stretch takes the recipe cheapest a point, known or taught by a
 --      trainer or vendor of the player's side; its price counted once.
 --   3. A step is one recipe in one colour: orange is "every craft",
---      yellow "most crafts", and its crafts are 1 / chance a point.
+--      yellow "most crafts", green "some crafts", and its crafts are
+--      1 / chance a point. Green is taken only when nothing orange or
+--      yellow is there.
 --   4. Trainer steps at Classic's ranks, Journeyman at 50 to 150 and so on,
 --      a level chip and "You're level N." when the level is short.
 --   5. Steps below the skill now are done; what the bags and bank hold
@@ -17,7 +19,7 @@
 --   8. The list shows the steps left first, the done ones after.
 
 local GLOBALS = { "time", "GetTime", "UnitFactionGroup", "GetRealZoneText", "GetLocale",
-  "UnitLevel", "C_Timer", "C_Map", "C_QuestLog", "GetProfessions", "GetProfessionInfo" }
+  "UnitLevel", "C_Timer", "C_Map", "C_QuestLog", "GetProfessions", "GetProfessionInfo", "IsPlayerSpell" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -206,24 +208,62 @@ check("its range", texts.range, "at 50, raises your cap to 150")
 check("the nearest trainer of your side", texts.lines[1], "Blacksmithing trainer in Ironforge")
 check("who teaches that far", Road:PlaceFor(journeyman, 164).name, "Journey Jo")
 
-local grinding = steps[plan.current + 1]
-check("a known recipe first, while it is cheapest", grinding.recipeID, 2)
-check("from the skill now", grinding.from, 62)
-check("yellow: most crafts", Road.Texts(grinding, "Blacksmithing", 15, 164).chip, "most crafts")
-check("1 / chance a point: 2 points take 17 crafts", grinding.crafts, 17)
-check("known: nothing to learn", grinding.learn, nil)
+-- A trainer inside a dungeon is named by the dungeon (2026-11-16: Artisan
+-- Enchanting's step named no trainer; Annora stands in Uldaman).
+do
+  local saved = ns.LearnNext.TrainerFor
+  ns.LearnNext.TrainerFor = function() return { kind = "trainer", name = "Annora", zone = "Badlands", x = 44.4, y = 12.2, inside = "Uldaman" } end
+  local artisan = { kind = "trainer", rank = { 200, 35, 50000, 300 }, at = 200, cap = 300, level = 35 }
+  check("a dungeon trainer is named by the dungeon",
+    Road.Texts(artisan, "Enchanting", 36, 333).lines[1], "Enchanting trainer in Uldaman")
+  check("and Show the Way still has a spot", Road:PlaceFor(artisan, 333).zone, "Badlands")
+  ns.LearnNext.TrainerFor = saved
+end
+
+-- A city trainer the data keeps on the zone map around it is named by the
+-- city (2026-11-23: Undercity's Apothecarium trainers read "in Silverpine
+-- Forest"; Thunder Bluff's and Darnassus' read Mulgore and Teldrassil).
+do
+  local saved = ns.LearnNext.TrainerFor
+  local doctor = { kind = "trainer", name = "Doctor Marsh", zone = "Silverpine Forest", x = 73.0, y = 9.5 }
+  ns.LearnNext.TrainerFor = function() return doctor end
+  local journey = { kind = "trainer", rank = { 50, 10, 450, 150 }, at = 50, cap = 150, level = 10 }
+  check("an Undercity trainer is named by the city",
+    Road.Texts(journey, "Alchemy", 15, 171).lines[1], "Alchemy trainer in Undercity")
+  check("and Show the Way still has the zone map", Road:PlaceFor(journey, 171).zone, "Silverpine Forest")
+  local craft = { kind = "craft", crafts = 1, from = 80, to = 90, name = "Oil", needs = {}, learn = doctor }
+  check("a recipe step names the city too", Road.Texts(craft, "Alchemy", 15, 171).lines[1],
+    "Learn it from the Alchemy trainer in Undercity.")
+  local brill = { kind = "trainer", name = "Carolai Anise", zone = "Tirisfal Glades", x = 59.4, y = 52.2 }
+  ns.LearnNext.TrainerFor = function() return brill end
+  check("a trainer out in a zone keeps the zone",
+    Road.Texts(journey, "Alchemy", 15, 171).lines[1], "Alchemy trainer in Tirisfal Glades")
+  check("Thunder Bluff from Mulgore's map", ns.LearnNext.ZoneName(
+    { name = "x", zone = "Mulgore", x = 47.5, y = 33.0 }), "Thunder Bluff")
+  check("Darnassus from Teldrassil's map", ns.LearnNext.ZoneName(
+    { name = "x", zone = "Teldrassil", x = 30.0, y = 50.0 }), "Darnassus")
+  ns.LearnNext.TrainerFor = saved
+end
+
+-- The grinding stone is known and cheaper a point, but green at 62 (green
+-- from 55): the belt, orange, wins (a player's report, 2026-11-18).
+local grinding = Find(function(s) return s.kind == "craft" and s.recipeID == 2 and not s.done end)
+check("a known green recipe waits while an orange one is there", grinding, nil)
+check("yellow: most crafts", Road.Texts(
+  { kind = "craft", tier = "medium", crafts = 1, from = 45, to = 55, name = "x", needs = {} },
+  "Blacksmithing", 15, 164).chip, "most crafts")
 
 local beltStep = Find(function(s) return s.kind == "craft" and s.recipeID == 3 and not s.done end)
-check("the belt takes over where cheaper", beltStep and beltStep.from, 64)
+check("the belt from the skill now", beltStep and beltStep.from, 62)
 check("to the cap the next recipe beats it", beltStep and beltStep.to, 75)
-check("every craft a point", beltStep and beltStep.crafts, 11)
+check("every craft a point", beltStep and beltStep.crafts, 13)
 check("still to learn, at its trainer", beltStep and beltStep.learn and beltStep.learn.kind, "trainer")
 texts = Road.Texts(beltStep, "Blacksmithing", 15, 164)
-check("Make N item", texts.title, "Make 11 Copper Chain Belt")
+check("Make N item", texts.title, "Make 13 Copper Chain Belt")
 check("chip", texts.chip, "every craft")
-check("range", texts.range, "64 to 75")
+check("range", texts.range, "62 to 75")
 check("materials from bags then bank", texts.lines[1],
-  "Needs 66 Copper Bar. You have 51, buy 5. Your banker has 10.")
+  "Needs 78 Copper Bar. You have 51, buy 17. Your banker has 10.")
 check("where it is learned, with the trainer's zone", texts.lines[2],
   "Learn it from the Blacksmithing trainer in " .. tostring(beltStep.learn.zone) .. ".")
 check("the trainer has a zone", beltStep.learn.zone ~= nil, true)
@@ -235,7 +275,7 @@ vendorStep.learn.zone = nil
 check("and without a zone", Road.Texts(vendorStep, "Blacksmithing", 15, 164).lines[1],
   "You don't know this recipe yet. Buy it from a vendor.")
 check("sells some back", texts.lines[#texts.lines], "Sells for about 1800c each, so it pays some back.")
-check("cost: what to buy and the recipe", beltStep.cost, 5 * 20 + 50)
+check("cost: what to buy and the recipe", beltStep.cost, 17 * 20 + 50)
 
 local coarse = Find(function(s) return s.kind == "craft" and s.recipeID == 4 end)
 check("a cheaper recipe takes over when reached", coarse ~= nil, true)
@@ -335,7 +375,7 @@ ns.Queue = {
   EnsureBuy = function(_, id, count, _, forRecipe) bought[id] = { count, forRecipe } return true end,
 }
 check("a recipe to learn puts its materials to buy", Road:QueueStep(beltStep), true)
-check("all of them", bought[BAR] and bought[BAR][1], 66)
+check("all of them", bought[BAR] and bought[BAR][1], 78)
 check("tied to the recipe", bought[BAR] and bought[BAR][2].recipeID, 3)
 check("with how many crafts it is for", bought[BAR] and bought[BAR][2].crafts, beltStep.crafts)
 local known = { kind = "craft", recipeID = 2, crafts = 7, needs = {} }
@@ -396,6 +436,111 @@ check("planned by real cost", switched and switched.pickBy, "real")
 settings.roadPickBy = "junk"
 check("anything else reads as lowest", Road.PickBy(), "lowest")
 settings.roadPickBy = nil
+
+print("\nFewest Materials and No Auction House")
+-- The owner said build it (2026-11-26, from a mockup).
+local many = { recipeID = 83, name = "Many", skill = 1, yellow = 40, grey = 80,
+  reagents = { { itemID = ROUGH, quantity = 5 } } }
+local function MorePlan(pickBy, offAuction)
+  return Road:Plan({
+    line = 164, skill = 10, max = 75, level = 15, pickBy = pickBy, owned = {},
+    candidates = {
+      { record = cheap, known = true, price = { cost = 20, back = 0, materials = 1, offAuction = false,
+        reagents = { { itemID = BAR, quantity = 1, unit = 20 } } } },
+      { record = many, known = true, price = { cost = 5, back = 0, materials = 5, offAuction = offAuction,
+        reagents = { { itemID = ROUGH, quantity = 5, unit = 1 } } } },
+    },
+  })
+end
+check("lowest cost takes the five cheap stones", FirstCraft(MorePlan("lowest", true)).recipeID, 83)
+local fewest = MorePlan("fewest", true)
+check("fewest materials is kept on the plan", fewest.pickBy, "fewest")
+check("fewest materials takes the one bar", FirstCraft(fewest).recipeID, 81)
+local noah = MorePlan("noah", false)
+check("no auction house is kept on the plan", noah.pickBy, "noah")
+check("nothing without the auction house: stuck", FirstCraft(noah), nil)
+check("says where it stops", noah.stuck, 10)
+local noahToo = MorePlan("noah", true)
+check("no auction house takes the vendor stones", FirstCraft(noahToo).recipeID, 83)
+settings.roadPickBy = "fewest"
+check("the setting reads fewest", Road.PickBy(), "fewest")
+settings.roadPickBy = "noah"
+check("the setting reads noah", Road.PickBy(), "noah")
+settings.roadPickBy = nil
+-- What comes without the auction house: a vendor's, one you make, a
+-- disenchant's.
+local savedVendor, savedCost, savedDisenchant = ns.Vendor, ns.Cost, ns.Disenchant
+ns.Vendor = { GetUnitPrice = function(_, id) if id == 1 then return 10 end end }
+ns.Cost = { FindRecipeForItem = function(_, id) if id == 2 then return 99 end end }
+ns.Disenchant = { MATERIALS = { { itemID = 3 } } }
+check("a vendor sells it", Road.WithoutAuction(1), true)
+check("you make it", Road.WithoutAuction(2), true)
+check("a disenchant gives it", Road.WithoutAuction(3), true)
+check("only the auction house has it", Road.WithoutAuction(4), false)
+check("all of a recipe's materials", Road.OffAuction({ { itemID = 1 }, { itemID = 3 } }), true)
+check("one from the auction house", Road.OffAuction({ { itemID = 1 }, { itemID = 4 } }), false)
+ns.Vendor = { GetUnitPrice = function() error("broken") end }
+check("a broken read is the auction house", Road.WithoutAuction(1), false)
+ns.Vendor, ns.Cost, ns.Disenchant = savedVendor, savedCost, savedDisenchant
+
+print("\nStop At")
+check("300 unless picked", Road.StopAt(), 300)
+settings.roadStopAt = 225
+check("225 once picked", Road.StopAt(), 225)
+settings.roadStopAt = 17
+check("anything else reads as 300", Road.StopAt(), 300)
+settings.roadStopAt = nil
+check("a stop ahead is kept", Road.StopFor(100, 150), 150)
+check("a stop passed goes on to the next", Road.StopFor(212, 150), 225)
+check("at 300 it stays 300", Road.StopFor(300, 225), 300)
+-- One recipe all the way, either side of Expert at 125.
+local long = { recipeID = 84, name = "Long", skill = 1, yellow = 260, grey = 280,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+local function StopPlan(stop, skill, max)
+  return Road:Plan({
+    line = 164, skill = skill, max = max, level = 30, owned = {}, stop = stop,
+    candidates = { { record = long, known = true, price = { cost = 10, back = 0, materials = 1,
+      reagents = { { itemID = BAR, quantity = 1, unit = 10 } } } } },
+  })
+end
+local to150 = StopPlan(150, 100, 150)
+local last, expert = 0, false
+for _, step in ipairs(to150.steps) do
+  if not step.done then last = math.max(last, step.to or 0) end
+  if not step.done and step.kind == "trainer" and step.cap == 225 then expert = true end
+end
+check("the road ends at the stop", last, 150)
+check("kept on the plan", to150.stop, 150)
+check("no Expert on the way to 150", expert, false)
+check("one step, not split at 125", #to150.steps - (function() local n = 0
+  for _, step in ipairs(to150.steps) do if step.done then n = n + 1 end end return n end)(), 1)
+check("crafts to the stop", to150.crafts, 50)
+local to225 = StopPlan(225, 100, 150)
+local trained = false
+for _, step in ipairs(to225.steps) do
+  if not step.done and step.kind == "trainer" and step.cap == 225 then trained = true end
+end
+check("Expert on the way to 225", trained, true)
+check("the default walks to 300", StopPlan(nil, 100, 150).stop, 300)
+
+print("\nQueue To adds the same recipe's steps together")
+-- A player's report (2026-11-23): two steps of one recipe, 3 and 14,
+-- must come out as 17 in the queue.
+local queued = {}
+local savedQueue2 = ns.Queue
+ns.Queue = {
+  Ensure = function(_, id, count) queued[id] = math.max(queued[id] or 0, count) return true end,
+  EnsureBuy = function() return true end,
+}
+local split = StopPlan(225, 100, 150)
+local parts = {}
+for _, step in ipairs(split.steps) do
+  if not step.done and step.kind == "craft" then parts[#parts + 1] = step.crafts end
+end
+check("two steps of the one recipe", #parts, 2)
+Road:QueueAll(split)
+check("the queue holds both", queued[84], parts[1] + parts[2])
+ns.Queue = savedQueue2
 
 print("\nReal cost: a craft that sells for more than it costs")
 -- Alchemy at 87: both early crafts pay. The road used to stay on the elixir
@@ -604,6 +749,18 @@ check("a fishing plan", fishPlan.fishing, true)
 check("Apprentice done", fishPlan.steps[1].done, true)
 check("Elwynn done", fishPlan.steps[2].done, true)
 check("Journeyman done", fishPlan.steps[3].done, true)
+-- With no race handed in, the game's own answer picks the home zones. It
+-- gives the name in the player's language first and the token second.
+local savedRace = UnitRace
+UnitRace = function() return "Zwerg", "Dwarf" end
+local dwarfPlan = Road.FishPlan({ skill = 1, max = 75, level = 5, side = "A", farmer = false, owned = {} })
+check("a Dwarf starts in Dun Morogh", dwarfPlan.steps[2].zone, "Dun Morogh")
+check("then Loch Modan", dwarfPlan.steps[4].zone, "Loch Modan")
+UnitRace = function() return "Untoter", "Scourge" end
+local undeadPlan = Road.FishPlan({ skill = 1, max = 75, level = 5, side = "H", farmer = false, owned = {} })
+check("an Undead starts in Tirisfal Glades", undeadPlan.steps[2].zone, "Tirisfal Glades")
+UnitRace = savedRace
+
 local westfall = fishPlan.steps[4]
 check("now: Westfall", westfall.zone, "Westfall")
 check("from your skill", westfall.from, 95)
@@ -659,8 +816,14 @@ check("the belt is offered", HasCandidate(3), true)
 check("nothing skipped yet", #Road:SkippedOn(164), 0)
 local beforePlan = Road:Get(professions[1])
 check("skip needs a recipe ID", Road:Skip(nil), false)
+-- One key per character: a GUID the client won't read writes nothing.
+check("no GUID, nothing written", Road:Skip(3), false)
+check("still offered", HasCandidate(3), true)
+local playing = "Player-1-AAAA"
+ns.Config.GetCharacterKey = function() return playing end
 check("skip the belt", Road:Skip(3), true)
-check("kept by name", ns.db.roadSkipped[3], ns.RecipeBook:Get(3).name)
+check("kept by name for this character", ns.db.roadSkippedBy[playing][3], ns.RecipeBook:Get(3).name)
+check("not account wide", ns.db.roadSkipped and ns.db.roadSkipped[3], nil)
 check("it is skipped", Road:IsSkipped(3), true)
 check("another is not", Road:IsSkipped(4), false)
 check("the road leaves it out", HasCandidate(3), false)
@@ -673,10 +836,398 @@ end
 check("no step for it", beltLeft, false)
 check("listed for its profession", Road:SkippedOn(164)[1], 3)
 check("not for another", #Road:SkippedOn(185), 0)
-check("Show All brings it back", Road:ShowAllOn(164), 1)
+-- Another character still has it on the road.
+playing = "Player-1-BBBB"
+check("an alt still has it", Road:IsSkipped(3), false)
+check("offered to the alt", HasCandidate(3), true)
+check("the alt's plan has it again", Road:Get(professions[1]) ~= skippedPlan, true)
+playing = "Player-1-AAAA"
+check("Bring Back brings it back", Road:ShowAllOn(164), 1)
 check("offered again", HasCandidate(3), true)
 check("nothing skipped after", Road:IsSkipped(3), false)
-check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
+check("Bring Back with nothing skipped", Road:ShowAllOn(164), 0)
+-- An account wide skip from before still counts, and comes back.
+ns.db.roadSkipped = { [3] = "Copper Chain Belt" }
+check("an old skip still counts", Road:IsSkipped(3), true)
+check("listed once", #Road:SkippedOn(164), 1)
+check("its name", Road:SkippedName(3), "Copper Chain Belt")
+check("one Bring Back", Road:BringBack(3), true)
+check("gone after", Road:IsSkipped(3), false)
+check("nothing to bring back", Road:BringBack(3), false)
+ns.Config.GetCharacterKey = function() return "me" end
+
+print("\ncooldown crafts stay off the road")
+-- A player's report (2026-11-25): Tailoring's road asked for about 40
+-- Mooncloth, one every 4 days. A craft with a cooldown is never a step;
+-- the road picks the next best recipe.
+local savedCooldowns = ns.Cooldowns
+local onCooldown = {}
+ns.Cooldowns = { seenVersion = 0, HasCooldown = function(_, id) return onCooldown[id] == true end }
+check("the belt is offered", HasCandidate(3), true)
+local freePlan = Road:Get(professions[1])
+onCooldown[3] = true
+ns.Cooldowns.seenVersion = 1
+check("a cooldown craft is left out", HasCandidate(3), false)
+check("Road.OnCooldown says so", Road.OnCooldown(3), true)
+check("another craft is not", Road.OnCooldown(4), false)
+local coolPlan = Road:Get(professions[1])
+check("the plan is worked out again", coolPlan ~= freePlan, true)
+local coolLeft = false
+for _, step in ipairs(coolPlan.steps) do
+  if step.kind == "craft" and step.recipeID == 3 then coolLeft = true end
+end
+check("no step for it", coolLeft, false)
+check("not counted as skipped", #Road:SkippedOn(164), 0)
+ns.Cooldowns = { HasCooldown = function() error("broken") end }
+check("a broken check leaves it on", Road.OnCooldown(3), false)
+ns.Cooldowns = nil
+check("no cooldown module leaves it on", HasCandidate(3), true)
+ns.Cooldowns = savedCooldowns
+
+print("\nno shopping row before the steps")
+-- A player's report (2026-11-17): Alchemy's road listed each step's herbs
+-- and vials on its own step. They gathered and bought for step one, then
+-- had to go back out for every step after. The road adds it all up first,
+-- and the vendor's vials for the whole road go on the list at the start.
+local HERB, VIAL = 2447, 3371
+local savedVendor = ns.Vendor
+ns.Vendor = {
+  GetUnitPrice = function(_, id) return id == VIAL and 4 or nil end,
+  IsLimited = function() return false end,
+  GetTable = function() return {} end,
+  KeepsInStock = function(_, id) return id == VIAL end,
+}
+local function Brew(id, name, skill, yellow, grey)
+  return { record = { recipeID = id, name = name, skill = skill, yellow = yellow, grey = grey,
+    reagents = { { itemID = HERB, quantity = 1 }, { itemID = VIAL, quantity = 1 } } }, known = true,
+    price = { cost = 14, back = 0, reagents = {
+      { itemID = HERB, quantity = 1, unit = 10 }, { itemID = VIAL, quantity = 1, unit = 4 } } } }
+end
+local brew = Road:Plan({
+  line = 171, skill = 1, max = 75, level = 10, owned = { [HERB] = { 5, 0, 0 }, [VIAL] = { 2, 0, 0 } },
+  candidates = { Brew(201, "First Brew", 1, 30, 45), Brew(202, "Second Brew", 25, 60, 75) },
+})
+local brewSteps, herbs, vials = {}, 0, 0
+for _, step in ipairs(brew.steps) do
+  if not step.done and step.kind == "craft" then
+    brewSteps[#brewSteps + 1] = step
+    for _, need in ipairs(step.needs) do
+      if need.itemID == HERB then herbs = herbs + need.count end
+      if need.itemID == VIAL then vials = vials + need.count end
+    end
+  end
+end
+check("the road has more than one brewing step", #brewSteps >= 2, true)
+-- The owner (2026-11-19): no "Get everything before you start" row. Each
+-- step lists what it needs and has Queue Step.
+local listed = Road.Listed(brew)
+check("the step to do now is the first row", listed[1], brewSteps[1])
+local anyShop = false
+for _, row in ipairs(listed) do if row.kind == "shop" then anyShop = true end end
+check("no row to get everything first", anyShop, false)
+check("the plan keeps no road-wide shopping list", brew.shopping, nil)
+
+local roadBuys, ensuredBrew = nil, {}
+ns.Queue = {
+  Ensure = function(_, id, count) ensuredBrew[id] = count return true end,
+  EnsureBuy = function() return true end,
+  SetRoadBuys = function(_, line, counts, name) roadBuys = { line = line, counts = counts, name = name } end,
+}
+Road:QueueStep(brewSteps[1], brew)
+check("Queue Step still queues its own crafts", ensuredBrew[201], brewSteps[1].crafts)
+-- The owner (2026-11-18): one click on a step queued the whole road. Queue
+-- Step queues only the step clicked: no later step's crafts, and none of
+-- the rest of the road's vials on the list to buy.
+local others = 0
+for id in pairs(ensuredBrew) do if id ~= 201 then others = others + 1 end end
+check("no other step is queued", others, 0)
+check("none of the rest of the road's vials go on the list", roadBuys and next(roadBuys.counts), nil)
+check("old lines for this road come off", roadBuys and roadBuys.line, 171)
+roadBuys = nil
+Road:QueueAll(brew)
+check("Queue All queues every step, so the road's own line goes", roadBuys and next(roadBuys.counts), nil)
+ns.Vendor, ns.Queue = savedVendor, nil
+
+-- A player's report (2026-11-18): the road called Rough Dynamite (yellow
+-- at 30, grey at 60 on Forever) a yellow step while the game's window
+-- showed it green. Green starts halfway, at 45.
+print("\ngreen steps")
+local dynamite = { recipeID = 3919, name = "Rough Dynamite", skill = 1, yellow = 30, grey = 60,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+check("yellow before halfway", Road.Band(dynamite, 44), "medium")
+check("green from halfway", Road.Band(dynamite, 45), "easy")
+check("grey at grey", Road.Band(dynamite, 60), "trivial")
+local function OnlyPlan(list, skill)
+  return Road:Plan({ line = 164, skill = skill, max = 75, level = 15, candidates = list, owned = {} })
+end
+local function Priced(record, cost, known)
+  return { record = record, known = known ~= false,
+    price = { cost = cost, reagents = { { itemID = BAR, quantity = 1, unit = cost } } } }
+end
+local alone = OnlyPlan({ Priced(dynamite, 10) }, 40)
+local tiers = {}
+for _, step in ipairs(alone.steps) do
+  if not step.done and step.kind == "craft" then tiers[#tiers + 1] = step.tier .. " " .. step.from .. "-" .. step.to end
+end
+check("a yellow step ends where green starts", tiers[1], "medium 40-45")
+check("then a green step (to the trainer at 50)", tiers[2], "easy 45-50")
+check("and green on to grey", tiers[3], "easy 50-60")
+local greenStep
+for _, step in ipairs(alone.steps) do if step.tier == "easy" and not step.done then greenStep = step end end
+check("a green step says some crafts", Road.Texts(greenStep, "Engineering", 15, 202).chip, "some crafts")
+
+-- A green craft is left for when nothing orange or yellow is there, even
+-- when it is cheaper a point.
+local dearer = { recipeID = 3920, name = "Dearer", skill = 1, yellow = 50, grey = 90,
+  reagents = { { itemID = BAR, quantity = 1 } } }
+local both = OnlyPlan({ Priced(dynamite, 1), Priced(dearer, 50) }, 46)
+local first
+for _, step in ipairs(both.steps) do
+  if not step.done and step.kind == "craft" then first = first or step end
+end
+check("yellow wins over a cheaper green", first and first.recipeID, 3920)
+local greenEarly = false
+for _, step in ipairs(both.steps) do
+  if not step.done and step.tier == "easy" and step.from < 70 then greenEarly = true end
+end
+check("no green step while a yellow one is there", greenEarly, false)
+
+-- What the game's window showed wins over the book.
+check("the book agrees: the same record", Road.Agree(dynamite, { tier = "medium", skill = 40 }), dynamite)
+local moved = Road.Agree(dynamite, { tier = "easy", skill = 40 })
+check("green at 40 moves green to 40", moved.green, 40)
+check("and grey with it", moved.grey, 55)
+check("and yellow with it", moved.yellow, 25)
+check("it still reads through to the recipe", moved.recipeID, 3919)
+check("grey seen at 50 moves grey to 50", Road.Agree(dynamite, { tier = "trivial", skill = 50 }).grey, 50)
+check("orange seen at 30 moves yellow to 31", Road.Agree(dynamite, { tier = "optimal", skill = 30 }).yellow, 31)
+check("no reading: the book", Road.Agree(dynamite, nil), dynamite)
+
+print("\nCharge for Own Materials off: what you own is free when picking")
+-- Leatherworking at 85 (a player's report, 2026-11-19): with the box off,
+-- the road still charged for the Medium Hide in the bags and never cured
+-- it, though Cured Medium Hide was orange and cost only its salt.
+local HIDE, SALT, LEATHER = 4232, 4289, 2318
+local function Leather(id, name, skill, yellow, grey, reagents)
+  local cost, lines, recs = 0, {}, {}
+  for _, r in ipairs(reagents) do
+    cost = cost + r[2] * r[3]
+    lines[#lines + 1] = { itemID = r[1], quantity = r[2], unit = r[3] }
+    recs[#recs + 1] = { itemID = r[1], quantity = r[2] }
+  end
+  return { record = { recipeID = id, name = name, skill = skill, yellow = yellow, grey = grey,
+    reagents = recs }, known = true, price = { cost = cost, reagents = lines } }
+end
+local function LeatherPlan(valueOwned)
+  return Road:Plan({
+    line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+    valueOwned = valueOwned,
+    candidates = {
+      Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+      Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+    },
+  })
+end
+check("charged: the belt is cheaper", FirstCraft(LeatherPlan(true)).recipeID, 3767)
+local freePlan = LeatherPlan(false)
+local cure = FirstCraft(freePlan)
+check("free: cure the hides you have first", cure.recipeID, 3817)
+check("only as many as the hides you have", cure.crafts <= 12, true)
+local cured, nextOne = 0, nil
+for _, step in ipairs(freePlan.steps) do
+  if not step.done and step.kind == "craft" then
+    if step.recipeID == 3817 and not nextOne then cured = cured + step.crafts
+    else nextOne = nextOne or step end
+  end
+end
+check("cures about the hides you have", cured >= 10 and cured <= 13, true)
+check("then the belt once the hides run out", nextOne and nextOne.recipeID, 3767)
+check("the cure step costs only salt", cure.cost, cure.crafts * 5)
+settings.valueOwnedMaterials = false
+check("the setting is read when not given", FirstCraft(Road:Plan({
+  line = 165, skill = 85, max = 150, level = 20, owned = { [HIDE] = { 12, 0, 0 } },
+  candidates = {
+    Leather(3817, "Cured Medium Hide", 75, 90, 105, { { HIDE, 1, 200 }, { SALT, 1, 5 } }),
+    Leather(3767, "Fine Leather Belt", 80, 100, 120, { { LEATHER, 6, 20 } }),
+  },
+})).recipeID, 3817)
+settings.valueOwnedMaterials = true
+
+print("\nno recipes that need reputation")
+-- A player's report (2026-11-19): the road sent them to a Redridge vendor
+-- for a pattern they couldn't buy, their standing too low, after they had
+-- bought its materials. A vendor's recipe that needs a standing the
+-- character doesn't have is left off; one they have the standing for stays.
+local PLAIN, FRIENDLY, CAMP = 7001, 7002, 7003
+ns.RECIPE_BOOK.RECIPES[61] = { 164, 40, 8001, 1, 1, { BAR, 2 }, "Plain Vendor Pattern" }
+ns.RECIPE_BOOK.RECIPES[62] = { 164, 40, 8002, 1, 1, { BAR, 2 }, "Friendly Pattern" }
+ns.RECIPE_BOOK.RECIPES[63] = { 164, 40, 8003, 1, 1, { BAR, 2 }, "Camp Pattern" }
+ns.LEARN_SPOTS.SKILLS[61] = { 40, 60, 80 }
+ns.LEARN_SPOTS.SKILLS[62] = { 40, 60, 80 }
+ns.LEARN_SPOTS.SKILLS[63] = { 40, 60, 80 }
+ns.RECIPE_BOOK.ITEMS[PLAIN] = { 61, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RECIPE_BOOK.ITEMS[FRIENDLY] = { 62, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RECIPE_BOOK.ITEMS[CAMP] = { 63, 500 }
+ns.RecipeBook.merged = nil
+Road:Forget()
+
+local tipLines = {
+  [FRIENDLY] = { { leftText = "Pattern: Friendly Pattern" },
+    { leftText = "Requires Lakeshire Guard - Friendly", leftColor = { r = 1, g = 0.13, b = 0.13 } } },
+  [PLAIN] = { { leftText = "Pattern: Plain Vendor Pattern" }, { leftText = "Requires Blacksmithing (40)" } },
+}
+local cached = { [PLAIN] = true, [FRIENDLY] = true, [CAMP] = true }
+local asked = {}
+C_TooltipInfo = { GetItemByID = function(id) return { lines = tipLines[id] or {} } end }
+C_Item = {
+  IsItemDataCachedByID = function(id) return cached[id] == true end,
+  RequestLoadItemDataByID = function(id) asked[#asked + 1] = id end,
+}
+local standing = nil
+C_Reputation = {
+  GetNumFactions = function() return standing and 1 or 0 end,
+  GetFactionDataByIndex = function() return { name = "Lakeshire Guard", reaction = standing } end,
+}
+local campSeller = nil
+ns.VendorPins = { RecipeSellers = function(_, id)
+  if id == CAMP and campSeller then return { campSeller } end
+  return {}
+end }
+
+check("a plain vendor recipe stays", HasCandidate(61), true)
+check("not a recipe that needs a standing you don't have", HasCandidate(62), false)
+check("the need, off the tooltip", Road.ItemNeeds(FRIENDLY).standing, "Friendly")
+check("no need on a plain one", Road.ItemNeeds(PLAIN), false)
+check("standings by the game's words", Road.StandingRank("Honored"), 6)
+standing = 5
+Road.OnFaction()
+check("there once you're Friendly", HasCandidate(62), true)
+standing = 4
+Road.OnFaction()
+check("off again at Neutral", HasCandidate(62), false)
+standing = nil
+Road.OnFaction()
+check("the red line says so when the standing can't be read", Road.NeedsStanding(FRIENDLY), true)
+
+-- A vendor the game showed selling it, with the standing it asked for.
+campSeller = { name = "Camp Quartermaster", mapID = 1433, x = 30, y = 40, gold = 100,
+  faction = "Lakeshire Guard", standing = "Honored" }
+check("a vendor that asked for a standing", HasCandidate(63), false)
+standing = 6
+check("there once you're Honored", Road.NeedsStanding(CAMP), false)
+standing = nil
+campSeller = { name = "Camp Quartermaster", mapID = 1433, x = 30, y = 40, gold = 100 }
+check("a vendor that asked for none", HasCandidate(63), true)
+
+-- An item the client hasn't loaded waits for it, then the road moves.
+local version = Road.standingVersion
+local waitItem = 7004
+ns.RECIPE_BOOK.RECIPES[64] = { 164, 40, 8004, 1, 1, { BAR, 2 }, "Waiting Pattern" }
+ns.LEARN_SPOTS.SKILLS[64] = { 40, 60, 80 }
+ns.RECIPE_BOOK.ITEMS[waitItem] = { 64, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+ns.RecipeBook.merged = nil
+check("left off while the client fetches it", HasCandidate(64), false)
+check("the client is asked for it", asked[#asked], waitItem)
+cached[waitItem] = true
+Road.OnItemInfo(waitItem, true)
+check("the road is worked out again", Road.standingVersion > version, true)
+check("on the road once it arrives", HasCandidate(64), true)
+
+print("\nno recipes for a specialty you don't have")
+-- Players' reports (2026-11-25): the Blacksmithing road mixed Armorsmith and
+-- Weaponsmith recipes, and Learn Next listed recipes the specialty can't
+-- learn. A recipe that needs a specialty the character doesn't have is left
+-- off; with none yet, a line says why.
+local Learn = ns.LearnNext
+local spells = {}
+IsPlayerSpell = function(id) return spells[id] == true end
+local function Learned(...)
+  spells = {}
+  for _, id in ipairs({ ... }) do spells[id] = true end
+  Learn.OnSpellsChanged()
+end
+ns.RECIPE_BOOK.RECIPES[71] = { 164, 40, 8011, 1, 1, { BAR, 2 }, "The Shatterer", t = 100 }
+ns.RECIPE_BOOK.RECIPES[72] = { 164, 40, 8012, 1, 1, { BAR, 2 }, "Truesilver Gauntlets", t = 100 }
+ns.RECIPE_BOOK.RECIPES[73] = { 164, 40, 8013, 1, 1, { BAR, 2 }, "Trainer Says Armorsmith", t = 100 }
+ns.RECIPE_BOOK.RECIPES[74] = { 164, 40, 8014, 1, 1, { BAR, 2 }, "Plans Say Weaponsmith" }
+ns.RECIPE_BOOK.RECIPES[75] = { 164, 40, 8015, 1, 1, { BAR, 2 }, "Plain Trainer Plate", t = 100 }
+for id = 71, 75 do ns.LEARN_SPOTS.SKILLS[id] = { 40, 60, 80 } end
+local WEAPON_PLANS = 7011
+ns.RECIPE_BOOK.ITEMS[WEAPON_PLANS] = { 74, 500, v = { "Amy Vendor", "Redridge Mountains", "A" } }
+cached[WEAPON_PLANS] = true
+tipLines[WEAPON_PLANS] = { { leftText = "Plans: Plans Say Weaponsmith" },
+  { leftText = "Requires Weaponsmith", leftColor = { r = 1, g = 0.13, b = 0.13 } } }
+local hadTrainer = ns.TrainerRecipes
+ns.TrainerRecipes = { version = 0, Get = function(_, id)
+  if id == 73 then return { cost = 100, skill = 40, at = 1, needs = "armor" } end
+end }
+ns.RecipeBook.merged = nil
+Road:Forget()
+
+check("the tooltip names the specialty", Road.ItemSpecialty(WEAPON_PLANS), "weapon")
+check("no specialty on a plain pattern", Road.ItemSpecialty(PLAIN), nil)
+check("a tooltip line, by the game's words", Learn.SpecialtyIn("Requires Dragonscale Leatherworking"), "dragonscale")
+check("a skill line is not a specialty", Learn.SpecialtyIn("Requires Blacksmithing (40)"), nil)
+
+Learned(9787) -- Weaponsmith
+check("a Weaponsmith's own recipe stays", HasCandidate(71), true)
+check("weapon plans stay for a Weaponsmith", HasCandidate(74), true)
+check("not an Armorsmith recipe for a Weaponsmith", HasCandidate(72), false)
+check("not one the trainer said needs Armorsmith", HasCandidate(73), false)
+check("a plain recipe stays", HasCandidate(75), true)
+check("no line for a Weaponsmith", Road.SpecialtyNote(164), nil)
+
+Learned(9788) -- Armorsmith
+check("an Armorsmith's own recipe stays", HasCandidate(72), true)
+check("the trainer's word counts", HasCandidate(73), true)
+check("not a Weaponsmith recipe for an Armorsmith", HasCandidate(71), false)
+check("not weapon plans for an Armorsmith", HasCandidate(74), false)
+
+Learned(17039) -- Master Swordsmith, a Weaponsmith too
+check("a master smith keeps Weaponsmith recipes", HasCandidate(71), true)
+check("but not Armorsmith ones", HasCandidate(72), false)
+
+Learned() -- none yet
+check("no specialty: none of theirs", HasCandidate(71) or HasCandidate(72) or HasCandidate(73) or HasCandidate(74), false)
+check("no specialty: a plain one stays", HasCandidate(75), true)
+check("the line says why", Road.SpecialtyNote(164), "Recipes for a specialty stay off until you learn one.")
+check("no line for a profession with no specialties", Road.SpecialtyNote(171), nil)
+
+-- A recipe already known always stays.
+local accountWide = ns.Recipes.GetAccountWide
+ns.Recipes.GetAccountWide = function()
+  local all = accountWide()
+  all[72] = { knownBy = { "me" } }
+  return all
+end
+ns.RecipeBook.known = nil
+check("a known recipe stays whatever the specialty", HasCandidate(72), true)
+ns.Recipes.GetAccountWide = accountWide
+ns.RecipeBook.known = nil
+
+-- The road is worked out again only when a specialty changed.
+local before = Learn.specialtyVersion
+Learn.OnSpellsChanged()
+check("other spell changes keep the road", Learn.specialtyVersion, before)
+Learned(9787)
+check("a new specialty moves the road", Learn.specialtyVersion > before, true)
+
+-- Learn Next leaves them off too.
+local rows = Learn:GetRows({ skills = { [164] = 45 } })
+local listed = {}
+for _, row in ipairs(rows) do listed[row.recipeID or row.id or (row.record and row.record.recipeID) or -1] = true end
+local names = {}
+for _, row in ipairs(rows) do names[row.name or ""] = true end
+check("Learn Next lists a Weaponsmith's own recipe", names["The Shatterer"] == true, true)
+check("Learn Next leaves an Armorsmith recipe off", names["Truesilver Gauntlets"] == nil, true)
+check("Learn Next leaves the trainer's Armorsmith recipe off", names["Trainer Says Armorsmith"] == nil, true)
+
+spells = {}
+Learn.OnSpellsChanged()
+ns.TrainerRecipes = hadTrainer
+
+C_TooltipInfo, C_Item, C_Reputation = nil, nil, nil
+ns.VendorPins = nil
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

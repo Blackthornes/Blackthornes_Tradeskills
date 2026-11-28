@@ -1,274 +1,162 @@
--- The price graph's hourly prices (asked 2026-10-06; volume and average 2026-10-09).
+-- Price History on the auction house Sell list.
 --
--- What must hold:
---   1. Only what the account crafts, its materials and starred items are
---      kept; a star counts from the next scan.
---   2. One price an hour (the newest), nothing older than fourteen days, never
---      out of order.
---   3. Prices:Record keeps the cheapest posting, leaving out a lone low one.
---   4. The best times are only said once the scans cover 8 hours on 5 days;
---      a steady price names no hour; a falling week does not fake a pattern.
---   5. An old save with no priceHistory loads, keeps everything else, and
---      nothing here touches the price table, my prices or favourites.
---   6. The graph places points by time and price, and falls back to the
---      price table's scans for an item that is not kept.
-
-time = time or os.time
-date = date or os.date
-
-local now = 1790000000
-local clock = now
-time = function() return clock end
-
-local passed, failed = 0, 0
-local function check(label, got, want)
-    if got == want then
-        passed = passed + 1
-        print(("  ok    %-60s %s"):format(label, tostring(got)))
-    else
-        failed = failed + 1
-        print(("  FAIL  %-60s got %s, want %s"):format(label, tostring(got), tostring(want)))
-    end
-end
+-- A player asked, the owner said build it from a mockup (2026-11-26). A
+-- click on a Sell row picks it; a click on the picked row lets it go. While
+-- a row is picked, Price History shows in the foot, in the foot note's
+-- place, and opens the Prices tab with that item picked. When the foot is
+-- too narrow beside Queue All, it takes Duration's place too. It never
+-- shows on Buy or the other views.
 
 local ns = {}
-ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
-ns.Util = {
-    Clamp = function(v, l, h) return math.max(l, math.min(h, v)) end,
-    Count = function(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end,
-    FormatMoney = function(c) return tostring(c) end,
-    FormatAge = function() return "" end,
-    HasFunction = function() return false end,
-    GetItemLabel = function(i) return "item" .. tostring(i) end,
-}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end
-ns.RegisterEvent = function() end
-ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end, function() end
+ns.RegisterEvent = function() return true end
+ns.Print, ns.Debug, ns.Warn = function() end, function() end, function() end
 
-local realm = "Forever-Alliance"
-ns.db = {
-    prices = {},
-    favouritePrices = {},
-    myPrices = { [realm] = { [2589] = { price = 30, mode = "use" } } },
-    characters = {
-        ["Ana-Forever"] = {
-            recipes = {
-                [2963] = { outputItemID = 2996, reagents = { { itemID = 2589, quantity = 3 } } },
-            },
-        },
-    },
-}
-ns.Config = {
-    Get = function() return nil end,
-    GetRealmKey = function() return realm end,
-    GetPriceTable = function()
-        ns.db.prices[realm] = ns.db.prices[realm] or {}
-        return ns.db.prices[realm]
-    end,
-}
+--------------------------------------------------------------------------------
+-- Frames that remember whether they show, their width and their anchors
+--------------------------------------------------------------------------------
 
-assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
-assert(loadfile(lfs_cwd .. "/Data/PriceHistory.lua"))("Blackthornes_TS", ns)
-
-local H = ns.PriceHistory
--- Wool Cloth, the Bolt made from it, Spider Silk, and an item nobody uses.
-local WOOL, BOLT, SILK, OTHER = 2589, 2996, 4306, 9999
-local HOUR = 3600
-
-print("which items")
-check("a craft is kept", H:IsTracked(BOLT), true)
-check("its material is kept", H:IsTracked(WOOL), true)
-check("anything else is not", H:IsTracked(OTHER), false)
-ns.Prices:SetFavourite(SILK, true, "Spider Silk")
-check("a starred item is kept at once", H:IsTracked(SILK), true)
-
-H:Note(OTHER, 50, now)
-check("an item not kept writes nothing", ns.db.priceHistory == nil, true)
-
-print("one an hour, fourteen days")
-H:Note(WOOL, 40, now)
-H:Note(WOOL, 35, now + 600)
-local list = ns.db.priceHistory[realm][WOOL]
-check("two scans in one hour keep one pair", #list, 2)
-check("the newest price stands for the hour", list[2], 35)
-
-H:Note(WOOL, 38, now + HOUR)
-check("the next hour adds a pair", #list, 4)
-H:Note(WOOL, 99, now - HOUR)
-check("an older price is left out, not written out of order", #list, 4)
-H:Note(WOOL, 0, now + 2 * HOUR)
-H:Note(WOOL, -5, now + 2 * HOUR)
-check("no price is not a price", #list, 4)
-
-H:Note(WOOL, 41, now + 8 * 24 * HOUR)
-check("after eight days the first week is still kept", #list, 6)
-H:Note(WOOL, 42, now + 15 * 24 * HOUR)
-check("after fifteen days only the newest pairs are left", #list, 4)
-check("and the last is the new price", list[4], 42)
-
-print("the price Record keeps")
-ns.db.priceHistory = nil
-ns.Prices:Record(BOLT, 300, 120, 20, now, 250, 200, nil)
-check("Record notes the cheapest posting, yours included",
-    ns.db.priceHistory[realm][BOLT][2], 200)
-ns.Prices:Record(BOLT, 300, 5, 20, now + HOUR, 260, nil, 5)
-check("a lone low listing is left out", ns.db.priceHistory[realm][BOLT][4], 260)
-ns.Prices:Record(OTHER, 300, 100, 5, now)
-check("the price table still takes every item", ns.Prices:Get(OTHER) ~= nil, true)
-check("but no history for it", ns.db.priceHistory[realm][OTHER], nil)
-
-print("points")
-clock = now + HOUR
-local points = H:GetPoints(BOLT, 24 * HOUR)
-check("both scans are in the last 24 hours", #points, 2)
-check("oldest first", points[1].p, 200)
-check("times come back to the hour", points[2].t, math.floor((now + HOUR) / HOUR) * HOUR)
-
-print("best times")
--- A week starting at local midnight, so hours of the day are known.
-local base = os.time({ year = 2026, month = 9, day = 28, hour = 0 })
-local function Week(priceAt, hours, days)
-    ns.db.priceHistory = nil
-    for day = 0, days - 1 do
-        for _, h in ipairs(hours) do
-            H:Note(WOOL, priceAt(day, h), base + day * 24 * HOUR + h * HOUR)
-        end
-    end
-    clock = base + days * 24 * HOUR
-    return H:GetBestTimes(WOOL)
+local function Stub(fields)
+    local frame = fields or {}
+    frame.shown = frame.shown == nil and true or frame.shown
+    frame.width = frame.width or 0
+    frame.points = {}
+    frame.Show = function(self) self.shown = true end
+    frame.Hide = function(self) self.shown = false end
+    frame.SetShown = function(self, on) self.shown = on and true or false end
+    frame.IsShown = function(self) return self.shown end
+    frame.SetWidth = function(self, w) self.width = w end
+    frame.GetWidth = function(self) return self.width end
+    frame.ClearAllPoints = function(self) self.points = {} end
+    frame.SetPoint = function(self, ...) self.points[#self.points + 1] = { ... } end
+    frame.SetText = function(self, text) self.text = text end
+    frame.GetParent = function() return Stub() end
+    frame.IsVisible = function(self) return self.shown end
+    return setmetatable(frame, { __index = function(self, key)
+        local noop = function() end
+        rawset(self, key, noop)
+        return noop
+    end })
 end
 
-local cheapAt4 = function(_, h) return h == 4 and 80 or (h == 20 and 120 or 100) end
-local best = Week(cheapAt4, { 2, 4, 8, 11, 14, 17, 20, 23 }, 3)
-check("three days is not enough", best.ready, false)
-check("but counts its days", best.days, 3)
+CreateFrame = function() return Stub() end
+C_Timer = { After = function() end, NewTicker = function() return Stub() end }
 
-best = Week(cheapAt4, { 4, 8, 14, 20 }, 7)
-check("four hours of the day is not enough", best.ready, false)
-check("and counts its hours", best.hours, 4)
+ns.Theme = setmetatable({
+    FONT = "font",
+    sizes = { tiny = 10, small = 11, normal = 12, large = 14, title = 16 },
+    Unpack = function(key) return key end,
+    TextWidth = function(label) return #(label.text or "") * 6 end,
+}, { __index = function() return function() return Stub() end end })
 
-best = Week(cheapAt4, { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
-check("8 hours on 6 days is enough", best.ready, true)
-check("cheapest at 4am", best.buyHour, 4)
-check("dearest at 8pm", best.sellHour, 20)
-check("not steady", best.steady, false)
-local texts = H:DescribeBestTimes(WOOL)
-check("said in words", texts[2], "Cheapest around 4am, dearest around 8pm")
+local buttons = {}
+ns.Widgets = setmetatable({
+    CreateButton = function(_, text, onClick, opts)
+        local button = Stub({ text = text, onClick = onClick, width = opts and opts.width or 90 })
+        button.label = { text = text }
+        buttons[text] = button
+        return button
+    end,
+    CreateDropdown = function() return Stub({ width = 76 }) end,
+}, { __index = function() return function() return Stub() end end })
 
-best = Week(function(day, h) return 100 + (h == 4 and 1 or 0) end, { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
-check("a price that holds all day is steady", best.steady, true)
+ns.Util = { FormatMoney = function(c) return tostring(c) end }
+ns.COLORS = { profit = "ff4fd18b" }
+ns.Config = { Get = function() return nil end, Set = function() end }
+ns.Posting = { DURATIONS = { { text = "24 Hours", value = 24 } } }
+ns.Collapse = {}
+ns.L = setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
--- Falling 10% a day, the same at every hour within a day: the late hours
--- of a day are not cheaper than its morning, so no hour should stand out.
-best = Week(function(day, _) return math.floor(1000 * (0.9 ^ day)) end,
-    { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
-check("a falling week is not a time of day pattern", best.steady, true)
+local PostPanel
+local realNew = ns.NewModule
+ns.NewModule = function(name) local m = realNew(name); PostPanel = m; return m end
+assert(loadfile(lfs_cwd .. "/UI/PostPanel.lua"))("Blackthornes_TS", ns)
 
-best = Week(cheapAt4, { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
-clock = base + 14 * 24 * HOUR
-check("the prices are kept for two weeks", #H:GetPoints(WOOL) > 0, true)
-check("but best times look at the last week only", H:GetBestTimes(WOOL).ready, false)
+local checks = 0
+local function check(label, condition)
+    checks = checks + 1
+    if not condition then error(("FAILED: %s"):format(label), 2) end
+    print(("  ok  %s"):format(label))
+end
 
-check("hour words", H.HourText(0) .. " " .. H.HourText(12) .. " " .. H.HourText(15), "12am 12pm 3pm")
+-- The drawer's foot, as Build leaves it.
+local refreshed = 0
+PostPanel.list = Stub({ rows = {}, Refresh = function() refreshed = refreshed + 1 end })
+PostPanel.frame = Stub({ width = 402 })
+PostPanel.footNote = Stub()
+PostPanel.duration = Stub({ width = 76 })
+PostPanel.listAll = Stub({ width = 110 })
+PostPanel.queueAll = Stub({ width = 100, shown = false })
+PostPanel.priceHistory = Stub({ width = 96, shown = false })
+PostPanel.view = "sell"
 
-print("upkeep and old saves")
-clock = base + 30 * 24 * HOUR
-check("prune drops what is over a week old", H:Prune() >= 1, true)
-check("nothing left of it", ns.db.priceHistory[realm][WOOL], nil)
+local opened
+local openedLink
+ns.PricesUI = { ShowItem = function(_, itemID, link) opened, openedLink = itemID, link end }
 
-ns.db.priceHistory[realm][12345] = "unreadable"
-H:Prune()
-check("an entry it cannot read is left alone", ns.db.priceHistory[realm][12345], "unreadable")
+check("nothing picked at first", PostPanel:IsPicked({ itemID = 7 }) == false)
+check("Price History hides with nothing picked", not PostPanel.priceHistory:IsShown())
 
-check("my prices untouched", ns.db.myPrices[realm][2589].price, 30)
-check("favourites untouched", ns.db.favouritePrices[SILK], "Spider Silk")
-check("prices untouched", ns.Prices:Get(OTHER) ~= nil, true)
+PostPanel:Pick(7)
+check("a click picks the row", PostPanel:IsPicked({ itemID = 7 }))
+check("another row is not picked", PostPanel:IsPicked({ itemID = 8 }) == false)
+check("the list draws the pick", refreshed > 0)
+check("Price History shows once a row is picked", PostPanel.priceHistory:IsShown())
+check("it takes the foot note's place", not PostPanel.footNote:IsShown())
+check("Duration stays while there is room", PostPanel.duration:IsShown())
+check("it sits right of Duration", PostPanel.priceHistory.points[1][2] == PostPanel.duration)
 
--- An old save: no priceHistory at all, reading and pruning work.
-ns.db.priceHistory = nil
-check("an old save reads as no points", #H:GetPoints(WOOL), 0)
-check("and prunes nothing", H:Prune(), 0)
-check("and is not given an empty table by reading", ns.db.priceHistory, nil)
+PostPanel:OpenPriceHistory()
+check("it opens the Prices tab on the picked item", opened == 7)
+PostPanel:Pick(7)
+PostPanel:Pick(7, "|Hitem:7::::::::18:1485:::1:12722:::::|h[Band of the Monkey]|h")
+PostPanel:OpenPriceHistory()
+check("with the picked copy, so a suffix opens as itself", openedLink == "|Hitem:7::::::::18:1485:::1:12722:::::|h[Band of the Monkey]|h")
+PostPanel:Pick(7)
+check("let go, the copy goes too", PostPanel.pickedLink == nil)
+PostPanel:Pick(7)
 
-print("graph maths")
-ns.Theme, ns.Widgets = {}, {}
-assert(loadfile(lfs_cwd .. "/UI/PriceGraph.lua"))("Blackthornes_TS", ns)
-local G = ns.PriceGraph
-local placed, low, high = G.Layout({ { t = 0, p = 10 }, { t = 50, p = 30 }, { t = 100, p = 20 } }, 200, 40, 100, 100)
-check("lowest", low, 10)
-check("highest", high, 30)
-check("x by time", placed[2].x, 100)
-check("y by price, highest at the top", placed[2].y, 40)
-check("lowest at the foot", placed[1].y, 0)
-placed = G.Layout({ { t = 0, p = 10 }, { t = 100, p = 10 } }, 200, 40, 100, 100)
-check("a flat line sits in the middle", placed[1].y, 20)
+-- Queue All too: too wide for all four, so Duration steps aside.
+PostPanel.queueAll.shown = true
+PostPanel:AnchorFootNote()
+check("too narrow: Duration steps aside", not PostPanel.duration:IsShown())
+check("too narrow: it starts at the foot's left edge", PostPanel.priceHistory.points[1][2] == PostPanel.frame)
+PostPanel.queueAll.shown = false
+PostPanel:AnchorFootNote()
+check("room again: Duration comes back", PostPanel.duration:IsShown())
 
-clock = now
-ns.db.priceHistory = nil
-ns.db.prices[realm] = { [OTHER] = { history = {
-    { t = now - 2 * HOUR, m = 90 }, { t = now - HOUR, m = 95 },
-} } }
-local series, kind = G.Series(OTHER, "day", now)
-check("an item not kept falls back to its scans", kind, "market")
-check("with both of them", #series, 2)
-series, kind = G.Series(WOOL, "day", now)
-check("a kept item with no prices draws nothing yet", kind, nil)
-local today = math.floor(now / 86400)
-local keptPrices = ns.db.prices[realm]
-ns.db.prices[realm] = { [OTHER] = { trend = { today - 3, 80, today - 2, 0, today - 1, 85, today, 88 } } }
-series, kind = G.Series(OTHER, "week", now)
-check("with no scans it falls back to the daily values", kind, "market")
-check("each day with a value", #series, 3)
-check("today's drawn at now", series[3].t, now)
-check("an earlier day at its end", series[2].t, today * 86400 - 1)
-series = G.Series(OTHER, "day", now)
-check("the 24 hour view keeps only yesterday's end and today", #series, 2)
-ns.db.prices[realm] = keptPrices
-check("the window is 24 hours by default", G.GetWindow(), "day")
-check("ticks say now at the right", G.TickText("day", now, true), "now")
-check("there is a 14 day view", G.WINDOWS.fortnight and G.WINDOWS.fortnight.seconds, 14 * 24 * HOUR)
-check("a 14 day tick names the day of the month",
-    G.TickText("fortnight", base, false):match("%d+$"), tostring(tonumber(os.date("%d", base))))
+PostPanel:Pick(7)
+check("a click on the picked row lets it go", PostPanel.picked == nil)
+check("Price History hides again", not PostPanel.priceHistory:IsShown())
+check("the foot note comes back", PostPanel.footNote:IsShown())
+opened = nil
+PostPanel:OpenPriceHistory()
+check("nothing picked opens nothing", opened == nil)
 
-print("listed each hour")
-clock = now
-ns.db.priceHistory, ns.db.priceListed = nil, nil
-ns.Prices:Record(WOOL, 40, 35, 120, now, 35, nil, nil)
-ns.Prices:Record(WOOL, 40, 36, 90, now + HOUR, 36, nil, nil)
-ns.Prices:Record(OTHER, 40, 36, 90, now + HOUR, 36, nil, nil)
-clock = now + HOUR
-local listed = H:GetListed(WOOL, 24 * HOUR)
-check("Record keeps how many were listed each hour", #listed, 2)
-check("the first hour's count", listed[1].q, 120)
-check("the second hour's count", listed[2].q, 90)
-check("an item not kept has no counts", ns.db.priceListed[realm][OTHER], nil)
-ns.Prices:RecordEmpty(WOOL, now + 2 * HOUR)
-clock = now + 2 * HOUR
-listed = H:GetListed(WOOL, 24 * HOUR)
-check("sold out is a count of none", listed[3] and listed[3].q, 0)
-check("and adds no price", #H:GetPoints(WOOL, 24 * HOUR), 2)
-check("the prices list keeps its old shape", type(ns.db.priceHistory[realm][WOOL][2]), "number")
-clock = now + 30 * 24 * HOUR
-H:Prune()
-check("prune clears old counts too", ns.db.priceListed[realm][WOOL], nil)
-ns.db.priceListed = nil
-check("a save from before counts reads as none", #H:GetListed(WOOL), 0)
+PostPanel:Pick(9)
+PostPanel.view = "buy"
+PostPanel:UpdatePriceHistory()
+check("never on Buy", not PostPanel.priceHistory:IsShown())
+PostPanel.view = "sell"
+ns.PricesUI = nil
+PostPanel:UpdatePriceHistory()
+check("no Prices tab, no button", not PostPanel.priceHistory:IsShown())
 
-print("average and bars")
-check("the average of what is shown", H.Average({ { p = 10 }, { p = 20 }, { p = 33 } }), 21)
-check("nothing shown, no average", H.Average({}), nil)
-local bars, most = G.LayoutBars({ { t = 0, q = 50 }, { t = 3600, q = 100 }, { t = 7200, q = 0 } },
-    240, 100, 24 * 3600, 24 * 3600)
-check("the most listed", most, 100)
-check("an hour with none listed gets no bar", #bars, 2)
-check("the tallest bar is the share of the height", bars[2].height, 100 * G.BAR_SHARE)
-check("half as many, half as tall", bars[1].height, 50 * G.BAR_SHARE)
-check("bars sit at their hour", bars[2].x, 10)
-check("an hour wide, less a gap", bars[1].width, 9)
-bars = G.LayoutBars({ { t = 0, q = 0 } }, 240, 100, 24 * 3600, 24 * 3600)
-check("all sold out draws no bars", #bars, 0)
+local source = assert(io.open(lfs_cwd .. "/UI/PostPanel.lua")):read("*a")
+check("a click hands on the row's copy", source:find("PostPanel:Pick(line.itemID, line.link)", 1, true) ~= nil)
+check("the Sell list marks the picked row", source:find("isSelected = function(line) return PostPanel:IsPicked(line) end", 1, true) ~= nil)
+check("a row that left the list lets the pick go", source:find("if not still then self.picked, self.pickedLink = nil, nil end", 1, true) ~= nil)
+check("right-click still opens the keep box", source:find('mouseButton == "RightButton" and line and line.itemID and ns.KeepBox', 1, true) ~= nil)
 
-print(("%d passed, %d failed"):format(passed, failed))
-if failed > 0 then error(("%d check(s) failed"):format(failed)) end
-print("PASS -- the price graph keeps what it should, for as long as it should")
+--------------------------------------------------------------------------------
+-- The Prices tab opens with the item picked
+--------------------------------------------------------------------------------
+
+local prices = assert(io.open(lfs_cwd .. "/UI/Tab_Prices.lua")):read("*a")
+check("Prices has ShowItem", prices:find("function PricesUI:ShowItem(itemID, link)", 1, true) ~= nil)
+check("it opens on Details", prices:find('self:ShowView("details")', 1, true) ~= nil)
+check("it leaves the filters alone", select(2, prices:find("function PricesUI:ShowItem.-\nend\n")) ~= nil
+    and not prices:match("function PricesUI:ShowItem.-\nend\n"):find("state.search =", 1, true))
+
+print(("\n%d check(s) passed\n"):format(checks))

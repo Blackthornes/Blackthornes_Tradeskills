@@ -298,7 +298,8 @@ end
 
 local function ShowTooltip(row, entry)
     if entry.heading then return end
-    Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID)
+    -- The listing's own link, so a random suffix shows as itself.
+    Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, nil, entry.link)
     GameTooltip:AddLine(" ")
     GameTooltip:AddDoubleLine(L["Your price each"], Util.FormatMoney(entry.unit or 0, { noColor = true }),
         0.7, 0.7, 0.7, 1, 1, 1)
@@ -344,6 +345,8 @@ local function ShowTooltip(row, entry)
     end
     GameTooltip:Show()
 end
+
+AuctionsView.ShowTooltip = ShowTooltip
 
 --------------------------------------------------------------------------------
 -- The list

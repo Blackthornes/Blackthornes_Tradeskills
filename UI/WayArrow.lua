@@ -1,14 +1,19 @@
 -- Blackthornes Tradeskills -- UI/WayArrow.lua
--- The arrow's dial for Show the way (2026-10-22), Farmer's, Equipment's
--- and Pets' arrow brought over: a gold ring with corner gems and a glowing
--- arrow that turns as you turn. Logic/WayArrow.lua works out where and how
--- far; this file only draws it. The art is Media/Arrow/*.tga, drawn by
+-- The arrow for Show the way (2026-10-22), Farmer's, Equipment's and Pets'
+-- arrow brought over. Logic/WayArrow.lua works out where and how far; this
+-- file only draws it. The art is Media/Arrow/*.tga, drawn by
 -- tools/make_arrow_art.py.
 --
--- The place sits on a plate across the top of the ring, the distance under
--- it, then the zone. Drag to move. Once you are there the arrow gives way
--- to a green check. Shown only while Show the way has aimed it, put away
--- with its red gem, and hidden inside dungeons.
+-- One thin dark glass pill with a gold edge (the owner picked it,
+-- 2026-11-25, in place of the tilted dial): a flat gold chevron in a round
+-- well at its left end turns as you turn. The place on top, the distance
+-- under it, the red close gem at the right end. Drag to move; no clicks
+-- and no hover card. Once you are there the well shows a green check and
+-- the edge turns green. When it can't point, a gold dot pulses in the well
+-- and the second line says the step.
+--
+-- Shown only while Show the way has aimed it, put away with its red gem,
+-- and hidden inside dungeons.
 
 local ADDON, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -18,21 +23,22 @@ local ArrowUI = ns.NewModule("WayArrowUI")
 local Theme = ns.Theme
 
 local MEDIA = ([[Interface\AddOns\%s\Media\]]):format(ADDON)
-ArrowUI.RING = MEDIA .. [[Arrow\Ring]]
-ArrowUI.ARROW = MEDIA .. [[Arrow\Blade]]
-ArrowUI.ARROW_GLOW = MEDIA .. [[Arrow\BladeGlow]]
-ArrowUI.GLOW = MEDIA .. [[Frame\Glow]]
-local CHECK = [[Interface\RaidFrame\ReadyCheck-Ready]]
+-- The slim pill's art (2026-11-25), drawn by tools/make_arrow_art.py.
+ArrowUI.ART = MEDIA .. [[Arrow\]]
 
-local RING = 84
--- The dial lies back like a compass on the ground, so the blade cannot be
--- turned flat: tools/make_arrow_art.py draws it at TURNS headings, COLUMNS
--- a row, and the frame nearest the way to go is shown.
-local TURNS = 64
-local COLUMNS = 8
-local PLATE_HEIGHT = 20
-local MIN_WIDTH = 150
-local MAX_WIDTH = 320
+-- The pill, in game pixels at 100%: HEIGHT tall (taller only when a long
+-- name wraps), as wide as its words between MIN_WIDTH and MAX_WIDTH.
+local HEIGHT = 26
+local WELL = 22
+local CHEVRON = 16
+local CLOSE = 14
+local GAP = 6
+local MIN_WIDTH = 140
+local MAX_WIDTH = 300
+-- The chevron is flat, so it turns with SetRotation. It turns in TURNS
+-- steps of 2 degrees, and only a new step touches the texture.
+local TURNS = 180
+ArrowUI.TURNS = TURNS
 -- The room the arrow leaves under Farmer's XP bar.
 local CLEAR_GAP = 4
 -- How big the whole arrow is drawn, in percent (Settings, "Arrow Size:").
@@ -41,37 +47,59 @@ ArrowUI.SIZES = { 50, 75, 100 }
 -- Redrawn this often, seconds: smooth to the eye, cheap to run.
 local STEP = 0.03
 
+-- Standing still and facing the same way, nothing on the dial can move, so
+-- it is read again only this often: 33 reads a second made new tables and
+-- words for the collector while you stood in town.
+local REST_STEP = 0.5
+ArrowUI.REST_STEP = REST_STEP
+
+local function ReadStill()
+    if IsPlayerMoving() then return nil end
+    return GetPlayerFacing() + 0
+end
+
+--- Where you face while you stand still; nil while you move, or when the
+--- client won't say (the dial then keeps up every step, as before).
+function ArrowUI.StillFacing()
+    if type(_G.IsPlayerMoving) ~= "function" or type(_G.GetPlayerFacing) ~= "function" then return nil end
+    local ok, facing = pcall(ReadStill)
+    if ok and type(facing) == "number" then return facing end
+    return nil
+end
+
+--- Nothing the dial shows can change: you stand still, facing as at the
+--- last read, and that read changed nothing on the dial.
+function ArrowUI:Quiet()
+    if not self.settled or self.drawnFacing == nil then return false end
+    return ArrowUI.StillFacing() == self.drawnFacing
+end
+
 local function Clock()
     if type(GetTime) ~= "function" then return 0 end
     local ok, now = pcall(GetTime)
     return ok and tonumber(now) or 0
 end
 
--- Gold while it points the way, green once you are there, pale blue when it
--- cannot point (far away, no position).
-local TINTS = {
-    point = { 1.00, 0.82, 0.32 },
-    arrived = { 0.31, 0.95, 0.55 },
-    rest = { 0.55, 0.65, 1.00 },
+-- The pill's edge and well rim: gold while it points or can't, green once
+-- you are there. The glass is the house dark glass, see-through a little.
+local COLORS = {
+    edge = { 0.95, 0.76, 0.31 },
+    edgeThere = { 0.37, 0.88, 0.48 },
+    rim = { 0.61, 0.45, 0.15 },
+    rimThere = { 0.25, 0.54, 0.31 },
+    glass = { 0.090, 0.075, 0.055 },
+    soft = { 0.81, 0.78, 0.68 },
 }
+ArrowUI.COLORS = COLORS
 
 --------------------------------------------------------------------------------
 -- Building
 --------------------------------------------------------------------------------
 
---- The frame of the art drawn nearest `turn` (radians, anticlockwise from
---- straight ahead): 0 to TURNS - 1.
+--- The step `turn` (radians, anticlockwise from straight ahead) falls on:
+--- 0 to TURNS - 1.
 function ArrowUI.FrameFor(turn)
     return math.floor(turn / (2 * math.pi) * TURNS + 0.5) % TURNS
-end
-
---- Show frame `index` of a sheet laid out COLUMNS a row.
-local function ShowFrame(texture, index)
-    local column = index % COLUMNS
-    local row = math.floor(index / COLUMNS)
-    local rows = TURNS / COLUMNS
-    pcall(texture.SetTexCoord, texture,
-        column / COLUMNS, (column + 1) / COLUMNS, row / rows, (row + 1) / rows)
 end
 
 local function Additive(texture)
@@ -79,105 +107,119 @@ local function Additive(texture)
     return texture
 end
 
+--- Three textures (left end, middle, right end) of one of the pill's
+--- pictures, so the pill can be any width.
+local function Slices(frame, file, layer, sublevel)
+    local parts = {}
+    for index, coords in ipairs({ { 0, 0.25 }, { 0.25, 0.75 }, { 0.75, 1 } }) do
+        local texture = frame:CreateTexture(nil, layer, nil, sublevel)
+        texture:SetTexture(file)
+        pcall(texture.SetTexCoord, texture, coords[1], coords[2], 0, 1)
+        parts[index] = texture
+    end
+    local left, middle, right = parts[1], parts[2], parts[3]
+    left:SetPoint("TOPLEFT")
+    left:SetPoint("BOTTOMLEFT")
+    right:SetPoint("TOPRIGHT")
+    right:SetPoint("BOTTOMRIGHT")
+    middle:SetPoint("TOPLEFT", left, "TOPRIGHT")
+    middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT")
+    return parts
+end
+
+local function Tint(parts, color, alpha)
+    for _, texture in ipairs(parts) do
+        texture:SetVertexColor(color[1], color[2], color[3], alpha or 1)
+    end
+end
+
+--- Outlined words, so they read on any ground through the glass.
+local function Label(frame, size, color)
+    local label = Theme.CreateLabel(frame, size, color, "LEFT")
+    pcall(label.SetFont, label, Theme.FONT, Theme.sizes[size] or 12, "OUTLINE")
+    pcall(label.SetShadowColor, label, 0, 0, 0, 1)
+    pcall(label.SetShadowOffset, label, 1, -1)
+    return label
+end
+
 function ArrowUI:Build()
     if self.frame then return self.frame end
 
     local frame = CreateFrame("Frame", "BlackthornesTSWayArrow", UIParent)
-    frame:SetSize(MIN_WIDTH, RING + PLATE_HEIGHT + 56)
+    frame:SetSize(MIN_WIDTH, HEIGHT)
     frame:SetScale(ArrowUI.Scale())
     frame:SetFrameStrata("MEDIUM")
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
+    -- The step box hangs under the pill (UI/TravelCard.lua, `Dial`).
+    self.dial = frame
 
-    -- The dial: a breathing glow behind the ring, the ring, then the arrow
-    -- with its own glow.
-    local dial = CreateFrame("Frame", nil, frame)
-    dial:SetSize(RING, RING)
-    dial:SetPoint("TOP", frame, "TOP", 0, -(PLATE_HEIGHT / 2 + 2))
-    self.dial = dial
+    -- The pill: dark glass with a gold hairline edge.
+    self.glass = Slices(frame, ArrowUI.ART .. "Pill", "BACKGROUND", 0)
+    Tint(self.glass, COLORS.glass, 0.86)
+    self.edge = Slices(frame, ArrowUI.ART .. "PillEdge", "BORDER", 0)
+    Tint(self.edge, COLORS.edge, 0.9)
 
-    local halo = Additive(dial:CreateTexture(nil, "BACKGROUND"))
-    halo:SetTexture(ArrowUI.GLOW)
-    halo:SetSize(RING * 1.6, RING * 1.6)
-    halo:SetPoint("CENTER")
-    self.halo = halo
+    -- The round well at the left end: the chevron and its glow, the check
+    -- once you are there, or a soft dot when it can't point.
+    local well = CreateFrame("Frame", nil, frame)
+    well:SetSize(WELL, WELL)
+    well:SetPoint("LEFT", frame, "LEFT", (HEIGHT - WELL) / 2, 0)
+    self.well = well
 
-    local ring = dial:CreateTexture(nil, "ARTWORK")
-    ring:SetTexture(ArrowUI.RING)
-    ring:SetAllPoints(dial)
-    self.ring = ring
+    local wellFill = well:CreateTexture(nil, "ARTWORK", nil, 0)
+    wellFill:SetTexture(ArrowUI.ART .. "Well")
+    wellFill:SetAllPoints(well)
+    local rim = well:CreateTexture(nil, "ARTWORK", nil, 1)
+    rim:SetTexture(ArrowUI.ART .. "WellEdge")
+    rim:SetAllPoints(well)
+    self.rim = { rim }
+    Tint(self.rim, COLORS.rim)
 
-    -- The blade and its glow fill the dial: each frame of the art covers
-    -- exactly the ring's square.
-    local arrow = dial:CreateTexture(nil, "OVERLAY", nil, 1)
-    arrow:SetTexture(ArrowUI.ARROW)
-    arrow:SetAllPoints(dial)
-    self.arrow = arrow
+    local glow = Additive(well:CreateTexture(nil, "OVERLAY", nil, 0))
+    glow:SetTexture(ArrowUI.ART .. "ChevronGlow")
+    glow:SetSize(CHEVRON + 8, CHEVRON + 8)
+    glow:SetPoint("CENTER")
+    glow:SetVertexColor(COLORS.edge[1], COLORS.edge[2], COLORS.edge[3])
+    self.glow = glow
 
-    local arrowGlow = Additive(dial:CreateTexture(nil, "OVERLAY", nil, 2))
-    arrowGlow:SetTexture(ArrowUI.ARROW_GLOW)
-    arrowGlow:SetAllPoints(dial)
-    self.arrowGlow = arrowGlow
-    ShowFrame(arrow, 0)
-    ShowFrame(arrowGlow, 0)
+    local chevron = well:CreateTexture(nil, "OVERLAY", nil, 1)
+    chevron:SetTexture(ArrowUI.ART .. "Chevron")
+    chevron:SetSize(CHEVRON, CHEVRON)
+    chevron:SetPoint("CENTER")
+    self.chevron = chevron
     self.shownFrame = 0
 
-    local check = dial:CreateTexture(nil, "OVERLAY", nil, 3)
-    check:SetTexture(CHECK)
-    check:SetSize(34, 34)
+    local check = well:CreateTexture(nil, "OVERLAY", nil, 2)
+    check:SetTexture(ArrowUI.ART .. "Check")
+    check:SetSize(CHEVRON, CHEVRON)
     check:SetPoint("CENTER")
     check:Hide()
     self.check = check
 
-    local mark = Theme.CreateLabel(dial, "title", "accentHi", "CENTER")
-    pcall(mark.SetFont, mark, Theme.FONT, 26, "OUTLINE")
-    mark:SetPoint("CENTER", 0, 1)
-    mark:SetText("?")
-    mark:Hide()
-    self.mark = mark
+    local dot = Additive(well:CreateTexture(nil, "OVERLAY", nil, 2))
+    dot:SetTexture(ArrowUI.ART .. "Dot")
+    dot:SetSize(12, 12)
+    dot:SetPoint("CENTER")
+    dot:SetVertexColor(COLORS.edge[1], COLORS.edge[2], COLORS.edge[3])
+    dot:Hide()
+    self.dot = dot
 
-    -- The plate across the ring's top: the place.
-    local plate = CreateFrame("Frame", nil, frame)
-    plate:SetHeight(PLATE_HEIGHT)
-    plate:SetPoint("TOP", frame, "TOP", 0, 0)
-    plate:SetFrameLevel(dial:GetFrameLevel() + 5)
-    Theme.Fill(plate, "ink", 0.96)
-    Theme.Border(plate, "accentHi")
-    Theme.Halo(plate, 5, 0.18)
-    self.plate = plate
-
-    -- The house close gem, just past the plate's right end, clear of the
-    -- place's name: puts it away.
+    -- The house close gem at the right end, inside the pill.
     if ns.Titanforged and ns.Titanforged.CloseGem then
         local close = ns.Titanforged.CloseGem(frame, function() ArrowUI:Close() end)
-        close:SetSize(18, 18)
+        close:SetSize(CLOSE, CLOSE)
         close:ClearAllPoints()
-        close:SetPoint("LEFT", plate, "RIGHT", 4, 0)
-        close:SetFrameLevel(plate:GetFrameLevel() + 1)
+        close:SetPoint("RIGHT", frame, "RIGHT", -GAP, 0)
+        close:SetFrameLevel(frame:GetFrameLevel() + 3)
         self.close = close
     end
 
-    local title = Theme.CreateLabel(plate, "normal", "gilt", "CENTER")
-    title:SetPoint("CENTER", 0, 0)
-    self.title = title
-
-    -- Under the ring: how far, where, and where the spot comes from.
-    local distance = Theme.CreateLabel(frame, "large", "text", "CENTER")
-    pcall(distance.SetFont, distance, Theme.FONT, 14, "OUTLINE")
-    distance:SetPoint("TOP", dial, "BOTTOM", 0, -4)
-    self.distance = distance
-
-    local place = Theme.CreateLabel(frame, "small", "muted", "CENTER")
-    pcall(place.SetFont, place, Theme.FONT, Theme.sizes.small, "OUTLINE")
-    place:SetPoint("TOP", distance, "BOTTOM", 0, -3)
-    self.place = place
-
-    local note = Theme.CreateLabel(frame, "tiny", "good", "CENTER")
-    pcall(note.SetFont, note, Theme.FONT, Theme.sizes.small, "OUTLINE")
-    note:SetPoint("TOP", place, "BOTTOM", 0, -2)
-    self.note = note
+    -- The place on top in gilt, how far under it in white.
+    self.title = Label(frame, "small", "gilt")
+    self.distance = Label(frame, "normal", "text")
 
     frame:SetScript("OnDragStart", function(self)
         ArrowUI.dragging = true
@@ -196,6 +238,7 @@ function ArrowUI:Build()
     frame:Hide()
     return frame
 end
+
 
 --------------------------------------------------------------------------------
 -- The close gem
@@ -260,6 +303,11 @@ end
 --- The words for a state with nothing to point at.
 function ArrowUI.Words(state)
     local mode = state.mode
+    -- On a trip the step box under the pill says the step.
+    if ns.TravelCard and ns.TravelCard.Words then
+        local distance, place, note, color = ns.TravelCard:Words(state)
+        if distance then return distance, place, note, color end
+    end
     if mode == "blind" then
         return L["Can't see you here"], L["The game won't say where you are"], "", "muted"
     end
@@ -277,21 +325,52 @@ local function Width(size, label)
 end
 ArrowUI.Width = Width
 
---- Lay the labels out and size the frame to the widest, measured.
+--- How tall a label's words are once wrapped.
+local function Tall(label, size)
+    if (label:GetText() or "") == "" then return 0 end
+    local ok, tall = pcall(label.GetStringHeight, label)
+    tall = ok and tonumber(tall) or 0
+    return math.max(tall, Theme.sizes[size] or 12)
+end
+
+--- The words for the second line: how far, or the step when it can't point.
+function ArrowUI.StepText(state)
+    local trip = type(state) == "table" and state.trip
+    local plan = type(trip) == "table" and trip.plan
+    if type(plan) ~= "table" then return "" end
+    local index = trip.index or ((plan.done or 0) + 1)
+    local count = trip.count or ((plan.done or 0) + #(plan.steps or {}))
+    return L.Format("Step %d of %d", index, count)
+end
+
+--- Size the pill to its words, measured: wider for a long name, up to
+--- MAX_WIDTH, then taller, the words wrapped and never cut off.
 function ArrowUI:Fit()
-    local widest = Width("normal", self.title) + 28
-    self.plate:SetWidth(math.max(RING + 16, widest))
-
-    for _, entry in ipairs({ { "large", self.distance }, { "small", self.place }, { "small", self.note } }) do
-        widest = math.max(widest, Width(entry[1], entry[2]) + 16)
-    end
-
-    local width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, math.ceil(widest)))
-    self.frame:SetWidth(width)
-    -- Wrapped rather than cut off when a long place name runs past the most.
-    for _, label in ipairs({ self.distance, self.place, self.note }) do
-        label:SetWidth(width - 8)
+    local left = (HEIGHT - WELL) / 2 + WELL + GAP
+    local right = GAP + CLOSE + GAP
+    local words = math.max(Width("small", self.title), Width("normal", self.distance))
+    local width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, math.ceil(left + words + right)))
+    local room = width - left - right
+    for _, label in ipairs({ self.title, self.distance }) do
+        label:SetWidth(room)
         label:SetWordWrap(true)
+    end
+    local top, under = Tall(self.title, "small"), Tall(self.distance, "normal")
+    local height = math.max(HEIGHT, math.ceil(top + under + 4))
+    self.frame:SetWidth(width)
+    self.frame:SetHeight(height)
+    for _, parts in ipairs({ self.glass, self.edge }) do
+        parts[1]:SetWidth(height / 2)
+        parts[3]:SetWidth(height / 2)
+    end
+    local pad = (height - top - under) / 2
+    self.title:ClearAllPoints()
+    self.title:SetPoint("TOPLEFT", self.frame, "TOPLEFT", left, -pad)
+    self.distance:ClearAllPoints()
+    if top > 0 then
+        self.distance:SetPoint("TOPLEFT", self.title, "BOTTOMLEFT", 0, 0)
+    else
+        self.distance:SetPoint("TOPLEFT", self.frame, "TOPLEFT", left, -pad)
     end
 end
 
@@ -331,38 +410,43 @@ function ArrowUI:Draw(force)
         return
     end
 
-    -- The plate carries the place or nothing: never a name for the dial.
+    -- The top line carries the place or nothing: never a name for the arrow.
     local title = state.name or ""
-    self.plate:SetShown(title ~= "")
-    local distance, place, note, noteColor = ArrowUI.Words(state)
+    local distance, place = ArrowUI.Words(state)
+    local pointing = state.mode == "point"
+    local arrived = state.mode == "arrived"
+    -- With the step box up the words step aside; the pill keeps how far
+    -- while it points, else the step you are on.
+    if distance == "" and pointing then distance = state.distance or "" end
+    if distance == "" then distance = ArrowUI.StepText(state) end
+    -- Nothing to name: the place goes on top.
+    if title == "" then title = place or "" end
 
     -- Joined by hand: a table here was one more for the collector 33 times
     -- a second.
-    local key = title .. "\n" .. distance .. "\n" .. place .. "\n" .. note .. "\n" .. noteColor
+    local key = title .. "\n" .. distance .. "\n" .. state.mode
     if force or key ~= self.drawnKey then
         self.drawnKey = key
         self.title:SetText(title)
         self.distance:SetText(distance)
-        self.place:SetText(place)
-        self.note:SetText(note)
-        self.note:SetTextColor(Theme.Unpack(noteColor))
-        self.distance:SetTextColor(Theme.Unpack(state.mode == "arrived" and "good" or "text"))
+        local color = arrived and COLORS.edgeThere or (not pointing and COLORS.soft) or nil
+        if color then
+            self.distance:SetTextColor(color[1], color[2], color[3])
+        else
+            self.distance:SetTextColor(Theme.Unpack("text"))
+        end
         self:Fit()
     end
 
-    local pointing = state.mode == "point"
-    local arrived = state.mode == "arrived"
-    self.arrow:SetShown(pointing)
-    self.arrowGlow:SetShown(pointing)
-    self.check:SetShown(arrived)
-    self.mark:SetShown(not pointing and not arrived)
-
-    local tint = pointing and TINTS.point or arrived and TINTS.arrived or TINTS.rest
-    -- The blade carries its own gold and light; only its glow is tinted.
-    self.arrow:SetVertexColor(1, 1, 1)
-    self.arrowGlow:SetVertexColor(tint[1], tint[2], tint[3])
-    self.halo:SetVertexColor(tint[1], tint[2], tint[3])
-    self.mark:SetTextColor(tint[1], tint[2], tint[3])
+    if self.drawnMode ~= state.mode then
+        self.drawnMode = state.mode
+        Tint(self.edge, arrived and COLORS.edgeThere or COLORS.edge, 0.9)
+        Tint(self.rim, arrived and COLORS.rimThere or COLORS.rim)
+        self.chevron:SetShown(pointing)
+        self.glow:SetShown(pointing)
+        self.check:SetShown(arrived)
+        self.dot:SetShown(not pointing and not arrived)
+    end
 
     if pointing and state.turn then
         self:Turn(state.turn)
@@ -372,10 +456,12 @@ function ArrowUI:Draw(force)
     frame:Show()
 end
 
---- Turn the arrow toward `turn` (radians, anticlockwise). Eased on Full so
---- it swings rather than snaps; straight there otherwise. Only a new frame
---- touches the textures.
+--- Turn the chevron toward `turn` (radians, anticlockwise). Eased on Full
+--- so it swings rather than snaps; straight there otherwise. Only a new
+--- step touches the textures.
 function ArrowUI:Turn(turn)
+    -- Where the swing ends: the pill is not settled until it is there.
+    self.aimFrame = ArrowUI.FrameFor(turn)
     local shown = self.shownTurn
     if shown and ns.Motion.Level() == "full" then
         local gap = turn - shown
@@ -387,24 +473,30 @@ function ArrowUI:Turn(turn)
     local index = ArrowUI.FrameFor(turn)
     if index == self.shownFrame then return end
     self.shownFrame = index
-    ShowFrame(self.arrow, index)
-    ShowFrame(self.arrowGlow, index)
+    local angle = index / TURNS * 2 * math.pi
+    pcall(self.chevron.SetRotation, self.chevron, angle)
+    pcall(self.glow.SetRotation, self.glow, angle)
 end
 
---- The glow: breathing on Full, still otherwise, brighter once you are there.
+--- The glow breathes on Full and holds still otherwise; when it can't
+--- point, the dot pulses on Full and holds still otherwise.
 function ArrowUI:Breathe(now)
     local level = ns.Motion.Level()
-    local arrived = self.state and self.state.mode == "arrived"
-    local rest = arrived and 0.55 or 0.32
-    local alpha = rest
-    if level == "full" then
-        local speed = arrived and 5 or 2.2
-        alpha = rest + 0.16 * math.sin(now * speed)
-    elseif level == "off" then
-        alpha = rest * 0.6
+    local mode = self.state and self.state.mode
+    if mode == "point" then
+        local alpha = 0.5
+        if level == "full" then
+            alpha = 0.5 + 0.2 * math.sin(now * 2.2)
+        elseif level == "off" then
+            alpha = 0.35
+        end
+        self.glow:SetAlpha(alpha)
+    elseif mode ~= "arrived" then
+        local beat = 0.6
+        if level == "full" then beat = 0.5 + 0.5 * math.sin(now * 3.9) end
+        self.dot:SetAlpha(0.35 + 0.65 * beat)
+        self.dot:SetSize(10 + 3 * beat, 10 + 3 * beat)
     end
-    self.halo:SetAlpha(alpha)
-    self.arrowGlow:SetAlpha(math.min(1, alpha + 0.25))
 end
 
 function ArrowUI:Step(elapsed)
@@ -412,8 +504,17 @@ function ArrowUI:Step(elapsed)
     if self.since < STEP then return end
     self.since = 0
 
-    local ok, err = pcall(self.Draw, self)
-    if not ok then ns.Debug("way arrow:", tostring(err)) end
+    self.restFor = (self.restFor or 0) + STEP
+    if not self:Quiet() or self.restFor >= REST_STEP then
+        self.restFor = 0
+        local key, shown = self.drawnKey, self.shownFrame
+        self.drawnFacing = ArrowUI.StillFacing()
+        self.aimFrame = nil
+        local ok, err = pcall(self.Draw, self)
+        if not ok then ns.Debug("way arrow:", tostring(err)) end
+        self.settled = ok and self.drawnKey == key and self.shownFrame == shown
+            and (self.aimFrame == nil or self.aimFrame == self.shownFrame)
+    end
     if self.frame:IsShown() then pcall(self.Breathe, self, Clock()) end
 end
 
@@ -431,6 +532,8 @@ function ArrowUI:Refresh()
     end
     if self.driver then self.driver:Show() end
     self:Build()
+    -- Something changed: keep up every step until the dial settles again.
+    self.settled = false
     local ok, err = pcall(self.Draw, self, true)
     if not ok then ns.Debug("way arrow:", tostring(err)) end
 end
@@ -454,7 +557,7 @@ function ArrowUI.Size()
     return math.floor(ArrowUI.Scale() * 100 + 0.5)
 end
 
---- Draws the whole arrow, plate and words too, at `percent` (50, 75 or
+--- Draws the whole arrow, words and close gem too, at `percent` (50, 75 or
 --- 100). 100 saves nothing, so nobody's save changes until a smaller size
 --- is picked. The arrow stays where it was left.
 function ArrowUI:SetSize(percent)
@@ -516,7 +619,7 @@ function ArrowUI:WatchXPBar()
 end
 
 --- With Farmer's XP bar showing, an arrow that overlaps it sits just below
---- it: the whole arrow, the plate and its close gem too. The saved spot is
+--- it: the whole pill, its close gem too. The saved spot is
 --- never changed, so it goes back when the bar is gone.
 function ArrowUI:AvoidXPBar()
     local frame = self.frame
@@ -529,7 +632,7 @@ function ArrowUI:AvoidXPBar()
         local barLeft, barBottom, barWidth, barHeight = bar:GetRect()
         if not barLeft then return end
         local left, bottom, right, top
-        for _, part in ipairs({ frame, self.plate, self.close }) do
+        for _, part in ipairs({ frame }) do
             local x, y, w, h = part:GetRect()
             if x and (part == frame or part:IsShown()) then
                 local scale = ArrowUI.Scale()
@@ -558,8 +661,16 @@ function ArrowUI:RestorePosition()
         local scale = ArrowUI.Scale()
         frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", ns.db.wayArrowX / scale, ns.db.wayArrowY / scale)
     else
-        -- Top middle, under where the game puts its own messages.
-        frame:SetPoint("TOP", UIParent, "TOP", 0, -140 / ArrowUI.Scale())
+        -- Never dragged: the next free place on the shared top shelf
+        -- (UI/SharedWindow.lua), so it never starts on another piece.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "arrow.tradeskills", {
+            free = function() return not (ns.db and ns.db.wayArrowX and ns.db.wayArrowY) end,
+            place = function() ArrowUI:RestorePosition() end,
+        })
+        if not placed then
+            frame:SetPoint("TOP", UIParent, "TOP", 0, -140 / ArrowUI.Scale())
+        end
     end
     self:AvoidXPBar()
 end

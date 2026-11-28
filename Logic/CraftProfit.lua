@@ -32,9 +32,8 @@ local function Now()
     return (type(GetTime) == "function" and GetTime()) or os.time()
 end
 
-local function Stamp()
-    return tostring(ns.Prices and ns.Prices.changes) .. ":" .. tostring(ns.Config and ns.Config.changes)
-end
+local function PriceStamp() return ns.Prices and ns.Prices.changes end
+local function ConfigStamp() return ns.Config and ns.Config.changes end
 
 --- Is the output a grey? Greys only ever go to a vendor.
 function CraftProfit.IsGrey(itemID)
@@ -47,7 +46,7 @@ function CraftProfit.IsGrey(itemID)
     return tonumber(quality) == POOR
 end
 
---- Sold one listing at a time (gear), so the auction house takes whole silver.
+--- Sold one listing at a time (gear, bags, wands), as an item auction.
 local function IsItemAuction(itemID)
     local status = ns.Scanner and ns.Scanner.GetCommodityStatus
         and Try(ns.Scanner.GetCommodityStatus, ns.Scanner, itemID)
@@ -163,7 +162,51 @@ local function Work(recipeID)
         result.boundProfit = result.sells - result.partial
     end
 
+    CraftProfit.TakeCounted(result, recipe)
     return result
+end
+
+--- The Profit tab's own sum, where it has one (the owner said build it,
+--- 2026-11-26: one profit sum everywhere). Profit:Counted prices the craft
+--- the way the Profit tab, the Queue and the craft pane do (sub-crafts,
+--- Charge for Own Materials, the deposit, Master Chef), so the profession
+--- window shows the same number. Sells For is what the sale brings in after
+--- the cut and the deposit, so Sells For less Mats Cost is the profit.
+--- A grey stays at the vendor; a craft the sum can't price keeps the
+--- figures worked out above.
+function CraftProfit.TakeCounted(result, recipe)
+    local Profit = ns.Profit
+    if not (Profit and Profit.Counted and Profit.Analyse) then return end
+    if not recipe.outputItemID or CraftProfit.IsGrey(recipe.outputItemID) then return end
+    local analysis = Try(Profit.Counted, Profit, result.recipeID)
+    if type(analysis) ~= "table" or not analysis.priceable or type(analysis.profit) ~= "number" then
+        return
+    end
+    local cost = analysis.cost
+    if type(cost) ~= "table" or type(cost.total) ~= "number" then return end
+
+    local reagents = {}
+    for _, reagent in ipairs(cost.reagents or {}) do
+        local source = reagent.source
+        reagents[#reagents + 1] = {
+            itemID = reagent.itemID,
+            quantity = reagent.quantity,
+            unitCost = reagent.unitCost,
+            lineCost = reagent.lineCost,
+            way = source == "vendor" and "vendor" or (source == "buy" or source == "mine") and "auction" or nil,
+            source = source,
+        }
+    end
+    result.reagents = reagents
+    result.bound, result.unpriced = {}, {}
+    result.partial, result.onlyBound, result.boundProfit = nil, nil, nil
+    result.yield = analysis.yield or result.yield
+    result.cost = cost.total
+    result.sells = analysis.profit + cost.total
+    result.sellsEach = result.sells / (result.yield > 0 and result.yield or 1)
+    result.sellsWay = analysis.via
+    result.profit = analysis.profit
+    result.counted = true
 end
 
 --- The figures for one craft, kept until a price or setting moves.
@@ -171,22 +214,38 @@ end
 --   quantity, unitCost, lineCost, way ("auction"/"vendor"), bound } },
 --   cost, partial, onlyBound, bound, unpriced, sells, sellsEach, sellsWay,
 --   profit, boundProfit }, or nil for a recipe nobody knows
+--
+-- A price arriving, a setting changing or `KEEP` running out makes every row
+-- out of date at once, and working them all out in the same frame was a
+-- hitch (2026-11-17). So a recipe that already has figures gets new ones at
+-- most `PER_FRAME` at a time; the rest keep showing theirs for a moment and
+-- are redone on the next asks. A recipe with no figures yet is always worked
+-- out, so a row never shows "No price" just to wait its turn.
+CraftProfit.PER_FRAME = 4
+local frameAt, worked = nil, 0
+
 function CraftProfit:For(recipeID)
     if not recipeID then return nil end
-    local stamp, now = Stamp(), Now()
+    local prices, config, now = PriceStamp(), ConfigStamp(), Now()
     local entry = kept[recipeID]
-    if entry and entry.stamp == stamp and now - entry.at < self.KEEP then
+    if entry and entry.prices == prices and entry.config == config and now - entry.at < self.KEEP then
         return entry.result
     end
+    if frameAt ~= now then frameAt, worked = now, 0 end
+    if entry and worked >= self.PER_FRAME then
+        return entry.result
+    end
+    worked = worked + 1
     local ok, result = pcall(Work, recipeID)
     if not ok then result = nil end
-    kept[recipeID] = { stamp = stamp, at = now, result = result }
+    kept[recipeID] = { prices = prices, config = config, at = now, result = result }
     return result
 end
 
 --- Forget what was kept, so the next ask works it out again.
 function CraftProfit:Forget()
     kept = {}
+    frameAt, worked = nil, 0
 end
 
 --- An item's plain name in its quality colour, never a bracketed link.
@@ -242,7 +301,7 @@ end
 
 --- "No price", greyed.
 function CraftProfit.NoPrice()
-    return "|c" .. Color("muted", "ff7a8089") .. L["No price"] .. "|r"
+    return "|c" .. Color("muted", "ff857c68") .. L["No price"] .. "|r"
 end
 
 --- A profit as the rows show it: "+5g 3s" green, "−2s" red.
@@ -262,7 +321,7 @@ function CraftProfit.RowText(figures)
     if figures.boundProfit then
         -- The part that could be priced, then a small "+" for the bound mats.
         return CraftProfit.SignedMoney(figures.boundProfit)
-            .. "|c" .. Color("muted", "ff7a8089") .. "+|r"
+            .. "|c" .. Color("muted", "ff857c68") .. "+|r"
     end
     return CraftProfit.NoPrice()
 end

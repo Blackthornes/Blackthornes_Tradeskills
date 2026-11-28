@@ -101,3 +101,44 @@ function Characters:IsPlaying(key)
     if selfKey == nil then return false end
     return key == selfKey or self:Same(key, selfKey)
 end
+
+--- One key for a realm name, the same on every account of one player.
+--- Forever's GetRealmName names the server behind the realm ("CAMWOW US2
+--- Realm 7 PvE"), so the key drops spaces, case and the "Realm N" part.
+--- The same few lines are in Queue, QueueMail, Butler, GoldGoal and GoldLog.
+local function RealmKey(name)
+    if type(name) ~= "string" or name == "" or name == "?" then return nil end
+    local key = name:lower():gsub("%s", ""):gsub("realm%d+", "")
+    if key == "" then return nil end
+    return key
+end
+
+--- Can one character mail the other? The same realm, and the same side,
+--- where both are known. Items never cross from Alliance to Horde, so an
+--- Alliance alt's cloth is no help to a Horde crafter (a player's report,
+--- 2026-11-27). A field one record lacks is taken as the same, so an old
+--- record from before realm and side were saved still counts.
+function Characters:CanMail(fromKey, toKey)
+    if fromKey == nil or toKey == nil then return false end
+    if fromKey == toKey then return true end
+    local records = Records()
+    local from, to = records and records[fromKey], records and records[toKey]
+    if type(from) ~= "table" or type(to) ~= "table" then return false end
+    local fromRealm, toRealm = RealmKey(from.realm), RealmKey(to.realm)
+    if fromRealm and toRealm and fromRealm ~= toRealm then return false end
+    if SameText(from.faction, to.faction) == false then return false end
+    return true
+end
+
+--- Can the character playing get items from this one? Its own records
+--- always; anyone else when Characters:CanMail says so. With no key for
+--- the one playing (a dungeon), true, as before: this only ever hides.
+function Characters:InReach(key)
+    if key == nil then return false end
+    local selfKey = SelfKey()
+    if selfKey == nil then return true end
+    if self:IsPlaying(key) then return true end
+    local records = Records()
+    if not (records and type(records[selfKey]) == "table") then return true end
+    return self:CanMail(selfKey, key)
+end

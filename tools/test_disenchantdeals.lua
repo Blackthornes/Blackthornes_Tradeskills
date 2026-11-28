@@ -133,15 +133,15 @@ Enchanter(50)
 local rows = Disenchant:GetAuctionRows()
 
 -- A level 22 green chest.
--- (Before 2026-10-03 every outcome counted by its chance. Now only the most
--- likely does: 5 dust on average at 160 = 800. Less 5% cut: 760.)
+-- (Every outcome counts by its chance, 2026-11-19: 75% of 5 dust at 160,
+-- 15% of 1.5 astral at 1000, 10% of a shard at 2000 = 1025. Less 5% cut: 974.)
 local chest = Find(rows, 2001)
 check("the green chest is listed", chest ~= nil)
-check("its disenchant value is 800", chest.value == 800)
-check("the auction cut comes off: 760", chest.net == 760)
+check("its disenchant value is 1025", chest.value == 1025)
+check("the auction cut comes off: 974", chest.net == 974)
 check("bought at the cheapest rival listing", chest.buy == 500)
-check("profit is 760 - 500 = 260", chest.gain == 260)
-check("margin is profit over the buy price", math.abs(chest.margin - 0.52) < 1e-9)
+check("profit is 974 - 500 = 474", chest.gain == 474)
+check("margin is profit over the buy price", math.abs(chest.margin - 0.948) < 1e-9)
 check("it says how many are listed", chest.listed == 3)
 
 check("his own listing is not a deal", Find(rows, 2002) == nil)
@@ -165,30 +165,46 @@ local deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
 check("a loss is not a deal", Find(deals, 2006) == nil)
 check("nothing held back with no minimums", hidden == 0)
 
-config.minProfit = 300
+config.minProfit = 500
 deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
-check("Minimum profit holds the 260 chest back", Find(deals, 2001) == nil)
+check("Minimum profit holds the 474 chest back", Find(deals, 2001) == nil)
 check("the gloves still clear it", Find(deals, 2003) ~= nil)
 check("and it says how many were held back", hidden >= 1)
 config.minProfit = 0
 
 config.minMarginPercent = 100
 deals = Disenchant:GetAuctionRows({ profitableOnly = true })
-check("Minimum margin holds the 52% chest back", Find(deals, 2001) == nil)
+check("Minimum margin holds the 94% chest back", Find(deals, 2001) == nil)
 config.minMarginPercent = 0
+
+-- The Disenchanting row in Minimums by Profession (2026-11-22) wins over
+-- the usual numbers; a blank box uses them.
+local own = { profit = 500 }
+ns.Profit = { DisenchantMinimums = function()
+    return own.profit or config.minProfit, own.margin or config.minMarginPercent
+end }
+deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("the Disenchanting row's 500 holds the 474 chest back", Find(deals, 2001) == nil)
+check("the gloves still clear the row's number", Find(deals, 2003) ~= nil)
+check("and the held back count follows it", hidden >= 1)
+config.minProfit = 1000000
+own = { profit = 0 }
+deals = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("the row's 0 shows the chest under a big usual minimum", Find(deals, 2001) ~= nil)
+config.minProfit = 0
+ns.Profit = nil
 
 print("\nwho can disenchant it")
 
-Enchanter(10)
+-- On Forever any enchanter breaks any item, from skill 1 (a player with
+-- Enchanting 4 saw only low level deals, 2026-11-24).
+Enchanter(4)
 rows = Disenchant:GetAuctionRows()
 chest = Find(rows, 2001)
-check("the chest needs 25", chest.needs == 25)
-check("Enchanting 10 cannot break it, but it is still shown", chest.canDisenchant == false)
-check("it names the enchanter", chest.enchanter == "Alt" and chest.enchanterSkill == 10)
-check("the low level bracers need 1, so 10 can", Find(rows, 2007).canDisenchant == true)
-
-Enchanter(50)
-check("Enchanting 50 can", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == true)
+check("the chest names no skill it needs", chest.needs == nil)
+check("Enchanting 4 can break a level 22 chest", chest.canDisenchant == true)
+check("it names the enchanter", chest.enchanter == "Alt" and chest.enchanterSkill == 4)
+check("and the low level bracers", Find(rows, 2007).canDisenchant == true)
 
 ns.db.characters = {}
 check("no enchanter at all is nil, not false", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == nil)
@@ -357,7 +373,7 @@ Disenchant:AnnounceDeals()
 check("with scan sounds off, the message and no sound", #printed == 1 and chimed == nil)
 config.scanSounds = nil
 
--- Only deals a character can break at today's skill count.
+-- Any enchanter counts every deal, whatever its skill.
 local function Breakable()
     local n = 0
     for _, row in ipairs(Disenchant:GetAuctionRows({ profitableOnly = true })) do
@@ -365,12 +381,12 @@ local function Breakable()
     end
     return n
 end
-Enchanter(10)
+Enchanter(4)
 local allDeals = #Disenchant:GetAuctionRows({ profitableOnly = true })
-check("some deals need more skill than Enchanting 10", Breakable() < allDeals)
+check("Enchanting 4 can break every deal", Breakable() == allDeals)
 printed = {}
-check("the message counts only deals Enchanting 10 can break",
-    Disenchant:AnnounceDeals() == Breakable())
+check("the message counts every deal for Enchanting 4",
+    Disenchant:AnnounceDeals() == allDeals)
 ns.db.characters = {}
 check("with no enchanter known, every deal counts", Disenchant:AnnounceDeals() == allDeals)
 Enchanter(50)
@@ -410,11 +426,12 @@ CreateFrame = function() return Stub() end
 C_Timer = { After = function() end }
 GameTooltip = Stub()
 
+local panels = {}
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
     SetItemNameColor = function() return false end,
     CreateLabel = function() return Label() end,
-    CreatePanel = function() return Stub() end,
+    CreatePanel = function() local panel = Stub(); panels[#panels + 1] = panel; return panel end,
     CreateDivider = function() return Stub() end,
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
@@ -424,13 +441,23 @@ ns.Theme = {
     CreateHeading = function() return Stub() end,
 }
 
-local checkboxes, lists = {}, {}
+local checkboxes, lists, buttons = {}, {}, {}
 ns.Widgets = {
     CreateTabStrip = function() return Stub() end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function() return Stub() end,
     CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,
-    CreateButton = function() return Stub() end,
+    CreateButton = function(_, text, onClick)
+        local button = Stub({
+            text = text, onClick = onClick, enabled = true,
+            SetText = function(self, value) self.text = value end,
+            SetEnabledState = function(self, on) self.enabled = on end,
+            SetConfirming = function(self, on) self.confirming = on end,
+            IsShown = function() return true end,
+        })
+        buttons[text] = button
+        return button
+    end,
     ShowItemTooltip = function() return true end,
     CreateScrollList = function(_, opts)
         local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
@@ -467,11 +494,11 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 2001))
 
--- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
-check("PROFIT shows 260 in green", row.cells[1].text:find("60", 1, true) and row.cells[1].color == "profit")
-check("MARGIN shows 52%", row.cells[2].text == "52%")
+-- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, AGE. No SKILL column.
+check("PROFIT shows 474 in green", row.cells[1].text:find("74", 1, true) and row.cells[1].color == "profit")
+check("MARGIN shows 94% (rounded down)", row.cells[2].text == "94%")
 check("BUY shows the price", row.cells[4].text ~= "")
-check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
+check("no SKILL column", row.cells[5].text ~= "25")
 
 -- Reported 2026-10-08: the names drew white. Most rows are items read in an
 -- earlier session that the client's cache no longer holds, so the name's
@@ -491,13 +518,11 @@ ITEM_QUALITY_COLORS = nil
 checkboxes["Only deals over my minimums"].onToggle(false)
 check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
 
-Enchanter(10)
+Enchanter(4)
 tab.refresh()
-list.opts.updateRow(row, Find(list.data, 2001))
-check("too high for his enchanters: SKILL in red", row.cells[5].color == "loss")
-
 checkboxes["Only ones I can disenchant"].onToggle(true)
-check("and hidden when asked", Find(list.data, 2001) == nil and Find(list.data, 2007) ~= nil)
+check("Enchanting 4 keeps the level 22 chest when asked for only ones it can break",
+    Find(list.data, 2001) ~= nil and Find(list.data, 2007) ~= nil)
 checkboxes["Only ones I can disenchant"].onToggle(false)
 
 list.opts.menu(Find(list.data, 2003))[1].run()
@@ -560,6 +585,228 @@ for _, fn in ipairs(later) do fn() end
 check("closing the auction house rebuilds the list", Disenchant.rowBuilds == builds + 1)
 ns.Scanner.isAuctionHouseOpen = true
 C_Timer.After = function() end
+
+-- Picked (2026-11-26): once it has drawn, a pick that must build the list
+-- again keeps the rows it had up and walks a few items a frame, then draws
+-- the list an at-once build gives. The pick used to walk every scanned item
+-- in its own frame.
+print("\npicked, the list builds over frames")
+
+do
+    -- A worker that does PER_FRAME items each time the test steps a frame.
+    local PER_FRAME, workers = 2, {}
+    local realWorker = ns.Util.NewWorker
+    ns.Util.NewWorker = function(opts)
+        local worker = { index = 0, running = false }
+        function worker:Start(items)
+            self.items, self.index, self.running = items, 0, true
+            workers[#workers + 1] = self
+            return self
+        end
+        function worker:Cancel() self.running = false end
+        function worker:Step()
+            local done = 0
+            while self.running and self.index < #self.items and done < PER_FRAME do
+                self.index = self.index + 1
+                done = done + 1
+                opts.onItem(self.items[self.index], self.index, self)
+            end
+            if self.running and self.index >= #self.items then
+                self.running = false
+                if opts.onDone then opts.onDone(self) end
+            end
+        end
+        return worker
+    end
+    local function Frame()
+        local stepped = false
+        for _, worker in ipairs(workers) do
+            if worker.running then worker:Step(); stepped = true end
+        end
+        return stepped
+    end
+    local function Frames()
+        local count = 0
+        while Frame() do count = count + 1 end
+        return count
+    end
+
+    local walked = 0
+    local realRow = Disenchant.AuctionRow
+    Disenchant.AuctionRow = function(...) walked = walked + 1; return realRow(...) end
+
+    local function Order(rows)
+        local ids = {}
+        for index, row in ipairs(rows) do ids[index] = row.itemID .. "=" .. row.gain end
+        return table.concat(ids, ",")
+    end
+    local draws = 0
+    local setData = list.SetData
+    list.SetData = function(self, data) draws = draws + 1; return setData(self, data) end
+
+    ns.UI.activeTab = "disenchanting"
+    ns.UI.window = { IsShown = function() return true end }
+    check("the tab has a redraw for when it is picked", type(tab.refreshPicked) == "function")
+
+    ns.Prices.changes = 20
+    tab.refresh()
+    local had = list.data
+    local builds = Disenchant.rowBuilds
+
+    walked, draws = 0, 0
+    tab.refreshPicked()
+    check("picked with nothing changed, it draws at once and walks nothing",
+        draws == 1 and walked == 0 and Frames() == 0)
+
+    -- New prices that name no item, as a scan gives.
+    ns.Prices.changes = 21
+    records[2006].rivalMin = 100
+    walked, draws = 0, 0
+    tab.refreshPicked()
+    check("picked after new prices, the pick itself walks no item", walked == 0)
+    check("and the rows it had stay up", draws == 0 and list.data == had)
+    Frame()
+    check("a frame later a few items are walked", walked == PER_FRAME)
+    check("the old rows still up", draws == 0 and list.data == had)
+    Frames()
+    check("every item walked once, over several frames", walked == 7)
+    check("then the list is drawn", draws == 1 and list.data ~= had)
+    check("with the new price in it", Find(list.data, 2006) ~= nil and Find(list.data, 2006).buy == 100)
+    check("counted as one build", Disenchant.rowBuilds == builds + 1)
+    local spread = Order(list.data)
+    ns.Prices.changes = 22
+    tab.refresh()
+    check("the same list an at-once build gives", Order(list.data) == spread)
+
+    -- A click or an event redraws while a build is under way.
+    ns.Prices.changes = 23
+    records[2006].rivalMin = 5000
+    tab.refreshPicked()
+    Frame()
+    draws = 0
+    tab.refresh()
+    check("a refresh under way answers at once, with what is true now",
+        draws == 1 and Find(list.data, 2006).buy == 5000)
+    walked = 0
+    check("and the build under way is dropped", Frames() == 0 and walked == 0)
+
+    -- Another tab picked before the build is done.
+    ns.Prices.changes = 24
+    records[2006].rivalMin = 100
+    tab.refreshPicked()
+    Frame()
+    walked, draws = 0, 0
+    ns.UI.activeTab = "queue"
+    Frames()
+    check("leaving the tab stops the build and draws nothing", walked == 0 and draws == 0)
+    ns.UI.activeTab = "disenchanting"
+    tab.refreshPicked()
+    Frames()
+    check("coming back builds afresh", Find(list.data, 2006).buy == 100)
+
+    -- The last one is bought while the list builds.
+    builds = Disenchant.rowBuilds
+    ns.Prices.changes = 25
+    tab.refreshPicked()
+    Frame()
+    records[2001].rivalMin = nil
+    ns.Prices.TouchedSince = function(_, since) return since == 25 and { [2001] = true } or nil end
+    ns.Prices.changes = 26
+    Frames()
+    check("a price that moved while it built is mended in the draw",
+        Find(list.data, 2001) == nil and Find(list.data, 2006).buy == 100)
+    check("without walking every item again", Disenchant.rowBuilds == builds + 1)
+
+    -- A change it cannot name while it builds: built again, at once.
+    records[2001].rivalMin = 500
+    ns.Prices.TouchedSince = function() return nil end
+    ns.Prices.changes = 27
+    tab.refreshPicked()
+    Frame()
+    ns.Prices.changes = 28
+    records[2006].rivalMin = 5000
+    Frames()
+    check("one it cannot name builds the list again before the draw",
+        Find(list.data, 2001) ~= nil and Find(list.data, 2006).buy == 5000)
+
+    -- The three steps are GetAuctionRows.
+    local steps = Disenchant:BeginAuctionRows({ profitableOnly = true })
+    for index = #steps.items, 1, -1 do Disenchant:AuctionRowStep(steps, steps.items[index]) end
+    local rows, hidden, pending = Disenchant:FinishAuctionRows(steps)
+    local wantRows, wantHidden, wantPending = Disenchant:GetAuctionRows({ profitableOnly = true })
+    check("the steps, in any order, give GetAuctionRows' list",
+        Order(rows) == Order(wantRows) and hidden == wantHidden and pending == wantPending)
+    check("and leave no material price kept after them", Disenchant.materialPrices == nil)
+
+    Disenchant.AuctionRow = realRow
+    list.SetData = setData
+    ns.Util.NewWorker = realWorker
+    ns.UI.activeTab, ns.UI.window = nil, nil
+    ns.Prices.TouchedSince = nil
+    ns.Prices.changes = nil
+    tab.refresh()
+end
+
+-- Buy One (2026-11-24): after Search, the same button buys the cheapest
+-- listing on each click, up to the highest price that meets the minimums.
+print("\nBuy One")
+
+local bids, requests = {}, {}
+local listings = {}
+local savedMoney = GetMoney
+GetMoney = function() return 1000000 end
+C_AuctionHouse = {
+    MakeItemKey = function(id) return { itemID = id } end,
+    SendSearchQuery = function() return true end,
+    GetNumItemSearchResults = function() return #listings end,
+    GetItemSearchResultInfo = function(_, i) return listings[i] end,
+    PlaceBid = function(id, total) bids[#bids + 1] = { id, total } end,
+}
+ns.AHQueue = { PRIORITY = { urgent = 10 }, Request = function(_, r) requests[r.key] = r; return true end }
+ns.DisenchantBuys = { Intend = function() end }
+assert(loadfile(lfs_cwd .. "/Logic/DisenchantQuickBuy.lua"))("Blackthornes_TS", ns)
+local Quick = ns.DisenchantQuickBuy
+Quick:Init()
+-- The tab hooked its redraw when it was built, before the module loaded here.
+tab.build(Stub())
+tab.refresh()
+list = lists[#lists]
+local detail
+for _, panel in ipairs(panels) do if rawget(panel, "quickLine") then detail = panel end end
+local button = detail.searchButton
+local chest = Find(list.data, 2001)
+list.opts.onClick(chest, nil, "LeftButton")
+check("before a search the button searches", button.text == "Search the auction house")
+
+local most = Quick.MostToPay(chest.net, Disenchant:AuctionContext().minProfit, config.minMarginPercent or 0)
+listings = {
+    { auctionID = 11, buyoutAmount = chest.buy, quantity = 1 },
+    { auctionID = 12, buyoutAmount = chest.buy + 2, quantity = 1 },
+    { auctionID = 13, buyoutAmount = chest.buy, quantity = 1, containsOwnerItem = true },
+    { auctionID = 14, buyoutAmount = most + 1, quantity = 1 },
+}
+sent = {}
+button.onClick()
+check("a click searches first", sent[#sent] == "item2001" and #bids == 0)
+requests["de-quickbuy"].send()
+for _, fn in ipairs(handlers.ITEM_SEARCH_RESULTS_UPDATED) do fn(nil, nil, { itemID = 2001 }) end
+check("then it reads Buy One for the cheapest", button.text == "Buy One for " .. ns.Util.FormatMoney(chest.buy, { noColor = true }))
+check("with how many more under it", detail.quickLine.text:find("1 more at", 1, true) ~= nil and detail.quickLine.shown)
+button.onClick()
+check("a click buys the cheapest, once", #bids == 1 and bids[1][1] == 11 and bids[1][2] == chest.buy)
+for _, fn in ipairs(handlers.AUCTION_HOUSE_PURCHASE_COMPLETED) do fn(nil, nil, 11) end
+check("and readies the next", button.text == "Buy One for " .. ns.Util.FormatMoney(chest.buy + 2, { noColor = true }))
+button.onClick()
+for _, fn in ipairs(handlers.AUCTION_HOUSE_PURCHASE_COMPLETED) do fn(nil, nil, 12) end
+check("own listings and ones over the limit are never bought", #bids == 2 and bids[2][1] == 12)
+check("done: the button says so and can't be clicked",
+    button.text == "No more deals for this item" and button.enabled == false)
+check("and the line says what was bought", detail.quickLine.text:find("Bought 2 for", 1, true) ~= nil)
+button.onClick()
+check("a click when done buys nothing", #bids == 2)
+list.opts.onClick(Find(list.data, 2003), nil, "LeftButton")
+check("another deal picked goes back to Search", button.text == "Search the auction house" and Quick.current == nil)
+C_AuctionHouse, ns.AHQueue, ns.DisenchantBuys, GetMoney = nil, nil, nil, savedMoney
 
 ns.Scanner.isAuctionHouseOpen = false
 printed = {}

@@ -123,7 +123,17 @@ function GoldGoalUI:Place()
     if x and y then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
     else
-        frame:SetPoint("TOP", UIParent, "TOP", 0, -120 / scale)
+        -- Never dragged: the first place on the shared top shelf.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "goldbar.tradeskills", {
+            free = function()
+                return not (tonumber(ns.Config:Get("goldTrackerX")) and tonumber(ns.Config:Get("goldTrackerY")))
+            end,
+            place = function() GoldGoalUI:Place() end,
+        })
+        if not placed then
+            frame:SetPoint("TOP", UIParent, "TOP", 0, -120 / scale)
+        end
     end
 end
 
@@ -213,7 +223,7 @@ function GoldGoalUI.LightTick(tick, lit)
     if lit then
         tick:SetVertexColor(1, 1, 1, 1)
     else
-        tick:SetVertexColor(0.42, 0.42, 0.46, 0.9)
+        tick:SetVertexColor(0.48, 0.44, 0.37, 0.9)
     end
     tick.lit = lit and true or false
 end

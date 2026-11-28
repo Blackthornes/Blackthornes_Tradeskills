@@ -40,13 +40,14 @@ local VIEWS = {
     { text = L["Recent, all"],    value = "all" },
     { text = L["Still listed"],   value = "listed" },
     { text = L["By item"],        value = "item" },
+    { text = L["Bought"],         value = "bought" },
     { text = L["Profit by method"], value = "methods" },
     { text = L["Mailbox visits"], value = "visits" },
     { text = L["Gold in and out"], value = "gold" },
 }
 
 local state = { view = "sales", search = "", selected = nil, period = "week", who = "all",
-    salesPeriod = "all", methodsWho = "all" }
+    salesPeriod = "all", methodsWho = "all", boughtPeriod = "month" }
 
 -- By item's columns, right to left (a player asked for a running count of
 -- how many of each item sold; the owner said build it from a mockup,
@@ -79,6 +80,7 @@ local function SalesView()
 end
 
 local function CurrentPeriod()
+    if state.view == "bought" then return state.boughtPeriod or "month" end
     if SalesView() then return state.salesPeriod or "all" end
     return state.period
 end
@@ -109,6 +111,9 @@ local awaitingItemData = false
 -- name, or failing that the name itself. A sale of something the addon has no
 -- recipe for is still a sale, so the name is shown rather than the row dropped.
 local function ItemLabel(itemID, name)
+    -- A random suffix copy keeps the name its mail gave it.
+    local suffixName = ns.Mail and ns.Mail.SuffixName and ns.Mail.SuffixName(itemID, name)
+    if suffixName then return Util.ColorItemName(itemID, suffixName) end
     if itemID then return Util.GetItemLabel(itemID) end
     return name or L["unknown item"]
 end
@@ -167,7 +172,7 @@ local function SignedMoney(copper)
 end
 
 --- What one ledger sale made, or nil.
--- @return profit, cost, source ("made" | "est")
+-- @return profit, cost, source ("made" | "bought" | "est")
 local function EntryProfit(entry)
     if not ns.CraftedCost or not ns.CraftedCost.SaleProfit then return nil end
     saleCosts = saleCosts or ns.CraftedCost:NewSaleCache()
@@ -447,7 +452,10 @@ end
 
 --- One listing from a character's last auction house reading.
 local function UpdateListingRow(row, listing)
-    row.name:SetText(ItemLabel(listing.itemID, nil))
+    -- Its saved link names it when the client has not sent the item yet.
+    local label = ItemLabel(listing.itemID, nil)
+    if listing.link and not Util.GetItemQualityColor(listing.itemID) then label = listing.link end
+    row.name:SetText(label)
     ApplyNameColor(row.name, listing.itemID)
 
     if listing.unit then
@@ -476,19 +484,35 @@ local function UpdateListingRow(row, listing)
     row.when:SetTextColor(Theme.Unpack(color))
 end
 
+--- Whether a mailbox visit was left out of the totals by the player.
+local function VisitLeftOut(haul)
+    return ns.MailHaul and ns.MailHaul.IsLeftOut and ns.MailHaul.IsLeftOut(haul) or false
+end
+
 --- One mailbox visit: what was collected, and the best sale in it.
 local function UpdateVisitRow(row, haul)
     local best = haul.best
 
     Theme.SetItemIcon(row.icon, best and best.itemID)
 
-    local head = L.Format("Collected %s", Util.FormatMoney(haul.total, { short = true }))
-    if haul.recordHaul then head = head .. L.Format("  |c%sbest haul|r", ns.COLORS.accent) end
-    row.name:SetText(head)
-    row.name:SetTextColor(Theme.Unpack("text"))
+    -- Left out of the totals by the player: kept in its place, greyed, with
+    -- a Left Out tag where "best haul" sat.
+    local leftOut = VisitLeftOut(haul)
+    local money = { short = true, noColor = leftOut or nil }
 
-    row.amount:SetText(Util.FormatMoney(haul.total, { short = true }))
-    row.amount:SetTextColor(Theme.Unpack("accent"))
+    local head = L.Format("Collected %s", Util.FormatMoney(haul.total, money))
+    if leftOut then
+        head = head .. L.Format("  |c%s%s|r", ns.COLORS.muted or ns.COLORS.accent, L["Left Out"])
+    elseif haul.recordHaul then
+        head = head .. L.Format("  |c%sbest haul|r", ns.COLORS.accent)
+    end
+    row.name:SetText(head)
+    row.name:SetTextColor(Theme.Unpack(leftOut and "dim" or "text"))
+
+    row.amount:SetText(Util.FormatMoney(haul.total, money))
+    row.amount:SetTextColor(Theme.Unpack(leftOut and "dim" or "accent"))
+    if row.icon and row.icon.SetDesaturated then pcall(row.icon.SetDesaturated, row.icon, leftOut and true or false) end
+    if row.icon and row.icon.SetAlpha then row.icon:SetAlpha(leftOut and 0.5 or 1) end
 
     local parts = {}
     if (haul.salesCount or 0) > 0 then
@@ -506,10 +530,32 @@ local function UpdateVisitRow(row, haul)
     if who ~= "" then parts[#parts + 1] = who end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
-    row.detail:SetTextColor(Theme.Unpack("muted"))
+    row.detail:SetTextColor(Theme.Unpack(leftOut and "dim" or "muted"))
 
     row.when:SetText(Util.FormatAgeAgo(haul.t and (time() - haul.t)))
     row.when:SetTextColor(Theme.Unpack("dim"))
+end
+
+--- The saved visit behind a row of the Mailbox visits view.
+local function VisitRecord(data)
+    return type(data) == "table" and rawget(data, "record") or data
+end
+
+--- Right-click on a mailbox visit: see its report, or leave it out of the
+--- totals (and count it again). Nothing is deleted.
+local function OpenVisitMenu(data)
+    if not (ns.RowMenu and ns.MailHaul and ns.MailHaul.SetLeftOut) then return end
+    local record = VisitRecord(data)
+    local leftOut = VisitLeftOut(record)
+    if GameTooltip then GameTooltip:Hide() end
+    ns.RowMenu:Open({
+        { text = L["See Report"], run = function()
+            if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
+        end },
+        { text = leftOut and L["Count It Again"] or L["Leave Out of Report"], run = function()
+            ns.MailHaul:SetLeftOut(record, not leftOut)
+        end },
+    }, { title = L["MAILBOX VISIT"] })
 end
 
 --- What a group of sales made, for the line under a name.
@@ -977,9 +1023,9 @@ end
 -- id another entry gave that name. Keyed by "?name" here instead, clicking
 -- one selected nothing, and the item's sales were never lit.
 local function SelectionKey(data)
-    return data.key or data.itemID
-        or (data.name and state.names and state.names[data.name])
-        or ("?" .. tostring(data.name or "unknown"))
+    if data.key then return data.key end
+    local itemID = data.itemID or (data.name and state.names and state.names[data.name])
+    return ns.Mail.ItemKey(itemID, data.name)
 end
 
 --------------------------------------------------------------------------------
@@ -1035,6 +1081,27 @@ end
 local function ApplyLayout()
     local gold = state.view == "gold"
     local methods = state.view == "methods"
+    local bought = state.view == "bought"
+
+    -- The Bought view draws its own tiles and list over the whole width.
+    if bought then
+        for _, key in ipairs({ "list", "detail", "chart", "legend", "search", "who",
+            "character", "characterLabel", "tiles", "headings", "emptyLabel", "carried" }) do
+            if widgets[key] then widgets[key]:Hide() end
+        end
+        widgets.period:Show()
+        widgets.period:Select(CurrentPeriod())
+        local picking = CurrentPeriod() == "pick"
+        widgets.fromDay:SetShown(picking)
+        widgets.toLabel:SetShown(picking)
+        widgets.toDay:SetShown(picking)
+        if ns.SalesBought then
+            ns.SalesBought:Show(true)
+            ns.SalesBought:PlaceCharacter(picking and widgets.toDay or widgets.period)
+        end
+        return
+    end
+    if ns.SalesBought then ns.SalesBought:Show(false) end
 
     widgets.list:SetShown(not gold)
     widgets.detail:SetShown(not gold)
@@ -1267,6 +1334,17 @@ local function Refresh()
         return
     end
 
+    if state.view == "bought" then
+        local from, to
+        if CurrentPeriod() ~= "all" then
+            FillPickedDays()
+            from, to = ns.MethodProfit.Range(CurrentPeriod(), state.fromDay, state.toDay)
+        end
+        local count = ns.SalesBought and ns.SalesBought:Refresh(from, to) or 0
+        widgets.summary:SetText(L.Format("%d buys in %s", count, PeriodText()))
+        return
+    end
+
     awaitingItemData = false
     saleCosts = nil
 
@@ -1342,7 +1420,8 @@ local function Refresh()
 
         for index = #history, 1, -1 do
             -- Flagged on a view of it, so nothing is written into saved data.
-            local haul = setmetatable({ haul = true }, { __index = history[index] })
+            -- `record` is the saved visit itself, for Leave Out of Report.
+            local haul = setmetatable({ haul = true, record = history[index] }, { __index = history[index] })
 
             local best = haul.best
             if query == "" or (best and Matches(best.itemID, best.name, query)) then
@@ -1448,15 +1527,25 @@ local function Refresh()
 
     if state.view == "visits" then
         local history = ns.MailHaul and ns.MailHaul:GetHistory() or {}
-        local collected = 0
-        for _, haul in ipairs(history) do collected = collected + (haul.total or 0) end
+        -- Visits the player left out still count as visits, but not toward
+        -- collected or best haul; the line says how many, so the gap is clear.
+        local collected, leftOut = 0, 0
+        for _, haul in ipairs(history) do
+            if VisitLeftOut(haul) then
+                leftOut = leftOut + 1
+            else
+                collected = collected + (haul.total or 0)
+            end
+        end
         local best = ns.MailHaul and ns.MailHaul:Records() or 0
 
-        widgets.summary:SetText(L.Format(#history == 1 and L["%d visit  ·  collected %s  ·  best haul %s"]
+        local line = L.Format(#history == 1 and L["%d visit  ·  collected %s  ·  best haul %s"]
                 or L["%d visits  ·  collected %s  ·  best haul %s"],
             #history,
             Util.FormatMoney(collected, { short = true }),
-            Util.FormatMoney(best, { short = true })))
+            Util.FormatMoney(best, { short = true }))
+        if leftOut > 0 then line = line .. "  ·  " .. L.Format("%d left out", leftOut) end
+        widgets.summary:SetText(line)
         widgets.carried:Hide()
         return
     end
@@ -1543,7 +1632,13 @@ local function Build(container)
     local period = Widgets.CreateTabStrip(toolbar, periodTabs, function(value)
         -- The sales views keep their own period, so picking one there never
         -- changes what the gold and method views show.
-        if SalesView() then state.salesPeriod = value else state.period = value end
+        if state.view == "bought" then
+            state.boughtPeriod = value
+        elseif SalesView() then
+            state.salesPeriod = value
+        else
+            state.period = value
+        end
         Refresh()
     end, { width = 560 })
     period:SetPoint("LEFT", 0, 0)
@@ -1718,6 +1813,12 @@ local function Build(container)
             if data.haul then
                 GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
                 GameTooltip:SetText(L["Click to see this visit's report again"], 1, 1, 1)
+                if VisitLeftOut(data) then
+                    GameTooltip:AddLine(L["This visit is left out of your totals."], 0.8, 0.8, 0.8, true)
+                    GameTooltip:AddLine(L["Right-click to count it again."], 0.6, 0.6, 0.6, true)
+                else
+                    GameTooltip:AddLine(L["Right-click to leave it out of your totals."], 0.6, 0.6, 0.6, true)
+                end
                 GameTooltip:Show()
                 return
             end
@@ -1737,7 +1838,11 @@ local function Build(container)
             if data.haul or data.methodRow or data.professionRow or data.methodItem or not state.selected then return false end
             return SelectionKey(data) == state.selected
         end,
-        onClick = function(data)
+        onClick = function(data, _, mouseButton)
+            if data.haul and mouseButton == "RightButton" then
+                OpenVisitMenu(data)
+                return
+            end
             if data.methodRow then
                 ToggleMethod(data.method.key)
                 Refresh()
@@ -1782,6 +1887,8 @@ local function Build(container)
     local summary = Theme.CreateLabel(container, "small", "text")
     summary:SetPoint("BOTTOMLEFT", 8, 10)
     widgets.summary = summary
+
+    if ns.SalesBought then ns.SalesBought:Build(container, toolbar, period, Refresh) end
 
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)

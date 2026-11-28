@@ -23,6 +23,372 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.50.1
+
+Fixes and changes:
+- My Crafts, All Recipes and Recipes to Learn keep the same profession pick when you switch between them.
+
+## 1.50.0
+
+- Recipe tooltips show which of your other characters can learn the recipe.
+- Butler can mail your alts the materials for their Road to 300. It is off unless ticked.
+- Butler can mail a recipe to the alt who can learn it. It is off unless ticked.
+- You can leave an alt out of both.
+
+Fixes and changes:
+- Buy materials at a vendor buys only for the character you are playing.
+
+## 1.49.3
+
+Fixes and changes:
+- Materials on your other characters only count when that character is on the same realm and faction.
+- Price History on the Sell list opens the exact item you picked, including its suffix.
+
+## 1.49.2
+
+Fixes and changes:
+- Favors and writs no longer say to make an item by transmute or another craft with a cooldown.
+
+## 1.49.1
+
+- The Sell list shows your other copies of an item when one copy is soulbound.
+
+## 1.49.0
+
+- The Profit tab shows a 7 Days price line, a sell-speed bar and three cards. Click any profit to see how it adds up.
+- Road to 300 has Stop At buttons, Fewest Materials, No Auction House and Skip on each step.
+- The Queue has Sort By chips and an optional chime when it is done.
+- My Auctions lists today's sales under Sold Today.
+- Pick how Tradeskills opens at the auction house, a profession and the mailbox.
+- New Font, Colors and Fold Gem choices on the All Addons page.
+
+Fixes and changes:
+- The game no longer stutters while a quick scan is read.
+- The Prices, Disenchanting, Level Up and Profit tabs open without a stall.
+- Opening Settings no longer freezes the game.
+- The save is smaller.
+- Road to 300 skips recipes before their skill and cooldown crafts such as transmutes.
+- The Recipes to Learn pane shows every material, costliest first.
+- A new copy of gear sells while the equipment set's own copy is worn.
+- The minimap button stays where a button drawer puts it.
+- Shift tooltip lines sit at the bottom of the tooltip.
+
+## 1.48.0
+
+- Vendor prices count the Bartering perk.
+- The item tooltip shows what an item costs to make now, above Profit Now.
+- Stock you bought is costed at what you paid and shows under Flipped.
+- Lucky disenchants at an Arcane Salvager say so again, with the sound.
+
+Fixes and changes:
+- Various other bug fixes for Tradeskills.
+
+## 1.47.2
+
+Fixes and changes:
+- Snipe and Disenchant Quick Buy buy the item when you press Buy.
+- The Salvager tab shows the cut and profit from your Salvager value.
+- Various other bug fixes for Tradeskills.
+
+## 1.47.1
+
+Fixes and changes:
+- Plain Disenchant Results in Settings lets you move your old disenchants to your Salvager results, or clear them.
+
+## 1.47.0
+
+- Profit Now on the item tooltip uses what one costs to make today, and shows for any item a recipe makes.
+- Hovering a craft's profit in the Craft queue shows the profit for one craft.
+
+## 1.46.2
+
+Fixes and changes:
+- Lowest Posting on the item tooltip shows the cheapest listing.
+
+## 1.46.1
+
+Fixes and changes:
+- The guide arrow is now a slim bar that takes less room.
+
+## 1.46.0
+
+- The Stats page lists suffixes under each item.
+
+Fixes and changes:
+- Quick scan reads big auction houses much faster.
+- Road to 300 and Learn Next leave out recipes for a specialty you do not have.
+- Road to 300 leaves out cooldown crafts such as Mooncloth.
+- The sell drawer hover shows the suffix name, and suffix graphs show the scans they have.
+- Various bug fixes.
+
+## 1.45.0
+
+- Buy One buys the next listing as soon as you click it again.
+- The Sales tab keeps 60 days of sales, up to 2,000.
+
+Fixes and changes:
+- Various bug fixes.
+
+## 1.44.0
+
+- The Craft queue has an Upgrades Only box that lists only crafts that make an upgrade for you.
+- Your Way There is now a small see-through box with only your current step and a dial that points the way.
+
+Fixes and changes:
+- The Salvager notice goes away when the Boosted Disenchanting buff ends.
+- Scroll bars move the way you drag them.
+
+## 1.43.0
+
+- Buy One on the Disenchanting tab buys the cheapest listing on each click, with no pop-up. You can bind a key to it.
+- Each random suffix on the Prices tab has its own My Price, and item cards and Sales show the suffix name.
+- The Sell list keeps its order while the auction house is open.
+- Disenchants at an Arcane Salvager are kept in their own record from the start. The addon spots the Salvager by its buff.
+
+Fixes and changes:
+- Any enchanter can disenchant any item.
+- Value on Tooltips set to Off hides the Disenchant Value line too.
+- The Disenchanting and Deals tabs update when you search the auction house yourself.
+- The Prices graph stays readable in a short window, and Side by Side no longer covers the value lines.
+
+## 1.42.0
+
+- The All Addons page in Settings has a Set Default button. Click Confirm and this addon's settings go back to how they started.
+
+## 1.41.2
+
+Fixes and changes:
+- Light Leather and other gathered goods list at the auction price.
+- Buy Sets and Merchant's Favor no longer stick on "auction house is busy".
+- Buy For on Disenchanting moves to the next price after you buy.
+
+## 1.41.1
+
+- Road to 300 names the city for Undercity, Thunder Bluff and Darnassus trainers.
+- Scans finish without a freeze, and the Profit and Prices searches are quicker.
+
+Fixes and changes:
+- Various bug fixes for Tradeskills.
+
+## 1.41.0
+
+- A new Queue From Sell List box in Settings puts crafts that Craft First holds back into your queue. It starts off.
+
+Fixes and changes:
+- After a scan, the Sell list lists an item as soon as you click, with no wait. This holds for fifteen minutes.
+- Snipe buys materials again, and tells you why when a buy fails. To Disenchant says why its list is empty.
+- Value on Tooltips set to Off hides only the price lines. Sales, disenchant and the other lines stay.
+- A random suffix item's new price shows the next time you open the auction house.
+- The recipe count no longer covers a long profit number in the profession list.
+- Closing windows with a gamepad no longer gives a blocked action error.
+
+
+## 1.40.0
+
+- A new Upgrades Only box on the profession window lists only the crafts that are upgrades for you.
+
+Fixes and changes:
+- A quick full scan that you stop keeps its prices.
+
+
+## 1.39.2
+
+Fixes and changes:
+- Road to 300 Fishing sends every race to the right zones.
+- Shuffle no longer shows an error on a recipe with no top yield.
+- The bag stack total on item tooltips stays inside the tooltip.
+
+## 1.39.1
+
+Fixes and changes:
+- The Auction House tab always shows the sell list in the One Window.
+- My Auctions rows grow to fit long item names.
+- Gear with a random suffix shows its full name in My Auctions.
+
+## 1.39.0
+
+- Windows fold into a round button with the Tradeskills badge.
+- Minimums by Profession has a Disenchanting row.
+
+Fixes and changes:
+- Folding the One Window no longer shuts it for good.
+- Road to 300 sends smiths to the trainer who teaches the recipe.
+- Profit Now and the Profit tab count what an item sold for when nobody else is selling.
+- Demand waits for three listings to be gone before it reads a market.
+
+## 1.38.0
+
+- Panels and rows have a warm brown-black look.
+- The main window has a slimmer frame.
+- One-line rows can be Compact if you like.
+- Item rows link in chat and try on gear.
+- Recipes to Learn shows the Profit: choice.
+- Tradeskills has a line in the game's Options.
+
+## 1.37.0
+
+- The Buy Materials button stays on the vendor window when Butler is loaded.
+- Each suffix on the Prices tab shows its own price graph and Stats.
+- Sales of stacks and other items are filed under their item, on one row.
+
+Fixes and changes:
+- Prices, Profit, Queue and Settings open with less stalling.
+- A steady run of listings keeps going, and Snipe finds hold still between searches.
+- Road to 300 uses the skill the trainer asks for.
+- Blackthornes' own channel no longer takes the /1 spot at login.
+
+## 1.36.0
+
+- Random suffix items open on the Prices tab to show a price for each suffix.
+
+Fixes and changes:
+- Crafts with a cooldown, like transmutes, are priced at what the item costs to buy.
+- Mailbox visits keep 60 days, up to 2,000.
+- Various bug fixes for Tradeskills.
+
+## 1.35.4
+
+Fixes and changes:
+- Your prices and sales are kept when the game gives a blank realm name.
+
+## 1.35.3
+
+Fixes and changes:
+- Road to 300 finds trainers for First Aid and Cooking recipes, so the road keeps going.
+
+## 1.35.2
+
+Fixes and changes:
+- Trade goods like leather post at the market price with Post at Minimum Profit.
+
+## 1.35.1
+
+Fixes and changes:
+- The trip line and stop dots now draw on the world map.
+- Longer periods count older sales past the last 400.
+- The age shown for a disenchant profit reads the material you mostly get.
+
+## 1.35.0
+
+- Every window has a gold gem on its title bar. Click it to switch between the one window and separate windows.
+- Road to 300 learns the recipes a profession trainer teaches when you open one.
+Fixes and changes:
+- Road to 300 leaves off vendor recipes that need a standing you don't have.
+- Disenchant value is the average of every result, counting each by its chance.
+- Item names on the Prices tab fill in once the game loads them.
+- The queued craft stays showing when you resize the window.
+- Snipe lists only show finds your Spending Cap can buy.
+- Crafted pieces with a suffix are priced by that suffix.
+
+## 1.34.5
+
+Fixes and changes:
+- Listing a Spellstone or other bag item no longer gets blocked. List It and Skip show in our own window.
+- Gear lists price to the copper.
+- Road to 300 counts materials you own as free when Charge for Own Materials is off, and the "Get everything before you start" row is gone.
+- A Quick Scan that stops partway keeps what it read.
+
+## 1.34.4
+
+Fixes and changes:
+- Restocking after a sale queues enough crafts to reach the amount you keep in stock.
+
+## 1.34.3
+
+Fixes and changes:
+- The cooldown timer no longer shows an error.
+- Road to 300 steps show in green.
+- In Recipes to Learn, a click on Skill sorts by skill again.
+
+## 1.34.2
+
+Fixes and changes:
+- Road to 300: Queue Step now queues only the step you click.
+
+## 1.34.0
+
+- The craft queue and Shopping List show on the Crafting tab of the one window, and only while something is queued.
+Fixes and changes:
+- An item that sold is no longer logged as cancelled, and restocking starts when your listed count hits 0.
+- Road to 300 sends each rank to the trainer who teaches it.
+- Hovering a recipe that makes more than one item in the Profit tab no longer shows an error.
+
+## 1.33.0
+
+- Star the recipes you want to learn, and vendors and trainers tell you when they teach one.
+- Each profession can have its own minimum profit.
+- The Profit tab has a new All Recipes view, and soulbound crafts get a price.
+- Material tooltips show which professions use them.
+- Butler's leveling help now covers Cooking and First Aid.
+- Various bug fixes for Tradeskills.
+
+## 1.32.0
+
+- There's a Post at Minimum Profit box on the Pricing page. It lists your crafts at the lowest price that still makes your Minimum Profit. It starts off.
+- There's a TSM Sold a Day box on the Pricing page. It takes the Sold a day number on tooltips from TSM. It starts off.
+Fixes and changes:
+- The window stays where you drag it.
+
+## 1.31.1
+
+Fixes and changes:
+- Tooltips for random suffix gear show the price for that suffix.
+- Road to 300 shows where the Artisan Enchanting trainer is, with Show the Way.
+- Import Prices works between your own accounts on the same realm.
+- Artisan crates show their favor and silver.
+
+## 1.31.0
+
+- There's a Crate Shopping List for Waylaid Crates on the auction house Buy tab. It starts off.
+- The craft pane and mail list can be tabs in the one window.
+- A slim craft strip sits inside the profession window when there's no room beside it.
+- The Queue page and Settings are sorted into clearer groups, with an All Addons page.
+- The window can dock in more places and you can resize it by hand.
+Fixes and changes:
+- Crate bundles over a stack now count.
+- Fixed an error from the background worker.
+- Long Your Time notes wrap.
+
+## 1.30.3
+
+Fixes and changes:
+- Craft prices in the Profit detail now show x2 when a craft makes more than one.
+- Forget Character and Clear Items work again on the Characters tab.
+- Items no longer sit off the Sell list for the wrong reason when breaking them down pays more.
+- Potions, food and bandages are rated against their own kind for demand.
+- Gear posts keep their exact copper price when you undercut.
+
+## 1.30.2
+
+Fixes and changes:
+- More recipes show the right materials and professions.
+
+## 1.30.1
+
+Fixes and changes:
+- Gold you mail between your own characters no longer counts as profit.
+- Writ hand-in spots show up right away.
+- Snipe Buy no longer gets stuck on asking.
+
+## 1.30.0
+
+- The Sales tab has a new Bought view. It shows what you spent at the auction house, what you bought most, and what you paid each.
+
+## 1.29.0
+
+- Butler can tell you why an item should wait, and Sell Anyway sells it when you disagree.
+- A new goal window helps you pick your next gold goal.
+- Profit shows your crafted sales by profession and by character.
+- You can pause crafts in the Queue, move them, and skip ones that need a tool.
+- There is a new price box for gear that binds when worn, on the Sharing page.
+- The game's profession window can show what a craft costs and earns. It starts off.
+Fixes and changes:
+- Gear posts at no undercut round up to a whole silver.
+- Road to 300 picks a closer trainer and adds up repeated steps.
+- Tooltips show the cost to make with bind on pickup parts.
+- The addon uses less memory.
+- The mouse wheel works the first time you open the auction house.
+
 ## 1.28.0
 
 Fixes and changes:

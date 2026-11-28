@@ -120,8 +120,8 @@ end
 --- What one craft gets back, each way it can be turned into gold.
 --
 -- The house rules: a grey item is worth what a vendor pays and nothing more,
--- and a disenchant counts at its most likely result alone (rarer ones are a
--- bonus). Disenchanted materials still have to be sold, so they lose the
+-- and a disenchant counts at its average, each result by its chance.
+-- Disenchanted materials still have to be sold, so they lose the
 -- auction house cut like any listing. A soulbound craft never reaches the
 -- auction house, but a vendor and a disenchant still take it.
 --
@@ -372,52 +372,74 @@ end
 --   make as a sub-craft. A craft only another character knows says who
 --   (`knownBy`).
 function LevelUp:GetRanked(opts)
+    local steps = self:BeginRanked(opts)
+    for _, recipeID in ipairs(steps.items) do self:RankOne(steps, recipeID) end
+    return self:FinishRanked(steps)
+end
+
+-- GetRanked in three steps, so the Level Up tab can build a few rows a
+-- frame when it is picked (2026-11-26; every pick built a row for every
+-- recipe in one frame). BeginRanked lists the recipes (`steps.items`),
+-- RankOne builds one's row, FinishRanked sorts. Same rows, same order.
+
+function LevelUp:BeginRanked(opts)
     opts = opts or {}
-
-    local needle = opts.search and opts.search ~= "" and opts.search:lower() or nil
-    local rows = {}
-    local materials = self:GetMaterialSet()
-
     local recipes, knownBy = self:ListedRecipes(opts.subCraftsOnly)
-    local purse = opts.canAfford and LevelUp.Purse() or nil
+    local items = {}
+    for recipeID in pairs(recipes) do items[#items + 1] = recipeID end
+    return {
+        opts = opts,
+        needle = opts.search and opts.search ~= "" and opts.search:lower() or nil,
+        rows = {},
+        materials = self:GetMaterialSet(),
+        recipes = recipes,
+        knownBy = knownBy,
+        purse = opts.canAfford and LevelUp.Purse() or nil,
+        items = items,
+    }
+end
 
-    for recipeID, recipe in pairs(recipes) do
-        local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
+function LevelUp:RankOne(steps, recipeID)
+    local opts, knownBy, materials = steps.opts, steps.knownBy, steps.materials
+    local recipe = steps.recipes[recipeID]
+    if not recipe then return end
 
-        -- Not a profession this character has dropped.
-        if keep and not knownBy[recipeID] and ns.Recipes.IsDropped
-            and ns.Recipes:IsDropped(recipe) then
-            keep = false
-        end
+    local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
 
-        if keep and needle then
-            keep = (recipe.name or ""):lower():find(needle, 1, true) ~= nil
-        end
-
-        if keep and opts.subCraftsOnly then
-            keep = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true
-        end
-
-        if keep then
-            local row = self:BuildRow(recipeID, recipe, materials)
-            if row then row.knownBy = knownBy[recipeID] end
-
-            if row then
-                -- A sub-craft gone grey is still made to go into others,
-                -- often the very one to stop making.
-                local showGrey = opts.includeTrivial or opts.subCraftsOnly
-                if row.tier == "trivial" and not showGrey then row = nil end
-                if row and opts.craftableOnly and row.craftableNow < 1 then row = nil end
-                if row and purse and self:ShortOfGold(row, purse) then row = nil end
-            end
-
-            if row then rows[#rows + 1] = row end
-        end
+    -- Not a profession this character has dropped.
+    if keep and not knownBy[recipeID] and ns.Recipes.IsDropped
+        and ns.Recipes:IsDropped(recipe) then
+        keep = false
     end
 
-    table.sort(rows, LevelUp.Compare)
+    if keep and steps.needle then
+        keep = (recipe.name or ""):lower():find(steps.needle, 1, true) ~= nil
+    end
 
-    return rows
+    if keep and opts.subCraftsOnly then
+        keep = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true
+    end
+
+    if not keep then return end
+
+    local row = self:BuildRow(recipeID, recipe, materials)
+    if row then row.knownBy = knownBy[recipeID] end
+
+    if row then
+        -- A sub-craft gone grey is still made to go into others,
+        -- often the very one to stop making.
+        local showGrey = opts.includeTrivial or opts.subCraftsOnly
+        if row.tier == "trivial" and not showGrey then row = nil end
+        if row and opts.craftableOnly and row.craftableNow < 1 then row = nil end
+        if row and steps.purse and self:ShortOfGold(row, steps.purse) then row = nil end
+    end
+
+    if row then steps.rows[#steps.rows + 1] = row end
+end
+
+function LevelUp:FinishRanked(steps)
+    table.sort(steps.rows, LevelUp.Compare)
+    return steps.rows
 end
 
 --------------------------------------------------------------------------------

@@ -40,7 +40,7 @@ local STRANGE_DUST, LESSER_ASTRAL, SMALL_GLIMMERING = 10940, 10998, 10978
 local items = {
     [1001] = { 2, 22, "INVTYPE_CHEST", 4, 2, 50 },    -- worth more disenchanted
     [1002] = { 2, 22, "INVTYPE_WEAPON", 2, 2, 50 },   -- a reagent has no price
-    [1011] = { 2, 22, "INVTYPE_LEGS", 4, 2, 900 },    -- a vendor pays more than the auction house
+    [1011] = { 2, 22, "INVTYPE_LEGS", 4, 2, 1200 },   -- a vendor pays more than the auction house
     [1012] = { 2, 22, "INVTYPE_FEET", 4, 2, 50 },     -- from a dropped profession
 }
 
@@ -185,7 +185,7 @@ check("nor kept by the \"pays more\" box", CraftRows(true)[1001] == nil)
 ns.Cost.GetCraftCost = realCost
 
 print("\na craft a vendor pays more for")
-check("is priced at what the vendor pays", crafts[1011].sells == 900 and crafts[1011].sellsAt == "vendor")
+check("is priced at what the vendor pays", crafts[1011].sells == 1200 and crafts[1011].sellsAt == "vendor")
 check("and so is worth more sold than disenchanted", crafts[1011].beatsSale == false)
 
 -- Analyse itself can choose the vendor's price when that pays more than

@@ -1,8 +1,7 @@
 # Handoff: wheel up to list on the Sell tab stops working
 
 The owner's report (2026-11-14): wheel up to list on the auction house Sell
-tab works for a while, then stops. Branch `claude/project-thread-0xdcz2`,
-PR to `main`.
+tab works for a while, then stops. PRs go to `main`.
 
 Read big files in pieces: grep first, at most 120 lines at a time.
 
@@ -145,12 +144,14 @@ No request or flag stays set forever. Three things eat wheel turns:
 
 - [x] Trace `ListNext` to the post call
 - [x] Root cause confirmed
-- [ ] Fix and test
-- [ ] PR
+- [x] P4 built 2026-11-21 (`AHQueue:NoteListing`, `Posting:ReadOutSince`,
+  `MAX_CONFIRMING` 30, `tools/test_poststeady.lua`). The debug trace
+  below was already taken out.
+- [ ] P1 and P3 still open; P2 is in (`CheckPending`, `BulkTried`)
 
 ## Debug trace (remove scroll debug before release)
 
-Added 2026-11-14, temporary, not a fix. Trent turns it on with
+Added 2026-11-14, temporary, not a fix. The owner turns it on with
 `/bts debug scroll` (plain `/bts debug` still toggles the old debug flag).
 While on, every wheel turn on the auction house prints one `[scroll]` line in
 chat: the turn's direction, view, Wanted, job, gap since the last turn, bound

@@ -25,7 +25,7 @@
 -- Values follow the house rules: materials at what they cost to buy (a
 -- vendor's price for what a vendor sells), what one craft gets back the way
 -- the Level Up tab works it out (LevelUp:GetReturns: a grey item at vendor
--- only, a disenchant at its most likely result), and nothing is ever priced
+-- only, a disenchant at its average result), and nothing is ever priced
 -- from a missing number.
 
 local _, ns = ...
@@ -37,9 +37,12 @@ local Util = ns.Util
 
 -- Forever lists each profession under a second, modern skill line as well
 -- (docs/FOREVER_API_FINDINGS.md). Recipes the game shows may carry either.
+-- Cooking (2939) and First Aid (2942) too: a recipe their windows showed
+-- kept the second line, so no trainer was found to teach it and Road to 300
+-- stopped (a player's report, 2026-11-20: First Aid stuck at 82).
 local MODERN_SKILL_LINES = {
-    [2937] = 171, [2938] = 164, [2940] = 333, [2941] = 202,
-    [2945] = 165, [2946] = 186, [2948] = 197,
+    [2937] = 171, [2938] = 164, [2939] = 185, [2940] = 333, [2941] = 202,
+    [2942] = 129, [2945] = 165, [2946] = 186, [2948] = 197,
 }
 
 -- The game's item class for recipes.
@@ -98,10 +101,13 @@ local FOREVER_SKILLS = {
     -- The same leather step: a player saw Thick Leather ask for 175 too
     -- (2026-11-14), where the estimate said 155 and Road to 300 offered it.
     ["thick leather"] = 175,
-    -- Not yet seen in game: the next leather step, read the same way, so
+    -- The next leather step, read the same way, so
     -- Road to 300 never offers it before the trainer would let you make it.
     ["rugged leather"] = 225,
     ["cured rugged hide"] = 225,
+    -- A player saw its trainer ask for 225 (2026-11-21), where the
+    -- estimate said 205.
+    ["rugged armor kit"] = 225,
 }
 
 -- Required skills read from recipe items' tooltips, one read per item a
@@ -250,6 +256,9 @@ function RecipeBook:GetAll()
             recipeID = recipeID,
             bookID = recipeID,
             name = row[7],
+            -- The English name, kept when a window in another language
+            -- renames the recipe: fixes below go by it.
+            bookName = row[7],
             skillLineID = row[1],
             profession = book.PROFESSIONS[row[1]],
             skill = row[2],
@@ -323,9 +332,29 @@ function RecipeBook:GetAll()
         end
     end
     for _, record in pairs(merged) do
-        local fixed = record.name and FOREVER_SKILLS[record.name:lower()]
+        -- By the English name: a window in another language renames the
+        -- recipe, and the fix missed it (a player's report, 2026-11-26:
+        -- Cured Thick Hide from 155 to 175).
+        local name = record.bookName or record.name
+        local fixed = name and FOREVER_SKILLS[name:lower()]
         if fixed then
             record.skill = fixed
+        end
+    end
+    -- What a trainer's own window showed (Logic/TrainerRecipes.lua, then
+    -- the shipped Data/ForeverTrainerRecipes.lua): its price, and the skill
+    -- it asks for, which is the game's own. A recipe Forever added has no
+    -- trainer price in the book until then (2026-11-19).
+    local trainers = ns.TrainerRecipes
+    if trainers and trainers.All then
+        for recipeID in pairs(trainers:All()) do
+            local record = merged[recipeID] or (aliases[recipeID] and merged[aliases[recipeID]])
+            local row = record and trainers:Get(recipeID)
+            if row then
+                if type(row.cost) == "number" then record.trainerCost = row.cost end
+                if type(row.skill) == "number" and row.skill > 0 then record.skill = row.skill end
+                record.trainerSeen = true
+            end
         end
     end
     for itemID, learned in pairs(SkillTable(false) or {}) do
@@ -843,6 +872,41 @@ function RecipeBook:LearnFrom(record)
     return short or L["Unknown"], lines
 end
 
+--- The ways a recipe item is got besides a trainer or vendor, for Learn
+--- next's "Learn From:" (2026-11-17): the same reading as LearnFrom's.
+--
+-- @return { drop = true when a creature drops it, quest = true when it
+--   comes from a quest, reputation or the other faction }
+function RecipeBook:LearnWays(record)
+    local ways = {}
+    if not record then return ways end
+    for _, itemID in ipairs(record.recipeItems or {}) do
+        local row = Book().ITEMS[itemID]
+        if row and (row.d or 0) > 0 then ways.drop = true end
+        if #VendorsOf(itemID) == 0 and #SellersOf(itemID) == 0 and not (row and row.d)
+            and not record.forever then
+            ways.quest = true
+        end
+    end
+    return ways
+end
+
+--- Every way a recipe is learned, for the Learn Next view's "Learn From:"
+--- (LearnNext.Matches reads it as `place.ways`): LearnWays plus a trainer
+--- (or the profession itself) and a vendor, as LearnFrom reads them.
+function RecipeBook:AllWays(record)
+    local ways = self:LearnWays(record)
+    if not record then return ways end
+    if record.trainerCost or record.starter then ways.trainer = true end
+    for _, itemID in ipairs(record.recipeItems or {}) do
+        if #VendorsOf(itemID) > 0 or #SellersOf(itemID) > 0 then
+            ways.vendor = true
+            break
+        end
+    end
+    return ways
+end
+
 --------------------------------------------------------------------------------
 -- What it is worth
 --------------------------------------------------------------------------------
@@ -854,6 +918,12 @@ end
 -- @return price, how ("trainer", "vendor" or "auction"), itemID
 function RecipeBook:GetRecipePrice(record, extraItemID)
     local best, how, which
+
+    -- Shipped vendor prices are full price; Bartering takes its share off.
+    local function Barter(price)
+        if ns.Vendor and ns.Vendor.Discounted then return ns.Vendor:Discounted(price) end
+        return price
+    end
 
     local function Offer(price, way, itemID)
         if price and price > 0 and (not best or price < best) then
@@ -871,10 +941,10 @@ function RecipeBook:GetRecipePrice(record, extraItemID)
         if seenAtVendor then
             Offer(ns.Vendor:GetUnitPrice(itemID), "vendor", itemID)
         elseif row and row.v and #VendorsOf(itemID) > 0 then
-            Offer(row[2], "vendor", itemID)
+            Offer(Barter(row[2]), "vendor", itemID)
         end
         for _, seller in ipairs(SellersOf(itemID)) do
-            Offer(seller.gold, "vendor", itemID)
+            Offer(Barter(seller.gold), "vendor", itemID)
         end
         Offer(ns.Prices and ns.Prices:GetValue(itemID, "lowest"), "auction", itemID)
     end
@@ -1044,6 +1114,20 @@ end
 
 local WAY_NAMES = { vendor = L["vendor"], auction = L["auction"], disenchant = L["disenchant"] }
 
+--- "Mira Ashvale (Tailoring 162)" for the alt who can learn a recipe now,
+--- "Mira Ashvale at Tailoring 115 (has 98)" when none can yet; nil when no
+--- alt the character playing can mail has the profession and lacks it.
+function RecipeBook:CanLearnText(record)
+    local alts = ns.AltLevelUp
+    if not (alts and alts.CanLearn) then return nil end
+    local best = alts:CanLearn(record)[1]
+    if not best then return nil end
+    if best.short then
+        return L.Format("%s at %s %d (has %d)", best.name, best.profession, tonumber(record.skill) or 0, best.skill)
+    end
+    return L.Format("%s (%s %d)", best.name, best.profession, best.skill)
+end
+
 --- Lines for a recipe item's tooltip, in ItemTooltip's `{ label, value }`
 --- shape. Nothing for an item that teaches no recipe the book knows.
 function RecipeBook:TooltipLines(itemID)
@@ -1080,6 +1164,11 @@ function RecipeBook:TooltipLines(itemID)
     else
         lines[#lines + 1] = { L["Known by"], L["nobody on this account"], color = "warn" }
     end
+
+    -- The alt who could learn it (2026-11-27): the one Butler's "Mail
+    -- Recipes to Who Can Learn Them:" would mail it to.
+    local canLearn = self:CanLearnText(record)
+    if canLearn then lines[#lines + 1] = { L["Can Learn"], canLearn } end
 
     local value = self:Value(record, itemID)
 

@@ -25,7 +25,14 @@ local crafted = { [BOLT] = { cost = 800 } }
 ns.CraftedCost = {
   Get = function(_, id) return crafted[id] end,
   NewSaleCache = function() return {} end,
-  SaleCost = function(_, entry) return entry.estimate end,
+  -- As the real one answers (tools/test_flipcost.lua runs it): the cost on
+  -- the sale, else today's estimate, else what was bought.
+  SaleCost = function(_, entry, itemID)
+    if type(entry.cost) == "number" then return entry.cost, entry.bought and "bought" or "made" end
+    if entry.estimate then return entry.estimate, "est" end
+    local paid = ns.MethodProfit:BuyCost(itemID or entry.itemID)
+    if paid then return paid, "bought" end
+  end,
 }
 ns.Disenchant = { GetMaterialPrice = function(_, id) if id == DUST then return 50 end end }
 
@@ -221,6 +228,35 @@ local sellers = MP:Sellers()
 check("two sellers", #sellers, 2)
 check("by name", sellers[1] and sellers[1].name, "Ana Stone")
 table.remove(vlog.events)
+print("\nolder sales")
+-- The mail ledger keeps only its newest entries. A busy seller filled it in
+-- a day, so every period from Today to All showed the same numbers (a
+-- player's report, 2026-11-20). A sale leaving the ledger is kept here.
+ledger.entries = {
+  { kind = "sold", itemID = LOOT, net = 100, deposit = 0, t = now - 100, quantity = 1, who = "A" },
+}
+MP:KeepOlderSale({ kind = "sold", itemID = BOLT, net = 1000, deposit = 10, t = now - 3 * 86400,
+  quantity = 2, cost = 300, who = "B" })
+MP:KeepOlderSale({ kind = "sold", name = "Mystery", net = 50, deposit = 0, t = now - 3 * 86400, who = "A" })
+MP:KeepOlderSale({ kind = "expired", itemID = LOOT, t = now - 3 * 86400 })
+local today = MP:Summary(now - 3600, now + 1)
+local week = MP:Summary(now - 7 * 86400, now + 1)
+check("today: not the older crafted sale", today.methods.crafted.n, 0)
+check("today: the sale still in the ledger", today.methods.other.n, 1)
+check("7d: the older crafted sale counts", week.methods.crafted.n, 2)
+check("with its cost", week.methods.crafted.cost, 600)
+check("and what it took in", week.methods.crafted.income, 990)
+check("an older sale with no ID keeps its name", week.methods.other.items["name:Mystery"] ~= nil, true)
+check("a return is not kept", #MP:GetLog().sold, 2)
+check("one character's older sales", MP:Summary(now - 7 * 86400, now + 1, { who = "B" }).methods.crafted.n, 2)
+check("older sellers are in the menu", #MP:Sellers(), 2)
+local soldLog = MP:GetLog().sold
+for i = 1, MP.MAX_OLDER_SALES + 5 do
+  soldLog[#soldLog + 1] = { t = now - 86400, id = LOOT, net = 1 }
+end
+MP:KeepOlderSale({ kind = "sold", itemID = LOOT, net = 1, t = now - 86400 })
+check("older sales are capped", #MP:GetLog().sold, MP.MAX_OLDER_SALES)
+MP:GetLog().sold = {}
 ns.Util.CharacterName = nil
 
 print("\nkeeping")
@@ -229,5 +265,8 @@ log.events[#log.events + 1] = { t = now - 500 * 86400, m = "vendored", id = LOOT
 local before = #log.events
 MP:Prune()
 check("old events go", #log.events, before - 1)
+log.sold = { { t = now - 500 * 86400, id = LOOT, net = 1 }, { t = now - 86400, id = LOOT, net = 1 } }
+MP:Prune()
+check("old auction sales go too", #log.sold, 1)
 
 if failures > 0 then error(failures .. " failure(s)") end

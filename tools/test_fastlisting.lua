@@ -27,7 +27,6 @@
 --      so one given up in the queue is asked again on the next click.
 
 local GLOBALS = { "CreateFrame", "C_Container", "ItemLocation", "GetTime", "time", "C_Timer",
-    "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
     "C_AuctionHouse" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
@@ -41,9 +40,11 @@ local function Blank()
 end
 
 local clock = 1000
+local wall = 100000
+local lastScanStamp
 CreateFrame = function() return Blank() end
 GetTime = function() return clock end
-time = function() return 100000 end
+time = function() return wall end
 
 local timers = {}
 C_Timer = {
@@ -76,17 +77,20 @@ C_Container = {
 ItemLocation = { CreateFromBagAndSlot = function() return { IsValid = function() return true end } end }
 
 local popup
-StaticPopupDialogs = {}
-StaticPopup_Show = function(which, text, _, data)
-    popup = Blank()
-    popup.which, popup.text, popup.data = which, text, data
-    return popup
-end
-StaticPopup_Visible = function(which) return popup and popup.which == which and popup or nil end
-StaticPopup_Hide = function(which) if popup and popup.which == which then popup = nil end end
 
 local said = {}
 local ns = {}
+
+-- Tradeskills' own question window (UI/PostConfirm.lua), as far as these
+-- checks need it. The game's pop-ups are never used for it.
+ns.PostConfirm = {
+    Show = function(_, ask)
+        popup = { text = ask.text, data = ask.data, itemID = ask.itemID, ask = ask }
+        return true
+    end,
+    IsShown = function() return popup ~= nil end,
+    Close = function() popup = nil end,
+}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = noop
@@ -139,6 +143,7 @@ ns.Prices = {
     GetScanValue = function(_, itemID, key) if key == "market" then return MARKET[itemID] end end,
     Get = function() return {} end,
     IsCredible = function(price) return type(price) == "number" and price > 0 end,
+    GetLastScan = function() return lastScanStamp end,
 }
 ns.Inventory = {
     GetCarriedBags = function() return { 0 } end,
@@ -207,6 +212,7 @@ local function Reset()
     Posting.confirming, Posting.pending, Posting.others, Posting.requesting = nil, nil, nil, {}
     Posting:ForgetChecks()
     Posting.wholeScanAt = nil
+    lastScanStamp = nil
     ns.Scanner.isAuctionHouseOpen = true
     settings.fastListing = nil
     settings.allowPostingAtALoss = nil
@@ -443,12 +449,12 @@ check("ten minutes on, the scan's price no longer lists on the click", Posting:I
 clock = clock + 100
 
 print("")
-print("a whole scan in the last ten minutes: no second check")
+print("a whole scan in the last fifteen minutes: no second check")
 
 Reset()
 settings.askBeforeListing = nil
 settings.fastListing = true
-check("ten minutes it is", Posting.FRESH_FOR, 600)
+check("fifteen minutes it is", Posting.SCAN_FRESH_FOR, 900)
 recorded[POTION] = 290
 check("before a scan the list would be checked", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
 Posting:NoteScanned({ [POTION] = { 290 } }, true)
@@ -461,16 +467,44 @@ Posting:Request(POTION, 5, 290)
 check("the click lists", #posted, 1)
 check("still with no search", #searches, 0)
 check("and no Click again", Said("Click again to list it"), false)
-clock = clock + Posting.FRESH_FOR - 20
+clock = clock + 12 * 60
+check("twelve minutes on, still no second check", Posting:IsFresh(OIL), true)
+check("the button still reads List", Posting:ClickChecksFirst(OIL), false)
+Posting:Request(POTION, 5, 290)
+check("and the click lists with no search", #searches, 0)
+clock = clock + Posting.SCAN_FRESH_FOR - 12 * 60 - 20
 Posting:ForgetChecks()
 check("closing the auction house and coming back keeps it", Posting:IsFresh(OIL), true)
 clock = clock + 21
-check("past ten minutes the scan is old", Posting:IsFresh(OIL), false)
+check("past fifteen minutes the scan is old", Posting:IsFresh(OIL), false)
 check("the button reads Check Price once it is old", Posting:ClickChecksFirst(OIL), true)
 Posting:NoteScanned({ [POTION] = { 290 } }, true)
 check("and List again after a fresh scan", Posting:ClickChecksFirst(OIL), false)
-clock = clock + Posting.FRESH_FOR + 1
+clock = clock + Posting.SCAN_FRESH_FOR + 1
 check("and the list would be checked again", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
+
+print("")
+print("the saved scan stamp counts after a /reload")
+
+Reset()
+settings.fastListing = true
+lastScanStamp = wall - 8 * 60
+check("a scan saved eight minutes ago, no mark this session: fresh", Posting:IsFresh(OIL), true)
+check("its copies with a suffix too", Posting:IsFreshCopy(OIL), true)
+check("the list is not checked", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), false)
+Posting:Request(POTION, 5, 290)
+check("the click lists with no search", #searches, 0)
+check("and lists", #posted, 1)
+lastScanStamp = wall - Posting.SCAN_FRESH_FOR - 1
+check("a saved scan past fifteen minutes is old", Posting:IsFresh(OIL), false)
+lastScanStamp = wall + 60
+check("a stamp from a clock set ahead is not trusted", Posting:IsFresh(OIL), false)
+lastScanStamp = "soon"
+check("an odd stamp is left alone", Posting:IsFresh(OIL), false)
+ns.Prices.GetLastScan = function() error("boom") end
+check("a stamp that cannot be read is not fresh", Posting:IsFresh(OIL), false)
+ns.Prices.GetLastScan = function() return lastScanStamp end
+lastScanStamp = nil
 
 Reset()
 settings.fastListing = true

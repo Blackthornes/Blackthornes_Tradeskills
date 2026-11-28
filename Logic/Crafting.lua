@@ -310,6 +310,21 @@ end
 -- @return entry, slots -- slots is nil when bag space did not decide
 function Crafting:PickNext(ready)
     if #ready == 0 then return nil end
+    -- Sort By on the Queue tab (2026-11-26): the first ready row in that
+    -- order, parts still before what they go into. My Order keeps the
+    -- rules below.
+    local sort = ns.Queue.SortBy and ns.Queue:SortBy() or "mine"
+    if sort ~= "mine" then
+        local isReady = {}
+        for _, entry in ipairs(ready) do isReady[entry] = true end
+        for _, entry in ipairs(ns.Queue:Ordered(ns.Queue:GetAll())) do
+            if isReady[entry] then
+                if sort == "bags" then return entry, (self:SlotsFreed(entry)) end
+                return entry
+            end
+        end
+        return ready[1]
+    end
     if #ready == 1 or not self:FreesSpaceFirst() then return ready[1] end
     -- The player's own order (Move to Top, Up, Down) is kept as it is.
     if ns.Queue.HasOwnOrder and ns.Queue:HasOwnOrder() then return ready[1] end
@@ -400,6 +415,15 @@ local CAST_KEPT_FOR = 10
 -- craft of the batch stayed on the queue.
 local AFTER_BATCH_SECONDS = 3
 
+--- A line about crafting from the queue ("made 1 of X, 4 left", "crafting
+-- 5x X..."). Craft Messages on the Tooltips page (`craftChat`, on unless
+-- unticked) keeps them out of chat; a player asked, 2026-11-17. Warnings
+-- and refusals still show.
+local function SayCraft(...)
+    if ns.Config and ns.Config.Get and ns.Config:Get("craftChat") == false then return end
+    ns.Print(...)
+end
+
 --- How many are still queued after a "made N of X" line, or nil when all are done.
 local function LeftText(left)
     if left and left > 0 then return left end
@@ -459,6 +483,7 @@ function Crafting:OnBagUpdate()
     -- walk is comparing against; see OnQueueChanged.
     self.walking = true
     local dependencyMade = false
+    local madeNow = 0
 
     for _, entry in ipairs(entries) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
@@ -507,12 +532,14 @@ function Crafting:OnBagUpdate()
                     -- well took one craft's items off both: 5 bolts asked for
                     -- plus 3 for a bag, make 3, and only 2 were left to make.
                     dependencyMade = true
+                    madeNow = madeNow + made
                     unclaimed[output] = unclaimed[output] - made * perCraft
 
-                    ns.Print(L.Format("made %d of %s, as materials for another craft", made,
+                    SayCraft(L.Format("made %d of %s, as materials for another craft", made,
                         ns.Recipes:GetDisplayLink(entry.recipeID)))
 
                 elseif made > 0 then
+                    madeNow = madeNow + made
                     unclaimed[output] = unclaimed[output] - made * perCraft
 
                     -- Marked for the row's action (DE or Vendor), before
@@ -535,10 +562,10 @@ function Crafting:OnBagUpdate()
 
                     local stillLeft = LeftText(left)
                     if stillLeft then
-                        ns.Print(L.Format("made %d of %s, %d left", made,
+                        SayCraft(L.Format("made %d of %s, %d left", made,
                             ns.Recipes:GetDisplayLink(entry.recipeID), stillLeft))
                     else
-                        ns.Print(L.Format("made %d of %s, all done", made,
+                        SayCraft(L.Format("made %d of %s, all done", made,
                             ns.Recipes:GetDisplayLink(entry.recipeID)))
                     end
                 end
@@ -553,6 +580,56 @@ function Crafting:OnBagUpdate()
 
     self.walking = false
     self:RememberOutputs()
+    if madeNow > 0 then self:NoteQueueMade(madeNow) end
+end
+
+--------------------------------------------------------------------------------
+-- Queue done (the owner said do it, 2026-11-26, from the ts-improve-10 mockup)
+--------------------------------------------------------------------------------
+
+-- Crafts made from the queue are counted until nothing of this character's
+-- is left on it. Then the Queue tab says "Queue done. N crafts made." and,
+-- with Queue Done Sound ticked (`queueDoneSound`, off unless ticked), our
+-- own chime plays, asking Mute All Sounds first. Emptying the queue by hand
+-- resets the count and stays quiet. Memory only.
+Crafting.QUEUE_DONE_SOUND = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS")
+    .. [[\Media\Sounds\queue-done.ogg]]
+
+--- Anything of this character's still on the queue?
+function Crafting.MineLeft()
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        if not ns.Queue.IsMine or ns.Queue:IsMine(entry) then return true end
+    end
+    return false
+end
+
+function Crafting:NoteQueueMade(count)
+    self.queueMade = (self.queueMade or 0) + count
+    self.queueDone = nil
+    if not Crafting.MineLeft() then self:QueueDone() end
+end
+
+--- The last craft of the queue was made.
+function Crafting:QueueDone()
+    local made = self.queueMade or 0
+    self.queueMade = 0
+    if made <= 0 then return end
+    self.queueDone = { crafts = made }
+    self.queueDoneAt = type(GetTime) == "function" and GetTime() or nil
+    if ns.Config:Get("queueDoneSound") == true then
+        pcall(ns.PlaySoundFile, Crafting.QUEUE_DONE_SOUND, "Master")
+    end
+    if ns.UI and ns.UI.OnQueueUpdated then ns.UI:OnQueueUpdated() end
+end
+
+--- "Queue done. N crafts made." while nothing new is queued, else nil.
+function Crafting:QueueDoneText()
+    if not self.queueDone or Crafting.MineLeft() then
+        self.queueDone = nil
+        return nil
+    end
+    local crafts = self.queueDone.crafts
+    return L.Format(crafts == 1 and L["Queue done. %d craft made."] or L["Queue done. %d crafts made."], crafts)
 end
 
 --- The queue changed by hand (added to, stepped, cleared).
@@ -564,6 +641,8 @@ end
 -- compared against.
 function Crafting:OnQueueChanged()
     if self.walking then return end
+    -- Emptied or cut by hand: what was counted no longer leads to "done".
+    if (self.queueMade or 0) > 0 and not Crafting.MineLeft() then self.queueMade = 0 end
     self:RememberOutputs()
 end
 
@@ -638,9 +717,9 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
                 local left = entry.quantity - 1
                 ns.Queue:SetQuantity(entry.recipeID, left)
                 if LeftText(left) then
-                    ns.Print(L.Format("made 1 of %s, %d left", ns.Recipes:GetDisplayLink(entry.recipeID), left))
+                    SayCraft(L.Format("made 1 of %s, %d left", ns.Recipes:GetDisplayLink(entry.recipeID), left))
                 else
-                    ns.Print(L.Format("made 1 of %s, all done", ns.Recipes:GetDisplayLink(entry.recipeID)))
+                    SayCraft(L.Format("made 1 of %s, all done", ns.Recipes:GetDisplayLink(entry.recipeID)))
                 end
             end
             return
@@ -734,7 +813,7 @@ function Crafting:Start(recipeID, count)
         return false
     end
 
-    ns.Print(L.Format("crafting %dx %s...", count, ns.Recipes:GetDisplayLink(recipeID)))
+    SayCraft(L.Format("crafting %dx %s...", count, ns.Recipes:GetDisplayLink(recipeID)))
 
     self:StartWatching()
     return true
@@ -796,6 +875,11 @@ function Crafting:AnnounceRunDone(run)
 
     -- Settings: SOUNDS, A run of crafts finishes.
     if ns.Config:Get("craftDoneSound") == false or type(PlaySound) ~= "function" then return end
+    -- The queue's own chime just played for the same last craft.
+    if self.queueDoneAt and ns.Config:Get("queueDoneSound") == true
+        and type(GetTime) == "function" and GetTime() - self.queueDoneAt < 15 then
+        return
+    end
 
     if run.outputItemID then
         local made = ns.Inventory:GetBagCount(run.outputItemID) - (run.before or 0)

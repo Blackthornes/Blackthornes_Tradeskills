@@ -196,6 +196,41 @@ function TSMPrices:GetValue(itemID, which)
     return value
 end
 
+-- How many sell a day, from TSM (a player asked, the owner said build it,
+-- 2026-11-16). Read only with "TSM Sold a Day:" ticked (`tsmSoldPerDay`,
+-- off unless ticked) and TSM Prices on. Not rounded: under 1 a day is a
+-- real answer. nil when TSM has no number, so the tooltip falls back to
+-- the player's own scans.
+TSMPrices.SOLD_SOURCE = "DBRegionSoldPerDay"
+TSMPrices.MAX_SOLD = 1e7              -- above this is not a count
+
+function TSMPrices:SoldPerDayOn()
+    return self:IsOn() and ns.Config ~= nil and ns.Config:Get("tsmSoldPerDay") == true
+end
+
+--- About how many sell a day, from TSM, or nil.
+function TSMPrices:SoldPerDay(itemID)
+    if type(itemID) ~= "number" or not self:SoldPerDayOn() then return nil end
+    local api = self.Api()
+    if not api then return nil end
+
+    local kept = cache.sold
+    if not kept then kept = {}; cache.sold = kept end
+    local now = GetTime and GetTime() or 0
+    local entry = kept[itemID]
+    if entry and now - entry[2] < self.CACHE_FOR then
+        return entry[1] or nil
+    end
+
+    local value
+    local ok, read = pcall(api.GetCustomPriceValue, self.SOLD_SOURCE, "i:" .. itemID)
+    if ok and type(read) == "number" and read == read and read >= 0 and read < self.MAX_SOLD then
+        value = read
+    end
+    kept[itemID] = { value or false, now }
+    return value
+end
+
 --- Forget kept answers (the setting was changed).
 function TSMPrices:Forget()
     cache = {}

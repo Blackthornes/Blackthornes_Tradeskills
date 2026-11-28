@@ -3,7 +3,9 @@
 -- and said build it, 2026-10-30, first on Classic, then copied here by hand
 -- for Forever): a house-look window with a rail down its
 -- left side, a button for each addon loaded, and the picked addon's pages
--- beside it. One size, one size grip, one fold gem, one place.
+-- beside it. One size, one size grip, one fold gem, one place. A swap gem
+-- beside the fold gem splits it back into each addon's own window, and the
+-- same gem on those windows joins them again (SharedWindow.AddSwap).
 --
 -- The same file in all five addons; a fix to it belongs in all five. There
 -- is no shared core addon, so, like UI/SharedMinimap.lua, every copy signs
@@ -48,10 +50,15 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 7
+local FILE_VERSION = 17
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
+-- The words through the addon's translation table where it has one.
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
+-- The gear at the foot of the rail: the settings every Blackthornes addon
+-- shares, shown once (2026-11-16, the owner said build it).
+SharedWindow.GEAR_ICON = [[Interface\Icons\INV_Misc_Gear_01]]
 SharedWindow.RAIL_WIDTH = 84
 SharedWindow.RAIL_BUTTON = 76
 SharedWindow.WIDTH = 860
@@ -65,6 +72,14 @@ SharedWindow.ROW_HEIGHT = 40
 SharedWindow.ROW_BUTTON = 34
 SharedWindow.ROW_ICON = 26
 SharedWindow.DOCK_GAP = 6
+-- Docked with no room on either side, the window may shrink to this share
+-- of the player's own size and no smaller; past that it keeps its size and
+-- sits over the game's window's edge instead (2026-11-16: it had shrunk
+-- too small to read beside the auction house).
+SharedWindow.SHRINK_LEAST = 0.85
+-- And never under this size in percent (the grip's 100 is the normal size),
+-- whatever the player's own: other docked pieces read it too.
+SharedWindow.DOCK_SCALE_MIN = 75
 -- How often, while a game window is open, the window looks that it still
 -- sits beside it.
 SharedWindow.KEEP_EVERY = 0.2
@@ -77,6 +92,8 @@ SharedWindow.PRIOR_FOR = 0.5
 -- The game's windows the one window docks beside: the events that open and
 -- close each, and the frames it may be (read only). `only` is the one addon
 -- needed there: while it shows, the row of addon buttons is left out.
+-- `prefer` is the addon the place is for, the row kept: up on another addon
+-- as the place opens, the window turns to it (SharedWindow.Preferred).
 -- `interaction` names the window's Enum.PlayerInteractionType, with the
 -- number to use when the client has no Enum. The first frame shown wins,
 -- so an open letter, which stands right of the mailbox, comes before it;
@@ -88,9 +105,21 @@ SharedWindow.PLACES = {
     mail = { show = "MAIL_SHOW", hide = "MAIL_CLOSED", frames = { "OpenMailFrame", "MailFrame" },
         follow = { "OpenMailFrame" }, interaction = { "MailInfo", 17 } },
     vendor = { show = "MERCHANT_SHOW", hide = "MERCHANT_CLOSED", frames = { "MerchantFrame" },
-        interaction = { "Merchant", 5 } },
+        prefer = "butler", interaction = { "Merchant", 5 } },
     trainer = { show = "TRAINER_SHOW", hide = "TRAINER_CLOSED", frames = { "ClassTrainerFrame" },
         interaction = { "Trainer", 7 } },
+    -- Added 2026-11-16 (the owner said build it, from the UI cleanup
+    -- mockups): the bank, the stable, and the character sheet, which has
+    -- no event of its own and is heard by HookScript on its frame (`hook`,
+    -- read only, never shown, hidden or moved).
+    bank = { show = "BANKFRAME_OPENED", hide = "BANKFRAME_CLOSED", frames = { "BankFrame" },
+        interaction = { "Banker", 8 } },
+    stable = { show = "PET_STABLE_SHOW", hide = "PET_STABLE_CLOSED", frames = { "PetStableFrame", "StableFrame" },
+        interaction = { "StableMaster", 22 } },
+    character = { hook = "CharacterFrame", frames = { "CharacterFrame" } },
+    -- The profession window (Tradeskills' craft pane moves in as a tab).
+    profession = { show = "TRADE_SKILL_SHOW", hide = "TRADE_SKILL_CLOSE",
+        frames = { "ProfessionsFrame", "TradeSkillFrame" } },
 }
 
 --- The place a PLAYER_INTERACTION_MANAGER_FRAME_HIDE kind closes, or nil.
@@ -99,9 +128,11 @@ function SharedWindow.InteractionPlace(kind)
     local enum = rawget(_G, "Enum")
     local types = type(enum) == "table" and rawget(enum, "PlayerInteractionType") or nil
     for key, place in pairs(SharedWindow.PLACES) do
-        local name, fallback = place.interaction[1], place.interaction[2]
-        local value = type(types) == "table" and rawget(types, name) or fallback
-        if value == kind then return key end
+        if place.interaction then
+            local name, fallback = place.interaction[1], place.interaction[2]
+            local value = type(types) == "table" and rawget(types, name) or fallback
+            if value == kind then return key end
+        end
     end
     return nil
 end
@@ -162,6 +193,22 @@ local function WriteAll(key, value)
         local db = SaveOf(entry)
         if db then db[key] = value end
     end
+end
+
+-- For the round button (UI/FoldWindow.lua): foldedWindows and its spots in
+-- windowSpots, read and written as the window spots are.
+-- WriteSave answers how many saves took it.
+SharedWindow.ReadSave = Read
+function SharedWindow.WriteSave(key, value)
+    local count = 0
+    for _, entry in pairs(hub.entries) do
+        local db = SaveOf(entry)
+        if db then
+            db[key] = value
+            count = count + 1
+        end
+    end
+    return count
 end
 
 --- Whether the one window is on: the newest answer any save holds, on when
@@ -237,6 +284,7 @@ function SharedWindow.Pick(key)
     end
     hub.current = entry
     WriteAll("oneWindowPick", key)
+    SharedWindow.Settle(frame)
     if type(entry.host.enter) == "function" then pcall(entry.host.enter, frame.area) end
     if hub.docked then SharedWindow.Refit() end
     SharedWindow.FillRail()
@@ -270,6 +318,11 @@ end
 --- open before. Any other close (the player's) stays closed.
 function SharedWindow.Close(byItself)
     if not hub.frame then return end
+    -- Folding into its round button hides the pages, and a page that
+    -- hears it hide asks for a close: that is no close. Taken as one, the
+    -- window never came back from its button (2026-11-22).
+    local fold = rawget(hub.frame, "blackthornesFold")
+    if type(fold) == "table" and fold.folding then return end
     hub.byItself = byItself and true or nil
     hub.frame:Hide()
     hub.byItself = nil
@@ -284,7 +337,10 @@ end
 --------------------------------------------------------------------------------
 
 local function Clamp(percent)
-    percent = tonumber(percent) or 100
+    percent = tonumber(percent)
+    -- Not a number (0/0) fails every comparison below and would come back
+    -- as the window's size; a bad save reads as the first size instead.
+    if not percent or percent ~= percent then percent = 100 end
     if percent < SharedWindow.SCALE_MIN then return SharedWindow.SCALE_MIN end
     if percent > SharedWindow.SCALE_MAX then return SharedWindow.SCALE_MAX end
     return percent
@@ -339,6 +395,40 @@ function SharedWindow.Fit(frame)
     end
 end
 
+--- The window's own size before any addon grows it: the usual one, or
+--- docked, less the rail and plus the row of addon buttons when it shows.
+function SharedWindow.BaseSize()
+    local width, height = SharedWindow.WIDTH, SharedWindow.HEIGHT
+    if hub.docked then
+        width = width - SharedWindow.RAIL_WIDTH - EDGE
+        if hub.row then height = height + SharedWindow.ROW_HEIGHT + EDGE end
+    end
+    return width, height
+end
+
+--- Back to the window's own size, its top left corner kept, so the addon
+--- shown next grows it only as far as it needs. Every addon only grows
+--- the window, so before this one tall page (Butler with gold goals) left
+--- its height behind for every addon after it, with empty room at the
+--- bottom (2026-11-16). Folded, the fold keeps the size it opens back to.
+function SharedWindow.Settle(frame)
+    frame = frame or hub.frame
+    if not frame then return end
+    local state = rawget(frame, "blackthornesFold")
+    if type(state) == "table" and state.folded then return end
+    local width, height = SharedWindow.BaseSize()
+    local okW, oldW = pcall(frame.GetWidth, frame)
+    local okH, oldH = pcall(frame.GetHeight, frame)
+    if okW and okH and oldW == width and oldH == height then return end
+    local ok, left, top = pcall(function() return frame:GetLeft(), frame:GetTop() end)
+    frame:SetSize(width, height)
+    if ok and type(left) == "number" and type(top) == "number" then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+    SharedWindow.Fit(frame)
+end
+
 local function Place(frame)
     frame:SetScale(Clamp(Read("oneWindowScale")) / 100)
     frame:ClearAllPoints()
@@ -385,7 +475,8 @@ local function MakeGrip(frame)
         end
         WriteAll("oneWindowScale", percent)
         SharedWindow.Fit(frame)
-        if hub.docked then SharedWindow.Dock(true) else SavePlace(frame) end
+        -- A size picked by hand wins: docked, it no longer shrinks to fit.
+        if hub.docked then hub.sized = true; SharedWindow.Dock(true) else SavePlace(frame) end
     end
     grip:SetScript("OnEnter", function() Light(true) end)
     grip:SetScript("OnLeave", function() if not grip.dragging then Light(false) end end)
@@ -394,7 +485,9 @@ local function MakeGrip(frame)
         if mouseButton ~= "LeftButton" then return end
         self.dragging = true
         local startX = GetCursorPosition()
-        local startScale = Clamp((frame:GetScale() or 1) * 100)
+        -- From the saved size, not the size shown: docked, it may be
+        -- shrunk to fit, and starting there would save the shrunk size.
+        local startScale = Clamp(Read("oneWindowScale"))
         local width = SharedWindow.WIDTH
         self:SetScript("OnUpdate", function()
             local x = GetCursorPosition()
@@ -411,6 +504,26 @@ local function MakeGrip(frame)
     return grip
 end
 
+--- Folded, the one window is one round button with the house badge, and
+--- it opens to the addon picked last (UI/FoldWindow.lua). After a /reload
+--- only the copy that draws the window brings its button back.
+function SharedWindow.FoldOptions()
+    return {
+        key = "BlackthornesOneWindow", shared = true, title = PLATE,
+        emblem = ([[Interface\AddOns\%s\Media\Frame\MinimapBadge]]):format(ADDON),
+        line = function()
+            local entry = SharedWindow.Picked()
+            if entry and entry.name then return (L["Opens to %s."]):format(tostring(entry.name)) end
+            return nil
+        end,
+        open = function() SharedWindow.Open() end,
+        mine = function() return IsDrawer() end,
+    }
+end
+if ns.FoldWindow and ns.FoldWindow.Opener then
+    pcall(ns.FoldWindow.Opener, ns.FoldWindow, "BlackthornesOneWindow", SharedWindow.FoldOptions())
+end
+
 function SharedWindow.Build()
     if hub.frame then return hub.frame end
     if not IsDrawer() or not CreateFrame or not UIParent then return nil end
@@ -424,9 +537,17 @@ function SharedWindow.Build()
     frame:EnableMouse(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    -- While the player drags it, nothing places it (SharedWindow.Dragging):
+    -- the watcher below put it back beside the game's window mid-drag, so
+    -- it snapped back under the cursor (players saw it at the profession
+    -- window, 2026-11-17).
+    frame:SetScript("OnDragStart", function(self)
+        hub.dragging = true
+        self:StartMoving()
+    end)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        hub.dragging = nil
         -- Moved while docked, it keeps that spot beside this game window
         -- (SharedWindow.Dropped); its own place is kept for when the game's
         -- window closes.
@@ -457,8 +578,11 @@ function SharedWindow.Build()
         Theme.Border(frame, "borderLit")
     end
     if ns.FoldWindow and ns.FoldWindow.Add and rawget(frame, "trim") then
-        pcall(ns.FoldWindow.Add, ns.FoldWindow, frame, {})
+        pcall(ns.FoldWindow.Add, ns.FoldWindow, frame, SharedWindow.FoldOptions())
     end
+    -- And left of that, the swap gem: it splits the addons back into their
+    -- own windows (SharedWindow.AddSwap).
+    if rawget(frame, "trim") then pcall(SharedWindow.AddSwap, frame, nil) end
 
     -- The rail down the left side, and the area the picked addon's pages fill.
     local rail = CreateFrame("Frame", nil, frame)
@@ -490,6 +614,7 @@ function SharedWindow.Build()
         table.insert(UISpecialFrames, "BlackthornesOneWindow")
     end
     frame:SetScript("OnHide", function()
+        hub.dragging = nil
         -- Closed by the player while a game window is open (its close gem,
         -- Escape, which closes the vendor too): it stays closed when that
         -- game window goes, never coming back by itself (a player saw it
@@ -645,6 +770,70 @@ function SharedWindow.FillRail()
         step = step + size + (docked and 6 or 4)
     end
     for index = #list + 1, #rail.buttons do rail.buttons[index]:Hide() end
+    SharedWindow.PlaceGear(rail, docked, size, icon, step)
+end
+
+--- The addon whose Settings show the All Addons page: the one showing now
+--- when it can, else the first on the rail that can.
+function SharedWindow.AllAddonsEntry()
+    if hub.current and type(hub.current.allAddons) == "function" then return hub.current end
+    for _, entry in ipairs(SharedWindow.Entries()) do
+        if type(entry.allAddons) == "function" then return entry end
+    end
+    return nil
+end
+
+--- Open the settings every Blackthornes addon shares.
+function SharedWindow.OpenAllAddons()
+    local entry = SharedWindow.AllAddonsEntry()
+    if not entry then return false end
+    if hub.current ~= entry and SharedWindow.On() then SharedWindow.Pick(entry.key) end
+    return pcall(entry.allAddons)
+end
+
+--- The gear: at the foot of the rail, or the end of the row when docked.
+--- Shown while any addon has the All Addons page.
+function SharedWindow.PlaceGear(rail, docked, size, icon, step)
+    local gear = rawget(rail, "gear")
+    if not SharedWindow.AllAddonsEntry() then
+        if gear then gear:Hide() end
+        return
+    end
+    if not gear then
+        gear = MakeButton(rail, 0)
+        gear.gear = true
+        gear:SetScript("OnClick", function() SharedWindow.OpenAllAddons() end)
+        gear:SetScript("OnEnter", function(self)
+            PaintButton(self, true)
+            local tip = rawget(_G, "GameTooltip")
+            if hub.docked and tip then
+                pcall(function()
+                    tip:SetOwner(self, "ANCHOR_BOTTOM")
+                    tip:SetText(L["All Addons"])
+                    tip:Show()
+                end)
+            end
+        end)
+        rail.gear = gear
+    end
+    gear.entry = nil
+    gear:SetSize(size, size)
+    gear.icon:SetSize(icon, icon)
+    gear.icon:ClearAllPoints()
+    gear.icon:SetTexture(SharedWindow.GEAR_ICON)
+    gear.name:SetText(L["All Addons"])
+    gear:ClearAllPoints()
+    if docked then
+        gear.icon:SetPoint("CENTER")
+        gear.name:Hide()
+        gear:SetPoint("LEFT", rail, "LEFT", step, 0)
+    else
+        gear.icon:SetPoint("TOP", 0, -10)
+        gear.name:Show()
+        gear:SetPoint("BOTTOM", rail, "BOTTOM", 0, 0)
+    end
+    PaintButton(gear, false)
+    gear:Show()
 end
 
 --------------------------------------------------------------------------------
@@ -709,7 +898,8 @@ local function Tell()
     for _, fn in ipairs(hub.watchers or {}) do pcall(fn) end
 end
 
---- The place open now ("auction", "mail", "vendor" or "trainer"), or nil.
+--- The place open now ("auction", "mail", "vendor", "trainer", "bank",
+--- "stable", "character" or "profession"), or nil.
 function SharedWindow.Place()
     return hub.place
 end
@@ -745,21 +935,86 @@ function SharedWindow.Refit()
     SharedWindow.Lay(frame, true, not row)
 end
 
+--- How wide the screen is in screen pixels, or nil when the client won't say.
+local function ScreenWidth()
+    local ok, width = pcall(function() return UIParent:GetWidth() * UIParent:GetEffectiveScale() end)
+    if ok and type(width) == "number" and width > 0 then return width end
+    return nil
+end
+
+-- The game's bags, read only: open on the right of the game's window they
+-- take that room, so the window goes left of it (the mockup's vendor).
+SharedWindow.BAG_FRAMES = { "ContainerFrameCombinedBags" }
+for i = 1, 13 do SharedWindow.BAG_FRAMES[#SharedWindow.BAG_FRAMES + 1] = "ContainerFrame" .. i end
+
+--- Where the room right of the game's window ends, in screen pixels: the
+--- screen's edge, or the left edge of the nearest open bag past it.
+local function RightEdge(gameRight, screen)
+    if not screen then return nil end
+    local edge = screen
+    for _, name in ipairs(SharedWindow.BAG_FRAMES) do
+        local bag = rawget(_G, name)
+        if type(bag) == "table" then
+            local ok, shown, left, scale = pcall(function()
+                return bag:IsShown(), bag:GetLeft(), bag:GetEffectiveScale()
+            end)
+            if ok and shown and type(left) == "number" and type(scale) == "number" then
+                local x = left * scale
+                if x >= gameRight - 1 and x < edge then edge = x end
+            end
+        end
+    end
+    return edge
+end
+
+--- Which side of the game's window the one window goes, and the scale it
+--- takes there (2026-11-16, the owner said build it): the right when it
+--- fits, as before; else the left when that fits (bags open on the
+--- right); else the side with more room, scaled down to fit the gap, never
+--- under SHRINK_LEAST of its own size (it keeps its size and overlaps
+--- then). Once resized by hand while docked it never shrinks (`sized`).
+--- All in screen pixels. Gives side ("right" or "left")
+--- and the effective scale to use.
+function SharedWindow.PickSide(gameLeft, gameRight, width, ours, reach, screen, sized)
+    reach = reach or 0
+    local need = (width + reach) * ours + SharedWindow.DOCK_GAP
+    if not screen or type(gameLeft) ~= "number" then return "right", ours end
+    local rightRoom = screen - gameRight
+    local leftRoom = gameLeft
+    if rightRoom >= need then return "right", ours end
+    if leftRoom >= need then return "left", ours end
+    local side = leftRoom > rightRoom and "left" or "right"
+    if sized then return side, ours end
+    local room = math.max(leftRoom, rightRoom) - SharedWindow.DOCK_GAP
+    local fit = room / (width + reach)
+    -- Never much smaller than the player's own size: when it would be,
+    -- it keeps its size and overlaps rather than shrink out of reading.
+    local least = math.max(ours * SharedWindow.SHRINK_LEAST,
+        ours * SharedWindow.DOCK_SCALE_MIN / Clamp(Read("oneWindowScale")))
+    if fit < least then return side, ours end
+    if fit > ours then fit = ours end
+    return side, fit
+end
+
 --- Put the window beside the game's window, by screen position: its left
---- edge (portrait and all) just past the game's right edge, the tops level.
+--- edge (portrait and all) just past the game's right edge, the tops level,
+--- or on the left when only that side has room (see PickSide).
 local function Beside(frame, game)
-    local ok, right, top, scale = pcall(function()
-        return game:GetRight(), game:GetTop(), game:GetEffectiveScale()
+    local ok, left, right, top, scale = pcall(function()
+        return game:GetLeft(), game:GetRight(), game:GetTop(), game:GetEffectiveScale()
     end)
     if not ok or type(right) ~= "number" or type(top) ~= "number" then return false end
     if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+    -- Measured at the window's own size each time, so it grows back when
+    -- the room comes back; Place puts the saved size back on undocking.
+    pcall(frame.SetScale, frame, Clamp(Read("oneWindowScale")) / 100)
     local okOurs, ours = pcall(frame.GetEffectiveScale, frame)
     if not okOurs or type(ours) ~= "number" or ours <= 0 then ours = 1 end
     local reach = 0
     local trim = rawget(frame, "trim")
     if trim and ns.Titanforged and ns.Titanforged.Reach then
-        local okReach, left = pcall(ns.Titanforged.Reach, trim)
-        if okReach and type(left) == "number" then reach = left end
+        local okReach, edge = pcall(ns.Titanforged.Reach, trim)
+        if okReach and type(edge) == "number" then reach = edge end
     end
     frame:ClearAllPoints()
     local spots = Read("oneWindowDockSpots")
@@ -768,9 +1023,34 @@ local function Beside(frame, game)
         -- Dragged here by hand before: the same spot from the game's window.
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
             (right * scale + spot.x) / ours, (top * scale + spot.y) / ours)
-    else
+        return true
+    end
+    local width = SharedWindow.FullSize(frame)
+    local side, fit = "right", ours
+    if type(width) == "number" and width > 0 then
+        side, fit = SharedWindow.PickSide(type(left) == "number" and left * scale or nil,
+            right * scale, width, ours, reach, RightEdge(right * scale, ScreenWidth()), hub.sized)
+    end
+    if fit < ours then
+        local okScale, own = pcall(frame.GetScale, frame)
+        if okScale and type(own) == "number" and own > 0 then
+            pcall(frame.SetScale, frame, own * fit / ours)
+            ours = fit
+        end
+    end
+    if side == "left" then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
-            right * scale / ours + reach + SharedWindow.DOCK_GAP, top * scale / ours)
+            math.max(0, left * scale / ours - width - reach - SharedWindow.DOCK_GAP / ours), top * scale / ours)
+    else
+        local x = right * scale / ours + reach + SharedWindow.DOCK_GAP
+        -- Too wide for the gap: slide back over the game's window, never
+        -- off the screen's right edge.
+        local screen = ScreenWidth()
+        if screen and type(width) == "number" then
+            local last = screen / ours - width
+            if x > last then x = math.max(0, last) end
+        end
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, top * scale / ours)
     end
     return true
 end
@@ -799,15 +1079,39 @@ local function SaveDockSpot(frame, game)
     WriteAll("oneWindowDockSpots", spots)
 end
 
+--- A number as the key holds it: to a tenth, so the client's last-digit
+--- wobble in a frame's edges never reads as a move.
+local function Tenth(value)
+    if type(value) ~= "number" then return tostring(value) end
+    return string.format("%.1f", value)
+end
+
 --- Where the game's window and this one stand and how wide this one is:
 --- when any of it moves, the window is placed beside it again.
 local function Spot(frame, game)
     local ok, key = pcall(function()
-        return table.concat({ tostring(game), tostring(game:GetRight()), tostring(game:GetTop()),
-            tostring(game:GetEffectiveScale()), tostring(frame:GetWidth()),
-            tostring(frame:GetEffectiveScale()) }, ":")
+        return table.concat({ tostring(game), Tenth(game:GetRight()), Tenth(game:GetTop()),
+            Tenth(game:GetEffectiveScale()), Tenth(frame:GetWidth()),
+            Tenth(frame:GetScale()), Tenth(RightEdge(game:GetRight() * game:GetEffectiveScale(),
+            ScreenWidth())) }, ":")
     end)
     return ok and key or nil
+end
+
+--- True while the player is dragging the window. A drag whose stop was
+--- never heard (the button let go off the game's window) ends here once
+--- the mouse button is up.
+function SharedWindow.Dragging()
+    if not hub.dragging then return false end
+    local down = rawget(_G, "IsMouseButtonDown")
+    if type(down) == "function" then
+        local ok, held = pcall(down, "LeftButton")
+        if ok and not held then
+            hub.dragging = nil
+            return false
+        end
+    end
+    return true
 end
 
 --- Dock beside the game's window open now. `again` only places it anew
@@ -815,6 +1119,7 @@ end
 function SharedWindow.Dock(again)
     local frame = hub.frame
     if not (frame and frame:IsShown() and hub.place) or InFight() then return false end
+    if SharedWindow.Dragging() then return false end
     local game = GameFrame()
     if not game then return false end
     if not hub.docked then
@@ -962,6 +1267,7 @@ function SharedWindow.Keep()
     if not (frame and hub.place) or InFight() then return false end
     local ok, shown = pcall(frame.IsShown, frame)
     if not (ok and shown) then return false end
+    if SharedWindow.Dragging() then return false end
     if not hub.docked then return SharedWindow.Dock() end
     local game = GameFrame()
     if not game or Spot(frame, game) == hub.spot then return false end
@@ -974,6 +1280,7 @@ function SharedWindow.Undock()
     if not (frame and hub.docked) then return end
     hub.docked = false
     hub.spot = nil
+    hub.sized = nil
     local row = hub.row ~= false
     hub.row = nil
     local width, height = SharedWindow.FullSize(frame)
@@ -1007,12 +1314,42 @@ local function Follow(place)
     end
 end
 
+--- The addon `key`'s place is for (`prefer`), or nil: only when it has
+--- moved in and, if its host has `wants(place)`, that says yes (Butler's
+--- "open at vendors" box). A host whose answer fails is left alone.
+function SharedWindow.Preferred(key)
+    local place = SharedWindow.PLACES[key]
+    local want = place and place.prefer
+    if not (want and SharedWindow.Hosts(want)) then return nil end
+    local entry = hub.entries[want]
+    local wants = entry.host.wants
+    if type(wants) == "function" then
+        local ok, yes = pcall(wants, key)
+        if not (ok and yes) then return nil end
+    end
+    return entry
+end
+
 --- One of the game's windows opened.
 function SharedWindow.Arrived(key)
     if not SharedWindow.PLACES[key] then return end
+    -- Two can be open at once (the character sheet at a vendor): each is
+    -- kept with when it opened, and the newest is the one docked beside.
+    hub.opened = hub.opened or {}
+    hub.openCount = (hub.openCount or 0) + 1
+    hub.opened[key] = hub.openCount
+    local was = hub.place
     hub.place = key
     Follow(SharedWindow.PLACES[key])
     local frame = hub.frame
+    if hub.docked and was ~= key and frame and frame:IsShown() then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() SharedWindow.Dock(true) end)
+        else
+            SharedWindow.Dock(true)
+        end
+        return
+    end
     if not (frame and frame:IsShown()) or hub.docked then return end
     -- Up already: what it showed before is what it goes back to. An addon
     -- that opened it a moment ago (Butler at the vendor) left a note of
@@ -1023,6 +1360,11 @@ function SharedWindow.Arrived(key)
     else
         hub.back = { key = hub.current and hub.current.key, open = true }
     end
+    -- Up on another addon at a place that is for one (Butler at the vendor;
+    -- a player saw Farmer come up there instead, 2026-11-17): turn to it.
+    -- hub.back still takes it back to the addon open before.
+    local preferred = SharedWindow.Preferred(key)
+    if preferred and hub.current ~= preferred then SharedWindow.Pick(preferred.key) end
     -- The game shows its window on the same event: place ours a moment after.
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function() SharedWindow.Dock() end)
@@ -1034,8 +1376,21 @@ end
 --- The game's window closed: back to its own place, and, a moment later,
 --- back to the addon that was open before.
 function SharedWindow.Left(key)
+    if hub.opened then hub.opened[key] = nil end
     if hub.place ~= key then return end
     hub.place = nil
+    -- Another game window still open: dock beside that one instead.
+    local newest, best = nil, -1
+    for other, order in pairs(hub.opened or {}) do
+        if order > best then newest, best = other, order end
+    end
+    if newest then
+        hub.place = newest
+        if hub.docked then
+            if not SharedWindow.Dock(true) then SharedWindow.Undock() end
+        end
+        return
+    end
     local back = hub.back
     hub.back = nil
     if hub.docked then SharedWindow.Undock() end
@@ -1056,18 +1411,487 @@ function SharedWindow.Left(key)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Shelves for small pieces (the owner said build it, 2026-11-16, from the
+-- Pets and Tradeskills UI cleanup mockups). Before, every addon picked its
+-- own first spot for its arrow, notices, bars and cards, and several were
+-- the same spot. Now a piece the player has not dragged asks a shelf for
+-- the next free place: the top shelf runs down from the top middle, the
+-- right shelf down the right side, left of the game's quest list. A dragged
+-- piece keeps its spot and leaves the shelf alone; no saved key changes.
+--
+-- The board is shared by every copy in `_G.BlackthornesShelves`, so
+-- pieces from all five addons line up together. Each piece joins with
+--   SharedWindow.ShelfJoin(key, { shelf = "top" or "right", order = n,
+--       frame = f, free = fn, shown = fn, height = fn, place = fn })
+-- `free()` is true while it sits in its first spot (not dragged);
+-- `place()` is called to lay it again when a piece above it comes, goes or
+-- changes height. `frame`, `shown` and `height` are optional: without a
+-- frame, `shown` and `height` (in UIParent units) say how much room it
+-- takes (the notice stack).
+--------------------------------------------------------------------------------
+
+SharedWindow.SHELVES = {
+    top = { anchor = "TOP", x = 0, y = -120, gap = 8 },
+    right = { anchor = "TOPRIGHT", x = -40, y = -250, gap = 8 },
+}
+-- Pieces on each shelf, in order. Pieces that come and go a lot (notices)
+-- sit last, so nothing above them jumps when one shows.
+SharedWindow.SHELF_ORDER = {
+    goldbar = 10, arrow = 20, xpbar = 30, shards = 40, sellmarked = 50, mailtally = 55,
+    goldgoal = 60, upgrade = 70, notice = 90,
+    auctions = 10, travel = 20, upgrades = 30, upgradequest = 40,
+}
+-- The game's quest list, read only: the right shelf stands left of it.
+SharedWindow.QUEST_LIST = { "ObjectiveTrackerFrame", "QuestWatchFrame", "WatchFrame" }
+
+local shelves = rawget(_G, "BlackthornesShelves")
+if type(shelves) ~= "table" then
+    shelves = {}
+    _G.BlackthornesShelves = shelves
+end
+shelves.pieces = shelves.pieces or {}
+
+local function ParentScale()
+    local ok, scale = pcall(UIParent.GetEffectiveScale, UIParent)
+    if ok and type(scale) == "number" and scale > 0 then return scale end
+    return 1
+end
+
+local function PieceShown(piece)
+    if type(piece.shown) == "function" then
+        local ok, shown = pcall(piece.shown)
+        return ok and shown and true or false
+    end
+    local frame = piece.frame
+    if type(frame) ~= "table" then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown and true or false
+end
+
+local function PieceFree(piece)
+    if type(piece.free) ~= "function" then return true end
+    local ok, free = pcall(piece.free)
+    return ok and free and true or false
+end
+
+--- How tall a piece stands, in UIParent units.
+local function PieceHeight(piece)
+    if type(piece.height) == "function" then
+        local ok, height = pcall(piece.height)
+        if ok and type(height) == "number" then return height end
+    end
+    local frame = piece.frame
+    if type(frame) ~= "table" then return 0 end
+    local ok, height, scale = pcall(function() return frame:GetHeight(), frame:GetEffectiveScale() end)
+    if not (ok and type(height) == "number") then return 0 end
+    if type(scale) ~= "number" or scale <= 0 then scale = ParentScale() end
+    return height * scale / ParentScale()
+end
+
+--- Where the right shelf stands across: left of the game's quest list
+--- when that shows, else in from the right edge. In UIParent units, from
+--- the right edge (so negative).
+local function RightShelfX()
+    local shelf = SharedWindow.SHELVES.right
+    local okW, width = pcall(UIParent.GetWidth, UIParent)
+    if not (okW and type(width) == "number" and width > 0) then return shelf.x end
+    for _, name in ipairs(SharedWindow.QUEST_LIST) do
+        local list = rawget(_G, name)
+        if type(list) == "table" then
+            local ok, shown, left, scale = pcall(function()
+                return list:IsShown(), list:GetLeft(), list:GetEffectiveScale()
+            end)
+            if ok and shown and type(left) == "number" and type(scale) == "number" then
+                local x = left * scale / ParentScale() - width - shelf.gap
+                if x < shelf.x then return x end
+            end
+        end
+    end
+    return shelf.x
+end
+
+--- Join a shelf, or update a piece that joined before (the newest copy's
+--- functions win). Gives the piece's first place.
+function SharedWindow.ShelfJoin(key, piece)
+    if type(key) ~= "string" or type(piece) ~= "table" then return end
+    local kind = key:match("^([^%.]+)")
+    piece.key = key
+    piece.shelf = SharedWindow.SHELVES[piece.shelf] and piece.shelf or "top"
+    piece.order = tonumber(piece.order) or SharedWindow.SHELF_ORDER[kind] or 80
+    local old = shelves.pieces[key]
+    shelves.pieces[key] = piece
+    local frame = piece.frame
+    if type(frame) == "table" and type(frame.HookScript) == "function"
+        and not (old and old.frame == frame and old.hooked) then
+        local function Moved() SharedWindow.ShelfChanged(key) end
+        pcall(frame.HookScript, frame, "OnShow", Moved)
+        pcall(frame.HookScript, frame, "OnHide", Moved)
+        pcall(frame.HookScript, frame, "OnSizeChanged", Moved)
+        piece.hooked = true
+    elseif old and old.hooked and old.frame == frame then
+        piece.hooked = true
+    end
+end
+
+--- The place a piece takes on its shelf: anchor point, x and y, in
+--- UIParent units (divide by the piece's own scale before SetPoint).
+--- Pieces before it that show and sit in their first spot take room.
+function SharedWindow.ShelfSpot(key)
+    local piece = shelves.pieces[key]
+    local name = piece and piece.shelf or "top"
+    local shelf = SharedWindow.SHELVES[name]
+    local order = piece and piece.order or 0
+    local y = shelf.y
+    local list = {}
+    for other, entry in pairs(shelves.pieces) do
+        if other ~= key and entry.shelf == name then list[#list + 1] = entry end
+    end
+    table.sort(list, function(a, b)
+        if a.order ~= b.order then return a.order < b.order end
+        return a.key < b.key
+    end)
+    for _, entry in ipairs(list) do
+        if entry.order > order or (entry.order == order and entry.key > key) then break end
+        if PieceShown(entry) and PieceFree(entry) then
+            local height = PieceHeight(entry)
+            if height > 0 then y = y - height - shelf.gap end
+        end
+    end
+    local x = name == "right" and RightShelfX() or shelf.x
+    return shelf.anchor, x, y
+end
+
+--- Join and stand at the shelf place in one call, for a piece's "no saved
+--- spot" branch. Gives true when placed. `piece.place` is what lays it
+--- again later (usually the piece's own restore, which comes back here).
+function SharedWindow.ShelfPlace(frame, key, piece)
+    if type(frame) ~= "table" or type(key) ~= "string" then return false end
+    piece = piece or {}
+    piece.frame = piece.frame or frame
+    SharedWindow.ShelfJoin(key, piece)
+    local point, x, y = SharedWindow.ShelfSpot(key)
+    local ok, scale = pcall(frame.GetEffectiveScale, frame)
+    if not (ok and type(scale) == "number" and scale > 0) then scale = ParentScale() end
+    scale = scale / ParentScale()
+    local placed = pcall(function()
+        frame:ClearAllPoints()
+        frame:SetPoint(point, UIParent, point, x / scale, y / scale)
+    end)
+    return placed
+end
+
+--- Something on a shelf came, went or changed height: lay again every
+--- piece after it that sits in its first spot. Put off a moment so a burst
+--- lays once, and never in a fight.
+function SharedWindow.ShelfChanged(key)
+    if shelves.pending then return end
+    shelves.pending = true
+    local function Lay()
+        shelves.pending = nil
+        if InFight() then
+            shelves.afterFight = true
+            return
+        end
+        SharedWindow.ShelfLay(key)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, Lay) else Lay() end
+end
+
+function SharedWindow.ShelfLay(key)
+    local from = key and shelves.pieces[key]
+    for other, piece in pairs(shelves.pieces) do
+        local after = not from or (piece.shelf == from.shelf and other ~= key
+            and (piece.order > from.order or (piece.order == from.order and other > key)))
+        if after and type(piece.place) == "function" and PieceShown(piece) and PieceFree(piece) then
+            pcall(piece.place)
+        end
+    end
+end
+
+--- One ladder of layers for every addon's frames (Farmer's UI cleanup,
+--- 2026-11-16): panels that stay up while you play sit low, pieces that
+--- pop up on their own (arrows, notes, the loot feed) in the middle, and
+--- windows the player opens on purpose on top. Menus and tooltips are the
+--- game's own, above all of them.
+SharedWindow.LAYERS = { panel = "LOW", popup = "MEDIUM", window = "DIALOG" }
+function SharedWindow.Layer(frame, kind)
+    local strata = SharedWindow.LAYERS[kind]
+    if type(frame) == "table" and strata and frame.SetFrameStrata then
+        pcall(frame.SetFrameStrata, frame, strata)
+    end
+end
+
+--- Places with no event of their own (the character sheet) are heard by
+--- HookScript on the game's frame, read only, once for every copy. A hook
+--- set by an older copy is never doubled: the shared table remembers it.
+function SharedWindow.HookPlaces()
+    hub.hookedPlaces = hub.hookedPlaces or {}
+    for key, place in pairs(SharedWindow.PLACES) do
+        local name = place.hook
+        local game = name and rawget(_G, name)
+        if name and not hub.hookedPlaces[name] and type(game) == "table"
+            and type(game.HookScript) == "function" then
+            local function Act(open)
+                local drawer = SharedWindow.Drawer()
+                local api = drawer and drawer.api or SharedWindow
+                if open then pcall(api.Arrived, key) else pcall(api.Left, key) end
+            end
+            local okShow = pcall(game.HookScript, game, "OnShow", function() Act(true) end)
+            local okHide = pcall(game.HookScript, game, "OnHide", function() Act(false) end)
+            if okShow and okHide then hub.hookedPlaces[name] = true end
+        end
+    end
+end
+pcall(SharedWindow.HookPlaces)
+
+--------------------------------------------------------------------------------
+-- The swap gem (the owner said build it, 2026-11-19, from the mockup): a
+-- gold gem left of the fold gem, so a window's gems run swap, fold, close.
+-- On the one window it shows two panes side by side and splits the addons
+-- back into their own windows; on an addon's own window it shows one pane
+-- with a rail line and joins them into the one window. Either way it is the
+-- one choice for all five addons, `SetOn`, the same as the "One Window:"
+-- box on the All Addons page (which reads it as it shows). No new setting
+-- and no new saved key.
+--
+-- Only real windows get it: the one window and the windows an addon lays
+-- into it, each signed up with `SharedWindow.AddSwap(frame, key)` after its
+-- fold gem. Floating arrows, bars and trackers do not.
+--
+-- A host may give three more calls for the swap, each optional:
+--   tab()      the tab showing now, or nil
+--   show(tab)  open on that tab (nil: where it would open anyway), in the
+--              one window or its own as the choice now stands
+--   hide()     close its own windows
+-- Without `show` the swap falls back to `open` (split) or `Open` (join).
+--------------------------------------------------------------------------------
+
+SharedWindow.SWAP_GEM = 22
+SharedWindow.SWAP_GAP = 2
+
+local SWAP_MEDIA = ([[Interface\AddOns\%s\Media\Frame\]]):format(tostring(ADDON))
+local SWAP_INK = { 0.165, 0.110, 0.024 }
+local SWAP_GOLD = { 0.910, 0.784, 0.451 }
+-- How thick the panes' lines are drawn on the gem's face.
+local SWAP_LINE = 1.5
+
+local function Width(object)
+    if not object then return nil end
+    local ok, width = pcall(object.GetWidth, object)
+    if ok and type(width) == "number" and width > 0 then return width end
+    return nil
+end
+
+-- One ink line on the gem's face, its top left corner `x`, `y` from the
+-- middle (y up).
+local function SwapInk(button, x, y, width, height)
+    local ink = button:CreateTexture(nil, "OVERLAY", nil, 2)
+    ink:SetColorTexture(SWAP_INK[1], SWAP_INK[2], SWAP_INK[3], 1)
+    ink:SetSize(width, height)
+    ink:SetPoint("TOPLEFT", button, "CENTER", x, y)
+    return ink
+end
+
+-- A pane: the outline of a box.
+local function SwapPane(button, x, y, width, height, glyph)
+    glyph[#glyph + 1] = SwapInk(button, x, y, width, SWAP_LINE)
+    glyph[#glyph + 1] = SwapInk(button, x, y - height + SWAP_LINE, width, SWAP_LINE)
+    glyph[#glyph + 1] = SwapInk(button, x, y, SWAP_LINE, height)
+    glyph[#glyph + 1] = SwapInk(button, x + width - SWAP_LINE, y, SWAP_LINE, height)
+end
+
+--- The gold gem with its glow and a lit copy for the mouse, as the fold gem
+--- has, and its panes: two side by side (split) or one with a rail line
+--- (join).
+local function SwapGem(button, join)
+    local glow = button:CreateTexture(nil, "BACKGROUND")
+    glow:SetTexture(SWAP_MEDIA .. "Glow")
+    glow:SetPoint("CENTER")
+    local size = Width(button) or SharedWindow.SWAP_GEM
+    glow:SetSize(size * 2.2, size * 2.2)
+    glow:SetVertexColor(SWAP_GOLD[1], SWAP_GOLD[2], SWAP_GOLD[3], 1)
+    pcall(glow.SetBlendMode, glow, "ADD")
+
+    local gem = button:CreateTexture(nil, "ARTWORK")
+    gem:SetTexture(SWAP_MEDIA .. "FoldGem")
+    gem:SetAllPoints(button)
+
+    local lit = button:CreateTexture(nil, "ARTWORK", nil, 1)
+    lit:SetTexture(SWAP_MEDIA .. "FoldGem")
+    lit:SetAllPoints(button)
+    pcall(lit.SetBlendMode, lit, "ADD")
+
+    local glyph = {}
+    if join then
+        SwapPane(button, -6, 5, 12, 10, glyph)
+        glyph[#glyph + 1] = SwapInk(button, -3, 5, SWAP_LINE, 10)
+    else
+        SwapPane(button, -6, 5, 5, 10, glyph)
+        SwapPane(button, 1, 5, 5, 10, glyph)
+    end
+
+    local function Light(p)
+        glow:SetAlpha(0.25 + 0.55 * p)
+        lit:SetAlpha(0.45 * p)
+    end
+    Light(0)
+    button.Light = Light
+    button.glyph = glyph
+end
+
+--- The gem's card: what a click does, and that the same gem undoes it.
+function SharedWindow.SwapTooltip(button)
+    if not (GameTooltip and button) then return end
+    GameTooltip:SetOwner(button, "ANCHOR_TOP")
+    if rawget(button, "join") then
+        GameTooltip:SetText(L["Join Into One Window"], 1, 1, 1)
+        GameTooltip:AddLine(L["Puts every Blackthornes addon in one window, with a button for each down the side."],
+            0.9, 0.88, 0.81, true)
+        GameTooltip:AddLine(L["You can split them again with this same button."], 0.5, 0.82, 0.5, true)
+    else
+        GameTooltip:SetText(L["Split Into Own Windows"], 1, 1, 1)
+        GameTooltip:AddLine(L["Gives each addon its own window again."], 0.9, 0.88, 0.81, true)
+        GameTooltip:AddLine(L["You can join them back with this same button."], 0.5, 0.82, 0.5, true)
+    end
+    GameTooltip:Show()
+end
+
+--- Give a dressed window its swap gem, left of its fold gem (or of its
+--- close gem when it has none). `key` is the addon whose own window this
+--- is; nil for the one window. Returns the button, once per window.
+function SharedWindow.AddSwap(frame, key)
+    if type(frame) ~= "table" or type(CreateFrame) ~= "function" then return nil end
+    local trim = rawget(frame, "titan")
+    if type(trim) ~= "table" then return nil end
+    local have = rawget(frame, "blackthornesSwap")
+    if have then return have end
+
+    local join = key ~= nil
+    local ok, button = pcall(CreateFrame, "Button", nil, trim)
+    if not (ok and button) then return nil end
+    frame.blackthornesSwap = button
+    button.swapKey = key
+    button.join = join
+
+    local fold = rawget(frame, "blackthornesFold")
+    fold = type(fold) == "table" and fold.button or nil
+    local beside = fold or rawget(trim, "closeButton")
+    local size = SharedWindow.SWAP_GEM
+    -- The Blizzard window style's buttons are the game's size: match them.
+    if rawget(trim, "blizzard") then size = Width(beside) or size end
+    button:SetSize(size, size)
+    if beside then
+        local besideSize = Width(beside) or size
+        button:SetPoint("CENTER", beside, "CENTER", -(besideSize / 2 + size / 2 + SharedWindow.SWAP_GAP), 0)
+    else
+        button:SetPoint("CENTER", trim, "TOPRIGHT", -(8 + size + SharedWindow.SWAP_GAP), -8)
+    end
+    SwapGem(button, join)
+
+    button:SetScript("OnEnter", function(self)
+        self.hovered = true
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(self, "hover", 1, 0.12, self.Light)
+        else
+            self.Light(1)
+        end
+        SharedWindow.SwapTooltip(self)
+    end)
+    button:SetScript("OnLeave", function(self)
+        self.hovered = false
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(self, "hover", 0, 0.18, self.Light)
+        else
+            self.Light(0)
+        end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    button:SetScript("OnClick", function(self)
+        if GameTooltip then GameTooltip:Hide() end
+        local drawer = SharedWindow.Drawer()
+        local api = drawer and drawer.api or SharedWindow
+        local swap = type(api.Swap) == "function" and api.Swap or SharedWindow.Swap
+        swap(rawget(self, "swapKey"), rawget(self, "join"))
+    end)
+    return button
+end
+
+-- A host's swap call, in a pcall: true and its answer when it has one.
+local function HostCall(entry, name, ...)
+    local host = entry and entry.host
+    local fn = type(host) == "table" and host[name]
+    if type(fn) ~= "function" then return false, nil end
+    local ok, answer = pcall(fn, ...)
+    if not ok then
+        if ns.Debug then pcall(ns.Debug, "one window swap:", tostring(answer)) end
+        return false, nil
+    end
+    return true, answer
+end
+
+--- The swap gem's click. `join` true: from `key`'s own window, every own
+--- window closes and the one window opens on `key`, on the same tab.
+--- `join` false: from the one window, it closes and the addon showing opens
+--- in its own window, on the same tab, at its own spot. In a fight nothing
+--- moves; it happens as the fight ends.
+function SharedWindow.Swap(key, join)
+    if InFight() then
+        hub.swapAfterFight = { key = key, join = join and true or false }
+        return false
+    end
+    hub.swapAfterFight = nil
+    if join then
+        local entry = key and hub.entries[key] or nil
+        local _, tab = HostCall(entry, "tab")
+        for _, each in pairs(hub.entries) do HostCall(each, "hide") end
+        SharedWindow.SetOn(true)
+        if entry and type(entry.host) == "table" then
+            HostCall(entry, "show", tab)
+            if not SharedWindow.IsOpen() then SharedWindow.Open(entry.key) end
+        else
+            SharedWindow.Open(key)
+        end
+        return true
+    end
+    local entry = hub.current or SharedWindow.Picked()
+    local _, tab = HostCall(entry, "tab")
+    SharedWindow.SetOn(false)
+    if entry then
+        local shown = HostCall(entry, "show", tab)
+        if not shown and type(entry.open) == "function" then pcall(entry.open) end
+    end
+    return true
+end
+
+
 -- Every copy listens; only the one that draws acts.
 if CreateFrame then
     local events = CreateFrame("Frame")
     local which = {}
     for key, place in pairs(SharedWindow.PLACES) do
-        which[place.show] = { key = key, open = true }
-        which[place.hide] = { key = key, open = false }
-        pcall(events.RegisterEvent, events, place.show)
-        pcall(events.RegisterEvent, events, place.hide)
+        if place.show then
+            which[place.show] = { key = key, open = true }
+            which[place.hide] = { key = key, open = false }
+            pcall(events.RegisterEvent, events, place.show)
+            pcall(events.RegisterEvent, events, place.hide)
+        end
     end
     pcall(events.RegisterEvent, events, "PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
+    pcall(events.RegisterEvent, events, "PLAYER_LOGIN")
+    pcall(events.RegisterEvent, events, "PLAYER_REGEN_ENABLED")
     events:SetScript("OnEvent", function(_, event, kind)
+        if event == "PLAYER_LOGIN" then SharedWindow.HookPlaces() return end
+        if event == "PLAYER_REGEN_ENABLED" then
+            -- The swap gem clicked in a fight happens now.
+            local swap = hub.swapAfterFight
+            if swap and IsDrawer() then SharedWindow.Swap(swap.key, swap.join) end
+            if shelves.afterFight and IsDrawer() then
+                shelves.afterFight = nil
+                SharedWindow.ShelfLay()
+            end
+            return
+        end
         if not IsDrawer() then return end
         if event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
             local ok, key = pcall(SharedWindow.InteractionPlace, kind)

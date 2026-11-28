@@ -56,6 +56,21 @@ function Prices.Smooth(record, marketValue)
     record.market = math.floor(market * (1 - EMA_ALPHA) + marketValue * EMA_ALPHA + 0.5)
 end
 
+--- True when a browse row's price (only the cheapest listing, no book) is
+--- far under the item's usual price. A player's report (2026-11-17): Wool
+--- Cloth showed "A vendor pays more: 33c each" while thousands sold near
+--- 1s 33c. One cheap listing was the browse row's price, it replaced the
+--- cheapest rival on record, and three such rows in a row made it the
+--- usual price too. A search for the item reads the whole book and can
+--- tell a lone low listing (IsLoneLow); a browse row cannot. So such a row
+--- keeps the price on record, counts as no odd scan, and is noted as
+--- `ignoredLow` until a search or a full scan settles it.
+function Prices.BrowseLow(record, price)
+    local market = type(record) == "table" and record.market
+    if type(market) ~= "number" or market <= 0 or type(price) ~= "number" then return false end
+    return price * Prices.ODD_RATIO < market
+end
+
 -- Fraction of an item's listed quantity treated as "the market" when pricing.
 -- Only the cheap end of the book matters: nobody sells at the 40th percentile.
 local MARKET_DEPTH = 0.25
@@ -128,8 +143,116 @@ local function IsFlat(history)
     return type(history[1]) ~= "table"
 end
 
---- How many readings a history holds, in either layout.
+--------------------------------------------------------------------------------
+-- The packed layout (2026-11-26, a lighter save). The game reads the whole
+-- save at every login and /reload, and price readings were a third of it:
+-- every number on a line of its own. So at logout each history is saved as
+-- one string, "t,m,q;dt,m,q;..." (dt is the time since the reading before;
+-- an empty field is a missing value). Every number is kept, and a history
+-- is packed only when unpacking it gives back exactly what it held. A
+-- history is unpacked into a table the first time it is read or added to
+-- (Prices.History), so nothing that reads it sees the string.
+--------------------------------------------------------------------------------
+
+local function PackNumber(v)
+    if v == false then return "" end
+    if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then return nil end
+    if v == math.floor(v) and v > -1e15 and v < 1e15 then return ("%d"):format(v) end
+    return ("%.17g"):format(v)
+end
+
+--- A flat history as one string, or nil when it holds anything that can't
+--- be packed and read back the same (it then stays a table).
+function Prices.PackHistory(flat)
+    if type(flat) ~= "table" or type(flat[1]) == "table" or #flat % 3 ~= 0 then return nil end
+    local parts, lastT = {}, nil
+    for base = 0, #flat - 3, 3 do
+        local t, m, q = flat[base + 1], flat[base + 2], flat[base + 3]
+        local tt = t
+        if type(t) == "number" and lastT then tt = t - lastT end
+        local a, b, c = PackNumber(tt), PackNumber(m), PackNumber(q)
+        if not (a and b and c) then return nil end
+        parts[#parts + 1] = a .. "," .. b .. "," .. c
+        if type(t) == "number" then lastT = t end
+    end
+    return table.concat(parts, ";")
+end
+
+local function UnpackNumber(text)
+    if text == "" then return false end
+    return tonumber(text)
+end
+
+--- A packed history back as a new flat table.
+function Prices.UnpackHistory(text)
+    local flat, lastT = {}, nil
+    if type(text) ~= "string" or text == "" then return flat end
+    for a, b, c in (text .. ";"):gmatch("([^,;]*),([^,;]*),([^,;]*);") do
+        local t = UnpackNumber(a)
+        if type(t) == "number" and lastT then t = t + lastT end
+        if type(t) == "number" then lastT = t end
+        local n = #flat
+        flat[n + 1], flat[n + 2], flat[n + 3] = t, UnpackNumber(b), UnpackNumber(c)
+    end
+    return flat
+end
+
+local function SameFlat(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+--- Pack one record's history (an item's or a suffix's) in place. True when
+--- it was packed; a history that would not read back the same is left as
+--- it is.
+function Prices.PackRecord(record)
+    if type(record) ~= "table" or type(record.history) ~= "table" then return false end
+    if type(record.history[1]) == "table" then Prices.FlattenHistory(record) end
+    local text = Prices.PackHistory(record.history)
+    if not text or not SameFlat(Prices.UnpackHistory(text), record.history) then return false end
+    record.history = text
+    return true
+end
+
+--- A record's history as a table, unpacked in place the first time. Read
+--- and add to history through this or the readers below, never by index.
+function Prices.History(record)
+    if type(record) ~= "table" then return nil end
+    if type(record.history) == "string" then
+        record.history = Prices.UnpackHistory(record.history)
+    end
+    return type(record.history) == "table" and record.history or nil
+end
+
+--- Pack every history in the save, every realm's, items and suffixes. Run
+--- at logout, so the game writes the short form. Returns how many.
+function Prices:PackAll()
+    local db = ns.db
+    if type(db) ~= "table" or type(db.prices) ~= "table" then return 0 end
+    local packed = 0
+    for _, realm in pairs(db.prices) do
+        if type(realm) == "table" then
+            for _, record in pairs(realm) do
+                if type(record) == "table" then
+                    if Prices.PackRecord(record) then packed = packed + 1 end
+                    if type(record.suffixes) == "table" then
+                        for _, entry in pairs(record.suffixes) do
+                            if Prices.PackRecord(entry) then packed = packed + 1 end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return packed
+end
+
+--- How many readings a history holds, in any layout.
 function Prices.HistoryCount(history)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     if type(history) ~= "table" then return 0 end
     if IsFlat(history) then return math.floor(#history / 3) end
     return #history
@@ -148,6 +271,7 @@ end
 
 --- Reading i (1 is the oldest): t, m, q. Missing values come back nil.
 function Prices.HistoryReading(history, i)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     if type(history) ~= "table" then return nil end
     if IsFlat(history) then
         local base = (i - 1) * 3
@@ -160,6 +284,7 @@ end
 
 --- Every reading, oldest first: for i, t, m, q in Prices.EachReading(history).
 function Prices.EachReading(history)
+    if type(history) == "string" then history = Prices.UnpackHistory(history) end
     local count = Prices.HistoryCount(history)
     local i = 0
     return function()
@@ -173,6 +298,10 @@ end
 -- kept; an entry that is not a reading table (never written by us) is left
 -- out only if it holds nothing at all. Returns true when it changed.
 function Prices.FlattenHistory(record)
+    if type(record) == "table" and type(record.history) == "string" then
+        Prices.History(record)
+        return true
+    end
     local history = type(record) == "table" and record.history
     if type(history) ~= "table" or IsFlat(history) then return false end
     local flat = {}
@@ -191,8 +320,9 @@ function Prices.FlattenHistory(record)
     return true
 end
 
---- Adds a reading at the end and keeps the newest MAX_HISTORY.
-function Prices.AddReading(record, t, m, q)
+--- Adds a reading at the end and keeps the newest MAX_HISTORY (or `most`).
+function Prices.AddReading(record, t, m, q, most)
+    Prices.History(record)
     if type(record.history) ~= "table" then record.history = {} end
     Prices.FlattenHistory(record)
     local history = record.history
@@ -200,7 +330,7 @@ function Prices.AddReading(record, t, m, q)
     history[n + 1] = Kept(t)
     history[n + 2] = Kept(m)
     history[n + 3] = Kept(q)
-    local extra = #history - MAX_HISTORY * 3
+    local extra = #history - (tonumber(most) or MAX_HISTORY) * 3
     if extra > 0 then
         local size = #history
         for i = 1, size - extra do history[i] = history[i + extra] end
@@ -450,7 +580,12 @@ end
 --   saw the listings. nil from a reading that saw only the cheapest price (a
 --   browse row): the ladder on record is kept while its first step is still
 --   the cheapest rival, and dropped when it is not.
-function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
+-- @param partial true when `quantity` may be only part of what is listed (a
+--   look at one item the client did not call complete). The price is learned
+--   as usual, but the count stays out of the readings Sold a day measures,
+--   the seven day counts and the volume bars: a fall from a full scan's count
+--   to a first page's count is not sales.
+function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder, partial)
     -- Lets a list know prices moved without comparing every record.
     Prices:Touch(itemID)
 
@@ -485,6 +620,13 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
         prices[itemID] = record
     end
 
+    -- A browse row far under the usual price is kept apart (Prices.BrowseLow).
+    if ladder == nil and Prices.BrowseLow(record, marketValue) then
+        record.min = minBuyout
+        record.ignoredLow = marketValue
+        return record, "lone low"
+    end
+
     -- EMA, seeded on first sight so a brand new item is not anchored to zero.
     Prices.Smooth(record, marketValue)
 
@@ -507,15 +649,16 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     record.quantity = quantity
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
-    Prices.NoteDaily(record, scannedAt, quantity)
+    local counted = not partial and quantity or nil
+    Prices.NoteDaily(record, scannedAt, counted)
     Prices.NoteTrend(record, scannedAt)
 
-    Prices.AddReading(record, scannedAt, record.market, quantity)
+    Prices.AddReading(record, scannedAt, record.market, counted)
 
     -- The hour by hour graph keeps the cheapest posting, as buying sees it.
     if ns.PriceHistory then
         ns.PriceHistory:Note(itemID, Prices.LowestListed(record), scannedAt)
-        ns.PriceHistory:NoteListed(itemID, quantity, scannedAt)
+        if counted then ns.PriceHistory:NoteListed(itemID, counted, scannedAt) end
     end
 
     -- The Stats tab's ninety days: the cheapest of each day, and its sales.
@@ -601,7 +744,12 @@ end
 function Prices:NoteBought(itemID, unitPrice, quantity, askedAt)
     local record = itemID and self:GetTable()[itemID]
     if type(record) ~= "table" then return false end
-    if askedAt and (record.seen or 0) > askedAt then return false end
+    -- Only a whole book read after the buy is known to leave it out. A
+    -- browse row read after it can still carry the listing just bought: on
+    -- Forever it is read again between the click and the client's answer,
+    -- at the old price (2026-11-24), and taking that as the newer word kept
+    -- a sold out price on the Disenchanting tab.
+    if askedAt and (record.ladderAt or 0) > askedAt then return false end
 
     quantity = math.max(1, math.floor(tonumber(quantity) or 1))
     local paid = tonumber(unitPrice)
@@ -821,24 +969,36 @@ end
 
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
 -- Returns the number of items recorded.
-function Prices:CommitScan(observations, scannedAt)
+-- @param partial true for a quick scan that stopped before it read every
+--   row: its counts stay out of Sold a Day (see Record), and it is not a
+--   full scan, so the full scan stamp is left alone.
+function Prices:CommitScan(observations, scannedAt, partial)
     scannedAt = scannedAt or time()
 
     local recorded = 0
     for itemID, listings in pairs(observations) do
-        -- How many sell it, for the Stats tab; the names go no further.
-        if ns.StatsLog then pcall(ns.StatsLog.NoteSellers, ns.StatsLog, itemID, listings, scannedAt) end
-
-        local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
-            self:Summarise(listings, self:GetScanValue(itemID, "market"))
-        if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
-            recorded = recorded + 1
-        end
+        if self:CommitOne(itemID, listings, scannedAt, partial) then recorded = recorded + 1 end
     end
 
-    self:SetLastFullScan(scannedAt)
+    if not partial then self:SetLastFullScan(scannedAt) end
     return recorded
+end
+
+--- One item of a scan: its listings summed up and recorded. True when a
+--- price was recorded. CommitScan does every item at once; a scan read to
+--- its end does them a few a frame (Scanner:ReadReplicateResults), since
+--- thousands in one frame froze the game as the scan finished.
+function Prices:CommitOne(itemID, listings, scannedAt, partial)
+    -- How many sell it, for the Stats tab; the names go no further.
+    if ns.StatsLog then pcall(ns.StatsLog.NoteSellers, ns.StatsLog, itemID, listings, scannedAt) end
+
+    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
+        self:Summarise(listings, self:GetScanValue(itemID, "market"))
+    if not marketValue then return false end
+
+    self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder,
+        partial == true or nil)
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -889,6 +1049,45 @@ function Prices:ListedCounts(itemID, price)
     if type(record) ~= "table" then return nil, nil end
     local total = tonumber(record.quantity)
     return Prices.CountAtOrBelow(record, price), total
+end
+
+--- Equipment's auction house upgrades (the owner said build it,
+--- 2026-11-26): what was listed at this realm and side's recent scans, read
+--- only, so Equipment never scans on its own. Each item seen listed within
+--- `staleAfterSeconds` (48 hours): { price = the cheapest posting, count =
+--- how many were up, seen = when, rolls = { { link, price, count } } for
+--- random suffixes with a link of their own }. Second: when the last scan
+--- was (GetLastScan), or nil before any.
+-- Keep stable: Equipment's Logic/AuctionGear.lua reads it inside a pcall.
+function Prices:OnSale()
+    local out = {}
+    local last = self:GetLastScan()
+    if not last then return out, nil end
+    local keep = ns.Config and ns.Config.Get and ns.Config:Get("staleAfterSeconds") or 172800
+    local oldest = time() - keep
+    for itemID, record in pairs(self:GetTable()) do
+        if type(itemID) == "number" and type(record) == "table" and (tonumber(record.seen) or 0) >= oldest
+            and (tonumber(record.quantity) or 0) > 0 then
+            local price = Prices.LowestListed(record) or record.ignoredLow
+            if price then
+                local entry = { price = price, count = record.quantity, seen = record.seen }
+                if type(record.suffixes) == "table" then
+                    for suffix, roll in pairs(record.suffixes) do
+                        local cost = type(roll) == "table" and (tonumber(roll.min) or tonumber(roll.rival))
+                        if cost and (tonumber(roll.seen) or 0) >= oldest and (tonumber(roll.quantity) or 1) > 0 then
+                            local link = Prices.SuffixLink(itemID, suffix)
+                            if link then
+                                entry.rolls = entry.rolls or {}
+                                entry.rolls[#entry.rolls + 1] = { link = link, price = cost, count = roll.quantity }
+                            end
+                        end
+                    end
+                end
+                out[itemID] = entry
+            end
+        end
+    end
+    return out, last
 end
 
 -- One of TSM's or Auctionator's modules for a price, counted when used.
@@ -955,6 +1154,24 @@ function Prices:PreferredTSM(itemID, which)
     return AskOther(ns.TSMPrices, itemID, which)
 end
 
+--- Your other account's price for an item and when it saw it, when that
+--- is newer than this account's own scan (or this account never priced
+--- it), else nil. Prices:GetValue uses it, and the tooltip shows it as the
+--- auction value, since it is your own play (Logic/AccountLink.lua).
+--- `scanned` is this account's own price, when the caller has it already.
+function Prices:GetLinkedValue(itemID, which, scanned)
+    if which == "rival" then return nil end
+    local link = ns.AccountLink
+    if not (link and link.PriceFor) then return nil end
+    local shared, sharedAt = link:PriceFor(itemID, which)
+    if not shared then return nil end
+    if scanned == nil then scanned = self:GetScanValue(itemID, which) end
+    local record = self:GetTable()[itemID]
+    local seen = type(record) == "table" and tonumber(record.seen) or 0
+    if not scanned or (sharedAt or 0) > seen then return shared, sharedAt end
+    return nil
+end
+
 function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
     if which == "rival" then return scanned end
@@ -967,39 +1184,35 @@ function Prices:GetValue(itemID, which)
         scanned = preferred
     end
 
-    -- Guildmates' prices (Logic/GuildPrices.lua, off unless the player turns
-    -- it on) fill a gap: an item never priced here, or one whose price has
-    -- gone stale while theirs is newer. A fresh scan of your own always wins.
-    -- Only asked when it could be used: their answer is sorted out of every
-    -- guildmate's, and prices are read many times a redraw.
+    -- Guildmates' prices (Logic/GuildPrices.lua) fill a gap, an item never
+    -- priced here, and replace your own price whenever a guildmate saw the
+    -- item after you last did, fresh or not (the owner, 2026-11-18). Only
+    -- their prices from after your scan count, so an older one never wins.
+    -- A price 10 times away from a fresh one of yours was never kept.
     local filled = preferred and true or nil
 
     -- Your other account's newest scan (Logic/AccountLink.lua, whenever the
     -- two accounts are linked) comes first: it is your own play,
     -- so it wins whenever it saw the item after this account last did.
-    local link = ns.AccountLink
-    if not filled and link and link.PriceFor then
-        local shared, sharedAt = link:PriceFor(itemID, which)
+    if not filled then
+        local shared = self:GetLinkedValue(itemID, which, scanned)
         if shared then
-            local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and tonumber(record.seen) or 0
-            if not scanned or (sharedAt or 0) > seen then
-                scanned = shared
-                filled = true
-            end
+            scanned = shared
+            filled = true
         end
     end
 
     local guild = ns.GuildPrices
-    if not filled and guild and guild.IsOn and guild:IsOn() and (not scanned or self:IsStale(itemID)) then
-        local shared, sharedAt = guild:GetValue(itemID, which)
-        if shared then
+    if not filled and guild and guild.IsOn and guild:IsOn() then
+        local since
+        if scanned then
             local record = self:GetTable()[itemID]
-            local seen = type(record) == "table" and record.seen or 0
-            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then
-                scanned = shared
-                filled = true
-            end
+            since = type(record) == "table" and tonumber(record.seen) or 0
+        end
+        local shared = guild:GetValue(itemID, which, nil, since)
+        if shared then
+            scanned = shared
+            filled = true
         end
     end
 
@@ -1085,6 +1298,10 @@ end
 -- and the oldest seen goes first.
 Prices.SUFFIX_MOST = 40
 
+-- The readings kept for each suffix, fewer than an item's: an item can have
+-- forty suffixes, and the saved file grows with every one.
+Prices.SUFFIX_READINGS = 8
+
 -- A suffix price older than this is not used; the item's price stands in.
 Prices.SUFFIX_KEEP = 14 * 24 * 3600
 
@@ -1133,6 +1350,13 @@ function Prices:RecordSuffix(itemID, suffix, marketValue, minBuyout, rival, quan
     entry.quantity = quantity
     entry.seen = scannedAt or time()
 
+    -- Its own readings, so a suffix picked on the Prices tab draws its own
+    -- graph and Stats rather than the item's (a player's report, 2026-11-21).
+    Prices.AddReading(entry, entry.seen, entry.market, quantity, Prices.SUFFIX_READINGS)
+    if ns.PriceHistory and ns.PriceHistory.NoteSuffix then
+        ns.PriceHistory:NoteSuffix(itemID, suffix, minBuyout or rival, quantity, entry.seen)
+    end
+
     Prices:Touch(itemID)
     return entry
 end
@@ -1178,14 +1402,203 @@ function Prices:GetSuffixEntry(itemID, suffix)
     return type(entry) == "table" and entry or nil
 end
 
---- The name the client gives one suffix of an item ("Lead Band of the
---- Monkey"), or nil while it is not loaded. Read inside a pcall.
-function Prices.SuffixName(itemID, suffix)
+--------------------------------------------------------------------------------
+-- Which suffix a copy is, on Forever
+--------------------------------------------------------------------------------
+--
+-- Forever names a suffix two ways. A link carries a bonus ID
+-- (item:8211::::::::40:1490:::1:12731) and leaves the old suffix field
+-- empty; the auction house's item key carries another number (itemSuffix,
+-- 14327 and the like), which is what `record.suffixes` is keyed by. Until
+-- 2026-11-19 nothing joined the two, so a copy in the bags was never priced
+-- by its suffix, and no suffix had a name (a player's report).
+--
+-- They are joined as they are seen together, account wide in
+-- `ns.db.suffixWords` (never rename it):
+--   bonuses[bonusID] = suffix          a link's bonus and its key's suffix
+--   tails[locale][suffix] = " of the Monkey"   what the suffix adds to a name
+
+local function SuffixWords()
+    local db = ns.db
+    if type(db) ~= "table" then return nil end
+    local words = db.suffixWords
+    if type(words) ~= "table" then
+        words = {}
+        db.suffixWords = words
+    end
+    if type(words.bonuses) ~= "table" then words.bonuses = {} end
+    if type(words.tails) ~= "table" then words.tails = {} end
+    return words
+end
+
+local function Tails(words)
+    local ok, locale = pcall(function() return _G.GetLocale and _G.GetLocale() end)
+    locale = ok and type(locale) == "string" and locale or "enUS"
+    local tails = words.tails[locale]
+    if type(tails) ~= "table" then
+        tails = {}
+        words.tails[locale] = tails
+    end
+    return tails
+end
+
+-- The client's name for an item ID or an item string, or nil. In a pcall.
+local function ItemName(item)
     local api = _G.C_Item
     local info = type(api) == "table" and api.GetItemInfo or _G.GetItemInfo
     if type(info) ~= "function" then return nil end
-    local ok, name = pcall(info, ("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    local ok, name = pcall(info, item)
     if ok and type(name) == "string" and name ~= "" then return name end
+    return nil
+end
+
+-- What a suffix adds after the item's own name (" of the Monkey"), or nil
+-- when the name is the plain one, or does not begin with it.
+local function TailOf(base, full)
+    if not (base and full) or full == base then return nil end
+    if #full <= #base or full:sub(1, #base) ~= base then return nil end
+    return full:sub(#base + 1)
+end
+
+local function LinkItemID(link)
+    return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+end
+
+local function LinkName(link)
+    return type(link) == "string" and link:match("|h%[(.-)%]|h") or nil
+end
+
+--- Keep what a suffix adds to a name, from one item's full name.
+function Prices:LearnSuffixName(itemID, suffix, fullName)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and itemID and suffix and suffix ~= 0 and type(fullName) == "string") then return false end
+    local tail = TailOf(ItemName(itemID), fullName)
+    if not tail then return false end
+    Tails(words)[suffix] = tail
+    return true
+end
+
+--- A copy's link seen beside its auction house key (a search's listing, a
+--- copy in the bags): its bonus and that suffix go together from now on.
+function Prices:LearnSuffix(link, suffix)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (words and suffix and suffix ~= 0 and type(link) == "string") then return false end
+
+    -- Only a link with one bonus says which bonus is the suffix.
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 1 then words.bonuses[bonuses[1]] = suffix end
+
+    if Tails(words)[suffix] == nil then
+        self:LearnSuffixName(LinkItemID(link), suffix, LinkName(link))
+    end
+    return #bonuses == 1
+end
+
+local keyNameAsked, KEY_NAME_TRIES = {}, 20
+
+--- Keep a suffix's name from the auction house's own key, once the game has
+--- it. Asked only for a suffix with no name yet.
+function Prices:LearnKeyName(key)
+    local words = SuffixWords()
+    local suffix = type(key) == "table" and tonumber(key.itemSuffix) or nil
+    if not (words and suffix and suffix ~= 0 and key.itemID) then return false end
+    if Tails(words)[suffix] ~= nil then return true end
+
+    -- A name the game has not loaded is asked for a few times, not at
+    -- every row of every scan.
+    local asked = keyNameAsked[suffix] or 0
+    if asked >= KEY_NAME_TRIES then return false end
+    keyNameAsked[suffix] = asked + 1
+
+    local AH = _G.C_AuctionHouse
+    if not (type(AH) == "table" and type(AH.GetItemKeyInfo) == "function") then return false end
+    local ok, info = pcall(AH.GetItemKeyInfo, key)
+    if not (ok and type(info) == "table") then return false end
+    return self:LearnSuffixName(key.itemID, suffix, info.itemName)
+end
+
+--- The suffix a Forever link names, as the auction house keeps it, and
+--- whether it could be placed. A copy with a suffix nothing has placed yet
+--- answers a stand-in (its bonus, negative) and false; a plain copy nil.
+function Prices.ResolveSuffix(link)
+    local bonuses = Util.LinkBonuses and Util.LinkBonuses(link) or {}
+    if #bonuses == 0 then return nil end
+    local words = SuffixWords()
+    if not words then return nil end
+
+    for _, bonus in ipairs(bonuses) do
+        local suffix = words.bonuses[bonus]
+        if suffix then return suffix, true end
+    end
+
+    -- By name: the plain name with more after it is a suffix copy.
+    local itemID, full = LinkItemID(link), LinkName(link)
+    local base = itemID and ItemName(itemID)
+    if not (base and full) or full == base then return nil end
+
+    local tail = TailOf(base, full)
+    if tail then
+        local record = Prices:GetTable()[itemID]
+        local kept = type(record) == "table" and type(record.suffixes) == "table" and record.suffixes or nil
+        local match
+        for suffix, known in pairs(Tails(words)) do
+            if known == tail and (match == nil or (kept and kept[suffix])) then match = suffix end
+        end
+        if match then
+            if #bonuses == 1 then words.bonuses[bonuses[1]] = match end
+            return match, true
+        end
+    end
+    return -bonuses[1], false
+end
+
+Util.ResolveSuffix = Prices.ResolveSuffix
+
+--- The name the client gives one suffix of an item ("Lead Band of the
+--- Monkey"), or nil while it is not known. Read inside a pcall.
+function Prices.SuffixName(itemID, suffix)
+    suffix = tonumber(suffix)
+    if not (itemID and suffix) then return nil end
+    local base = ItemName(itemID)
+    local words = SuffixWords()
+
+    if words and base then
+        local tail = Tails(words)[suffix]
+        if tail then return base .. tail end
+
+        -- A bonus known to be this suffix names it in any language.
+        for bonus, known in pairs(words.bonuses) do
+            if known == suffix then
+                local name = ItemName(("item:%d::::::::::::1:%d"):format(itemID, bonus))
+                if name and name ~= base then return name end
+                break
+            end
+        end
+
+        -- The auction house's own name for it, kept for next time.
+        if Prices:LearnKeyName({ itemID = itemID, itemLevel = 0, itemSuffix = suffix, battlePetSpeciesID = 0 }) then
+            tail = Tails(words)[suffix]
+            if tail then return base .. tail end
+        end
+    end
+
+    -- Clients that keep the suffix in the link's own field.
+    local name = ItemName(("item:%d:0:0:0:0:0:%d"):format(itemID, suffix))
+    if name and name ~= base then return name end
+    return nil
+end
+
+--- A link for one suffix of an item, from the bonus known to be that
+--- suffix, so the game can draw that copy's card. Nil while no bonus is.
+function Prices.SuffixLink(itemID, suffix)
+    suffix = tonumber(suffix)
+    local words = SuffixWords()
+    if not (itemID and suffix and words) then return nil end
+    for bonus, known in pairs(words.bonuses) do
+        if known == suffix then return ("item:%d::::::::::::1:%d"):format(itemID, bonus) end
+    end
     return nil
 end
 
@@ -1201,7 +1614,7 @@ function Prices:SuffixRows(itemID)
         if type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0) >= oldest then
             rows[#rows + 1] = {
                 suffix = suffix, market = entry.market, min = entry.min, rival = entry.rival,
-                seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
+                quantity = entry.quantity, seen = entry.seen, name = Prices.SuffixName(itemID, suffix),
             }
         end
     end
@@ -1210,6 +1623,33 @@ function Prices:SuffixRows(itemID)
         return (tonumber(a.suffix) or 0) < (tonumber(b.suffix) or 0)
     end)
     return rows
+end
+
+--- How many suffixes of an item have a recent price: the rows SuffixRows
+--- would give, counted without asking the client for any name. Second:
+--- the time until which that count holds, nil when none are counted.
+function Prices:SuffixCount(itemID)
+    local record = itemID and self:GetTable()[itemID]
+    local suffixes = type(record) == "table" and record.suffixes
+    if type(suffixes) ~= "table" then return 0 end
+    local oldest, count, first = time() - Prices.SUFFIX_KEEP, 0, nil
+    for _, entry in pairs(suffixes) do
+        local seen = type(entry) == "table" and tonumber(entry.market) and (tonumber(entry.seen) or 0)
+        if seen and seen >= oldest then
+            count = count + 1
+            if not first or seen < first then first = seen end
+        end
+    end
+    -- Second: until when the count holds while the record stays as it is
+    -- (the day the first of the counted ones turns too old).
+    return count, first and first + Prices.SUFFIX_KEEP or nil
+end
+
+--- The suffix names known in the client's language, by suffix
+--- ({ [14322] = " of the Bear" }), for searching without asking the client.
+function Prices:SuffixTails()
+    local words = SuffixWords()
+    return words and Tails(words) or {}
 end
 
 --- What one copy is worth, by its link: its suffix's own price when one is
@@ -1235,11 +1675,19 @@ function Prices:GetLinkValue(link, which)
             return nil, false
         end
     elseif suffix then
+        -- The suffix's own price the player set, else the item's.
+        local mine, mode, ownMine = self:GetMine(itemID, suffix)
         local own = self:GetSuffixValue(itemID, suffix, which)
         if own then
-            local mine, mode = self:GetMine(itemID)
             if mine and (mode == "use" or own < mine) then return mine, false end
             return own, true
+        end
+        if ownMine then
+            -- No recent price for this suffix: the scans' price for the
+            -- item, under this suffix's own price, not the item's.
+            local scanned = self.GetScanValue and self:GetScanValue(itemID, which) or nil
+            if mode == "use" or not scanned or scanned < mine then return mine, false end
+            return scanned, false
         end
     end
 
@@ -1378,25 +1826,29 @@ end
 -- is only ever presented as a confidence hint, never as a sale rate.
 function Prices:GetLiquidity(itemID)
     local record = self:GetTable()[itemID]
-    local history = record and record.history
+    local history = Prices.History(record)
     local count = Prices.HistoryCount(history)
     if count < 2 then
         return nil
     end
 
     local drops, total = 0, 0
+    local previous
 
-    for i = 2, count do
-        local _, _, previous = Prices.HistoryReading(history, i - 1)
+    -- A reading with no count (a look that read only part of the book) is
+    -- passed over, so the next count is measured from the last one known.
+    for i = 1, count do
         local _, _, current = Prices.HistoryReading(history, i)
-        previous = tonumber(previous) or 0
-        current = tonumber(current) or 0
+        current = tonumber(current)
 
-        if previous > 0 then
-            if current < previous then
-                drops = drops + (previous - current)
+        if current then
+            if previous and previous > 0 then
+                if current < previous then
+                    drops = drops + (previous - current)
+                end
+                total = total + previous
             end
-            total = total + previous
+            previous = current
         end
     end
 
@@ -1429,10 +1881,11 @@ Prices.SALES_MIN_SPAN = SALES_MIN_SPAN
 --- The stock's movement over the kept readings: listings gone, the average
 -- stock, and the days the readings span. nil when there is too little to go on.
 local function StockMovement(record)
-    if not record or type(record.history) ~= "table" then return nil end
+    local history = Prices.History(record)
+    if not history then return nil end
 
     local kept = {}
-    for _, t, _, q in Prices.EachReading(record.history) do
+    for _, t, _, q in Prices.EachReading(history) do
         if type(t) == "number" and type(q) == "number" and q > 0 then
             local last = kept[#kept]
             if not last or t - last.t >= SALES_GAP then
@@ -1462,6 +1915,15 @@ function Prices:GetSalesPerDay(itemID)
     local drops, average, days = StockMovement(self:GetTable()[itemID])
     if not drops then return nil end
     return Util.Clamp(drops / average / days, 0, 1)
+end
+
+--- How many listings left the auction house over the kept readings, the
+--- count GetSalesPerDay is worked out from. Demand needs a few before it
+--- says anything (Demand.MARKET_MIN_GONE).
+-- @return nil when there is not enough time or stock to go on
+function Prices:GetListingsGone(itemID)
+    local drops = StockMovement(self:GetTable()[itemID])
+    return drops
 end
 
 --- About how many leave the auction house a day, from the same readings as
@@ -1710,6 +2172,10 @@ function Prices:SetFavourite(itemID, on, name)
         ns.db.favouritePrices[itemID] = nil
     end
 
+    -- A list kept until the prices change (the Prices tab's) shows a
+    -- starred item with no price, so a star counts as a change.
+    self:Touch(itemID)
+
     -- A starred item keeps an hour by hour price history from the next scan.
     if ns.PriceHistory then ns.PriceHistory:Retrack() end
 end
@@ -1729,7 +2195,7 @@ end
 --   "floor"  the auction price, but never below this: a craft worth more
 --            to you than the auction house is paying right now.
 -- Kept per realm, like the price table, in `myPrices[realm][itemID] =
--- { price, mode, name, high, under }`. Never rename it. Apart from the price table, so
+-- { price, mode, name, high, under, suffixes }`. Never rename it. Apart from the price table, so
 -- pruning old prices never takes a player's own price with it.
 
 local MY_MODES = { use = true, floor = true }
@@ -1752,28 +2218,97 @@ local function MyPrices(create)
     return realm
 end
 
---- The price the player set on an item, and its kind ("use" or "floor").
---- nil when none is set. A saved entry this cannot read is left alone.
-function Prices:GetMine(itemID)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return nil end
+-- One suffix ("of the Monkey") can have a price of its own (a player's
+-- report, the owner chose it, 2026-11-24: one floor on "of Magic" was every
+-- suffix's, though they sold from 1g to 11g). Kept on the item's entry as
+-- `suffixes[suffix] = { price, mode, high, under }` (never rename it). A
+-- suffix with none of its own takes the item's. The item's entry may then
+-- hold suffix prices and no price of its own.
 
+local function ReadPrice(entry)
+    if type(entry) ~= "table" then return nil end
     local price = tonumber(entry.price)
     if not price or price < 1 or not MY_MODES[entry.mode] then return nil end
     return math.floor(price), entry.mode
 end
 
---- Set the player's price on an item. A price of nil or 0 clears it.
+local function SuffixKey(suffix)
+    suffix = tonumber(suffix)
+    if suffix and suffix ~= 0 then return suffix end
+    return nil
+end
+
+--- The saved table that answers for an item or one of its suffixes: the
+--- suffix's own when it has a price, else the item's. Second: true when the
+--- suffix's own answered.
+local function MyEntry(itemID, suffix)
+    local realm = itemID and MyPrices(false)
+    local entry = realm and realm[itemID]
+    if type(entry) ~= "table" then return nil end
+    suffix = SuffixKey(suffix)
+    local own = suffix and type(entry.suffixes) == "table" and entry.suffixes[suffix]
+    if ReadPrice(own) then return own, true end
+    return entry, false
+end
+
+--- The price the player set on an item, and its kind ("use" or "floor").
+--- With a suffix: that suffix's own price, else the item's; third return
+--- is true when it was the suffix's own. nil when none is set. A saved
+--- entry this cannot read is left alone.
+function Prices:GetMine(itemID, suffix)
+    local entry, own = MyEntry(itemID, suffix)
+    local price, mode = ReadPrice(entry)
+    if not price then return nil end
+    return price, mode, own or nil
+end
+
+--- True when the item, or any of its suffixes, has a price the player set.
+function Prices:HasMine(itemID)
+    if self:GetMine(itemID) then return true end
+    local realm = itemID and MyPrices(false)
+    local entry = realm and realm[itemID]
+    if type(entry) ~= "table" or type(entry.suffixes) ~= "table" then return false end
+    for _, own in pairs(entry.suffixes) do
+        if ReadPrice(own) then return true end
+    end
+    return false
+end
+
+--- Drop an item's entry once it holds no price and no suffix price.
+local function DropIfEmpty(realm, itemID)
+    local entry = realm[itemID]
+    if type(entry) ~= "table" then return end
+    if ReadPrice(entry) then return end
+    if type(entry.suffixes) == "table" and next(entry.suffixes) ~= nil then return end
+    realm[itemID] = nil
+end
+
+--- Set the player's price on an item, or with `suffix` on that suffix
+--- alone. A price of nil or 0 clears it.
 -- @return true when saved or cleared, false when the price was refused
-function Prices:SetMine(itemID, price, mode, name)
+function Prices:SetMine(itemID, price, mode, name, suffix)
     if not itemID then return false end
     price = tonumber(price)
+    suffix = SuffixKey(suffix)
 
     if not price or price < 1 then
         local realm = MyPrices(false)
-        if realm and realm[itemID] ~= nil then
-            realm[itemID] = nil
+        local entry = realm and realm[itemID]
+        if type(entry) ~= "table" then
+            if realm and entry ~= nil then realm[itemID] = nil; Prices:Touch(itemID) end
+            return true
+        end
+        if suffix then
+            if type(entry.suffixes) == "table" and entry.suffixes[suffix] ~= nil then
+                entry.suffixes[suffix] = nil
+                if next(entry.suffixes) == nil then entry.suffixes = nil end
+                DropIfEmpty(realm, itemID)
+                Prices:Touch(itemID)
+            end
+        elseif entry.price ~= nil or entry.mode ~= nil then
+            -- The item's own price goes; its suffixes keep theirs.
+            entry.price, entry.mode, entry.high, entry.under = nil, nil, nil, nil
+            DropIfEmpty(realm, itemID)
             Prices:Touch(itemID)
         end
         return true
@@ -1786,14 +2321,29 @@ function Prices:SetMine(itemID, price, mode, name)
     if not realm then return false end
 
     local old = realm[itemID]
+    if type(old) ~= "table" then old = nil end
     if type(name) ~= "string" or name == "" then
-        name = type(old) == "table" and type(old.name) == "string" and old.name or nil
+        name = old and type(old.name) == "string" and old.name or nil
+    end
+
+    if suffix then
+        local entry = old or {}
+        entry.name = name
+        if type(entry.suffixes) ~= "table" then entry.suffixes = {} end
+        local was = entry.suffixes[suffix]
+        was = type(was) == "table" and was or {}
+        entry.suffixes[suffix] = { price = math.floor(price), mode = mode, high = was.high, under = was.under }
+        realm[itemID] = entry
+        Prices:Touch(itemID)
+        return true
     end
 
     -- Highest and When Cheaper (below) stay with the price when it changes.
-    local high = type(old) == "table" and old.high or nil
-    local under = type(old) == "table" and old.under or nil
-    realm[itemID] = { price = math.floor(price), mode = mode, name = name, high = high, under = under }
+    local high = old and old.high or nil
+    local under = old and old.under or nil
+    local suffixes = old and old.suffixes or nil
+    realm[itemID] = { price = math.floor(price), mode = mode, name = name, high = high, under = under,
+        suffixes = suffixes }
     Prices:Touch(itemID)
     return true
 end
@@ -1806,22 +2356,31 @@ end
 -- Read only while the entry is a "floor" price; a "use" price is used as it is.
 
 --- The limits on a "floor" price: highest (copper or nil) and whether to
---- wait while the auction house is cheaper (true or nil).
-function Prices:GetMyLimits(itemID)
-    local _, mode = self:GetMine(itemID)
+--- wait while the auction house is cheaper (true or nil). With a suffix,
+--- the limits of whichever price GetMine answers with.
+function Prices:GetMyLimits(itemID, suffix)
+    local _, mode = self:GetMine(itemID, suffix)
     if mode ~= "floor" then return nil, nil end
-    local entry = MyPrices(false)[itemID]
+    local entry = MyEntry(itemID, suffix)
     local high = tonumber(entry.high)
     high = high and high >= 1 and math.floor(high) or nil
     return high, entry.under == "wait" or nil
 end
 
---- Set Highest on an item with a price of its own. nil or 0 takes it off.
--- @return true when saved or cleared, false when the item has no price set
-function Prices:SetMyHigh(itemID, high)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return false end
+--- The saved table with a price of its own for exactly this item or suffix.
+local function OwnEntry(itemID, suffix)
+    local entry, own = MyEntry(itemID, suffix)
+    if SuffixKey(suffix) and not own then return nil end
+    if not ReadPrice(entry) then return nil end
+    return entry
+end
+
+--- Set Highest on an item (or one suffix) with a price of its own. nil or
+--- 0 takes it off.
+-- @return true when saved or cleared, false when it has no price set
+function Prices:SetMyHigh(itemID, high, suffix)
+    local entry = OwnEntry(itemID, suffix)
+    if not entry then return false end
     high = tonumber(high)
     if high and high >= 1 then
         if not Prices.IsCredible(high) then return false end
@@ -1836,12 +2395,11 @@ function Prices:SetMyHigh(itemID, high)
     return true
 end
 
---- Set When Cheaper on an item with a price of its own: true waits, false
---- or nil lists at the floor.
-function Prices:SetMyWait(itemID, wait)
-    local realm = itemID and MyPrices(false)
-    local entry = realm and realm[itemID]
-    if type(entry) ~= "table" then return false end
+--- Set When Cheaper on an item (or one suffix) with a price of its own:
+--- true waits, false or nil lists at the floor.
+function Prices:SetMyWait(itemID, wait, suffix)
+    local entry = OwnEntry(itemID, suffix)
+    if not entry then return false end
     local under = wait and "wait" or nil
     if entry.under ~= under then
         entry.under = under
@@ -1874,6 +2432,8 @@ function Prices:Prune()
 
     if removed > 0 then
         ns.Debug(("removed %d old price(s)"):format(removed))
+        -- No one item: lists kept until the prices change build again.
+        self:Touch()
     end
     return removed
 end
@@ -1915,6 +2475,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
+        self:Touch()
         ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, more than anyone could pay",
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
@@ -1970,6 +2531,10 @@ function Prices:OnEnable()
     self:Scrub()
     self:Prune()
     self:FlattenSoon()
+    -- Last thing before the game writes the save: the short form.
+    ns.RegisterEvent(self, "PLAYER_LOGOUT", function()
+        pcall(Prices.PackAll, Prices)
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -2022,7 +2587,7 @@ ns.RegisterCommand("price", L["<item link or name>: what the auction house says"
     if record.rivalMin then
         -- Asked of the chooser rather than worked out again here, so this
         -- cannot drift from the price the Sell tab would actually use.
-        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID, nil, nil, true)
 
         ns.PrintRaw(L.Format("  cheapest rival %s   you would post at %s (%s)",
             Util.FormatMoney(record.rivalMin),
@@ -2036,7 +2601,7 @@ ns.RegisterCommand("price", L["<item link or name>: what the auction house says"
     else
         -- No rival on record. Asked of the chooser for the same reason as
         -- above: this must not drift from the price the Sell tab would use.
-        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID, nil, nil, true)
 
         if ns.Prices:HoldsLowest(itemID) then
             ns.PrintRaw(L.Format("  |c%syou hold the lowest listing|r", ns.COLORS.profit))

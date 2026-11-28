@@ -18,6 +18,12 @@
 -- LEFT words are set. A sold or faded row keeps a frame of its own while
 -- it goes, so the others never jump.
 --
+-- Sold Today (2026-11-26, the owner said build it from a mockup): a sold
+-- row lights up and stamps SOLD as before, then settles in a list under
+-- the auctions still up, headed "Sold Today: N", with the time it sold and
+-- the gold it brought. A sale shows there once its row is done going. The
+-- list starts again each day (Logic/AuctionTracker.lua, SalesToday).
+--
 -- Saved, account wide, never renamed: auctionTrackerX/Y (top left, screen
 -- units), auctionTrackerScale (percent), auctionTrackerSeeThrough (0 to 3).
 
@@ -38,6 +44,9 @@ local PAD = 8
 local HEADER = 24
 local ICON = 18
 local LEFT_W = 52
+-- A sold row's time ("11:02 AM") needs a little more room than time left.
+local TIME_W = 62
+local SOLD_HEADING = 26
 local PRICE_W = 74
 local COIN = [[Interface\Icons\INV_Misc_Coin_01]]
 local GLOW = ([[Interface\AddOns\%s\Media\Frame\Glow]]):format(ADDON)
@@ -87,8 +96,17 @@ function AuctionTrackerUI.LeftText(ends, rough, now)
 end
 
 local function RowName(row)
-    local name = Util.GetItemName(row.itemID, row.link)
+    -- A link names the item as it is, a random suffix too ("of the Beast"),
+    -- so its words come first, without the brackets.
+    local name = type(row.link) == "string" and row.link:match("|h%[(.-)%]|h")
+    if not name or name == "" then name = Util.GetItemName(row.itemID, row.link) end
     if type(name) ~= "string" then name = "?" end
+    -- No link and the client has not sent the item yet: the name is a
+    -- stand-in until it does, and the rows are drawn again then.
+    if not row.link and row.itemID and Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, known = pcall(C_Item.GetItemInfo, row.itemID)
+        if not (ok and type(known) == "string") then AuctionTrackerUI.awaitingNames = true end
+    end
     if Util.ColorItemName then
         local ok, colored = pcall(Util.ColorItemName, row.itemID, name)
         if ok and type(colored) == "string" then return colored end
@@ -117,7 +135,19 @@ function AuctionTrackerUI:Place()
     if x and y then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
     else
-        frame:SetPoint("RIGHT", UIParent, "RIGHT", -40 / scale, 60 / scale)
+        -- Never dragged: the first place on the shared right shelf, left
+        -- of the game's quest list.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "auctions.tradeskills", {
+            shelf = "right",
+            free = function()
+                return not (tonumber(Get("auctionTrackerX")) and tonumber(Get("auctionTrackerY")))
+            end,
+            place = function() AuctionTrackerUI:Place() end,
+        })
+        if not placed then
+            frame:SetPoint("RIGHT", UIParent, "RIGHT", -40 / scale, 60 / scale)
+        end
     end
 end
 
@@ -202,6 +232,13 @@ local function Stripe(widget, index)
     widget.background:SetColorTexture(Theme.Unpack(key))
 end
 
+--- A name wraps only inside a width it knows: two anchors alone leave it
+--- one line tall to the game, so its row did not grow and a long name ran
+--- into the rows below.
+local function NameWidth(row, width, leftWidth)
+    row.name:SetWidth(math.max(1, width - 4 - ICON - 6 - 4 - (leftWidth or LEFT_W) - 6 - PRICE_W - 4))
+end
+
 local function NewRow(self)
     local body = self.body
     local width = self.WIDTH - 2 * PAD
@@ -260,9 +297,9 @@ local function NewRow(self)
 
     local name = Theme.CreateLabel(row, "small", "text", "LEFT")
     name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    name:SetPoint("RIGHT", left, "LEFT", -4, 0)
     pcall(name.SetWordWrap, name, true)
     row.name = name
+    NameWidth(row, width)
 
     row:SetScript("OnEnter", function(widget)
         widget.background:SetColorTexture(Theme.Unpack("glassHover"))
@@ -305,6 +342,54 @@ local function RowHeight(self, widget)
     return math.max(self.ROW, math.ceil(height) + 6)
 end
 
+--- When a sale was heard, as the clock says it: "2:14 PM" on an English
+--- client, "14:14" on the others.
+function AuctionTrackerUI.SoldTime(at)
+    if type(at) ~= "number" then return "" end
+    local locale = type(GetLocale) == "function" and GetLocale() or "enUS"
+    if locale == "enUS" or locale == "enGB" then
+        local text = date("%I:%M %p", at)
+        return (text:gsub("^0", ""))
+    end
+    return date("%H:%M", at)
+end
+
+--- Fill a Sold Today row from its sale: the time it sold and what it brought.
+local function FillSoldRow(widget, sale)
+    widget.data = sale
+    Theme.SetItemIcon(widget.icon, sale.itemID, sale.link)
+    local quantity = tonumber(sale.quantity) or 1
+    widget.count:SetText(quantity > 1 and tostring(quantity) or "")
+    widget.name:SetText(RowName(sale))
+    widget.left:SetWidth(TIME_W)
+    widget.left:SetText(AuctionTrackerUI.SoldTime(sale.at))
+    widget.price:SetText("|c" .. (ns.COLORS and ns.COLORS.profit or "ff4fd18b") .. "+|r" .. Money(sale.copper))
+end
+
+--- The "Sold Today: N" line over the sales: the words with a short gold
+--- line under them, and a thin line across.
+local function NewSoldHeading(self)
+    local width = self.WIDTH - 2 * PAD
+    local heading = CreateFrame("Frame", nil, self.body)
+    heading:SetSize(width, SOLD_HEADING)
+    local label = Theme.CreateLabel(heading, "small", "text", "LEFT")
+    label:SetPoint("BOTTOMLEFT", 4, 6)
+    heading.label = label
+    local under = heading:CreateTexture(nil, "ARTWORK")
+    under:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
+    under:SetHeight(2)
+    under:SetWidth(60)
+    under:SetColorTexture(Theme.Unpack("accent", 0.9))
+    heading.under = under
+    local line = heading:CreateTexture(nil, "BORDER")
+    line:SetPoint("BOTTOMLEFT")
+    line:SetPoint("BOTTOMRIGHT")
+    line:SetHeight(1)
+    line:SetColorTexture(Theme.Unpack("accent", 0.35))
+    if self.seeThroughOn then AuctionTrackerUI.ShadeAll(heading, true) end
+    return heading
+end
+
 --------------------------------------------------------------------------------
 -- The window
 --------------------------------------------------------------------------------
@@ -312,6 +397,7 @@ end
 function AuctionTrackerUI:Build()
     if self.frame then return self.frame end
     self.glass, self.pool, self.going, self.floats, self.coins = {}, {}, {}, {}, {}
+    self.soldPool = {}
     self.offset = 0
 
     local frame = Theme.CreatePanel(UIParent, "window", "metal")
@@ -327,6 +413,20 @@ function AuctionTrackerUI:Build()
         SavePlace(f)
     end)
     frame:SetScript("OnShow", function() AuctionTrackerUI:Refresh(true) end)
+
+    -- An item the client had not sent yet showed by number: drawn again once
+    -- it arrives. A burst of arrivals is one redraw, and only while a row is
+    -- waiting on one.
+    local redrawQueued = false
+    ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", function()
+        if redrawQueued or not AuctionTrackerUI.awaitingNames or not frame:IsShown() then return end
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            AuctionTrackerUI.awaitingNames = false
+            AuctionTrackerUI:Refresh(true)
+        end)
+    end)
     frame:EnableMouseWheel(true)
     frame:SetScript("OnMouseWheel", function(_, delta) AuctionTrackerUI:Scroll(delta) end)
     Theme.TopSheen(frame, 0.06)
@@ -349,6 +449,8 @@ function AuctionTrackerUI:Build()
     local gems = ns.HouseKit and ns.HouseKit.CreatePanelGems and ns.HouseKit.CreatePanelGems(header, {
         onFold = function(folded) AuctionTrackerUI:SetFolded(folded) end,
         onClose = function() if Logic() then Logic():SetOn(false) end end,
+        -- Folds into a round button (UI/FoldWindow.lua, 2026-11-22).
+        round = { frame = frame, key = "MyAuctions", title = L["My Auctions"] },
     })
     self.gems = gems
 
@@ -488,7 +590,8 @@ function AuctionTrackerUI:Refresh(force)
     -- A row shown before and gone now, not sold: it ran out, or the
     -- auction house says it is no longer up. It fades with no gold.
     for index, old in ipairs(self.list or {}) do
-        if not old.going and not here[old.key] and not self.going[old.key] then
+        if not old.going and not old.sale and not old.soldHeading
+            and not here[old.key] and not self.going[old.key] then
             self:Fade(old, index)
         end
     end
@@ -503,6 +606,19 @@ function AuctionTrackerUI:Refresh(force)
         table.insert(list, at, going.data)
         going.data.going = key
     end
+
+    -- Today's sales under the auctions, newest first. A sale whose row is
+    -- still going (lit, stamped, sliding) waits until it is done.
+    local sales = {}
+    for _, sale in ipairs(logic.SalesToday and logic:SalesToday() or {}) do
+        if not (sale.key and self.going[sale.key]) then sales[#sales + 1] = sale end
+    end
+    if #sales > 0 then
+        list[#list + 1] = { soldHeading = #sales }
+        for _, sale in ipairs(sales) do list[#list + 1] = { sale = sale } end
+    end
+    self.soldShown = #sales
+    self.drawnDay = date("%Y-%m-%d")
     self.list = list
 
     -- A new auction (just posted) sorts by time left, so it often lands
@@ -511,7 +627,8 @@ function AuctionTrackerUI:Refresh(force)
     if self.seen then
         local newest
         for index, row in ipairs(list) do
-            if not row.going and not self.seen[row.key] then newest = index end
+            if not row.going and not row.sale and not row.soldHeading
+                and not self.seen[row.key] then newest = index end
         end
         local offset = self.offset or 0
         if newest and (newest <= offset or newest > offset + self.MOST_ROWS) then
@@ -522,7 +639,7 @@ function AuctionTrackerUI:Refresh(force)
 
     self.upCount = 0
     for _, row in ipairs(list) do
-        if not row.going then self.upCount = self.upCount + 1 end
+        if not row.going and not row.sale and not row.soldHeading then self.upCount = self.upCount + 1 end
     end
 
     if not self.counting then
@@ -534,6 +651,7 @@ end
 
 --- Lay the rows out: going rows on frames of their own, the rest on the
 --- pool, each as tall as it needs, and the window as tall as its rows.
+--- Under them, the Sold Today line and today's sales on a pool of their own.
 function AuctionTrackerUI:Layout(now)
     if not self.frame or self.folded then return end
     now = now or Now()
@@ -541,30 +659,65 @@ function AuctionTrackerUI:Layout(now)
     local most = math.max(0, #list - self.MOST_ROWS)
     if (self.offset or 0) > most then self.offset = most end
 
-    local used, y, shown = 0, 44, 0
+    -- Nothing up: "Nothing up right now." stands where the rows start,
+    -- and today's sales follow under it.
+    local liveRows = 0
+    for _, data in ipairs(list) do
+        if not data.sale and not data.soldHeading then liveRows = liveRows + 1 end
+    end
+    local nothingUp = liveRows == 0
+    local top = nothingUp and (44 + self.ROW + 6) or 44
+
+    local used, soldUsed, y, shown = 0, 0, top, 0
     local width = self.WIDTH - 2 * PAD
+    local headingShown = false
     for index = (self.offset or 0) + 1, #list do
         if shown >= self.MOST_ROWS then break end
         local data = list[index]
-        local widget
-        if data.going then
-            local going = self.going[data.going]
-            widget = going and going.widget
-        end
-        if not widget then
-            used = used + 1
-            widget = self.pool[used]
+        local widget, height
+        if data.soldHeading then
+            widget = self.soldHeading
+            if not widget then
+                widget = NewSoldHeading(self)
+                self.soldHeading = widget
+            end
+            widget.label:SetText(L.Format("Sold Today: %d", data.soldHeading))
+            local ok, textWidth = pcall(widget.label.GetStringWidth, widget.label)
+            widget.under:SetWidth(math.max(20, (ok and tonumber(textWidth)) or 60))
+            height = SOLD_HEADING
+            headingShown = true
+        elseif data.sale then
+            soldUsed = soldUsed + 1
+            widget = self.soldPool[soldUsed]
             if not widget then
                 widget = NewRow(self)
-                self.pool[used] = widget
+                self.soldPool[soldUsed] = widget
             end
-            FillRow(widget, data, now)
-            widget:SetAlpha(1)
-            widget.lit:SetAlpha(0)
+            NameWidth(widget, width, TIME_W)
+            FillSoldRow(widget, data.sale)
+            Stripe(widget, soldUsed)
+            height = RowHeight(self, widget)
+        else
+            if data.going then
+                local going = self.going[data.going]
+                widget = going and going.widget
+            end
+            if not widget then
+                used = used + 1
+                widget = self.pool[used]
+                if not widget then
+                    widget = NewRow(self)
+                    self.pool[used] = widget
+                end
+                NameWidth(widget, width)
+                FillRow(widget, data, now)
+                widget:SetAlpha(1)
+                widget.lit:SetAlpha(0)
+            end
+            Stripe(widget, index)
+            height = RowHeight(self, widget)
         end
         shown = shown + 1
-        Stripe(widget, index)
-        local height = RowHeight(self, widget)
         local share = data.going and self.going[data.going] and self.going[data.going].share or 1
         widget:SetHeight(math.max(1, height * share))
         widget:ClearAllPoints()
@@ -574,14 +727,15 @@ function AuctionTrackerUI:Layout(now)
         y = y + height * share
     end
     for index = used + 1, #self.pool do self.pool[index]:Hide() end
+    for index = soldUsed + 1, #self.soldPool do self.soldPool[index]:Hide() end
+    if self.soldHeading and not headingShown then self.soldHeading:Hide() end
     for _, going in pairs(self.going) do
         if going.widget and not going.widget:IsShown() then going.widget:Hide() end
     end
 
-    local nothing = #list == 0
-    self.empty:SetShown(nothing)
-    self.headings:SetShown(not nothing)
-    if nothing then y = 44 + self.ROW + 6 end
+    self.empty:SetShown(nothingUp)
+    self.headings:SetShown(not nothingUp)
+    if #list == 0 then y = 44 + self.ROW + 6 end
     self.footer:SetText(L.Format("%d up", self.upCount or 0))
     self:PlaceThumb(#list, y)
     self.frame:SetHeight(HEADER + 1 + y + 26)
@@ -608,7 +762,9 @@ function AuctionTrackerUI:Tick()
     local logic = Logic()
     if not logic then return end
     local now = Now()
-    if self.drawnVersion ~= logic.version or (self.soonest and now >= self.soonest) then
+    -- A new day clears the Sold Today list.
+    if self.drawnVersion ~= logic.version or (self.soonest and now >= self.soonest)
+        or (self.soldShown or 0) > 0 and self.drawnDay ~= date("%Y-%m-%d") then
         self:Refresh(true)
         return
     end

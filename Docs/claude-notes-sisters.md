@@ -116,7 +116,7 @@ _G.BlackthornesTS.CraftOrFarm:ForMaterial(itemID)
 
 Keep both calls stable; if one changes, change Farmer's `Logic/Pace.lua`
 or `UI/ItemTooltip.lua` too. Tested in `tools/test_craftorfarm.lua` and
-`tools/test_yourtimeview.lua`. Not yet seen in game.
+`tools/test_yourtimeview.lua`.
 
 ## How Tradeskills uses Equipment
 
@@ -162,7 +162,7 @@ ns.LearnNext:ShowTheWayFor(recipeID)  -- Show the way by recipe ID; true when a 
 
 Keep these stable; if one changes, change Equipment's `Logic/Enchants.lua`
 too. Tested in `tools/test_enchantsforyou.lua` and
-`tools/test_learnnext.lua`. Not yet seen in game.
+`tools/test_learnnext.lua`.
 
 Equipment calls back one way: when a player changes their own stat weights
 in Equipment's weights window, or picks a spec there, it calls, inside a
@@ -196,6 +196,17 @@ the players' reports in `FOREVER_SKILLS`, then Classic's book.
 
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
+
+Auction house upgrades (the owner said build it from a mockup, 2026-11-26):
+Equipment's Find Upgrades lists gear on the auction house from the scans
+this addon already made, never a scan of its own. It reads, inside a pcall
+and read only, `ns.Prices:OnSale()` (`Data/Prices.lua`): `{ [itemID] = {
+price, count, seen, rolls } }` for items seen listed within
+`staleAfterSeconds`, and `GetLastScan()`'s time. `rolls` holds random
+suffixes with a link of their own (`Prices.SuffixLink`). It also listens
+through `Prices:WatchScans(fn)` to read again after a scan. Keep both
+stable; if one changes, change Equipment's `Logic/AuctionGear.lua`.
+Tested in `tools/test_onsale.lua`.
 
 Equipment's **Queue it** button (a player asked on Discord, the owner agreeing
 2026-10-10; on crafted rows in Where to get upgrades and the Upgrade
@@ -349,6 +360,12 @@ Butler's gold top-ups).
 The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
+Since 2026-11-26 (Butler's search that knows words) each entry also has
+`auctions`, a fresh `{ [itemID] = count }` of what the character has up at
+this realm's auction houses (`Auctions:GetListings`, listings not yet
+ended), and `auctionsAt`, when that was last read (nil when never).
+Butler counts them as "on auction" in All Characters. Tested in
+`tools/test_butler.lua`.
 
 Mail running out (the owner said build it from a mockup, 2026-11-09, for
 Butler's "Mail Running Out"): each inbox read (`Mail:Read`) saves
@@ -361,8 +378,8 @@ player's mail with money or items not sent back once already) or are
 gone for good. `Holdings()` entries carry them as `mailCount`,
 `mailSoonest`, `mailSoonCount`, `mailReturns` and `mailGone` (nil until
 read this way), as of `mailAt`; Butler counts the days since. Tested in
-`tools/test_mailrunsout.lua` and `tools/test_butler.lua`. Not yet seen in
-game. If they change, change Butler's `Logic/MailRunsOut.lua` too.
+`tools/test_mailrunsout.lua` and `tools/test_butler.lua`.
+If they change, change Butler's `Logic/MailRunsOut.lua` too.
 
 Clear Items and stale alts (a player's report, the owner said build it
 from a mockup, 2026-11-10: Butler's jobs mailed items long gone and gold
@@ -377,7 +394,7 @@ own menu calls `Butler:ClearHoldings(key or full name)` (true and the full
 name, or false and "playing", "unknown" or "error"). The job holder skips
 an alt whose bags are older than `Butler.STALE_DAYS` (30;
 `Butler.Stale`). Tested in `tools/test_clearitems.lua` and
-`tools/test_butler.lua`. Not yet seen in game.
+`tools/test_butler.lua`.
 
 At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:
@@ -390,7 +407,9 @@ _G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil;
 `FillMail` fills the Send Mail page through `QueueMail:Fill` for one of
 the player's characters (`name` as Advise gave it, resolved with
 `QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
-count }`, subject "From Blackthornes Butler"; `money`, optional copper,
+count, link }`, where a link (since 2026-11-28) sends only that version
+of the item, through `QueueMail.OnlyLink`, the same as Butler's
+MailFill; subject "From Blackthornes Butler"; `money`, optional copper,
 goes in the gold boxes through `QueueMail.PutMoney`, gold alone being a
 mail of its own, never with COD ticked and never more than the purse less
 postage); the player presses Send and
@@ -508,10 +527,17 @@ _G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why; never rais
 or its list is not read), `BuyFromVendor` the button's own click
 (`Vendor:BuyNeeded`, then `UI:UpdateMerchantButton`). Tested in
 `tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
-reads them. While Butler is loaded and its window opens at vendors (its
-`openAtVendor`, read from `BlackthornesButlerDB`), the Buy materials button
-over the vendor window hides (`UI.ButlerBuysHere`, the owner 2026-10-18):
-Butler's Buy row does the buying. Tested in `tools/test_merchantbutton.lua`.
+reads them. From 2026-10-18 the Buy materials button over the vendor
+window hid while Butler was loaded with `openAtVendor` on, trusting Butler's
+Buy row; but that row is out of sight when Butler's window is shut, folded
+or on All Characters, and players lost Buy. Since 2026-11-21 (the owner
+tapped "Build A and B") the button stays at `MerchantFrame`'s top right
+whether Butler is loaded or not; with Butler loaded (`UI.ButlerLoaded`) it
+only hides when this vendor has nothing the queue needs, instead of the
+grey "Nothing needed here". Butler's own bar shows a "Buy %d" button at
+the vendor too, through the same two calls. When the button comes or goes
+it places Sell marked again (`SellMarked:Update`). `UI.ButlerBuysHere`
+stays for the Wishlist card. Tested in `tools/test_merchantbutton.lua`.
 
 Butler's tooltip line "Vendors sell it for 25c" (a player asked, the
 owner said build it, 2026-10-22) asks what a vendor charges for one,
@@ -579,6 +605,64 @@ can't cover. Tested in `tools/test_butlerskillup.lua` and
 `tools/test_canafford.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
+Butler's "Keep Level Up Materials:" on its Keep page (a player asked, the
+owner said build it, 2026-11-17; off unless ticked in Butler) keeps what
+the Level Up list still needs, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:LevelUpMaterials()   -- { [itemID] = profession name }, or nil
+```
+
+Every material of a recipe the character playing knows (not a dropped
+profession) while the craft is orange or yellow (`optimal` or `medium`,
+the same tiers as `NextSkillUp`), Cooking and First Aid too (their names
+from the Professions book, through `ProfessionOf`). Read straight from
+`Recipes:GetAll` and `SkillUp:GetForRecipe`, not `LevelUp:GetRanked`, so
+no prices are worked out and it stays cheap. An item two professions use
+names the first by name. Kept 60 s or until the recipes are read again; a
+fresh table each time. Tested in `tools/test_butlerlevelupmats.lua`. Keep
+it stable; Butler's `Logic/Sisters.lua` reads it.
+
+Butler's recipe wishlist row (the owner said build it, 2026-11-17, from
+a mockup with the words he approved) reads the starred recipes the open
+vendor or trainer teaches, inside a pcall, read only:
+
+```lua
+_G.BlackthornesTS.Butler:WishlistHere()
+  -- { { recipeID, name, itemID, price, needs, short, kind = "vendor" or "trainer", index } }, or nil
+```
+
+nil with "Recipe Wishlist:" off or nothing open; an empty list when the
+window teaches nothing starred. `itemID` is the recipe item (vendor only),
+`price` copper for one, `needs` the skill it asks for, `short` that skill
+when the character playing is short of it, `index` its place in the
+vendor's or trainer's list now (nil for a trainer line it can't teach yet).
+Butler adds a "Buy a recipe on your wishlist" or "Learn a recipe on your
+wishlist" row per recipe and buys (`BuyMerchantItem(index, 1)`) or trains
+(`BuyTrainerService(index)`) by index itself, one a click; it never changes
+the wishlist. While `_G.BlackthornesButler.Wishlist` exists and Butler's
+window comes up at the vendor (`UI.ButlerBuysHere`), Tradeskills' own card
+under the window stays hidden (`WishlistCard.ButlerShows`), so an older
+Butler leaves the card showing. Tested in `tools/test_wishlist.lua`. Keep
+it stable; Butler's `Logic/Wishlist.lua` reads it.
+
+Butler's Set Up Butler card (the owner said build it, 2026-11-26, from
+a mockup) reads and types the disenchanter on the Mail page, inside a
+pcall:
+
+```lua
+_G.BlackthornesTS.Butler:Disenchanter()        -- the typed name, trimmed, or nil
+_G.BlackthornesTS.Butler:SetDisenchanter(name) -- true, or false
+```
+
+`Disenchanter` is only what is typed in the box (`disenchanterName`),
+never the one "Pick One for Me:" picks; the card shows only while the box
+is empty. `SetDisenchanter` writes the box as the Mail page does and
+redraws the mail panel; nil or "" empties it; the character playing
+(`QueueMail:IsPlayingName`) is refused and nothing is written. Tested in
+`tools/test_butlerdisenchanter.lua`. Keep both stable; Butler's
+`UI/QuickSetup.lua` calls them.
+
 Butler's "Craft When It Pays More" (a player asked, the owner said build
 it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
 inside a pcall:
@@ -602,6 +686,58 @@ lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 
 
+### Who can make it (Butler's restock list, 2026-11-26)
+
+`Butler:MakersOf(itemID)` answers Butler's restock list: the recipe on
+this account that makes the item and is known by the most characters,
+`{ recipeID, name, per, makers = { { key, name, short, playing } } }`, or
+nil. Linked characters (another account) and dropped professions are left
+out. Read only, inside a pcall, never raises. Butler shows "NAME can make
+them." and a Queue button that calls `QueueCraft`. Tested in
+`tools/test_butlercraft.lua`.
+
+## Mats and recipes to alts (2026-11-27)
+
+A player asked, the owner said build it (2026-11-27, from a mockup whose
+words he approved). Two Butler boxes, both off unless ticked in Butler,
+read two calls here (`Logic/Butler.lua`, worked out in
+`Logic/AltLevelUp.lua`):
+
+- `Butler:AltLevelUp()` for "Send Level Up Materials to Alts:":
+  `{ [itemID] = { to, count, profession } }`. For each alt the one playing
+  can mail (`Characters:CanMail`, never itself, never `linkedFrom`, each
+  once by `Characters:Same`; nobody with no GUID for the one playing), each
+  profession under 300 gets a Road to 300 (`RoadPlan:Plan`) from only the
+  recipes it knows (`RoadPlan:KnownCandidates`, `RoadPlan.LineFor`, no
+  places to learn, no cooldown crafts). What the steps still want less its
+  bags, bank, mail and `QueueMail:InFlight` is the count; an item two alts
+  need goes to the one needing most. Kept by a key (the alts' saved
+  times, sent mail, scans, Pick By, skips, the queue), priced
+  `AltLevelUp.BUDGET` recipes a frame; nil while the first answer is
+  worked out, then `_G.BlackthornesButler.Verdicts:Changed()` (pcall)
+  when a new answer differs.
+- `Butler:RecipeFor(itemID)` for "Mail Recipes to Who Can Learn Them:":
+  `{ to, profession, skill, has, now }` for a recipe item nobody on the
+  account knows, that the one playing can't learn now, and that the alt
+  doesn't already hold; the alt is `AltLevelUp:CanLearn`'s first (can
+  learn now first, then higher skill).
+- The recipe tooltip's "Can Learn:" line (`RecipeBook:CanLearnText`):
+  "%s (%s %d)" or "%s at %s %d (has %d)", with the recipe lines.
+- The Sell list holds the alt's count (`SisterKeeps.AltHold`) while
+  Butler's `Verdicts:AltLevelUpOn()` or `AltRecipesOn()` says so, the
+  rest still sells; held whether or not "Keep What Other Addons Need" is
+  ticked, as Butler's own lists are.
+
+Both calls take an optional `leaveOut` (`{ [key] = true }`, since
+2026-11-27): the alts the player unticked under Butler's "Characters That
+Get Them:" (`Verdicts:AltsLeftOut()`, which the Sell list reads too). The
+roads are kept per alt and profession, so leaving one out only picks the
+next alt again. `Butler:Holdings()` entries carry `professions` (`{ { name,
+skill } }`) for that list's rows.
+
+Nothing new is saved. Tested in `tools/test_altlevelup.lua`,
+`tools/test_recipebook.lua` and `tools/test_sisterkeeps.lua`.
+
 ## Butler Says Wait on the auction house drawer
 
 The owner said build it from a mockup (2026-11-14). Butler folds an item
@@ -620,3 +756,8 @@ unless unticked, never rename it), "Waiting: N" and Sell All Waiting sit in
 a strip under the summary, shown only while something waits. Without
 Butler nothing waits. Tested in `tools/test_butlerwait.lua`. If Butler
 changes those calls, change `Logic/SisterKeeps.lua` too.
+
+Butler also reads `_G.BlackthornesTS.Prices.changes` (with rawget, no
+call) and judges again when it moves, so its Wait prices follow a new
+scan (Butler's `Verdicts:PricesMoved`, 2026-11-25). Keep `Prices.changes`
+a number that grows with every price written; never rename it.

@@ -38,7 +38,10 @@ _G.C_Item = {
   GetItemInfoInstant = function() return nil end,
   RequestLoadItemDataByID = function() end,
 }
-_G.GetTime = function() return 100 end
+-- A frame passes between each step, as it does in the game: a few recipes a
+-- frame get new figures (see tools/test_craftstutter.lua).
+local clock = 100
+_G.GetTime = function() clock = clock + 0.016; return clock end
 
 local RECIPES = {
   [1] = { outputItemID = 20, reagents = { { itemID = 10, quantity = 8 }, { itemID = 12, quantity = 1 } } },

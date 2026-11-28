@@ -322,10 +322,14 @@ local function GemButton(parent, art, glowKey, size)
 end
 
 --- A panel's fold gem and close gem, the house pair, for panels that stay up
---- while you play (they are not dressed windows, so FoldWindow can't take
---- them). opts: onFold(folded), onClose, size. Returns { fold, close } with
---- :SetFolded(on). The close gem sits at the header's right, the fold gem
---- left of it.
+--- while you play (they are not dressed windows, so FoldWindow:Add can't
+--- take them). opts: onFold(folded), onClose, size, round. Returns
+--- { fold, close } with :SetFolded(on). The close gem sits at the header's
+--- right, the fold gem left of it.
+---
+--- opts.round folds the whole panel into a round button instead
+--- (UI/FoldWindow.lua): { frame = the panel, key, title, pill, line,
+--- onToggle }, as FoldWindow:Join takes them. onFold is then not called.
 function HouseKit.CreatePanelGems(header, opts)
     opts = opts or {}
     local size = opts.size or HouseKit.PANEL_GEM
@@ -363,13 +367,25 @@ function HouseKit.CreatePanelGems(header, opts)
         end
         if on then Tip(button, text()) elseif GameTooltip then GameTooltip:Hide() end
     end
+    local round = opts.round
+    local FoldWindow = ns.FoldWindow
+    if type(round) == "table" and round.frame and FoldWindow and FoldWindow.Join then
+        FoldWindow:Join(round.frame, round)
+    else
+        round = nil
+    end
     fold:SetScript("OnEnter", function(self)
         Hover(self, true, function()
-            return gems.folded and Text("Expand this window") or Text("Collapse this window")
+            return (gems.folded and not round) and Text("Expand this window") or Text("Collapse this window")
         end)
     end)
     fold:SetScript("OnLeave", function(self) Hover(self, false) end)
     fold:SetScript("OnClick", function()
+        if round then
+            if GameTooltip then GameTooltip:Hide() end
+            FoldWindow:Fold(round.frame)
+            return
+        end
         gems:SetFolded(not gems.folded)
         if opts.onFold then opts.onFold(gems.folded) end
     end)

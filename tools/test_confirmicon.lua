@@ -1,10 +1,8 @@
--- The item's icon in the posting confirmation.
+-- The posting confirmation's words.
 --
--- The icon sits beside the four lines, not as a line of its own: the house rule
--- is that the dialog says exactly "Average Market Value", "Lowest Market
--- Posting", "Posting at" and "List it at this price, or skip it.". It goes with the
--- dialog when it closes, since the game lends the same popup frame to other
--- dialogs afterwards.
+-- The house rule is that the question says exactly "Average Market Value",
+-- "Lowest Market Posting", "Posting at" and "List it at this price, or skip
+-- it.", with the item's icon beside them, not as a line of its own.
 
 local ns = {}
 ns.COLORS = setmetatable({ accent = "ffc8a44d" }, { __index = function() return "ffffffff" end })
@@ -25,8 +23,8 @@ ns.Util = {
     GetMaxStackSize = function() return 20 end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function() return false end,
-    RoundToSilver = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
-    IsWholeSilver = function(p) return p >= 100 and p % 100 == 0 end,
+    ItemAuctionPrice = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
+    IsItemAuctionPrice = function(p) return p >= 100 and p % 100 == 0 end,
     WhenAuctionReady = function(action) action() end,
 }
 
@@ -53,40 +51,12 @@ C_Timer = {
     NewTicker = function() return { Cancel = function() end } end,
 }
 
--- A popup frame that records the textures made on it.
-local function NewPopup(width)
-    local popup = { width = width, textures = {} }
-    function popup:GetWidth() return self.width end
-    function popup:GetName() return nil end
-    function popup:CreateTexture()
-        local tex = { shown = false }
-        function tex:ClearAllPoints() end
-        function tex:SetAllPoints() end
-        function tex:SetSize() end
-        function tex:SetPoint() end
-        function tex:SetTexture(t) self.texture = t end
-        function tex:Show() self.shown = true end
-        function tex:Hide() self.shown = false end
-        self.textures[#self.textures + 1] = tex
-        return tex
-    end
-    return popup
-end
-
-local nextPopup, shownText
-StaticPopupDialogs = {}
-StaticPopup_Show = function(_, text)
-    shownText = text
-    return nextPopup
-end
-
 assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Data/Scanner.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Posting.lua"))("Blackthornes_TS", ns)
 
 local Prices, Posting = ns.Prices, ns.Posting
-local entry = StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"]
 
 local checks = 0
 local function check(label, condition)
@@ -104,53 +74,24 @@ local function lines(text)
     return out
 end
 
-local function iconOn(popup)
-    local tex = popup.textures[1]
-    return tex and tex.shown and tex.texture or nil
-end
+print("\nthe posting confirmation's words")
 
-print("\nthe item icon in the posting confirmation")
-
-check("the dialog makes room beside its text", entry.showAlert == true)
+-- What the question window was handed (tools/test_postconfirm.lua checks the
+-- window itself: the icon, the buttons, Escape).
+local asked
+ns.PostConfirm = { Show = function(_, ask) asked = ask; return true end }
 
 Prices:Record(2589, 500, 450, 20, time(), 450, nil)
-local wide = NewPopup(420)
-nextPopup = wide
 Posting:Confirm(2589, 1, 400, { state = "fresh" })
 
-check("the item's icon is shown", iconOn(wide) == 132889)
-local l = lines(shownText)
+check("the item goes along for its icon", asked and asked.itemID == 2589)
+local l = lines(asked.text)
 check("the text is still exactly four lines", #l == 4
     and l[1] == "Average Market Value: 500"
     and l[2] == "Lowest Market Posting: 450"
     and l[3] == "Posting at: 400, item2589"
     and l[4] == "List it at this price, or skip it.")
 
--- Closing the dialog takes the icon with it: the frame is lent to other
--- dialogs next.
-entry.OnHide(wide)
-check("the icon goes when the dialog closes", iconOn(wide) == nil)
-
--- An item the game has not loaded yet shows the question mark, never the
--- alert sign underneath.
-nextPopup = wide
-Posting:Confirm(9999, 1, 100)
-check("an unknown icon shows the question mark", iconOn(wide) == 134400)
-check("and the same texture is reused", #wide.textures == 1)
-
--- The next confirmation lands in another popup frame: only it has an icon.
-local other = NewPopup(420)
-nextPopup = other
-Posting:Confirm(2589, 1, 400, { state = "fresh" })
-check("the new dialog has the icon", iconOn(other) == 132889)
-check("the old frame's icon is gone", iconOn(wide) == nil)
-
--- A popup that did not widen has no room beside its text.
-local narrow = NewPopup(320)
-nextPopup = narrow
-Posting:Confirm(2589, 1, 400, { state = "fresh" })
-check("no icon over the words of a narrow popup", iconOn(narrow) == nil)
-
-StaticPopupDialogs, StaticPopup_Show = nil, nil
+ns.PostConfirm = nil
 
 print(("\n%d check(s) passed\n"):format(checks))

@@ -179,6 +179,7 @@ end
 
 local workerFrame = CreateFrame("Frame", "BlackthornesTSWorkerFrame")
 local activeWorkers = {}
+local stepList = {}
 
 local workerProto = {}
 workerProto.__index = workerProto
@@ -252,11 +253,23 @@ workerFrame:SetScript("OnUpdate", function()
         return
     end
 
+    -- Step a copy of the list. A worker's handlers may start or cancel
+    -- workers (itself too), and adding a key to a table while pairs() walks
+    -- it raises "invalid key to 'next'".
+    local n = 0
     for worker in pairs(activeWorkers) do
-        if worker.running then
-            StepWorker(worker)
-        else
-            activeWorkers[worker] = nil
+        n = n + 1
+        stepList[n] = worker
+    end
+    for i = 1, n do
+        local worker = stepList[i]
+        stepList[i] = nil
+        if activeWorkers[worker] then
+            if worker.running then
+                StepWorker(worker)
+            else
+                activeWorkers[worker] = nil
+            end
         end
     end
 end)
@@ -291,12 +304,15 @@ end
 
 --- Existence check for a dotted API path, e.g. "C_AuctionHouse.SendBrowseQuery".
 -- Returns the value and true when every segment resolves.
+local function Index(tbl, key) return tbl[key] end
+
 function Util.ResolvePath(path)
     local current = _G
     for segment in path:gmatch("[^%.]+") do
         if type(current) ~= "table" then return nil, false end
 
-        local ok, value = pcall(function() return current[segment] end)
+        -- No function made for each segment: lists ask this for every row.
+        local ok, value = pcall(Index, current, segment)
         if not ok or value == nil then return nil, false end
 
         current = value
@@ -527,11 +543,15 @@ end
 -- When the stack size is not cached the old behaviour stands and the division
 -- happens. That is the case worth watching, which is why `/bts listings`
 -- prints the stack size it managed to read.
-function Util.UnitPriceFromStack(itemID, totalPrice, quantity)
+--
+-- @param maxStack optional stack size the caller already read; false for
+--   one it asked about and the client didn't know.
+function Util.UnitPriceFromStack(itemID, totalPrice, quantity, maxStack)
     if not quantity or quantity <= 1 then return totalPrice end
     if totalPrice < quantity then return totalPrice end
 
-    local maxStack = Util.GetMaxStackSize(itemID)
+    if maxStack == nil then maxStack = Util.GetMaxStackSize(itemID) end
+    maxStack = maxStack or nil
     if maxStack and quantity > maxStack then return totalPrice end
 
     return math.floor(totalPrice / quantity)
@@ -541,7 +561,11 @@ end
 --
 -- The eighth field of item:ID:enchant:gem1:gem2:gem3:gem4:suffix:... in the
 -- link. Negative numbers are suffixes too, so anything but 0 counts.
-local function ParseSuffix(link)
+--
+-- Forever leaves that field empty and names the suffix with a bonus ID
+-- further along (item:15012::::::::18:1485:::1:12722, "of the Bear"), after
+-- unique, level, spec, modifiers, context and the count of bonuses.
+local function LinkFields(link, most)
     if type(link) ~= "string" then return nil end
     local body = link:match("item:([%-%d:]+)")
     if not body then return nil end
@@ -550,19 +574,54 @@ local function ParseSuffix(link)
     for field in (body .. ":"):gmatch("([^:]*):") do
         index = index + 1
         fields[index] = field
-        if index >= 7 then break end
+        if index >= most then break end
     end
+    return fields
+end
 
-    local suffix = tonumber(fields[7] or "")
+local function ParseSuffix(link)
+    local fields = LinkFields(link, 7)
+    local suffix = fields and tonumber(fields[7] or "")
     if not suffix or suffix == 0 then return nil end
     return suffix
 end
 
+-- No link has needed more bonuses than this; a wild count reads no further.
+local BONUS_MOST = 16
+
+local function ParseBonuses(link)
+    local bonuses = {}
+    local fields = LinkFields(link, 13 + BONUS_MOST)
+    local count = fields and tonumber(fields[13] or "") or 0
+    for index = 1, math.min(count, BONUS_MOST) do
+        local bonus = tonumber(fields[13 + index] or "")
+        if bonus and bonus ~= 0 then bonuses[#bonuses + 1] = bonus end
+    end
+    return bonuses
+end
+
+--- The bonus IDs an item link carries, as a list (empty for none).
+function Util.LinkBonuses(link)
+    local ok, bonuses = pcall(ParseBonuses, link)
+    return ok and bonuses or {}
+end
+
+--- The random suffix a link names, or nil for none. On Forever it is the
+--- number the auction house keeps that suffix under (Prices.ResolveSuffix,
+--- set as Util.ResolveSuffix), and the second value says whether it could
+--- be placed: false means "a suffix copy, which one not known yet", and the
+--- first value is then only a stand-in, never one to save a price under.
 function Util.LinkSuffix(link)
     -- Inside a pcall: a link read in an instance can be a secret value that
     -- raises when it is matched.
     local ok, suffix = pcall(ParseSuffix, link)
-    return ok and suffix or nil
+    if ok and suffix then return suffix, true end
+
+    local resolve = Util.ResolveSuffix
+    if type(resolve) ~= "function" then return nil end
+    local resolved, found, sure = pcall(resolve, link)
+    if resolved and found then return found, sure == true end
+    return nil
 end
 
 --- A player-readable label for an item: its clickable link when the client has
@@ -820,37 +879,66 @@ function Util.FormatAgeAgo(seconds)
     return L.Format("%s ago", age)
 end
 
---- Round a price down to something an item auction will actually accept.
+--- Item auctions (gear, bags, wands) are listed one at a time.
 --
--- C_AuctionHouse.PostItem takes whole gold and silver only: a price carrying
--- any copper at all silently fails, which the client surfaces as an internal
--- error rather than anything readable. Commodities are unaffected and keep
--- copper precision, so this is only ever applied to item auctions.
+-- Forever takes copper in their price, down to a floor of one silver (tried
+-- in game 2026-11-16, after a player's report), so a 0c undercut can match a
+-- rival to the copper. Older versions rounded to whole silver because the
+-- server once refused copper there. `wholeSilverOnly` brings that back for the
+-- tests only: nothing in play sets it (the owner, 2026-11-19, after a missed
+-- listing had turned it on and gear went up a silver over the cheapest).
+Util.wholeSilverOnly = false
+
+--- A price an item auction will take, rounded down.
 --
 -- Below a silver there is nothing to round down to, so the floor is one
 -- silver. That can land above market value on a near-worthless item, but it
--- is the only price the server will take.
-function Util.RoundToSilver(price)
+-- is the lowest price the server will take.
+function Util.ItemAuctionPrice(price)
     if type(price) ~= "number" then return nil end
     if price < COPPER_PER_SILVER then return COPPER_PER_SILVER end
-    return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    if Util.wholeSilverOnly then
+        return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    end
+    return math.floor(price)
 end
 
---- Round a price UP to something an item auction will accept.
+--- A price an item auction will take, rounded UP.
 --
--- Rounding down is right when there is a rival to get beneath: the price has
--- to be below theirs to sell first. With no rival there is nothing to get
--- beneath, and rounding down instead throws away up to a silver of a price
--- that was only ever an estimate -- enough, on a cheap craft, to put it under
--- what the materials cost and have the listing refused.
-function Util.CeilToSilver(price)
+-- Rounding down is right when there is a rival to get beneath. With no rival,
+-- or when matching one, rounding down would only give gold away.
+function Util.ItemAuctionPriceUp(price)
     if type(price) ~= "number" then return nil end
     if price <= COPPER_PER_SILVER then return COPPER_PER_SILVER end
-    return math.ceil(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    if Util.wholeSilverOnly then
+        return math.ceil(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    end
+    return math.ceil(price)
 end
 
 --- Is this price one an item auction will accept?
-function Util.IsWholeSilver(price)
-    return type(price) == "number" and price >= COPPER_PER_SILVER
-        and price % COPPER_PER_SILVER == 0
+function Util.IsItemAuctionPrice(price)
+    if type(price) ~= "number" or price < COPPER_PER_SILVER or price % 1 ~= 0 then
+        return false
+    end
+    return not Util.wholeSilverOnly or price % COPPER_PER_SILVER == 0
+end
+
+--- A copy of a recipe's materials with the costliest line first, so a list
+--- cut short only ever hides the cheapest (a player asked, 2026-11-25).
+--- Lines with no price go last; ties keep the recipe's own order.
+function Util.CostliestFirst(list, key)
+    key = key or "lineCost"
+    local copy, order = {}, {}
+    for index, entry in ipairs(list or {}) do
+        copy[index] = entry
+        order[entry] = index
+    end
+    table.sort(copy, function(a, b)
+        local ca, cb = a[key], b[key]
+        if ca and cb and ca ~= cb then return ca > cb end
+        if (ca ~= nil) ~= (cb ~= nil) then return ca ~= nil end
+        return order[a] < order[b]
+    end)
+    return copy
 end

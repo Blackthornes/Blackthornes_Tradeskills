@@ -94,7 +94,8 @@ function CraftProfitCard.Rows(figures)
             kind = "mat",
             label = (entry.quantity or 1) .. " " .. name,
             value = entry.lineCost and CP.Money(entry.lineCost) or CP.NoPrice(),
-            way = entry.lineCost and CP.WayText(entry.way) or nil,
+            -- A made or owned mat has no AH or Vendor tag.
+            way = entry.lineCost and entry.way and CP.WayText(entry.way) or nil,
         }
     end
     rows[#rows + 1] = { kind = "cost", label = lines[2].label, value = lines[2].value }
@@ -161,7 +162,7 @@ function CraftProfitCard:Draw(figures)
         line.label:SetFontObject(line.label:GetFontObject())
         line.label:SetTextColor(Theme.Unpack(bold and "text" or "muted"))
         local label = row.label
-        if row.makes then label = label .. "  |c" .. ((ns.COLORS and ns.COLORS.muted) or "ff7a8089") .. row.makes .. "|r" end
+        if row.makes then label = label .. "  |c" .. ((ns.COLORS and ns.COLORS.muted) or "ff857c68") .. row.makes .. "|r" end
         line.label:SetText(label)
         line.value:SetText(row.value or "")
         line.way:SetText(row.way or "")
@@ -222,17 +223,28 @@ function CraftProfitCard:Place()
         frame:SetWidth(width)
         self.drawn = nil
     end
+    local game = anchor.game or anchor.frame
+    local okStrata, strata = pcall(game.GetFrameStrata, game)
+    local okLevel, level = pcall(anchor.frame.GetFrameLevel, anchor.frame)
+    if not okStrata then strata = nil end
+    if not okLevel then level = nil end
+    -- Placed again only when what it sits on moved to another frame, strata
+    -- or level. Re-anchoring twice a second made the game lay the card and
+    -- the reagents out again each time, crafting or not (2026-11-17).
+    local placed = self.placed
+    if placed and placed.frame == anchor.frame and placed.under == anchor.under
+        and placed.strata == strata and placed.level == level then
+        return true
+    end
     frame:ClearAllPoints()
     if anchor.under then
         frame:SetPoint("TOPLEFT", anchor.frame, "BOTTOMLEFT", 0, -CraftProfitCard.GAP)
     else
         frame:SetPoint("BOTTOMLEFT", anchor.frame, "BOTTOMLEFT", CraftProfitCard.PAD, CraftProfitCard.PAD + 40)
     end
-    local game = anchor.game or anchor.frame
-    local okStrata, strata = pcall(game.GetFrameStrata, game)
-    local okLevel, level = pcall(anchor.frame.GetFrameLevel, anchor.frame)
-    if okStrata and strata then pcall(frame.SetFrameStrata, frame, strata) end
-    if okLevel and level then pcall(frame.SetFrameLevel, frame, level + 30) end
+    if strata then pcall(frame.SetFrameStrata, frame, strata) end
+    if level then pcall(frame.SetFrameLevel, frame, level + 30) end
+    self.placed = { frame = anchor.frame, under = anchor.under, strata = strata, level = level }
     return true
 end
 

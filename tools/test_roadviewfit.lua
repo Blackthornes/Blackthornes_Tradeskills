@@ -62,13 +62,44 @@ place = { name = "Orgrimmar" }
 menu = RV.StepMenu({ kind = "craft", recipeID = 8 })
 check("Show the Way when it has a place", menu[2].text, "Show the Way")
 check("skip still last", menu[3].text, "Skip This Recipe")
-check("nothing skipped, no line", RV.SkippedText(0), nil)
-check("one skipped", RV.SkippedText(1), "1 recipe skipped.")
-check("more skipped", RV.SkippedText(3), "3 recipes skipped.")
-check("the foot says it", RV.FootText({ saved = 0 }, 2), "2 recipes skipped.")
-check("under what you own", RV.FootText({ saved = 50 }, 1), "What you own already takes off 50c.\n1 recipe skipped.")
-check("no line with none skipped", RV.FootText({ saved = 0 }, 0), "")
+check("nothing skipped, no line", RV.SkippedText({}), nil)
+check("one skipped", RV.SkippedText({ "Copper Chain Belt" }), "Skipped: Copper Chain Belt.")
+check("more skipped", RV.SkippedText({ "A", "B" }), "Skipped: A, B.")
+check("the foot says it", RV.FootText({ saved = 0 }, { "A" }), "Skipped: A.")
+check("under what you own", RV.FootText({ saved = 50 }, { "A" }), "What you own already takes off 50c.\nSkipped: A.")
+check("no line with none skipped", RV.FootText({ saved = 0 }, {}), "")
 
+print("\nthe foot names the stop")
+check("crafts and gold to the stop", RV.TotalText({ stop = 225, crafts = 14, total = 42100 }),
+  "To 225: 14 crafts, about 42100c")
+check("300 when the plan has no stop", RV.TotalText({ crafts = 1, total = 5 }), "To 300: 1 craft, about 5c")
+
+print("\nSkip sits left of the row's buttons")
+local function Shown(on)
+  local b = { shown = on, points = {} }
+  function b:IsShown() return self.shown end
+  function b:SetShown(v) self.shown = v end
+  function b:ClearAllPoints() self.points = {} end
+  function b:SetPoint(...) self.points[#self.points + 1] = { ... } end
+  return b
+end
+local row = { skip = Shown(false), way = Shown(true), queue = Shown(true) }
+RV.PlaceSkip(row, true)
+check("shown on a craft step", row.skip.shown, true)
+check("left of Show the Way", row.skip.points[1][2], row.way)
+row.way.shown = false
+RV.PlaceSkip(row, true)
+check("left of Queue Step without a way", row.skip.points[1][2], row.queue)
+RV.PlaceSkip(row, false)
+check("hidden on a done step", row.skip.shown, false)
+
+print("\nthe skipped names")
+ns.RoadPlan.SkippedOn = function() return { 3, 4 } end
+ns.RoadPlan.SkippedName = function(_, id) return id == 4 and "Old Name" or nil end
+ns.RecipeBook = { Get = function(_, id) if id == 3 then return { name = "Belt" } end end }
+local names = RV.SkippedNames(164)
+check("by the book's name", names[1], "Belt")
+check("else the name kept", names[2], "Old Name")
 print("")
 if failures > 0 then error(string.format("%d road button check(s) failed", failures)) end
 print("  all road button checks passed")

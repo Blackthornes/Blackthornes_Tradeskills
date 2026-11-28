@@ -180,17 +180,37 @@ item:Redraw()
 check("Shift down: the trend comes back", Has(item, "Trend (7 days)"), true)
 check("and no hint", item.hint, 0)
 shift = false
+Shift:Apply(Shift.ALWAYS, "trend", true, SetOn("tooltipTrend"))
 
 Shift:Apply(Shift.SHIFT, "value", true, SetOn("showValueOnItemTooltips"))
 item:Redraw()
-check("every value line held back", #item.lines, 0)
+check("every value line held back", Has(item, "Auction value"), false)
+check("the trend keeps its own setting", Has(item, "Trend (7 days)"), true)
 check("just the hint", item.hint, 1)
 shift = true
 item:Redraw()
 check("Shift down: the value comes back", Has(item, "Auction value"), true)
 shift = false
 Shift:Apply(Shift.ALWAYS, "value", true, SetOn("showValueOnItemTooltips"))
+
+-- With Shift held, a line on Shift is marked for the bottom of the block
+-- (2026-11-26); a line on Always is not.
+local function BlockLine(label)
+  ItemTooltip:ForgetLines()
+  local out = ItemTooltip:BlockLines(Tooltip(2589), nil) or {}
+  for _, line in ipairs(out) do if line[1] == label then return line end end
+  return nil
+end
+Shift:Apply(Shift.SHIFT, "trend", true, SetOn("tooltipTrend"))
+shift = true
+check("block: trend on Shift goes last", BlockLine("Trend (7 Days):") and BlockLine("Trend (7 Days):").shift, true)
+check("block: value on Always stays put", BlockLine("Auction Value:") and BlockLine("Auction Value:").shift, nil)
+Shift:Apply(Shift.SHIFT, "value", true, SetOn("showValueOnItemTooltips"))
+check("block: value on Shift goes last", BlockLine("Auction Value:") and BlockLine("Auction Value:").shift, true)
+shift = false
+Shift:Apply(Shift.ALWAYS, "value", true, SetOn("showValueOnItemTooltips"))
 Shift:Apply(Shift.ALWAYS, "trend", true, SetOn("tooltipTrend"))
+check("block: trend on Always stays put", BlockLine("Trend (7 Days):") and BlockLine("Trend (7 Days):").shift, nil)
 
 -- The Shift key itself redraws the tooltip, only while a line is on Shift.
 local refreshed = 0

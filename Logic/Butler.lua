@@ -73,6 +73,11 @@
 --   crafted        true for a green some recipe makes, asked only while
 --                  `youDisenchant` is true; nil otherwise.
 --
+-- Butler's Set Up Butler card (2026-11-26) reads and types the disenchanter:
+--
+--   _G.BlackthornesTS.Butler:Disenchanter()        -- the typed name, or nil
+--   _G.BlackthornesTS.Butler:SetDisenchanter(name) -- true, or false
+--
 -- Butler's right-click menu marks or unmarks one (2026-10-11):
 --
 --   _G.BlackthornesTS.Butler:SetBoughtToDisenchant(itemID, on, count)
@@ -123,6 +128,8 @@
 --                  mailAt, nil when never read this way (2026-11-10).
 --   clearedAt      when the player last cleared this character's saved
 --                  items (Butler:ClearHoldings), else nil.
+--   professions    { { name (the client's), skill } }, each learned
+--                  profession as saved, highest skill first (2026-11-27).
 --
 -- At a mailbox and the bank (2026-10-11), Butler asks two more things:
 --
@@ -222,6 +229,22 @@
 -- count for the buy box (UI:SearchAuctionHouse) and it answers true, "one",
 -- so Butler's next click sends the rest. Never raises.
 --
+-- Butler's recipe wishlist row (the owner said build it, 2026-11-17)
+-- reads the starred recipes the open vendor or trainer teaches:
+--
+--   _G.BlackthornesTS.Butler:WishlistHere()   -- a list, or nil; reads only
+--
+-- { { recipeID, name, itemID (the recipe item, at a vendor), price (copper
+-- for one, or nil), needs (the skill it asks for), short (that skill when
+-- the character playing is short of it, else nil), kind = "vendor" or
+-- "trainer", index (its place in the vendor's or trainer's list now; nil
+-- for a trainer line it can't teach yet) } }, in the window's order. nil
+-- with "Recipe Wishlist:" off or no vendor or trainer open; an empty list
+-- when it teaches nothing starred. Butler buys (BuyMerchantItem) or trains
+-- (BuyTrainerService) by index itself, one a click, and never changes the
+-- wishlist. While Butler's Wishlist module is loaded, Tradeskills' own card
+-- under the window stays hidden (UI/Wishlist.lua).
+--
 -- Butler's "Cheapest Skill-Up" line (a player asked, the owner said build
 -- it, 2026-10-19) shows the Level Up tab's top pick for each profession:
 --
@@ -238,6 +261,40 @@
 -- the trainer) is { profession, english (its English name), skill, max,
 -- capped = true } with no recipe, so Butler can name the rank to train.
 -- QueueSkillUp puts one in the queue (Queue:Ensure).
+--
+-- Butler's "Keep Level Up Materials:" (a player asked, the owner said
+-- build it, 2026-11-17, off unless ticked in Butler) keeps what the Level
+-- Up list still needs:
+--
+--   _G.BlackthornesTS.Butler:LevelUpMaterials()   -- a table, or nil; reads only
+--
+-- { [itemID] = profession (the client's name) } for every material of a
+-- recipe the character playing knows (not a dropped profession) while that
+-- craft is orange or yellow ("optimal" or "medium"), Cooking and First Aid
+-- too. Prices play no part. Kept for 60 seconds or until the recipes are
+-- read again. nil on any error.
+--
+-- Butler's "Send Level Up Materials to Alts:" and "Mail Recipes to Who
+-- Can Learn Them:" (a player asked, the owner said build it, 2026-11-27,
+-- both off unless ticked in Butler) ask, only while ticked:
+--
+--   _G.BlackthornesTS.Butler:AltLevelUp(leaveOut)        -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:RecipeFor(itemID, leaveOut) -- a table, or nil; reads only
+--
+-- `leaveOut` (optional, since 2026-11-27) is { [character key] = true }:
+-- alts the player unticked under Butler's "Characters That Get Them:";
+-- the item or recipe then goes to the next alt.
+--
+-- AltLevelUp is { [itemID] = { to (full name), count, profession (the
+-- client's name) } }: what an alt's Road to 300 still needs from the
+-- recipes it knows, less its bags, bank, mail and what is on its way
+-- (Logic/AltLevelUp.lua). nil while the first answer is worked out; Butler
+-- is told (Verdicts:Changed) when a new one differs. RecipeFor is { to,
+-- profession, skill (what the recipe needs), has (the alt's skill), now
+-- (true when it can learn it now) } for a recipe item nobody on the
+-- account knows, that the character playing can't learn now itself, and
+-- that no alt already holds; the alt is AltLevelUp:CanLearn's first.
+-- Both only for characters the one playing can mail, never itself.
 --
 -- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
 -- owner said build it, off unless ticked in Butler) asks, only while that
@@ -698,11 +755,11 @@ local function Breaking(itemID, kept, quality)
     if able == nil then return nil, nil, nil end
     if not able then return nil, false, nil end
 
-    local value, _, breakdown = disenchant:GetValue(itemID)
-    local needs = breakdown and breakdown.facts and breakdown.facts.skill
+    local value = disenchant:GetValue(itemID)
 
+    -- On Forever any Enchanting skill breaks any item.
     local function Enough(skill)
-        return skill ~= nil and (needs == nil or skill >= needs)
+        return skill ~= nil
     end
 
     -- Enchanting on this character's own record is enough: it teaches
@@ -920,6 +977,46 @@ function Butler:CraftFor(item, carried)
     return nil
 end
 
+--- Who on this account can craft an item, for Butler's restock list
+-- (2026-11-26): { recipeID, name, per, makers = { { key, name, short,
+-- playing } } }, the recipe known by the most of them, or nil. Only this
+-- account's own characters (not linked ones). Read only; never raises.
+function Butler:MakersOf(item)
+    local itemID = tonumber(item)
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local recipes = ns.Recipes
+        if not (recipes and recipes.GetCharacters) then return nil end
+        local records = Characters()
+        local byRecipe, best = {}, nil
+        for _, character in ipairs(recipes:GetCharacters()) do
+            local record = records[character.key]
+            if type(record) == "table" and not character.linkedFrom and type(record.recipes) == "table" then
+                for recipeID, recipe in pairs(record.recipes) do
+                    if type(recipe) == "table" and recipe.outputItemID == itemID
+                        and not (recipes.IsDropped and recipes:IsDropped(recipe, character.key)) then
+                        local found = byRecipe[recipeID]
+                        if not found then
+                            found = { recipeID = recipeID, name = recipe.name,
+                                per = math.max(1, math.floor(tonumber(recipe.quantityMin) or 1)), makers = {} }
+                            byRecipe[recipeID] = found
+                        end
+                        found.makers[#found.makers + 1] = {
+                            key = character.key, name = character.name, short = ShortName(character.key),
+                            playing = character.isCurrent == true
+                                or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
+                        }
+                        if not best or #found.makers > #best.makers then best = found end
+                    end
+                end
+            end
+        end
+        return best
+    end)
+    if ok then return answer end
+    return nil
+end
+
 --- Queue at least `crafts` of a recipe, from Butler's Queue button.
 -- @return true, or false and why; never raises
 function Butler:QueueCraft(recipeID, crafts)
@@ -943,6 +1040,36 @@ function Butler:SetBoughtToDisenchant(itemID, on, count)
         else
             buys:Unmark(itemID)
         end
+    end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
+--- The disenchanter typed on the Mail page (its whole name, trimmed), or
+--- nil while the box is empty. For Butler's Set Up Butler card
+--- (2026-11-26), which shows only when nobody is typed there. Never raises.
+function Butler:Disenchanter()
+    local ok, typed = pcall(function() return ns.Config:Get("disenchanterName") end)
+    if not ok or type(typed) ~= "string" then return nil end
+    typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+    return typed ~= "" and typed or nil
+end
+
+--- Type the disenchanter, as the Mail page's box does (`disenchanterName`).
+--- nil or "" empties the box. The character playing is refused (one key
+--- per character). Never raises.
+-- @return true, or false (refused) and maybe an error
+function Butler:SetDisenchanter(name)
+    if name ~= nil and type(name) ~= "string" then return false end
+    local trimmed = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local mail = ns.QueueMail
+    if trimmed ~= "" and mail and mail.IsPlayingName then
+        local okPlaying, playing = pcall(mail.IsPlayingName, mail, trimmed)
+        if okPlaying and playing then return false end
+    end
+    local ok, err = pcall(function()
+        ns.Config:Set("disenchanterName", trimmed)
+        if ns.QueueMailPanel and ns.QueueMailPanel.Refresh then ns.QueueMailPanel:Refresh() end
     end)
     if not ok then return false, tostring(err) end
     return true
@@ -976,11 +1103,51 @@ local function LiveBags()
     return nil
 end
 
+--- What each character has up for sale at the auction houses of this
+--- realm, from its last reading (Auctions:GetListings), for Butler's
+--- search (2026-11-26). A listing that has ended since (sold or back in
+--- the mail) is left out. { [key] = { [itemID] = count } } and when each
+--- was read; empty without the Auctions module.
+local function Listed()
+    local counts, at = {}, {}
+    local auctions = ns.Auctions
+    if not (auctions and auctions.GetListings) then return counts, at end
+    local ok, listings = pcall(auctions.GetListings, auctions)
+    if not ok or type(listings) ~= "table" then return counts, at end
+    for _, listing in ipairs(listings) do
+        local who, itemID, quantity = listing.who, listing.itemID, listing.quantity
+        if type(who) == "string" and type(itemID) == "number" and listing.ended ~= true
+            and type(quantity) == "number" and quantity > 0 then
+            counts[who] = counts[who] or {}
+            counts[who][itemID] = (counts[who][itemID] or 0) + quantity
+            if type(listing.readAt) == "number" and listing.readAt > (at[who] or 0) then
+                at[who] = listing.readAt
+            end
+        end
+    end
+    return counts, at
+end
+
+local function SavedProfessions(record)
+    local list = {}
+    for _, profession in ipairs(type(record.professions) == "table" and record.professions or {}) do
+        if type(profession) == "table" and profession.learned ~= false and type(profession.name) == "string" then
+            list[#list + 1] = { name = profession.name, skill = tonumber(profession.skillLevel) or 0 }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.skill ~= b.skill then return a.skill > b.skill end
+        return a.name < b.name
+    end)
+    return list
+end
+
 local function Holdings()
     local list = {}
     local records = Characters()
     local recipes = ns.Recipes
     if not (recipes and recipes.GetCharacters) then return list end
+    local listed, listedAt = Listed()
 
     for _, character in ipairs(recipes:GetCharacters()) do
         local record = records[character.key]
@@ -998,12 +1165,18 @@ local function Holdings()
                 playing = character.isCurrent == true
                     or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
                 linked = character.linkedFrom,
+                -- Each learned profession and its skill, as saved, for
+                -- Butler's "Characters That Get Them:" rows (2026-11-27).
+                professions = SavedProfessions(record),
                 bank = Counts(record.bank),
                 mail = Counts(record.mail),
                 bankAt = Stamp(record.bankAt),
                 mailAt = Stamp(record.mailAt),
                 mailMoney = Stamp(record.mailMoney),
                 clearedAt = Stamp(record.clearedAt),
+                -- Up for sale at the auction house, as last read there.
+                auctions = Counts(listed[character.key]),
+                auctionsAt = Stamp(listedAt[character.key]),
             }
             local expiry = record.mailExpiry
             if type(expiry) == "table" then
@@ -1126,7 +1299,8 @@ end
 
 --- Fill the game's Send Mail page for one of the player's characters.
 -- `name` is a short name (as Advise gives it) or a name typed in Settings;
--- `items` is a list of { itemID, count }. Nothing is sent: the player
+-- `items` is a list of { itemID, count, link }; with a link only that
+-- version goes. Nothing is sent: the player
 -- presses Send. Never raises. Never fills a mail to the character playing
 -- (a player found one, 2026-10-11): that is "false" and why.
 -- @return true when filling started, or false and why; then the name the
@@ -1144,8 +1318,11 @@ function Butler:FillMail(name, items, money)
     for _, item in ipairs(items) do
         local itemID = type(item) == "table" and tonumber(item.itemID)
         local count = type(item) == "table" and tonumber(item.count)
+        -- The version Butler said to mail, by its link (since 2026-11-28).
+        local link = type(item) == "table" and type(item.link) == "string" and item.link ~= ""
+            and item.link or nil
         if itemID and count and count > 0 then
-            list[#list + 1] = { itemID = itemID, count = math.floor(count) }
+            list[#list + 1] = { itemID = itemID, count = math.floor(count), link = link }
         end
     end
     if #list == 0 and not money then return false, L["nothing to mail"] end
@@ -1257,12 +1434,16 @@ end
 -- the leather it holds is a step on its own line (a player logged in on
 -- the holder and the mail step was gone, 2026-10-11); its other records
 -- never do. The key, how many, and for the character playing how many of
--- them are in its bags; or nil.
+-- them are in its bags; or nil. Only a character that can mail the
+-- crafter (the same realm and side): an Alliance alt holding more must not
+-- hide the Horde one that can send it (2026-11-27).
 local function Holder(records, crafterKey, itemID, Playing, selfKey)
     local bestKey, bestCount = nil, 0
+    local queue = ns.Queue
     for key, record in pairs(records) do
         if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key)
-            and not Butler.Stale(record) then
+            and not Butler.Stale(record)
+            and not (queue and queue.CanMail and not queue:CanMail(key, crafterKey)) then
             local count = 0
             if type(record.inventory) == "table" then count = count + (tonumber(record.inventory[itemID]) or 0) end
             if type(record.bank) == "table" then count = count + (tonumber(record.bank[itemID]) or 0) end
@@ -1272,7 +1453,8 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
         end
     end
     local inventory = ns.Inventory
-    if selfKey and not Playing(crafterKey) and inventory and inventory.GetBagCount then
+    if selfKey and not Playing(crafterKey) and inventory and inventory.GetBagCount
+        and not (queue and queue.CanMail and not queue:CanMail(selfKey, crafterKey)) then
         local bags = inventory:GetBagCount(itemID) or 0
         local bank = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
         if bags + bank > 0 and bags + bank >= bestCount then
@@ -1800,15 +1982,65 @@ local function ReadLine(skillLineID)
     return nil
 end
 
+--- Cooking and First Aid from the Professions book, each { name,
+--- skillLineID, skillLevel, maxSkillLevel }: Forever's trade skill lines
+--- leave the secondary professions out, so Butler's line never showed them
+--- (a player asked, 2026-11-17). As Logic/RoadPlan.lua reads them.
+local function FromBook()
+    local found = {}
+    local getAll, getInfo = rawget(_G, "GetProfessions"), rawget(_G, "GetProfessionInfo")
+    if type(getAll) ~= "function" or type(getInfo) ~= "function" then return found end
+    local ok, indexes = pcall(function() return { getAll() } end)
+    if not ok then return found end
+    for i = 1, 6 do
+        local index = indexes[i]
+        if type(index) == "number" then
+            local read, entry = pcall(function()
+                local name, _, rank, maxRank, _, _, skillLine = getInfo(index)
+                if type(name) ~= "string" or name == "" then return nil end
+                return {
+                    name = name .. "",
+                    skillLineID = type(skillLine) == "number" and skillLine + 0 or nil,
+                    skillLevel = type(rank) == "number" and rank + 0 or 0,
+                    maxSkillLevel = type(maxRank) == "number" and maxRank + 0 or 0,
+                }
+            end)
+            if read and entry and entry.maxSkillLevel > 0 then found[#found + 1] = entry end
+        end
+    end
+    return found
+end
+
+--- The learned professions Recipes knows, then the book's that it lacks.
+local function Learned()
+    local recipes = ns.Recipes
+    local list, seen = {}, {}
+    if recipes and recipes.GetLearnedProfessions then
+        local ok, learned = pcall(recipes.GetLearnedProfessions, recipes)
+        for _, entry in ipairs(ok and type(learned) == "table" and learned or {}) do
+            if type(entry) == "table" and entry.name then
+                list[#list + 1] = entry
+                seen[entry.name] = true
+            end
+        end
+    end
+    for _, entry in ipairs(FromBook()) do
+        if not seen[entry.name] then
+            list[#list + 1] = entry
+            seen[entry.name] = true
+        end
+    end
+    return list
+end
+
 --- The character's learned professions, found by skill line, by the
 --- client's name and by the English name of either of Forever's two IDs.
 local function LearnedLookup()
     local byLine, byName, byEnglish = {}, {}, {}
     local recipes = ns.Recipes
-    if not (recipes and recipes.GetLearnedProfessions) then return byLine, byName, byEnglish end
-    local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
+    if not recipes then return byLine, byName, byEnglish end
     local english = recipes.SKILL_LINE_PROFESSIONS or {}
-    for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+    for _, entry in ipairs(Learned()) do
         if type(entry) == "table" and (tonumber(entry.maxSkillLevel) or 0) > 0 and entry.name then
             local info = { professionName = entry.name, skillLevel = entry.skillLevel,
                 maxSkillLevel = entry.maxSkillLevel }
@@ -1907,10 +2139,8 @@ local function NextSkillUp()
     end
     -- A profession at its cap with nothing on the Level Up tab (gathering
     -- ones have no crafts) still says it is capped, from the saved read.
-    local recipes = ns.Recipes
-    if recipes and recipes.GetLearnedProfessions then
-        local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
-        for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+    if ns.Recipes then
+        for _, entry in ipairs(Learned()) do
             local skill, max = type(entry) == "table" and tonumber(entry.skillLevel), type(entry) == "table" and tonumber(entry.maxSkillLevel)
             if skill and max and max > 0 and skill >= max and entry.name and not seen[entry.name] then
                 seen[entry.name] = true
@@ -1959,6 +2189,123 @@ function Butler:QueueSkillUp(recipeID)
     local ok, done, why = pcall(queue.Ensure, queue, recipeID, 1)
     if ok and done then return true end
     return false, ok and why or L["the queue would not take it"]
+end
+
+--------------------------------------------------------------------------------
+-- Materials still used to level, for Butler's "Keep Level Up Materials:"
+--------------------------------------------------------------------------------
+
+local LEVEL_UP_SECONDS = 60
+local levelUpMats, levelUpKey, levelUpAt
+
+--- Every material a craft on the Level Up list still uses while that craft
+--- is orange or yellow for the character playing. Read straight from the
+--- recipes (the Level Up tab's own list, less its prices), so it stays
+--- cheap enough to ask for every bag item.
+local function LevelUpMaterials()
+    local recipes, skillUp = ns.Recipes, ns.SkillUp
+    if not (recipes and recipes.GetAll and skillUp and skillUp.GetForRecipe) then return nil end
+    local key = (SelfKey() or "?") .. ":" .. RecipesStamp()
+    if levelUpMats and levelUpKey == key and Now() - (levelUpAt or 0) < LEVEL_UP_SECONDS then
+        return levelUpMats
+    end
+
+    -- Recipes in a fixed order, so an item used by two professions is
+    -- named the same way every time.
+    local ids, known = {}, recipes:GetAll() or {}
+    for recipeID, recipe in pairs(known) do
+        if type(recipe) == "table" and type(recipe.reagents) == "table" then ids[#ids + 1] = recipeID end
+    end
+    table.sort(ids, function(a, b) return tostring(a) < tostring(b) end)
+
+    local answer, lookup, names = {}, {}, {}
+    local english = recipes.SKILL_LINE_PROFESSIONS or {}
+    for _, recipeID in ipairs(ids) do
+        local recipe = known[recipeID]
+        local dropped = recipes.IsDropped and recipes:IsDropped(recipe)
+        local info = not dropped and skillUp:GetForRecipe(recipeID, recipe) or nil
+        if info and SKILL_UP_TIERS[info.tier] then
+            local line = recipe.skillLineID
+            local name = line and names[line]
+            if line and name == nil then
+                local found = ProfessionOf(line, lookup)
+                name = found and found.professionName or english[line] or false
+                names[line] = name
+            end
+            if name then
+                for _, reagent in ipairs(recipe.reagents) do
+                    local itemID = type(reagent) == "table" and tonumber(reagent.itemID)
+                    if itemID and (answer[itemID] == nil or name < answer[itemID]) then
+                        answer[itemID] = name
+                    end
+                end
+            end
+        end
+    end
+
+    levelUpMats, levelUpKey, levelUpAt = answer, key, Now()
+    return answer
+end
+
+--- { [itemID] = profession name (the client's) } for every material a
+--- craft the character playing knows still uses while it gives a point
+--- (orange or yellow). An item two professions use names the first by
+--- name. Never raises, writes nothing; nil on any error. A fresh table
+--- each time.
+function Butler:LevelUpMaterials()
+    local ok, answer = pcall(LevelUpMaterials)
+    if not (ok and type(answer) == "table") then return nil end
+    local copy = {}
+    for itemID, name in pairs(answer) do copy[itemID] = name end
+    return copy
+end
+
+--------------------------------------------------------------------------------
+-- The alts' level-up materials and recipes, for Butler (2026-11-27)
+--------------------------------------------------------------------------------
+
+--- What the alts' roads to 300 still need, each item to one alt: { [itemID]
+--- = { to, count, profession } }. nil while it is worked out or on any
+--- error. Never raises, writes nothing; a fresh table each time.
+function Butler:AltLevelUp(leaveOut)
+    local alts = ns.AltLevelUp
+    if not (alts and alts.Needs) then return nil end
+    local ok, needs = pcall(alts.Needs, alts, type(leaveOut) == "table" and leaveOut or nil)
+    if not (ok and type(needs) == "table") then return nil end
+    local copy = {}
+    for itemID, need in pairs(needs) do
+        if type(need.to) == "string" and (need.count or 0) > 0 then
+            copy[itemID] = { to = need.to, count = need.count, profession = need.profession }
+        end
+    end
+    return copy
+end
+
+--- The alt to mail a recipe item to: { to, profession, skill, has, now },
+--- or nil. Never raises, writes nothing.
+function Butler:RecipeFor(itemID, leaveOut)
+    itemID = tonumber(itemID)
+    leaveOut = type(leaveOut) == "table" and leaveOut or nil
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local book, alts = ns.RecipeBook, ns.AltLevelUp
+        if not (book and alts) then return nil end
+        local record = book:ForItem(itemID)
+        if not record then return nil end
+        -- Someone on the account knows it: it stays free to sell.
+        if #book:WhoKnows(record) > 0 then return nil end
+        if alts:PlayingCanLearn(record) then return nil end
+        for _, alt in ipairs(alts:CanLearn(record, leaveOut)) do
+            local holder = { key = alt.key, record = ns.db.characters[alt.key] }
+            if holder.record and alts.Has(holder, itemID) == 0 then
+                return { to = alt.name, profession = alt.profession, skill = tonumber(record.skill) or 0,
+                    has = alt.skill, now = not alt.short }
+            end
+        end
+        return nil
+    end)
+    if ok and type(answer) == "table" then return answer end
+    return nil
 end
 
 --------------------------------------------------------------------------------
@@ -2012,6 +2359,27 @@ function Butler:VendorPrice(itemID)
     itemID = tonumber(itemID)
     if not itemID then return nil end
     return VendorPrice(itemID)
+end
+
+--- The starred recipes the open vendor or trainer teaches, for Butler's
+--- wishlist row; nil while the wishlist is off or nothing is open. Never
+--- raises, writes nothing; a fresh table each time.
+function Butler:WishlistHere()
+    local ok, list = pcall(function()
+        local wishlist = ns.Wishlist
+        if not wishlist then return nil end
+        local here, kind = wishlist:Here()
+        if not (here and kind) then return nil end
+        local copy = {}
+        for _, entry in ipairs(here) do
+            copy[#copy + 1] = { recipeID = entry.recipeID, name = entry.name, itemID = entry.itemID,
+                price = entry.price, needs = entry.needs, short = entry.short, kind = entry.kind,
+                index = entry.index }
+        end
+        return copy
+    end)
+    if ok and type(list) == "table" then return list end
+    return nil
 end
 
 --- Look up items on the auction house, from Butler's Search click. Every

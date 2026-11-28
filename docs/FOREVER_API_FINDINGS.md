@@ -138,6 +138,9 @@ skill-line ID spaces — a modern one and a legacy one:
 | Herbalism | 2944 | 182 |
 | Mining | 2946 | 186 |
 | Tailoring | 2948 | 197 |
+| Cooking | 2939 | 185 |
+| First Aid | 2942 | 129 |
+| Fishing | 2943 | 356 |
 
 Both IDs report the same skill level. Deduplicate by profession name or recipes
 will be counted twice.
@@ -326,6 +329,13 @@ rather than inferred.
 
 ## Item auctions take whole silver only; commodities take copper
 
+**Update 2026-11-16: Forever takes copper on item auctions now.** The owner
+posted gear with copper in its price and it went up, from one silver. Prices
+keep their copper (`Util.ItemAuctionPrice`); if a listing with copper ever
+fails to appear, `Posting:FallBackToWholeSilver` sets `Util.wholeSilverOnly`
+and the rest of the session lists in whole silver. The notes below are what
+was seen before.
+
 **This is Blizzard behaviour, not a Forever quirk**, and it is documented.
 Warcraft Wiki on `C_AuctionHouse.PostItem`'s `bid`/`buyout`:
 
@@ -409,6 +419,21 @@ dust or shard.
 
 ## Still unverified
 
+- `UnitFactionGroup("npc")` at a goblin auctioneer (Booty Bay, Gadgetzan,
+  Everlook) is taken to give no side, which is how Tradeskills tells the
+  neutral auction house from your own (`Auctions:CurrentHouse`). Not yet
+  seen in game (2026-11-17).
+
+**The daily reset and quest done flags (added 2026-11-17).** The Deals tab's
+Craftsman's Writs mark each order done today and say when new orders come
+in. The reset clock reads `C_DateAndTime.GetSecondsUntilDailyReset()`, then
+`GetQuestResetTime()`, each inside a pcall; a number from 1 to about a day
+counts. Writs turned in with the addon off come from
+`C_QuestLog.IsQuestFlaggedCompleted(questID)` (else the old global), read at
+login and when the list opens. None of the three is seen on Forever yet:
+`/bts probe` prints what each answers under "Writs". If neither reset call
+answers, the clock hides and a turn-in counts as done for one day.
+
 **How a profession window can be opened from the addon.** Casting is
 protected, so the Queue tab lays a `SecureActionButtonTemplate` button
 (type `spell`, the profession's name, or Smelting for Mining) over its craft
@@ -461,6 +486,17 @@ been seen to. If the call raises, or two quotes never come
 now start larger (up to 50 keys) and halve when the queue gives up; how
 many Forever takes at once is not yet measured.
 
+**Snipe and stacks (2026-11-23).** Snipe asked
+`GetItemCommodityStatus` with an item ID, which Forever refuses (it takes an
+item in the bags, see above), so every find read as sold one at a time. A
+material's listings answer on `COMMODITY_SEARCH_RESULTS_UPDATED`, which
+that path never read: Buy It showed "Asking..." for 13 seconds and let go
+without a word. Snipe now asks the scanner's memory, and for an item nobody
+knows, the event that answers says what it is (and is kept with
+`Scanner:LearnCommodity`). `StartCommoditiesPurchase` is documented as
+needing the player's own click, so a clicked buy is planned from the
+listings and the next click asks. Not yet seen in game.
+
 ## Bank slot events fire with the bank shut
 
 `PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on
@@ -492,12 +528,23 @@ muted, are guesses). The notice key was not read, so Logic/RealmPrices.lua
 treats any notice on our channel within a few seconds of a send as a refusal,
 hides it, and backs off.
 
-## The one window's docking (not yet seen in game)
+A player's report (2026-11-21): the price channel often took /1 at login,
+where General goes. The game's own channels join as you enter the world, and
+a channel joined first takes the lowest free number; a channel joined by name
+is also remembered for the next login. Logic/RealmPrices.lua now waits until
+another channel is in (`GetChannelList`), never joins inside an instance, and
+moves ours behind the game's channels (named by `EnumerateServerChannels`)
+with `C_ChatInfo.SwapChatChannelsByChannelIndex`, as the chat settings'
+channel order does. These three come from the retail client and are not yet
+seen on Forever; `/bts share channel` now prints whether each exists. With no
+swap, ours leaves for the session so General keeps its number.
+
+## The one window's docking
 
 `UI/SharedWindow.lua` (2026-10-30) docks the one window beside the game's
 own windows by screen position only; it never moves, hides or writes a
 Blizzard frame. What it expects of Forever's retail engine, from the
-retail client, not yet seen in game: `AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED`
+retail client: `AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED`
 with `AuctionHouseFrame`, `MAIL_SHOW`/`MAIL_CLOSED` with `MailFrame`,
 `MERCHANT_SHOW`/`MERCHANT_CLOSED` with `MerchantFrame`, and
 `TRAINER_SHOW`/`TRAINER_CLOSED` with `ClassTrainerFrame`. The retail
@@ -515,3 +562,45 @@ though the game shows them as the same realm. Within one account the
 answer stays the same. So a realm is compared by a key with spaces, case
 and the "Realm N" part left out (`RealmKey`, in Tab_Characters, Queue,
 QueueMail, Butler, GoldGoal and GoldLog), never by the raw name.
+
+## A random suffix is a bonus ID in the link, another number in the auction key (2026-11-19)
+
+Read from saved links and saved suffix prices, not from a probe.
+
+- A link leaves the old suffix field empty and carries a bonus ID after
+  the count of bonuses: `item:15012::::::::18:1485:::1:12722` is "Lupine
+  Slippers of the Bear", `item:14123::::::::10:1486:::1:12733` "Ritual
+  Cape of Power". Bonus IDs seen run from about 12719 to 12920, and more
+  than one can share a name.
+- The auction house's item key names the suffix with `itemSuffix`, a
+  different number: every one saved was 14298 to 14473.
+- Nothing in the client is known to turn one into the other, so
+  Tradeskills joins them as it sees a link beside its key
+  (`Prices:LearnSuffix`) or by the name's tail (`Prices:LearnKeyName`).
+- Still unverified: that `C_AuctionHouse.GetItemKeyInfo(key).itemName`
+  carries the suffix, and that it answers with the auction house shut.
+
+## Arcane Salvager (2026-11-24)
+
+- Item 279985, placed with spell 1263056 (needs Enchanting 140 and a
+  campfire). The game does not publish how much more it gives.
+- Seen in game 2026-11-24: standing near one gives the buff "Boosted
+  Disenchanting" (spell 1283701); a campfire gives "Campfire Nearby"
+  (1283391). Placing it did not fire spell 1263056 as the player's
+  UNIT_SPELLCAST_SUCCEEDED; the buff is what Salvager mode reads now.
+
+## Crafting specialties (2026-11-25)
+
+- Road to 300 and Learn Next read the character's specialty by Classic's
+  spell numbers (Armorsmith 9788, Weaponsmith 9787, Master Swordsmith
+  17039, Hammersmith 17040, Axesmith 17041, Dragonscale 10656, Elemental
+  10658, Tribal 10660, Gnomish 20219, Goblin 20222) through
+  `IsPlayerSpell`, `IsSpellKnown` and `C_SpellBook.IsSpellKnown`, then by
+  name through `C_Spell.GetSpellInfo`.
+- Which recipes need one: a recipe item's tooltip ("Requires Armorsmith",
+  `ITEM_REQ_SKILL`) and a trainer line's `GetTrainerServiceAbilityReq`
+  (ability name first, then whether it is met).
+- The probe's "specialties" line shows each name in the client and
+  whether the character has it. Still to see: that Forever keeps these
+  spell numbers and that its trainers list the specialty as an ability
+  requirement.

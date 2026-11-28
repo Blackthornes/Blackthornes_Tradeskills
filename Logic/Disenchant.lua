@@ -137,14 +137,10 @@ local EPIC = {
     { upTo = math.huge, outcomes = { { NEXUS_CRYSTAL, 1.0, 1, 2 } } },
 }
 
--- The Enchanting skill needed, by item level. Roughly: the published figures
--- vary a little between sources.
-local SKILL = {
-    { upTo = 20, skill = 1 },   { upTo = 25, skill = 25 },  { upTo = 30, skill = 50 },
-    { upTo = 35, skill = 75 },  { upTo = 40, skill = 100 }, { upTo = 45, skill = 125 },
-    { upTo = 50, skill = 150 }, { upTo = 55, skill = 175 }, { upTo = 60, skill = 200 },
-    { upTo = math.huge, skill = 225 },
-}
+-- No skill table: on Forever any enchanter breaks any item, from Enchanting
+-- 1 (a player with Enchanting 4 saw only low level deals, 2026-11-24).
+-- Classic's 25 for item level 21 and up, and so on, does not hold here, so
+-- facts.skill stays nil and every check below reads nil as "any skill".
 
 -- Item classes that can be disenchanted.
 local CLASS_WEAPON, CLASS_ARMOR = 2, 4
@@ -293,6 +289,20 @@ local CLASS_CONSUMABLE = 0
 local function NeedsTooltip(known)
     if not known.vt then return true end
     return known.vt ~= TOOLTIP_READ and known.c == CLASS_CONSUMABLE
+end
+
+--- Read an item the client already holds, also with the auction house
+--- open. It never asks the client for anything, so it takes no room from
+--- Ready to sell. Snipe needs it: it only runs at the auction house, where
+--- nothing else here reads a new item, so gear a scan found was never
+--- watched To Disenchant until it had been read with the house shut.
+-- @return true when the item was read just now
+function Disenchant:ReadHeld(itemID)
+    if not itemID or Store()[itemID] then return false end
+    if not Util.HasFunction("C_Item.IsItemDataCachedByID") then return false end
+    local ok, held = pcall(C_Item.IsItemDataCachedByID, itemID)
+    if not (ok and held == true) then return false end
+    return Remember(itemID) ~= nil
 end
 
 --- Did this addon ask the client for this item, and is it on its way or
@@ -599,7 +609,6 @@ function Disenchant:GetOutcomes(itemID)
         }
     end
 
-    facts.skill = Band(SKILL, level).skill
     facts.key = BandKey(facts, band)
     facts.source = "table"
     facts.casts = 0
@@ -645,6 +654,60 @@ function Disenchant:GetOutcomes(itemID)
 end
 
 --------------------------------------------------------------------------------
+-- At an Arcane Salvager
+--------------------------------------------------------------------------------
+
+-- An item's own Salvager results are shown once it has this many.
+Disenchant.SALVAGER_LEARN_AFTER = 5
+
+--- What one disenchant of this item gives at an Arcane Salvager, from your
+--- own Salvager disenchants only (Logic/DisenchantLog.lua, `salvagerLog`).
+--- Only the Disenchanting tab reads it: every price elsewhere stays on the
+--- plain chances.
+--
+-- The item's own results once it has SALVAGER_LEARN_AFTER, else its kind
+-- of item's once those reach LEARN_AFTER.
+--
+-- @return outcomes (nil when too few), facts
+--   facts.casts   how many the chances come from
+--   facts.byItem  true when they are this item's own
+--   facts.seen    the item's own record so far ({ casts, got }), or nil
+--   facts.need    how many more of this item before it shows, when too few
+--   nil, nil when the item cannot be disenchanted.
+function Disenchant:GetSalvagerOutcomes(itemID)
+    local _, plain = self:GetOutcomes(itemID)
+    if not plain or not plain.key then return nil, nil end
+
+    local log = ns.DisenchantLog
+    local own = log and log.GetSalvagerItem and log:GetSalvagerItem(itemID)
+    local band = log and log.GetSalvagerBand and log:GetSalvagerBand(plain.key)
+
+    local facts = { key = plain.key, seen = own, casts = 0 }
+
+    if own and (own.casts or 0) >= self.SALVAGER_LEARN_AFTER then
+        facts.casts, facts.byItem = own.casts, true
+        return Learned(own), facts
+    end
+
+    if band and (band.casts or 0) >= self.LEARN_AFTER then
+        facts.casts = band.casts
+        return Learned(band), facts
+    end
+
+    facts.casts = own and own.casts or 0
+    facts.need = self.SALVAGER_LEARN_AFTER - facts.casts
+    return nil, facts
+end
+
+--- GetValue at an Arcane Salvager: value, partial, breakdown; nil value
+--- when there are too few Salvager disenchants (breakdown still has facts).
+function Disenchant:GetSalvagerValue(itemID)
+    local outcomes, facts = self:GetSalvagerOutcomes(itemID)
+    if not outcomes then return nil, nil, facts and { outcomes = {}, facts = facts } or nil end
+    return self:ValueOf(outcomes, facts)
+end
+
+--------------------------------------------------------------------------------
 -- Value
 --------------------------------------------------------------------------------
 
@@ -653,43 +716,69 @@ end
 --- (2026-09-27: "based on DE mat's lowest posting value disregarding
 --- outliers"), since that is what the materials would sell for today.
 function Disenchant:GetMaterialPrice(itemID)
+    -- While GetAuctionRows walks every scanned item, each material is
+    -- priced once: the same few dusts, essences and shards were priced
+    -- again for every item, a third of the build.
+    local kept = self.materialPrices
+    if kept then
+        local known = kept[itemID]
+        if known ~= nil then return known or nil end
+    end
+
     local value = ns.Prices and ns.Prices:GetValue(itemID, "lowest")
-    if not value or value <= 0 then return nil end
+    if not value or value <= 0 then value = nil end
+    if kept then kept[itemID] = value or false end
     return value
 end
 
---- What disenchanting one of this item gives, in copper: its most likely
---- outcome. Anything rarer is a bonus and is not counted.
+--- What disenchanting one of this item gives, in copper, on average: each
+--- outcome's worth times its chance.
 --
 -- @return value, partial, breakdown
 --   value     nil when the item cannot be disenchanted, is not cached, or
 --             its most likely material has no price yet
---   partial   always nil now; kept so callers need not change
+--   partial   true when a rarer material has no price yet; it then counts
+--             as nothing, so the value is low rather than high
 --   breakdown { outcomes = { { itemID, name, chance, min, max, average,
---             price, worth }, ... }, facts }
+--             price, worth, counted, likely }, ... }, facts }
 function Disenchant:GetValue(itemID)
     local outcomes, facts = self:GetOutcomes(itemID)
     if not outcomes then return nil end
+    return self:ValueOf(outcomes, facts)
+end
 
-    -- Valued at the most likely outcome alone (2026-10-03:
-    -- "disenchant value should be based on the highest chance outcome. Lucky
-    -- disenchants are a bonus."). A 20% essence or a 5% shard is not what
-    -- the next disenchant gives, so counting a share of it made breaking
-    -- an item down look better than it usually is.
+--- GetValue's sum for any list of outcomes (the plain ones, or the
+--- Salvager's).
+function Disenchant:ValueOf(outcomes, facts)
+
+    -- Each disenchant gives one outcome, never the likely one plus extras
+    -- (a player's math, 2026-11-19: Burnside Rifle showed 1.5 essence at
+    -- 2g 85s, as if every disenchant gave it). Valuing an item at its most
+    -- likely outcome alone (2026-10-03) only played it safe when that
+    -- outcome was the cheapest; when it was the dearest it overstated. The
+    -- average over many disenchants is the honest number. The chances are
+    -- how often each material shows up, so they are not scaled to add up to
+    -- one: your own results can have a shard turn up beside the dust.
     local likely
     for index, outcome in ipairs(outcomes) do
         if not likely or outcome.chance > outcomes[likely].chance then likely = index end
     end
 
     local lines = {}
-    local value
+    local value = 0
+    local likelyPriced, partial = false, nil
 
     for index, outcome in ipairs(outcomes) do
         local average = outcome.average or (outcome.min + outcome.max) / 2
         local price = self:GetMaterialPrice(outcome.itemID)
         local worth = price and (price * average) or nil
 
-        if index == likely and worth then value = worth end
+        if worth then
+            value = value + worth * (outcome.chance or 0)
+            if index == likely then likelyPriced = true end
+        elseif index ~= likely then
+            partial = true
+        end
 
         lines[index] = {
             itemID = outcome.itemID,
@@ -701,17 +790,18 @@ function Disenchant:GetValue(itemID)
             price = price,
             -- What this outcome is worth when it is the one you get.
             worth = worth,
-            -- The outcome the value is; every other one is a bonus.
-            counted = index == likely,
+            -- Every outcome counts toward the value by its chance.
+            counted = true,
+            -- The one a disenchant most often gives.
+            likely = index == likely,
         }
     end
 
     local breakdown = { outcomes = lines, facts = facts }
 
-    if not value then return nil, nil, breakdown end
+    if not likelyPriced then return nil, nil, breakdown end
 
-    -- Never partial: only the one outcome counts, and it is priced.
-    return math.floor(value + 0.5), nil, breakdown
+    return math.floor(value + 0.5), partial, breakdown
 end
 
 --- Is this item an enchanting material a disenchant can give?
@@ -1075,10 +1165,11 @@ end
 
 Disenchant._BuyPrice = BuyPrice
 
---- Can your best enchanter break this? nil when no character has Enchanting.
-local function CanDisenchant(skill, needs)
+--- Can one of your characters break this? On Forever any Enchanting skill
+--- breaks any item. nil when no character has Enchanting.
+local function CanDisenchant(skill)
     if skill == nil then return nil end
-    return needs == nil or skill >= needs
+    return true
 end
 
 --- Every disenchantable item someone else has on the auction house, with
@@ -1099,11 +1190,19 @@ end
 function Disenchant:AuctionContext(opts)
     opts = opts or {}
     local skill, enchanter = self:GetBestEnchanter()
+    -- The Disenchanting row in Minimums by Profession (2026-11-22), else
+    -- the usual Minimum Profit and Minimum Margin.
+    local usualProfit = ns.Config and ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config and ns.Config:Get("minMarginPercent") or 0
+    if ns.Profit and ns.Profit.DisenchantMinimums then
+        local ok, p, m = pcall(ns.Profit.DisenchantMinimums, ns.Profit)
+        if ok and p then usualProfit, usualMargin = p, m or usualMargin end
+    end
     return {
         profitableOnly = opts.profitableOnly,
         cut = ns.Config and ns.Config:Get("auctionCut") or 0.05,
-        minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0,
-        minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100,
+        minProfit = opts.minProfit or usualProfit,
+        minMargin = (opts.minMargin or usualMargin) / 100,
         skill = skill,
         enchanter = enchanter,
         -- Only what the last scan (or a search since) actually saw. A listing
@@ -1147,11 +1246,10 @@ function Disenchant:AuctionRow(itemID, record, ctx)
         gain = gain,
         margin = gain / buy,
         beatsSale = gain > 0,
-        needs = facts.skill,
         enchanter = ctx.enchanter,
         enchanterSkill = ctx.skill,
         -- nil when no character has Enchanting at all.
-        canDisenchant = CanDisenchant(ctx.skill, facts.skill),
+        canDisenchant = CanDisenchant(ctx.skill),
         age = ns.Prices:GetAge(itemID),
         stale = ns.Prices:IsStale(itemID),
     }
@@ -1184,28 +1282,55 @@ end
 --   are read while the auction house is open), and each item's place
 --   ([itemID] = "row", "hidden" or "pending"), for PatchAuctionRows
 function Disenchant:GetAuctionRows(opts)
+    local steps = self:BeginAuctionRows(opts)
+    for _, itemID in ipairs(steps.items) do
+        self:AuctionRowStep(steps, itemID)
+    end
+    return self:FinishAuctionRows(steps)
+end
+
+--- GetAuctionRows in steps, so a list can build over frames (the tab does,
+--- when picked): BeginAuctionRows, AuctionRowStep for each of steps.items
+--- in any order, then FinishAuctionRows for what GetAuctionRows returns.
+--- A price that moves between steps is the caller's to notice
+--- (Prices.changes) and mend (PatchAuctionRows, or a fresh build).
+function Disenchant:BeginAuctionRows(opts)
     -- Counted for /bts readysell, which says how often this ran.
     self.rowBuilds = (self.rowBuilds or 0) + 1
 
-    local rows, hidden, pending, places = {}, 0, 0, {}
     local prices = ns.Prices and ns.Prices:GetTable() or {}
-    local ctx = self:AuctionContext(opts)
+    local items = {}
+    for itemID in pairs(prices) do items[#items + 1] = itemID end
 
-    for itemID, record in pairs(prices) do
-        local place, row = self:AuctionRow(itemID, record, ctx)
-        places[itemID] = place
-        if place == "row" then
-            rows[#rows + 1] = row
-        elseif place == "hidden" then
-            hidden = hidden + 1
-        elseif place == "pending" then
-            pending = pending + 1
-        end
+    return {
+        items = items, prices = prices, ctx = self:AuctionContext(opts),
+        rows = {}, hidden = 0, pending = 0, places = {},
+        -- Nothing prices an item while a step runs, so a material's price
+        -- is kept for the build (GetMaterialPrice) and let go after each
+        -- step, even when a row raises.
+        materialPrices = {},
+    }
+end
+
+function Disenchant:AuctionRowStep(steps, itemID)
+    self.materialPrices = steps.materialPrices
+    local ok, place, row = pcall(self.AuctionRow, self, itemID, steps.prices[itemID], steps.ctx)
+    self.materialPrices = nil
+    if not ok then error(place, 0) end
+
+    steps.places[itemID] = place
+    if place == "row" then
+        steps.rows[#steps.rows + 1] = row
+    elseif place == "hidden" then
+        steps.hidden = steps.hidden + 1
+    elseif place == "pending" then
+        steps.pending = steps.pending + 1
     end
+end
 
-    table.sort(rows, BestFirst)
-
-    return rows, hidden, pending, places
+function Disenchant:FinishAuctionRows(steps)
+    table.sort(steps.rows, BestFirst)
+    return steps.rows, steps.hidden, steps.pending, steps.places
 end
 
 --- Redo the rows of a few items in a list GetAuctionRows built, in place:
@@ -1258,10 +1383,9 @@ function Disenchant:AnnounceDeals()
     local ok, all = pcall(self.GetAuctionRows, self, { profitableOnly = true })
     if not ok or type(all) ~= "table" then return 0 end
 
-    -- Only deals one of your characters can break at their Enchanting skill
-    -- today. The tab still lists the rest, marked; the message is what says
-    -- "go and buy", so it leaves them out. With no enchanter known at all,
-    -- canDisenchant is nil and every deal counts, as before.
+    -- Only deals one of your characters can break. On Forever any enchanter
+    -- breaks any item, so this leaves out nothing today. With no enchanter
+    -- known at all, canDisenchant is nil and every deal counts, as before.
     local rows = {}
     for _, row in ipairs(all) do
         if row.canDisenchant ~= false then rows[#rows + 1] = row end
@@ -1312,10 +1436,9 @@ local function Report(input)
     local value, partial, breakdown = Disenchant:GetValue(itemID)
     local facts = breakdown and breakdown.facts or {}
 
-    ns.Print(L.Format(facts.isWeapon and L["%s: item level %d, %s weapon, needs Enchanting about %d"]
-            or L["%s: item level %d, %s armor, needs Enchanting about %d"],
-        Util.GetItemLabel(itemID), facts.itemLevel or 0, QUALITY_WORDS[facts.qualityName] or facts.qualityName or "?",
-        facts.skill or 0))
+    ns.Print(L.Format(facts.isWeapon and L["%s: item level %d, %s weapon"]
+            or L["%s: item level %d, %s armor"],
+        Util.GetItemLabel(itemID), facts.itemLevel or 0, QUALITY_WORDS[facts.qualityName] or facts.qualityName or "?"))
 
     if facts.source == "yours" then
         ns.Print(L.Format("  from %s", Disenchant:YoursPhrase(facts)))
@@ -1328,10 +1451,9 @@ local function Report(input)
         local count = line.min == line.max and tostring(line.min)
             or ("%d-%d"):format(line.min, line.max)
 
-        ns.Print(("  %s%%  %sx %s  %s%s"):format(
+        ns.Print(("  %s%%  %sx %s  %s"):format(
             Util.Round(line.chance * 100, 1), count, Util.ColorItemName(line.itemID, line.name) or Util.GetItemLabel(line.itemID),
-            line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"],
-            line.counted and "" or L["  (bonus)"]))
+            line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"]))
     end
 
     if value then

@@ -8,7 +8,9 @@
 -- their side teaches (Logic/LearnNext.lua), its price counted once. Below
 -- yellow every craft gives a point; from yellow to grey the chance falls
 -- to nothing, (grey - skill) / (grey - yellow), so a point takes
--- 1 / chance crafts. A step is one recipe in one colour; it ends where the
+-- 1 / chance crafts. Green starts halfway from yellow to grey, and a green
+-- craft is taken only when no orange or yellow one is there. A step is one
+-- recipe in one colour; it ends where the
 -- colour changes, a trainer is due or another recipe is clearly cheaper.
 --
 -- Trainer steps follow Classic's ranks: Journeyman at 50 (level 10) to 150,
@@ -24,6 +26,9 @@
 -- ranks recipes by what their materials cost, as before; "real" takes off
 -- what one craft sells back for (LevelUp:GetReturns), so a craft that pays
 -- some back can win. Kept account wide in `roadPickBy` (never rename it).
+-- Since 2026-11-26 also "fewest" (fewest materials a point) and "noah" (no
+-- auction house), and Stop At (`roadStopAt`): the road ends at 150, 225 or
+-- 300. Skips are kept per character (`roadSkippedBy`).
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -109,6 +114,14 @@ RoadPlan.SWITCH = 0.85
 -- materials cost, however well it sells: the road can't bank on every one
 -- selling, and a cost at or below 0 can't be ranked a point.
 RoadPlan.REAL_FLOOR = 0.2
+-- With Charge for Own Materials off, what the character owns is free when
+-- the road picks its recipes. It still counts this share of its price, so
+-- of two free crafts the one more likely to give a point wins.
+RoadPlan.OWNED_SHARE = 0.01
+-- Fewest Materials: the gold a craft costs only breaks a tie between two
+-- recipes that take as many materials (a craft under 1000g never outweighs
+-- one material).
+RoadPlan.FEWEST_TIE = 1e-7
 
 -- Recipes priced a frame while the plan is worked out.
 RoadPlan.BUDGET = 12
@@ -137,6 +150,62 @@ function RoadPlan.Chance(record, skill)
     if skill < yellow then return 1 end
     local chance = (grey - skill) / math.max(1, grey - yellow)
     return math.min(1, chance + RoadPlan.Overtime())
+end
+
+--- Where a recipe turns yellow, green and grey. Green starts halfway from
+--- yellow to grey, as the game has it (LearnNext.Tier).
+function RoadPlan.Edges(record)
+    local yellow, grey = record.yellow, record.grey
+    if not (yellow and grey) then return nil end
+    return yellow, record.green or math.floor((yellow + grey) / 2), grey
+end
+
+--- The colour a craft is at a skill: "optimal" (orange), "medium" (yellow),
+--- "easy" (green) or "trivial" (grey); nil when the colours are not known.
+function RoadPlan.Band(record, skill)
+    local yellow, green, grey = RoadPlan.Edges(record)
+    if not yellow then return nil end
+    if skill >= grey then return "trivial" end
+    if skill < yellow then return "optimal" end
+    if skill < green then return "medium" end
+    return "easy"
+end
+
+--- A recipe's colours moved to agree with what a profession window showed
+--- (a player's report, 2026-11-18: the road called Rough Dynamite yellow
+--- while the game showed it green). `seen` is { tier, skill }: the game's
+--- colour for the recipe at that skill. When the book's colours disagree,
+--- all three move together by as much as it takes, the way Forever moved
+--- them (Data/LearnSpots.lua). Returns the record itself when they agree,
+--- else a copy that reads through to it.
+function RoadPlan.Agree(record, seen)
+    local yellow, green, grey = RoadPlan.Edges(record)
+    local tier, at = seen and seen.tier, seen and tonumber(seen.skill)
+    if not (yellow and tier and at and at > 0) then return record end
+    local shift = 0
+    if tier == "optimal" then
+        if at >= yellow then shift = at + 1 - yellow end
+    elseif tier == "medium" then
+        if at < yellow then shift = at - yellow
+        elseif at >= green then shift = at + 1 - green end
+    elseif tier == "easy" then
+        if at < green then shift = at - green
+        elseif at >= grey then shift = at + 1 - grey end
+    elseif tier == "trivial" then
+        if at < grey then shift = at - grey end
+    end
+    if shift == 0 then return record end
+    return setmetatable({ yellow = yellow + shift, green = green + shift, grey = grey + shift },
+        { __index = record })
+end
+
+--- What the game last showed for a recipe's colour, { tier, skill }, or nil.
+function RoadPlan.Seen(recipeID)
+    local skillUp = ns.SkillUp
+    if not (skillUp and skillUp.GetForRecipe and recipeID) then return nil end
+    local ok, seen = pcall(skillUp.GetForRecipe, skillUp, recipeID)
+    if ok and type(seen) == "table" and seen.tier and type(seen.skill) == "number" then return seen end
+    return nil
 end
 
 --- What a vendor pays for one of an item, or nil.
@@ -169,6 +238,8 @@ function RoadPlan.Price(record)
         reagents[#reagents + 1] = { itemID = line.itemID, quantity = line.quantity or 1, unit = unit }
         cost = cost + unit * (line.quantity or 1)
     end
+    local materials = 0
+    for _, reagent in ipairs(reagents) do materials = materials + reagent.quantity end
 
     local sells, back
     if ns.LevelUp and ns.LevelUp.GetReturns then
@@ -179,7 +250,38 @@ function RoadPlan.Price(record)
             back = returns.best
         end
     end
-    return { cost = cost, reagents = reagents, sells = sells, back = back }
+    return { cost = cost, reagents = reagents, sells = sells, back = back, materials = materials,
+        offAuction = RoadPlan.OffAuction(reagents) }
+end
+
+--- No Auction House (the owner said build it, 2026-11-26, from a mockup):
+--- a material comes without the auction house when a vendor sells it, the
+--- character can make it, or a disenchant gives it.
+function RoadPlan.WithoutAuction(itemID)
+    if type(itemID) ~= "number" then return false end
+    local vendor = ns.Vendor
+    if vendor and vendor.GetUnitPrice then
+        local ok, price = pcall(vendor.GetUnitPrice, vendor, itemID)
+        if ok and price ~= nil then return true end
+    end
+    local cost = ns.Cost
+    if cost and cost.FindRecipeForItem then
+        local ok, recipeID = pcall(cost.FindRecipeForItem, cost, itemID)
+        if ok and recipeID ~= nil then return true end
+    end
+    local disenchant = ns.Disenchant
+    for _, material in ipairs(disenchant and disenchant.MATERIALS or {}) do
+        if material.itemID == itemID then return true end
+    end
+    return false
+end
+
+--- True when every material of a recipe comes without the auction house.
+function RoadPlan.OffAuction(reagents)
+    for _, reagent in ipairs(reagents or {}) do
+        if not RoadPlan.WithoutAuction(reagent.itemID) then return false end
+    end
+    return true
 end
 
 -- The classic skill line for a profession's English name, for a line the
@@ -210,6 +312,252 @@ local function LineOf(record, memo)
     return found or line
 end
 
+--------------------------------------------------------------------------------
+-- Recipes that need reputation (a player's report, the owner said so,
+-- 2026-11-19): the road sent a player to a Redridge vendor for a pattern
+-- they couldn't buy, their standing too low, after they had bought its
+-- materials. A recipe only a vendor teaches is left off the road while it
+-- needs a standing the character doesn't have. The need is read off the
+-- recipe item's own tooltip ("Requires Faction - Friendly"), or off what a
+-- vendor showed (VendorPins). The character's standing is read from the
+-- game; when it can't be told, the line's red colour says it, and when
+-- neither can, the recipe stays off. An item the client hasn't loaded is
+-- left off until it arrives, then the road is worked out again. Nothing is
+-- saved; `standingVersion` is in the plan's key.
+--------------------------------------------------------------------------------
+
+RoadPlan.standingVersion = 0
+RoadPlan.specialtyOff = {}  -- [line] = recipes left off for a specialty, last worked out
+RoadPlan.STANDINGS = { "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
+
+local needsRead = {}  -- [itemID] = { faction, standing, red } or false, this session
+local specRead = {}   -- [itemID] = the specialty its tooltip asks for, or false
+local loading = {}    -- [itemID] = true while the client fetches it
+local sawNeed = false -- a recipe on a road needed a standing this session
+
+local function PlainText(value)
+    local ok, copy = pcall(function()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
+    return ok and copy or nil
+end
+
+local function TipText(line)
+    if type(line) ~= "table" then return nil end
+    local text = line.leftText
+    if text == nil and type(line.args) == "table" then
+        for _, arg in ipairs(line.args) do
+            if type(arg) == "table" and arg.field == "leftText" then text = arg.stringVal end
+        end
+    end
+    text = PlainText(text)
+    return text and (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
+--- Is a tooltip line red, the game's colour for a need not met? nil when
+--- the line carries no colour.
+local function IsRed(line)
+    local ok, red = pcall(function()
+        local c = type(line) == "table" and line.leftColor
+        if type(c) ~= "table" or type(c.r) ~= "number" then return nil end
+        return c.r > 0.9 and (c.g or 0) < 0.3 and (c.b or 0) < 0.3
+    end)
+    if ok then return red end
+    return nil
+end
+
+local function RequiresPattern()
+    local vendor = ns.Vendor
+    if vendor and type(vendor.RequiresPattern) == "function" then
+        local ok, pattern, factionAt = pcall(vendor.RequiresPattern)
+        if ok and pattern then return pattern, factionAt or 1 end
+    end
+    return "^Requires (.+) %- (.+)$", 1
+end
+
+--- What a recipe item's tooltip says it needs: { faction, standing, red },
+--- false when it needs no standing, nil while the client fetches it.
+function RoadPlan.ItemNeeds(itemID)
+    if type(itemID) ~= "number" then return false end
+    if needsRead[itemID] ~= nil then return needsRead[itemID] end
+    local tips = rawget(_G, "C_TooltipInfo")
+    if type(tips) ~= "table" or type(tips.GetItemByID) ~= "function" then return false end
+    local items = rawget(_G, "C_Item")
+    if type(items) == "table" and type(items.IsItemDataCachedByID) == "function" then
+        local ok, cached = pcall(items.IsItemDataCachedByID, itemID)
+        if ok and cached == false then
+            if not loading[itemID] and type(items.RequestLoadItemDataByID) == "function" then
+                loading[itemID] = true
+                pcall(items.RequestLoadItemDataByID, itemID)
+            end
+            if loading[itemID] then return nil end
+        end
+    end
+    local found, specialty = false, false
+    local ok = pcall(function()
+        local data = tips.GetItemByID(itemID)
+        if type(data) ~= "table" or type(data.lines) ~= "table" then return end
+        local pattern, factionAt = RequiresPattern()
+        local learn = ns.LearnNext
+        for _, line in ipairs(data.lines) do
+            local text = TipText(line)
+            if text and learn and learn.SpecialtyIn then
+                specialty = learn.SpecialtyIn(text) or specialty
+            end
+            local a, b = nil, nil
+            if text then a, b = text:match(pattern) end
+            if a and b then
+                if factionAt == 2 then a, b = b, a end
+                found = { faction = a, standing = b, red = IsRed(line) }
+            end
+        end
+    end)
+    if not ok then found, specialty = false, false end
+    needsRead[itemID] = found
+    specRead[itemID] = specialty
+    return found
+end
+
+--- The specialty a recipe item's tooltip asks for ("Requires
+--- Armorsmith"), or nil; read with its standing, in the same pass.
+function RoadPlan.ItemSpecialty(itemID)
+    if type(itemID) ~= "number" then return nil end
+    if specRead[itemID] == nil then RoadPlan.ItemNeeds(itemID) end
+    return specRead[itemID] or nil
+end
+
+--- A standing's place, 1 (Hated) to 8 (Exalted), by the game's own words
+--- for it in the client's language, or nil.
+function RoadPlan.StandingRank(label)
+    label = PlainText(label)
+    if not label then return nil end
+    for i = 1, 8 do
+        if label == PlainText(rawget(_G, "FACTION_STANDING_LABEL" .. i))
+            or label == PlainText(rawget(_G, "FACTION_STANDING_LABEL" .. i .. "_FEMALE")) then
+            return i
+        end
+    end
+    for i, english in ipairs(RoadPlan.STANDINGS) do
+        if label == english then return i end
+    end
+    return nil
+end
+
+--- The character's standing with a faction, by its name, 1 to 8, or nil
+--- when the game doesn't list it.
+function RoadPlan.PlayerStanding(faction)
+    faction = PlainText(faction)
+    if not faction then return nil end
+    local found
+    pcall(function()
+        local rep = rawget(_G, "C_Reputation")
+        if type(rep) == "table" and type(rep.GetNumFactions) == "function"
+            and type(rep.GetFactionDataByIndex) == "function" then
+            for index = 1, tonumber(rep.GetNumFactions()) or 0 do
+                local data = rep.GetFactionDataByIndex(index)
+                if type(data) == "table" and data.name == faction and type(data.reaction) == "number" then
+                    found = data.reaction + 0
+                    return
+                end
+            end
+        end
+        local count, info = rawget(_G, "GetNumFactions"), rawget(_G, "GetFactionInfo")
+        if type(count) == "function" and type(info) == "function" then
+            for index = 1, tonumber(count()) or 0 do
+                local name, _, standing = info(index)
+                if name == faction and type(standing) == "number" then
+                    found = standing + 0
+                    return
+                end
+            end
+        end
+    end)
+    return found
+end
+
+--- Does a recipe item need a standing the character doesn't have? true or
+--- false, or nil while the client fetches the item.
+function RoadPlan.NeedsStanding(itemID)
+    local need = RoadPlan.ItemNeeds(itemID)
+    if not need then
+        local pins = ns.VendorPins
+        local ok, sellers = false, nil
+        if pins and pins.RecipeSellers then ok, sellers = pcall(pins.RecipeSellers, pins, itemID) end
+        for _, seller in ipairs(ok and type(sellers) == "table" and sellers or {}) do
+            if seller.faction and seller.standing then
+                need = { faction = seller.faction, standing = seller.standing }
+                break
+            end
+        end
+    end
+    if need == nil then return nil end
+    if not need then return false end
+    sawNeed = true
+    local want, have = RoadPlan.StandingRank(need.standing), RoadPlan.PlayerStanding(need.faction)
+    if want and have then return have < want end
+    if need.red ~= nil then return need.red end
+    return true
+end
+
+local refreshSoon = false
+local function StandingsMoved()
+    RoadPlan.standingVersion = RoadPlan.standingVersion + 1
+    local after = rawget(_G, "C_Timer") and C_Timer.After
+    if refreshSoon or type(after) ~= "function" then return end
+    refreshSoon = true
+    after(0.5, function()
+        refreshSoon = false
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end)
+end
+
+--- An item the road was waiting on arrived (or the client has none).
+function RoadPlan.OnItemInfo(itemID, success)
+    if not (itemID and loading[itemID]) then return end
+    loading[itemID] = nil
+    needsRead[itemID] = nil
+    specRead[itemID] = nil
+    if success == false then needsRead[itemID] = false end
+    StandingsMoved()
+end
+
+--- A standing changed: read every need again, the next time the road is
+--- drawn. Every kill can raise one, so nothing is redrawn here, and only
+--- when a recipe needing one was seen.
+function RoadPlan.OnFaction()
+    for key, need in pairs(needsRead) do
+        if need then needsRead[key] = nil end
+    end
+    if sawNeed then RoadPlan.standingVersion = RoadPlan.standingVersion + 1 end
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(RoadPlan, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+        RoadPlan.OnItemInfo(itemID, success)
+    end)
+    ns.RegisterEvent(RoadPlan, "UPDATE_FACTION", function() RoadPlan.OnFaction() end)
+end
+
+--- A craft with a cooldown (Mooncloth, transmutes, any craft a character
+--- was seen waiting on) never levels a profession: one every few days is
+--- not a step (a player's report, the owner said leave them off, 2026-11-25).
+--- The Profit and Queue tabs still show them.
+--- The game's window can list a recipe under an ID of its own and in the
+--- player's language, so the book's ID and English name are asked too
+--- (a player's report, 2026-11-27: Iron to Gold 28 times). Every
+--- transmute shares one cooldown, Forever's new ones too.
+function RoadPlan.OnCooldown(recipeID, record)
+    local name = record and record.bookName
+    if type(name) == "string" and name:find("^Transmute") then return true end
+    local cooldowns = ns.Cooldowns
+    if not (cooldowns and cooldowns.HasCooldown) then return false end
+    for _, id in ipairs({ recipeID, record and record.bookID }) do
+        local ok, has = pcall(cooldowns.HasCooldown, cooldowns, id)
+        if ok and has == true then return true end
+    end
+    return false
+end
+
 --- The recipes that could level a profession: known, or taught by a trainer
 --- or vendor of the player's side. Each { record, known, place }.
 function RoadPlan:Candidates(line)
@@ -226,10 +574,13 @@ function RoadPlan:Candidates(line)
             remade[record.name:lower()] = true
         end
     end
+    local learn = ns.LearnNext
+    local leftOff = 0
     for _, record in pairs(all) do
         if LineOf(record, memo) == line and record.yellow and record.grey
             and record.reagents and #record.reagents > 0
             and not RoadPlan:IsSkipped(record.recipeID)
+            and not RoadPlan.OnCooldown(record.recipeID, record)
             and not (not record.forever and record.name and remade[record.name:lower()]) then
             local known = record.starter or book:KnowsIt(record)
             local place
@@ -237,82 +588,239 @@ function RoadPlan:Candidates(line)
                 local ok, where = pcall(ns.LearnNext.Place, ns.LearnNext, record)
                 place = ok and where or nil
             end
-            if known or place then
-                list[#list + 1] = { record = record, known = known, place = place }
+            -- Only a vendor teaches it, and it needs a standing the
+            -- character doesn't have (or can't tell yet): off the road.
+            if not known and place and place.kind == "vendor"
+                and RoadPlan.NeedsStanding(place.itemID) ~= false then
+                place = nil
             end
+            -- It needs a specialty the character doesn't have: off the road.
+            if not known and place and learn and learn.WrongSpecialty and learn.WrongSpecialty(record) then
+                place = nil
+                leftOff = leftOff + 1
+            end
+            if known or place then
+                -- The game's own colour wins over the book's when a window
+                -- showed it.
+                local shown = known and RoadPlan.Agree(record, RoadPlan.Seen(record.recipeID)) or record
+                list[#list + 1] = { record = shown, known = known, place = place }
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.record.recipeID < b.record.recipeID end)
+    RoadPlan.specialtyOff[line] = leftOff
+    return list
+end
+
+--- The Classic line of a saved profession entry ({ name, skillLineID }),
+--- or nil when it has no road. For another character's saved professions
+--- (Logic/AltLevelUp.lua).
+function RoadPlan.LineFor(profession)
+    if type(profession) ~= "table" then return nil end
+    local line = Classic(profession.skillLineID)
+    if RoadPlan.RANKS[line] then return line end
+    return LineByName(profession)
+end
+
+--- The recipes another character could level `line` with: only the ones
+--- it knows (`knows[recipeID]`) and the starters, each { record, known }.
+--- No learning places, so nothing to buy (Logic/AltLevelUp.lua).
+function RoadPlan:KnownCandidates(line, knows)
+    local list = {}
+    local book = ns.RecipeBook
+    if not (book and type(knows) == "table") then return list end
+    local all = book:GetAll()
+    local memo, remade = {}, {}
+    for _, record in pairs(all) do
+        if record.forever and record.name and LineOf(record, memo) == line then
+            remade[record.name:lower()] = true
+        end
+    end
+    for _, record in pairs(all) do
+        if LineOf(record, memo) == line and record.yellow and record.grey
+            and record.reagents and #record.reagents > 0
+            and (knows[record.recipeID] or record.starter)
+            and not RoadPlan.OnCooldown(record.recipeID, record)
+            and not (not record.forever and record.name and remade[record.name:lower()]) then
+            list[#list + 1] = { record = record, known = true }
         end
     end
     table.sort(list, function(a, b) return a.record.recipeID < b.record.recipeID end)
     return list
 end
 
+--- The line under the road's header while the character has no specialty
+--- yet and the road left a specialty's recipes off; nil otherwise.
+function RoadPlan.SpecialtyNote(line)
+    local learn = ns.LearnNext
+    if not (learn and learn.HasAnySpecialty) or (RoadPlan.specialtyOff[line] or 0) == 0 then return nil end
+    if learn.HasAnySpecialty(line) then return nil end
+    return L["Recipes for a specialty stay off until you learn one."]
+end
+
 --------------------------------------------------------------------------------
 -- Skipped recipes (a player asked, the owner said build it, 2026-11-12):
 -- right-click a step and Skip This Recipe, and the road picks the next one.
--- Kept account wide in `roadSkipped`, recipeID -> name (never rename it).
--- Only the road reads it; the queue and the other tabs are untouched.
+-- Only the road reads them; the queue and the other tabs are untouched.
+--
+-- Per character since 2026-11-26 (the owner said build it, from a mockup:
+-- a Skip button on each step, "Skipped: X. Bring Back" under the road):
+-- kept in `roadSkippedBy[GUID][recipeID] = name` (never rename it). A GUID
+-- the client won't read means nothing is written. Skips from before, kept
+-- account wide in `roadSkipped` (recipeID -> name, never rename it), stay
+-- readable and still count for every character until brought back.
 --------------------------------------------------------------------------------
 
 RoadPlan.skipVersion = 0
 
-local function Skipped()
+local function Me()
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if type(key) == "string" and key:find("^Player%-") then return key end
+    return nil
+end
+
+local function Mine(create)
+    local me = ns.db and Me()
+    if not me then return nil end
+    local by = ns.db.roadSkippedBy
+    if not by then
+        if not create then return nil end
+        by = {}
+        ns.db.roadSkippedBy = by
+    end
+    local mine = by[me]
+    if not mine and create then
+        mine = {}
+        by[me] = mine
+    end
+    return mine
+end
+
+local function Old()
     return ns.db and ns.db.roadSkipped
 end
 
 function RoadPlan:IsSkipped(recipeID)
-    local skipped = recipeID ~= nil and Skipped()
-    return skipped and skipped[recipeID] ~= nil or false
+    if recipeID == nil then return false end
+    local mine, old = Mine(false), Old()
+    return (mine and mine[recipeID] ~= nil) or (old and old[recipeID] ~= nil) or false
 end
 
---- Leave a recipe off the road. The road is worked out again.
+--- The name kept for a skipped recipe, or nil.
+function RoadPlan:SkippedName(recipeID)
+    local mine, old = Mine(false), Old()
+    return (mine and mine[recipeID]) or (old and old[recipeID]) or nil
+end
+
+--- Leave a recipe off this character's road. The road is worked out again.
 -- @return true when it was skipped
 function RoadPlan:Skip(recipeID, name)
-    if not ns.db or type(recipeID) ~= "number" then return false end
-    ns.db.roadSkipped = ns.db.roadSkipped or {}
+    if type(recipeID) ~= "number" then return false end
+    local mine = Mine(true)
+    if not mine then return false end
     local record = ns.RecipeBook and ns.RecipeBook.Get and ns.RecipeBook:Get(recipeID)
-    ns.db.roadSkipped[recipeID] = name or (record and record.name) or ("recipe " .. recipeID)
+    mine[recipeID] = name or (record and record.name) or ("recipe " .. recipeID)
     RoadPlan.skipVersion = RoadPlan.skipVersion + 1
     return true
 end
 
---- The skipped recipes of one profession, by its Classic line.
+--- The recipes skipped on one profession, by its Classic line.
 function RoadPlan:SkippedOn(line)
-    local list = {}
-    local skipped = Skipped()
-    if not skipped then return list end
+    local list, seen = {}, {}
     local book = ns.RecipeBook
     local memo = {}
-    for recipeID in pairs(skipped) do
-        local record = book and book.Get and book:Get(recipeID)
-        if record and LineOf(record, memo) == line then list[#list + 1] = recipeID end
+    for _, skipped in ipairs({ Mine(false) or {}, Old() or {} }) do
+        for recipeID in pairs(skipped) do
+            local record = not seen[recipeID] and book and book.Get and book:Get(recipeID)
+            if record and LineOf(record, memo) == line then
+                list[#list + 1] = recipeID
+                seen[recipeID] = true
+            end
+        end
     end
     table.sort(list)
     return list
 end
 
---- Show All: bring back every skipped recipe of one profession.
--- @return how many came back
-function RoadPlan:ShowAllOn(line)
-    local skipped = Skipped()
-    local list = self:SkippedOn(line)
-    for _, recipeID in ipairs(list) do skipped[recipeID] = nil end
-    if #list > 0 then RoadPlan.skipVersion = RoadPlan.skipVersion + 1 end
-    return #list
+--- Bring Back one recipe to this character's road.
+-- @return true when it came back
+function RoadPlan:BringBack(recipeID)
+    local mine, old = Mine(false), Old()
+    local back = false
+    if mine and mine[recipeID] ~= nil then mine[recipeID], back = nil, true end
+    if old and old[recipeID] ~= nil then old[recipeID], back = nil, true end
+    if back then RoadPlan.skipVersion = RoadPlan.skipVersion + 1 end
+    return back
 end
 
---- How the road picks its recipes: "lowest" (what the materials cost) or
---- "real" (less what one craft sells back for).
+--- Bring Back: every skipped recipe of one profession comes back.
+-- @return how many came back
+function RoadPlan:ShowAllOn(line)
+    local count = 0
+    for _, recipeID in ipairs(self:SkippedOn(line)) do
+        if self:BringBack(recipeID) then count = count + 1 end
+    end
+    return count
+end
+
+--- How the road picks its recipes: "lowest" (what the materials cost),
+--- "real" (less what one craft sells back for), "fewest" (the fewest
+--- materials a point) or "noah" (materials that need no auction house).
+RoadPlan.PICK_BY = { lowest = true, real = true, fewest = true, noah = true }
 function RoadPlan.PickBy()
     local ok, value = pcall(function() return ns.Config and ns.Config:Get("roadPickBy") end)
-    return (ok and value == "real") and "real" or "lowest"
+    return (ok and RoadPlan.PICK_BY[value]) and value or "lowest"
+end
+
+--- Stop At (the owner said build it, 2026-11-26, from a mockup): where the
+--- road ends, 150, 225 or 300. Kept account wide in `roadStopAt` (never
+--- rename it); 300, the whole road, unless picked.
+RoadPlan.STOPS = { 150, 225, 300 }
+function RoadPlan.StopAt()
+    local ok, value = pcall(function() return ns.Config and ns.Config:Get("roadStopAt") end)
+    value = ok and tonumber(value) or nil
+    for _, stop in ipairs(RoadPlan.STOPS) do
+        if value == stop then return stop end
+    end
+    return RoadPlan.TARGET
+end
+
+--- The stop the road walks to from a skill: a stop at or below the skill
+--- is passed, so the road goes on to the next one.
+function RoadPlan.StopFor(skill, stop)
+    stop = stop or RoadPlan.TARGET
+    if (skill or 0) < stop then return stop end
+    for _, next in ipairs(RoadPlan.STOPS) do
+        if next > (skill or 0) then return next end
+    end
+    return RoadPlan.TARGET
 end
 
 -- What a point costs with a recipe at a skill, with its learning price
 -- spread over the points it can still give.
-local function PointCost(candidate, skill, learned, real)
+-- spare: what the character still owns, read by Spare(itemID), when owned
+-- materials are free; nil when they are charged.
+-- pick: PickBy's choice. Fewest Materials ranks by the materials a point,
+-- the gold only breaking a tie; No Auction House leaves out a recipe with
+-- a material only the auction house has, then ranks by cost.
+local function PointCost(candidate, skill, learned, pick, spare)
     local chance = RoadPlan.Chance(candidate.record, skill)
     if chance <= 0 or not candidate.price then return nil end
+    if pick == "noah" and not candidate.price.offAuction then return nil end
+    if pick == "fewest" then
+        local materials = candidate.price.materials or 0
+        return (materials + candidate.price.cost * RoadPlan.FEWEST_TIE) / chance
+    end
+    local real = pick == "real"
     local craft = candidate.price.cost
+    if spare then
+        craft = 0
+        for _, reagent in ipairs(candidate.price.reagents or {}) do
+            local quantity = reagent.quantity or 1
+            local mine = math.min(quantity, math.max(0, spare(reagent.itemID)))
+            craft = craft + reagent.unit * ((quantity - mine) + mine * RoadPlan.OWNED_SHARE)
+        end
+    end
     if real then
         -- Never below a share of the materials: a craft that sells for more
         -- than it costs would otherwise have a cost below 0, which looks
@@ -328,13 +836,24 @@ local function PointCost(candidate, skill, learned, real)
     return cost
 end
 
-local function Best(candidates, skill, learned, real)
-    local best, bestCost
+-- The cheapest recipe a point at a skill. A green craft only now and then
+-- gives a point, so one is taken only when no orange or yellow craft is
+-- there (a player's report, 2026-11-18: they keep green for the last point
+-- or two).
+local function Best(candidates, skill, learned, pick, spare)
+    local best, bestCost, green, greenCost
     for _, candidate in ipairs(candidates) do
-        local cost = PointCost(candidate, skill, learned, real)
-        if cost and (not bestCost or cost < bestCost) then best, bestCost = candidate, cost end
+        local cost = PointCost(candidate, skill, learned, pick, spare)
+        if cost then
+            if RoadPlan.Band(candidate.record, skill) == "easy" then
+                if not greenCost or cost < greenCost then green, greenCost = candidate, cost end
+            elseif not bestCost or cost < bestCost then
+                best, bestCost = candidate, cost
+            end
+        end
     end
-    return best, bestCost
+    if best then return best, bestCost end
+    return green, greenCost
 end
 
 --- The road, worked out from priced candidates.
@@ -346,16 +865,67 @@ end
 -- @param opts.candidates  Candidates' list, each with `price` (Price's)
 -- @param opts.owned       { [itemID] = { bags, bank, alts } }, or nil to read them
 -- @param opts.pickBy      "lowest" (the default) or "real"
+-- @param opts.valueOwned  false: what is owned is free when picking; nil reads
+--                         Charge for Own Materials
 -- @return { steps, current, total, saved, back, stuck, skill, max, pickBy }
 function RoadPlan:Plan(opts)
     if opts.line == RoadPlan.FISHING then return RoadPlan.FishPlan(opts) end
     local line, now = opts.line, opts.skill or 0
     local ranks = RoadPlan.RANKS[line] or {}
     local candidates = opts.candidates or {}
-    local real = opts.pickBy == "real"
+    local pick = RoadPlan.PICK_BY[opts.pickBy] and opts.pickBy or "lowest"
+    local real = pick == "real"
+    -- Stop At: the road ends there (a stop already passed goes on to the next).
+    local target = RoadPlan.StopFor(now, opts.stop)
     local learned = {}
     local steps = {}
     local stuck
+
+    -- What the character owns: bags, bank, and what the other characters
+    -- it can mail hold. Read once an item.
+    local held = {}
+    local function Held(itemID)
+        local have = held[itemID]
+        if have then return have end
+        local given = opts.owned and opts.owned[itemID]
+        if given then
+            have = { given[1] or 0, given[2] or 0, given[3] or 0 }
+        else
+            local inv = ns.Inventory
+            local okBags, bags = pcall(inv.GetBagCount, inv, itemID)
+            local okBank, bank = pcall(inv.GetBankCount, inv, itemID)
+            have = { okBags and tonumber(bags) or 0, okBank and tonumber(bank) or 0,
+                RoadPlan.AltsHold(itemID) or 0 }
+        end
+        held[itemID] = have
+        return have
+    end
+
+    -- Charge for Own Materials off (a player's report, 2026-11-19): what
+    -- the character owns is free when picking, used up as the road goes,
+    -- so it cures the hides in the bags before buying a belt's leather.
+    local valueOwned = opts.valueOwned
+    if valueOwned == nil then
+        local ok, value = pcall(function() return ns.Config and ns.Config:Get("valueOwnedMaterials") end)
+        valueOwned = not (ok and value == false)
+    end
+    local spareLeft = {}
+    local function Spare(itemID)
+        local left = spareLeft[itemID]
+        if left == nil then
+            local have = Held(itemID)
+            left = have[1] + have[2] + have[3]
+            spareLeft[itemID] = left
+        end
+        return left
+    end
+    local spare = not valueOwned and Spare or nil
+    local function UseUp(candidate, crafts)
+        if not spare then return end
+        for _, reagent in ipairs(candidate.price and candidate.price.reagents or {}) do
+            spareLeft[reagent.itemID] = Spare(reagent.itemID) - (reagent.quantity or 1) * crafts
+        end
+    end
 
     -- The cap a rank set raises it to, the first rank still to train.
     local function NextRank(cap)
@@ -370,6 +940,9 @@ function RoadPlan:Plan(opts)
         local p = from
         while p < to do
             local rank = NextRank(cap)
+            -- A rank the road to the stop doesn't need (Expert on the way
+            -- to 150) is left for later.
+            if rank and not done and cap >= to then rank = nil end
             if rank and p >= rank[1] and (not done or rank[4] <= (opts.max or 0)) then
                 steps[#steps + 1] = {
                     kind = "trainer", rank = rank, at = rank[1], cap = rank[4],
@@ -385,22 +958,27 @@ function RoadPlan:Plan(opts)
                     break
                 end
 
-                local candidate = Best(candidates, p, learned, real)
+                local sp = not done and spare or nil
+                local candidate = Best(candidates, p, learned, pick, sp)
                 if not candidate then
                     if not done then stuck = p end
                     break
                 end
                 local record = candidate.record
-                local orange = p < record.yellow
-                local bandEnd = orange and record.yellow or record.grey
+                local yellow, green, grey = RoadPlan.Edges(record)
+                local tier = RoadPlan.Band(record, p)
+                local orange = tier == "optimal"
+                local bandEnd = orange and yellow or (tier == "medium" and green) or grey
                 limit = math.min(limit, bandEnd)
 
                 local q, crafts = p, 0
                 repeat
-                    crafts = crafts + 1 / RoadPlan.Chance(record, q)
+                    local these = 1 / RoadPlan.Chance(record, q)
+                    crafts = crafts + these
+                    if sp then UseUp(candidate, these) end
                     q = q + 1
-                    local other, otherCost = Best(candidates, q, learned, real)
-                    local mine = PointCost(candidate, q, learned, real)
+                    local other, otherCost = Best(candidates, q, learned, pick, sp)
+                    local mine = PointCost(candidate, q, learned, pick, sp)
                     local switch = other and other ~= candidate and otherCost and mine
                         and otherCost < mine * RoadPlan.SWITCH
                 until q >= limit or switch
@@ -409,7 +987,7 @@ function RoadPlan:Plan(opts)
                     kind = "craft", record = record, recipeID = record.recipeID, name = record.name,
                     outputItemID = record.outputItemID, from = p, to = q,
                     crafts = math.max(1, math.ceil(crafts - 1e-9)),
-                    orange = orange, done = done, price = candidate.price,
+                    orange = orange, tier = tier, done = done, price = candidate.price,
                     sells = candidate.price and candidate.price.sells,
                 }
                 if not candidate.known and not learned[record.recipeID] then
@@ -430,7 +1008,7 @@ function RoadPlan:Plan(opts)
     for _, candidate in ipairs(candidates) do
         if candidate.known then learned[candidate.record.recipeID] = true end
     end
-    Walk(now, RoadPlan.TARGET, math.max(opts.max or 75, startCap), false)
+    Walk(now, target, math.max(opts.max or 75, startCap), false)
 
     -- What the character owns comes off once, step by step: bags, bank,
     -- then what the other characters it can mail hold.
@@ -438,25 +1016,18 @@ function RoadPlan:Plan(opts)
     local function Owned(itemID)
         local have = pool[itemID]
         if have then return have end
-        local given = opts.owned and opts.owned[itemID]
-        if given then
-            have = { bags = given[1] or 0, bank = given[2] or 0, alts = given[3] or 0 }
-        else
-            local inv = ns.Inventory
-            local okBags, bags = pcall(inv.GetBagCount, inv, itemID)
-            local okBank, bank = pcall(inv.GetBankCount, inv, itemID)
-            have = { bags = okBags and tonumber(bags) or 0, bank = okBank and tonumber(bank) or 0,
-                alts = RoadPlan.AltsHold(itemID) }
-        end
+        local read = Held(itemID)
+        have = { bags = read[1], bank = read[2], alts = read[3] }
         pool[itemID] = have
         return have
     end
 
-    local total, saved, back, current = 0, 0, 0, nil
+    local total, saved, back, current, crafts = 0, 0, 0, nil, 0
     for index, step in ipairs(steps) do
         if not step.done then
             current = current or index
             if step.kind == "craft" then
+                crafts = crafts + step.crafts
                 step.needs = {}
                 local cost = (step.learn and step.learn.price) or 0
                 for _, reagent in ipairs(step.price and step.price.reagents or {}) do
@@ -471,7 +1042,7 @@ function RoadPlan:Plan(opts)
                     local buy = need - fromBags - fromBank - fromAlts
                     step.needs[#step.needs + 1] = {
                         itemID = reagent.itemID, count = need, bags = fromBags, bank = fromBank,
-                        alts = fromAlts, buy = buy,
+                        alts = fromAlts, buy = buy, unit = reagent.unit,
                     }
                     cost = cost + buy * reagent.unit
                     saved = saved + (fromBags + fromBank + fromAlts) * reagent.unit
@@ -505,7 +1076,7 @@ function RoadPlan:Plan(opts)
 
     return {
         steps = steps, current = current, total = total, saved = saved, back = back, stuck = stuck,
-        skill = now, max = opts.max, line = line, pickBy = real and "real" or "lowest",
+        skill = now, max = opts.max, line = line, pickBy = pick, stop = target, crafts = crafts,
     }
 end
 
@@ -552,6 +1123,12 @@ function RoadPlan.Shown(steps)
     end
     for _, step in ipairs(done) do open[#open + 1] = step end
     return open
+end
+
+--- The list's rows: Shown's. The whole road's shopping row went (the
+--- owner, 2026-11-19): each step lists what it needs and has Queue Step.
+function RoadPlan.Listed(plan)
+    return RoadPlan.Shown(plan and plan.steps)
 end
 
 --------------------------------------------------------------------------------
@@ -638,7 +1215,14 @@ local function Key(profession, level)
         tostring(ns.Prices and ns.Prices.scanCount or 0),
         tostring(ns.Queue and ns.Queue.version or 0),
         RoadPlan.PickBy(),
+        tostring(RoadPlan.StopAt()),
+        tostring(Me and Me() or ""),
         tostring(RoadPlan.skipVersion),
+        tostring(ns.TrainerRecipes and ns.TrainerRecipes.version or 0),
+        tostring(RoadPlan.standingVersion),
+        tostring(ns.Cooldowns and ns.Cooldowns.seenVersion or 0),
+        tostring(ns.LearnNext and ns.LearnNext.specialtyVersion or 0),
+        tostring(ns.Config and ns.Config:Get("valueOwnedMaterials") ~= false),
         -- Farmer's fishing pace moves with every cast it counts.
         profession.line == RoadPlan.FISHING and tostring(RoadPlan.FarmerPaceVersion()) or "",
     }, "|")
@@ -667,7 +1251,9 @@ function RoadPlan:Get(profession, onReady)
         local plan = self:Plan({
             line = profession.line, skill = profession.skill, max = profession.max,
             level = level, candidates = candidates, pickBy = RoadPlan.PickBy(),
+            stop = RoadPlan.StopAt(),
         })
+        plan.professionName = profession.name
         kept[profession.line] = { key = key, plan = plan }
         return plan
     end
@@ -711,10 +1297,18 @@ end
 
 --- Queue Step: the step's crafts in the queue, or for a recipe still to
 --- learn, its materials on the list to buy (as Learn next's Queue materials).
+-- Only the step clicked (the owner, 2026-11-18): it once put the vendor
+-- materials of every later step on the list too, which read as the whole
+-- road queued. Queue All is the one button for the whole road.
+-- With the plan, lines that older Queue Step left for this road
+-- (`forRoad`) come off, so its list holds only what was asked for.
 -- @return true when something went on
-function RoadPlan:QueueStep(step)
+function RoadPlan:QueueStep(step, plan)
     local queue = ns.Queue
     if not (step and step.kind == "craft" and queue) then return false end
+    if plan and queue.SetRoadBuys then
+        pcall(queue.SetRoadBuys, queue, plan.line, {}, plan.professionName)
+    end
     if not step.learn and queue.Ensure then
         local ok, done = pcall(queue.Ensure, queue, step.recipeID, step.queueCrafts or step.crafts)
         return ok and done and true or false
@@ -739,6 +1333,12 @@ function RoadPlan:QueueAll(plan)
     local count = 0
     for _, step in ipairs(plan and plan.steps or {}) do
         if not step.done and step.kind == "craft" and self:QueueStep(step) then count = count + 1 end
+    end
+    -- Every step is queued now, so the queue counts all their vials, and
+    -- no line for this road is left from before.
+    local queue = ns.Queue
+    if plan and queue and queue.SetRoadBuys then
+        pcall(queue.SetRoadBuys, queue, plan.line, {}, plan.professionName)
     end
     return count
 end
@@ -982,7 +1582,10 @@ end
 local function Race()
     local ok, token = pcall(function()
         local fn = rawget(_G, "UnitRace")
-        local _, value = fn and fn("player")
+        if not fn then return nil end
+        -- The second answer is the token ("Dwarf", "Scourge"); the first is
+        -- the name in the player's language.
+        local _, value = fn("player")
         if type(value) == "string" then return value .. "" end
     end)
     return ok and token or nil
@@ -1162,7 +1765,9 @@ function RoadPlan.FishTexts(step, professionName, level, current)
 
     if index <= 2 then
         local place = not step.locked and RoadPlan:PlaceFor(step, RoadPlan.FISHING)
-        if place and place.zone then texts.lines[1] = L.Format("%s trainer in %s", professionName, place.zone) end
+        if place and place.zone then
+            texts.lines[1] = L.Format("%s trainer in %s", professionName, ns.LearnNext.ZoneName(place))
+        end
     elseif index == 3 then
         local seller = step.how.sellers[Side() or "A"] or step.how.sellers.A
         texts.lines[1] = L.Format("%s sells it in %s. Read it to learn Expert %s.",
@@ -1275,7 +1880,10 @@ function RoadPlan.Texts(step, professionName, level, line)
         elseif not step.locked and not step.how then
             local place = not step.done and RoadPlan:PlaceFor(step, line)
             if place and place.zone then
-                texts.lines[1] = L.Format("%s trainer in %s", professionName, place.zone)
+                -- A trainer inside a dungeon is named by the dungeon, though
+                -- the pin goes on its door (LearnNext.INSIDE_TRAINERS).
+                local where = ns.LearnNext.ZoneName and ns.LearnNext.ZoneName(place) or place.inside or place.zone
+                texts.lines[1] = L.Format("%s trainer in %s", professionName, where)
             end
         end
         return texts
@@ -1284,14 +1892,14 @@ function RoadPlan.Texts(step, professionName, level, line)
     texts.title = L.Format("Make %d %s", step.crafts, ItemName(step.outputItemID, step.name))
     texts.range = L.Format("%d to %d", step.from, step.to)
     if step.done then return texts end
-    texts.chip = step.orange and L["every craft"] or L["most crafts"]
+    texts.chip = (step.orange and L["every craft"]) or (step.tier == "easy" and L["some crafts"]) or L["most crafts"]
     for _, need in ipairs(step.needs or {}) do texts.lines[#texts.lines + 1] = RoadPlan.NeedText(need) end
     if RoadPlan.Covered(step) then texts.lines[#texts.lines + 1] = L["You have enough for this step."] end
     if step.learn then
         if step.learn.kind == "trainer" then
             -- Where the trainer stands, as the row's Show the Way aims (the
             -- owner, 2026-10-23: a lone "Trainer" said nothing).
-            local zone = step.learn.zone
+            local zone = ns.LearnNext.ZoneName(step.learn)
             texts.lines[#texts.lines + 1] = zone
                 and L.Format("Learn it from the %s trainer in %s.", professionName, zone)
                 or L.Format("Learn it from the %s trainer.", professionName)

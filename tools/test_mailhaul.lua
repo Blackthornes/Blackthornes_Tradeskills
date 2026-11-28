@@ -507,6 +507,32 @@ Take(1)
 check("gold spent at the mailbox is left out",         MailHaul:Current().total, 2000)
 Close()
 
+-- Gold one of your own characters mailed you was yours already, so the
+-- purse going up by it is not money made (a player's report, 2026-11-15).
+local hadGoldLog = ns.GoldLog
+ns.GoldLog = { IsOwnCharacter = function(_, name) return name == "Alt Surname" end }
+inbox = {
+    { sender = "Alt Surname", subject = "gold for you", money = 50000 },
+    { sender = "Friend Person", subject = "thanks", money = 700 },
+    Sold("Linen Bag", 3000),
+}
+Open()
+purse = purse + 50000
+Take(1)
+check("gold from your own alt is not counted",         MailHaul:Current().total, 0)
+check("nor put under other mail",                      MailHaul:Current().gold.other, 0)
+purse = purse + 700
+Take(1)
+purse = purse + 3000
+Take(1)
+local altHaul = Close()
+check("the rest still counts",                         altHaul.total, 3700)
+check("a friend's gold is still other mail",           altHaul.gold.other, 700)
+check("and the sale is still a sale",                  altHaul.gold.sold, 3000)
+
+-- Put the gold log back as the other checks expect it.
+ns.GoldLog = hadGoldLog
+
 -- A look-alike moving into view after the first sale's gold reached the
 -- purse is a new mail. Taking it too is a second sale, not the first again.
 inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
@@ -613,6 +639,154 @@ Wait(3)
 check("faded out after 30",                            tally.shown, false)
 check("and ready to show fully next time",             tally.alpha, 1)
 MailHaul:Closed()
+
+--------------------------------------------------------------------------------
+print("")
+print("a visit left out of the totals stays saved but stops counting")
+--------------------------------------------------------------------------------
+
+do
+    local realm = ns.Config:GetRealmKey()
+    local kept = ns.db.mailHauls[realm]
+    local keptLast = MailHaul.last
+    MailHaul.last = nil
+    local small = { t = now - 3000, who = "A", total = 1000, best = { name = "Linen Bag", amount = 400 } }
+    local alt = { t = now - 2000, who = "A", total = 50000, recordHaul = true, previousBest = 1000,
+        best = { name = "Gold", amount = 30000 }, sales = {}, items = {}, gold = { other = 50000 },
+        salesCount = 0, itemCount = 0, letters = 3 }
+    local recent = { t = now - 60, who = "A", total = 2000, best = { name = "Linen Bag", amount = 900 } }
+    ns.db.mailHauls[realm] = { small, alt, recent }
+
+    local bestHaul, bestSale = MailHaul:Records()
+    check("before: the alt's gold is the best haul",        bestHaul, 50000)
+    check("before: and the best sale",                       bestSale, 30000)
+
+    -- The Sales tab hands over a view of the record, not the record.
+    local row = setmetatable({ haul = true, record = alt }, { __index = alt })
+    check("leaving it out changes it",                       MailHaul:SetLeftOut(row, true), true)
+    check("the mark is on the saved visit",                  alt.leftOut, true)
+    check("not written on the row's view",                   rawget(row, "leftOut"), nil)
+    check("the row reads it through",                        MailHaul.IsLeftOut(row), true)
+    check("still saved, nothing deleted",                    #MailHaul:GetHistory(), 3)
+    check("one left out",                                    MailHaul:LeftOutCount(), 1)
+    bestHaul, bestSale = MailHaul:Records()
+    check("best haul skips it",                              bestHaul, 2000)
+    check("best sale skips it",                              bestSale, 900)
+    check("today and the week skip it",                      MailHaul:TotalSince(now - 7200), 3000)
+    check("leaving it out twice changes nothing",            MailHaul:SetLeftOut(alt, true), false)
+
+    -- Its report, opened again: the plain ribbon, Count It Again, no fanfare.
+    played = {}
+    MailReport:Show(row, { replay = true })
+    Settle()
+    local frame = MailReport.frame
+    check("the plain ribbon shows",                          frame.leftOutRibbon.shown, true)
+    check("with its words",                                  frame.leftOutRibbon.text.text,
+        "Left out of your totals. It stays saved here.")
+    check("not the best haul ribbon",                        frame.ribbon.shown, false)
+    check("Count It Again sits beside Close",                frame.countAgain.shown, true)
+    local fanfare = false
+    for _, sound in ipairs(played) do if sound == MailReport.SOUNDS.record then fanfare = true end end
+    check("no record fanfare",                               fanfare, false)
+    check("best haul at the bottom skips it",               (frame.stats.text or ""):find(Util.FormatMoney(2000, { short = true }), 1, true) ~= nil, true)
+
+    played = {}
+    frame.countAgain.disabled = false
+    frame.countAgain.scripts.OnClick(frame.countAgain, "LeftButton")
+    check("Count It Again puts it back",                     alt.leftOut, nil)
+    check("the plain ribbon goes",                           frame.leftOutRibbon.shown, false)
+    check("its record ribbon is back",                       frame.ribbon.shown, true)
+    check("the button goes",                                 frame.countAgain.shown, false)
+    check("redrawn quietly, no sound",                       #played, 0)
+    check("the total shows in full at once",                 frame.amount.text, Util.FormatMoney(50000))
+    check("counted again in the best haul",                  (MailHaul:Records()), 50000)
+
+    MailReport:Show(setmetatable({ haul = true, record = recent }, { __index = recent }), { replay = true })
+    check("a counted visit opens with no new button",        frame.countAgain.shown, false)
+    MailReport:Show(alt)
+    check("a fresh report never shows it",                   frame.countAgain.shown, false)
+    frame:Hide()
+
+    -- The report of the visit just closed is a copy; it follows its record.
+    MailHaul.last = { t = recent.t, who = recent.who, total = recent.total }
+    MailHaul:SetLeftOut(recent, true)
+    check("the just-closed copy follows",                    MailHaul.last.leftOut, true)
+    MailHaul:SetLeftOut(MailHaul.last, false)
+    check("and counting the copy again counts the record",   recent.leftOut, nil)
+
+    ns.db.mailHauls[realm] = kept
+    MailHaul.last = keptLast
+end
+
+--------------------------------------------------------------------------------
+print("")
+print("a busy seller keeps two months of visits, and the records never drop off")
+--------------------------------------------------------------------------------
+
+do
+    local realm = ns.Config:GetRealmKey()
+    local kept = ns.db.mailHauls[realm]
+    local keptLast = MailHaul.last
+    local DAY = 86400
+
+    -- A player found only 100 visits, two days back: a heavy seller fills
+    -- 100 in no time. 150 visits over the last two days, plus an old record.
+    local history = {}
+    local oldBest = { t = now - 90 * DAY, who = "A", total = 900000,
+        best = { name = "Gold", amount = 5000 } }
+    local oldSale = { t = now - 80 * DAY, who = "A", total = 3000,
+        best = { name = "Runecloth Bag", amount = 2900 } }
+    local oldPlain = { t = now - 70 * DAY, who = "A", total = 100, best = { name = "Linen Bag", amount = 100 } }
+    history[1], history[2], history[3] = oldBest, oldSale, oldPlain
+    for index = 1, 150 do
+        history[#history + 1] = { t = now - 2 * DAY + index * 60, who = "A", total = 1000,
+            best = { name = "Linen Bag", amount = 400 } }
+    end
+    ns.db.mailHauls[realm] = history
+
+    inbox = { Sold("Linen Bag", 600) }
+    Open()
+    Take(1)
+    local haul = Close()
+    MailReport.frame:Hide()
+
+    local saved = MailHaul:GetHistory()
+    local recent = 0
+    for _, visit in ipairs(saved) do
+        if visit.t >= now - 2 * DAY then recent = recent + 1 end
+    end
+    check("every visit from the last two days is still there", recent, 151)
+    check("the week counts all of them",                       haul.week, 150 * 1000 + 600)
+    check("the old visit with no record is gone",              (function()
+        for _, visit in ipairs(saved) do if visit == oldPlain then return false end end
+        return true end)(), true)
+    local bestHaul, bestSale = MailHaul:Records()
+    check("the best haul stays, though it is old",             bestHaul, 900000)
+    check("the best sale stays, though it is old",             bestSale, 5000)
+    check("oldest first, still",                               saved[1] == oldBest and saved[#saved].t == now, true)
+
+    -- Two thousand at most, the records kept even then.
+    local many = { oldBest }
+    for index = 1, 2100 do
+        many[#many + 1] = { t = now - DAY + index, who = "A", total = 10, best = { name = "Linen Bag", amount = 5 } }
+    end
+    MailHaul:TrimHistory(many, now)
+    check("never more than two thousand",                      #many, MailHaul.MAX_HAULS)
+    check("the record is still first",                         many[1], oldBest)
+    check("the oldest plain ones went",                        many[2].t, now - DAY + 102)
+
+    -- A player back from a long break keeps their last hundred.
+    local quiet = {}
+    for index = 1, 120 do
+        quiet[#quiet + 1] = { t = now - 200 * DAY + index, who = "A", total = index }
+    end
+    MailHaul:TrimHistory(quiet, now)
+    check("a long break still leaves a hundred",               #quiet, 100)
+    check("the newest hundred",                                quiet[1].t, now - 200 * DAY + 21)
+
+    ns.db.mailHauls[realm] = kept
+    MailHaul.last = keptLast
+end
 
 MailHaul:InvalidateMatchers()
 

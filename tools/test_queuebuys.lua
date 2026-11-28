@@ -210,4 +210,31 @@ Queue:Ensure(GAUNTLETS_RECIPE, 1)
 check("a Learn next line with no crafts stays when the craft is queued", #ns.db.queueBuys == 1)
 ns.db.queueBuys, ns.db.queue = {}, {}
 
+print("\nRoad to 300: the rest of the road's vials in one stop")
+
+-- A player's report (2026-11-17): the road bought vials for step one only.
+-- Queue Step now lists the vials of every step after it, tied to the road.
+local VIAL = 3371
+Queue:Ensure(GAUNTLETS_RECIPE, 1)
+check("the road's vials go on the list", Queue:SetRoadBuys(171, { [VIAL] = 40 }, "Alchemy") == true)
+check("as one line to buy", Line(VIAL) and Line(VIAL).needed == 40 and Line(VIAL).shortfall == 40)
+check("which says what it is for", Line(VIAL).buys[1].forRoad == 171
+    and Line(VIAL).buys[1].forRoadName == "Alchemy")
+check("the queued craft's own materials still count", Line(BAR) and Line(BAR).needed == 8)
+bags[VIAL] = 40
+check("the vials bought cover it", Line(VIAL) == nil or Line(VIAL).shortfall == 0)
+bags[VIAL] = nil
+check("asked again, the same changes nothing", Queue:SetRoadBuys(171, { [VIAL] = 40 }, "Alchemy") == false)
+Queue:SetRoadBuys(171, { [VIAL] = 25 }, "Alchemy")
+check("the next step sets it, never adds", #ns.db.queueBuys == 1 and Line(VIAL).needed == 25)
+Queue:SetRoadBuys(197, { [VIAL] = 5 }, "Tailoring")
+Queue:SetRoadBuys(171, {}, "Alchemy")
+check("nothing left takes this road's line off, never another road's",
+    #ns.db.queueBuys == 1 and ns.db.queueBuys[1].forRoad == 197)
+check("a road line is never tied to a recipe to learn", #Queue:QueueLearned() == 0 and #ns.db.queueBuys == 1)
+Queue:EnsureBuy(VIAL, 3, nil, { recipeID = BELT_RECIPE or 99, name = "Belt", crafts = 1 })
+Queue:SetRoadBuys(197, {}, "Tailoring")
+check("nor does it take a recipe's line off", #ns.db.queueBuys == 1 and ns.db.queueBuys[1].forRecipe ~= nil)
+ns.db.queueBuys, ns.db.queue = {}, {}
+
 print(("\n%d checks passed"):format(checks))

@@ -182,6 +182,9 @@ check("and her cheapest listing", Value(bob, 2589, "lowest"), 990)
 check("never the rival price", Value(bob, 2589, "rival"), nil)
 check("both items came", Value(bob, 2592), 500)
 current = bob
+check("the tooltip's price is Ana's", (bob.ns.Prices:GetLinkedValue(2589, "market")), 1000)
+check("and her cheapest for its lowest line", (bob.ns.Prices:GetLinkedValue(2589, "lowest")), 990)
+current = bob
 local count = bob.ns.AccountLink:PricesHeld("Ana")
 check("Bob holds two prices from Ana", count, 2)
 check("every message fits", longest <= 255, true)
@@ -193,6 +196,8 @@ print("\nthe newer scan wins")
 clock = clock + 600
 Scan(bob, { [2589] = 1200 }, clock - 30)
 check("Bob's own newer scan wins", Value(bob, 2589), 1200)
+current = bob
+check("and the tooltip keeps Bob's own", bob.ns.Prices:GetLinkedValue(2589, "market"), nil)
 clock = clock + 600
 Scan(ana, { [2589] = 800 }, clock - 30)
 Check(ana); Check(bob); Check(ana)
@@ -285,6 +290,21 @@ clock = clock + 8 * 24 * 3600
 current = bob
 bob.ns.AccountLink:PrunePrices()
 check("a week on, old prices are let go", bob.ns.db.linkedPrices, nil)
+
+--------------------------------------------------------------------------------
+print("\none realm, two server names")
+--------------------------------------------------------------------------------
+-- Forever gives one player's two accounts different realm names for the
+-- same realm ("CAMWOW EU1 Realm 3 Normal" and "... Realm 7 Normal").
+
+local cara = NewClient("Cara", "CAMWOW EU1 Realm 3 Normal-Alliance", "Dan")
+local dan = NewClient("Dan", "CAMWOW EU1 Realm 7 Normal-Alliance", "Cara")
+Add(cara); Add(dan)
+Scan(cara, { [2589] = 1500 }, clock - 60)
+Check(cara); Check(dan); Check(cara)
+check("Dan gets Cara's price", Value(dan, 2589), 1500)
+current = dan
+check("and sees it on the tooltip", (dan.ns.Prices:GetLinkedValue(2589, "market")), 1500)
 
 for name, value in pairs(saved) do _G[name] = value end
 

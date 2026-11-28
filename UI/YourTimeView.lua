@@ -222,9 +222,30 @@ local function Way(detail, anchor)
     way.note = Theme.CreateLabel(way, "tiny", "muted")
     way.note:SetPoint("TOPLEFT", 8, -30)
     way.note:SetPoint("RIGHT", way, "RIGHT", -8, 0)
-    way.note:SetWordWrap(false)
+    way.note:SetWordWrap(true)
 
     return way
+end
+
+local WAY_HEIGHT, NOTE_TOP, NOTE_PAD = 42, 30, 8
+
+--- A way's note on as many lines as it needs, its card growing with it, so
+--- a long item name is never cut off. The ways hang under one another, so
+--- the ones below move down by themselves.
+local function SetNote(way, text)
+    local note = way.note
+    note:SetText(text)
+    local line = ((Theme.sizes and Theme.sizes.tiny) or 10) + 2
+    local need = line
+    local okRoom, room = pcall(way.GetWidth, way)
+    local width = Theme.TextWidth and Theme.TextWidth(note)
+    if okRoom and type(room) == "number" and room > NOTE_PAD * 2
+        and type(width) == "number" and width > room - NOTE_PAD * 2 then
+        need = math.ceil(width / (room - NOTE_PAD * 2)) * line
+        local okHeight, height = pcall(note.GetStringHeight, note)
+        if okHeight and type(height) == "number" and height > need then need = math.ceil(height) end
+    end
+    way:SetHeight(math.max(WAY_HEIGHT, NOTE_TOP + need))
 end
 
 local function MaterialLine(detail, anchor, gap)
@@ -446,7 +467,7 @@ local function ShowEntry(detail, entry)
             frame.value:SetTextColor(Theme.Unpack(best and "profit" or (way.value < 0 and "loss" or "text")))
         end
         local missing = entry.missing and Util.ColoredItemName(entry.missing.itemID)
-        frame.note:SetText(way.note or (missing and L.Format("Farm some %s and this fills in.", missing)) or "")
+        SetNote(frame, way.note or (missing and L.Format("Farm some %s and this fills in.", missing)) or "")
         SetBar(frame.bar, way.farm, way.craft, longest)
         frame.bar:SetShown(way.value ~= nil)
         frame:Show()

@@ -14,12 +14,21 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+-- Costliest material first; a list as it came when Util is not loaded.
+local function CostliestFirst(list)
+    if Util.CostliestFirst then return Util.CostliestFirst(list) end
+    return list
+end
 
 local RecipeBookView = {}
 ns.RecipeBookView = RecipeBookView
 
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
+-- The Profit: drop-down and the search box beside it (2026-11-21), the
+-- drop-down as wide as on My Crafts.
+local METHOD_WIDTH = 170
+local METHOD_SEARCH_WIDTH = 120
 local ALL = "all"
 
 --- The book's (English) name for one of the character's professions. The
@@ -36,19 +45,30 @@ end
 -- Right to left, measured from the list's right edge. Money sits to the
 -- right, so its coins line up; the rest is centred under its heading.
 -- `width` is the least each gets: Widgets.FitColumns widens it to fit the
--- heading and a full amount.
+-- heading and a full amount. Every amount shows its gold, silver and copper
+-- (a big profit read as one coin, "1g", was easy to miss), so money is
+-- measured with two gold digits, and PROFIT with its "(Vendor)" tag too.
+local MONEY_SAMPLE = "99g 99s 99c"
 local COLUMNS = {
     { key = "learn",      label = L["LEARN FROM"], width = 92, justify = "CENTER" },
-    { key = "price",      label = L["RECIPE"],     width = 66, money = true },
+    { key = "price",      label = L["RECIPE"],     width = 66, money = true, sample = MONEY_SAMPLE },
     { key = "profit",     label = L["PROFIT"],     width = 104, money = true },
     -- How well the item it makes sells (Logic/Demand.lua), as on My crafts,
     -- so a player can tell before buying the recipe.
     { key = "demand",     label = L["DEMAND"],     width = 50, justify = "CENTER" },
-    { key = "disenchant", label = L["DISENCHANT"], width = 66, money = true },
-    { key = "sells",      label = L["SELLS"],      width = 66, money = true },
-    { key = "cost",       label = L["COST"],       width = 66, money = true },
+    { key = "disenchant", label = L["DISENCHANT"], width = 66, money = true, sample = MONEY_SAMPLE },
+    { key = "sells",      label = L["SELLS"],      width = 66, money = true, sample = MONEY_SAMPLE },
+    { key = "cost",       label = L["COST"],       width = 66, money = true, sample = MONEY_SAMPLE },
     { key = "skill",      label = L["SKILL"],      width = 36, justify = "CENTER" },
 }
+
+-- On a list too narrow for every column, these step aside in this order,
+-- least needed first, so the recipe's name keeps NAME_MIN and reads on one
+-- line (the Level Up tab's Learn Next showed "Encha..." in tall rows,
+-- 2026-11-17). Each still shows in the pane on the right. Nothing saved.
+local NAME_MIN = 200
+local SQUEEZE_ORDER = { "demand", "disenchant", "price", "sells", "cost" }
+RecipeBookView.NAME_MIN = NAME_MIN
 
 -- Any column but the recipe's name can be hidden (UI/Columns.lua). The
 -- Profit and Level Up tabs' copies share the choice.
@@ -62,6 +82,8 @@ ns.Columns:Register("recipes", L["Recipes to learn"], COLUMNS)
 --   levelling; otherwise the most profit comes first
 -- @param opts.showSkill  the picked profession's skill at the top right, as
 --   Road to 300 shows it (every profession you have under All professions)
+-- @param opts.filters  Have Skill and Learn From on a line under the top
+--   bar, shared with the Level Up tab's LEARN NEXT line
 --- What one craft would bring in, sold at `price` each: the auction house
 --- after its cut, or a vendor when that pays more.
 function RecipeBookView.BackAt(itemID, price, yield, vendor)
@@ -123,9 +145,20 @@ local function NewView(opts)
         includeKnown = false,
         selected = nil,
         waiting = false,
+        -- "Wishlist First" in the top bar (UI/Wishlist.lua, 2026-11-17).
+        wishlistFirst = ns.Config == nil or ns.Config:Get("recipeBookWishlistFirst") ~= false,
     }
 
     local widgets = {}
+
+    -- Columns set aside for the list's width, and a count that moves when
+    -- they change, so each row lays itself out again on its next draw.
+    local squeezed, squeezedKey, layoutVersion = {}, "", 0
+    local PlaceHeadings, ReadFilters   -- below, by Build; Refresh calls them
+
+    local function ColumnVisible(column)
+        return not squeezed[column.key]
+    end
 
     --------------------------------------------------------------------------------
     -- Rows
@@ -133,9 +166,10 @@ local function NewView(opts)
 
     --- The shown columns from the right edge; the name has the rest.
     local function PlaceRow(row)
-        local offset = ns.Columns:Place("recipes", COLUMNS, row.cells, { gap = 8 })
+        local offset = ns.Columns:Place("recipes", COLUMNS, row.cells, { gap = 8, visible = ColumnVisible })
         row.name:SetPoint("RIGHT", row, "RIGHT", offset - 8, 0)
         row.columnsVersion = ns.Columns.version
+        row.layoutVersion = layoutVersion
     end
 
     local function CreateRow(row)
@@ -145,6 +179,14 @@ local function NewView(opts)
         row.name = Theme.CreateLabel(row, "small", "text")
         row.name:SetPoint("LEFT", 30, 0)
         row.name:SetWordWrap(false)
+
+        -- The recipe wishlist's star (2026-11-17), in a column of its own
+        -- at the left: Profit's small star badge means something else.
+        if ns.WishlistUI then
+            row.star = ns.WishlistUI.CreateStar(row, function() return row.data and row.data.recipeID end)
+            row.star:SetPoint("LEFT", 4, 0)
+            row.star:Hide()
+        end
 
         row.cells = {}
         for _, column in ipairs(COLUMNS) do
@@ -162,12 +204,27 @@ local function NewView(opts)
             cell:SetTextColor(Theme.Unpack("dim"))
             return
         end
-        Theme.SetMoneyText(cell, copper, { short = true })
+        Theme.SetMoneyText(cell, copper)
         cell:SetTextColor(Theme.Unpack(colorKey or "text"))
     end
 
     local function UpdateRow(row, entry)
-        if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+        if row.columnsVersion ~= ns.Columns.version or row.layoutVersion ~= layoutVersion then
+            PlaceRow(row)
+        end
+
+        local ui = ns.WishlistUI
+        local starred = ui ~= nil and rawget(row, "star") ~= nil and ui.Shown()
+        if ui and rawget(row, "star") then
+            row.star:SetShown(starred)
+            if starred then row.star:Paint(false) end
+            local room = starred and ui.STAR_ROOM or 0
+            if row.starRoom ~= room then
+                row.starRoom = room
+                row.icon:SetPoint("LEFT", 8 + room, 0)
+                row.name:SetPoint("LEFT", 30 + room, 0)
+            end
+        end
 
         -- No item made (an enchant): the recipe item's icon stands in.
         local iconItem = entry.outputItemID or (entry.record.recipeItems and entry.record.recipeItems[1])
@@ -222,7 +279,7 @@ local function NewView(opts)
         end
 
         if entry.profit then
-            Theme.SetMoneyText(cells.profit, entry.profit, { short = true,
+            Theme.SetMoneyText(cells.profit, entry.profit, {
                 suffix = ns.Profit and ns.Profit.WayTag(entry.backWay) or nil })
             cells.profit:SetTextColor(Theme.ProfitColor(entry.profit))
         else
@@ -267,7 +324,9 @@ local function NewView(opts)
     --------------------------------------------------------------------------------
 
     local VALUE_LINES = 7
-    local MATERIAL_LINES = 5
+    -- Room for every material a recipe takes (7 at most in the book),
+    -- costliest first, so none is hidden (a player asked, 2026-11-25).
+    local MATERIAL_LINES = 7
     local LEARN_LINES = 4
 
     local function DoubleLine(parent, anchor, gap)
@@ -506,7 +565,7 @@ local function NewView(opts)
         end
         detail.graphInfo = nil
 
-        local reagents = (value.costDetail and value.costDetail.reagents) or {}
+        local reagents = CostliestFirst((value.costDetail and value.costDetail.reagents) or {})
         for index, line in ipairs(detail.materials) do
             local reagent = reagents[index]
             line.itemID, line.itemName = nil, nil
@@ -575,13 +634,47 @@ local function NewView(opts)
         return options, first
     end
 
+    --- Share a pick with My Crafts and All Recipes (the Profit tab's copy
+    --- only, 2026-11-27).
+    local function SharePick(value)
+        local Profit = ns.Profit
+        if not (opts.shareProfession and Profit and Profit.PickProfession) then return end
+        Profit.PickProfession(value ~= ALL and value or nil)
+        state.pickSeen = (Profit.PickedProfession())
+    end
+
+    --- Take the profession picked on My Crafts or All Recipes, once per
+    --- pick. One this list does not offer leaves it where it was.
+    local function AdoptPickedProfession(options)
+        local Profit = ns.Profit
+        if not (opts.shareProfession and Profit and Profit.PickedProfession) then return end
+        local version, english = Profit.PickedProfession()
+        if version == (state.pickSeen or 0) then return end
+        state.pickSeen = version
+
+        local value = english == false and ALL or nil
+        if english then
+            for _, option in ipairs(options) do
+                if option.value == english and not option.header then value = english end
+            end
+        end
+        if value and value ~= state.profession then
+            state.profession = value
+            state.selected = nil
+        end
+    end
+
     function instance.Refresh()
         if not widgets.list or not ns.RecipeBook then return end
 
         local options, first = ProfessionOptions()
         widgets.profession:SetOptions(options)
+        AdoptPickedProfession(options)
         if state.profession == nil then state.profession = first or ALL end
         widgets.profession:SetValue(state.profession)
+        if widgets.method then
+            widgets.method:SetValue(ns.Profit.GetMethod and ns.Profit:GetMethod() or "best")
+        end
 
         state.waiting = false
 
@@ -614,13 +707,51 @@ local function NewView(opts)
             search = state.search,
             order = opts.order,
         })
+        -- Have Skill and Learn From (the Level Up tab's copy only): the same
+        -- test as its LEARN NEXT line, with each way's count in the menu.
+        local filteredOut = false
+        if state.filters then
+            ReadFilters()
+            for _, entry in ipairs(rows) do
+                entry.place = { ways = ns.RecipeBook.AllWays and ns.RecipeBook:AllWays(entry.record) or {} }
+                local mine = state.skills[entry.profession]
+                entry.locked = not mine or (entry.skill or 0) > mine
+            end
+            local before = #rows
+            local counts
+            rows, counts = ns.LearnNext.Filter(rows, { haveSkill = state.haveSkill, learnFrom = state.learnFrom })
+            filteredOut = before > 0 and #rows == 0
+            widgets.haveSkill:SetChecked(state.haveSkill)
+            widgets.learnFrom:SetOptions(widgets.learnFromOptions(counts))
+            widgets.learnFrom:SetValue(state.learnFrom)
+        end
+
         if widgets.sorter then rows = widgets.sorter:Sort(rows) end
+
+        -- The recipe wishlist (2026-11-17): the box shows only while it is on,
+        -- and starred recipes go first, each part in the order it had.
+        local wishing = ns.WishlistUI ~= nil and ns.WishlistUI.Shown()
+        if ns.Wishlist and wishing then ns.Wishlist:Prune() end
+        if widgets.firstBox then
+            widgets.firstBox:SetShown(wishing)
+            widgets.firstBox:SetChecked(state.wishlistFirst)
+            if widgets.skill then
+                widgets.skill:SetPoint("LEFT", wishing and widgets.firstBox or widgets.known, "RIGHT", 12, 0)
+            end
+        end
+        if widgets.nameHeading then
+            widgets.nameHeading:SetPoint("LEFT", wishing and 30 + ns.WishlistUI.STAR_ROOM or 30, 0)
+        end
+        if wishing and state.wishlistFirst then rows = ns.WishlistUI.StarredFirst(rows) end
+        PlaceHeadings()
 
         widgets.list:SetData(rows)
 
         widgets.empty:SetShown(#rows == 0)
         if #rows == 0 then
-            if state.search ~= "" then
+            if filteredOut then
+                widgets.empty:SetText(L["No recipes to learn here with these filters."])
+            elseif state.search ~= "" then
                 widgets.empty:SetText(L.Format("Nothing matching \"%s\".", state.search))
             else
                 widgets.empty:SetText(L["You know every recipe of this profession."])
@@ -658,6 +789,7 @@ local function NewView(opts)
             if profession:lower():find(needle, 1, true) then
                 state.profession = profession
                 state.selected = nil
+                SharePick(profession)
                 return
             end
         end
@@ -667,9 +799,121 @@ local function NewView(opts)
     -- Build
     --------------------------------------------------------------------------------
 
+    --- Work out which columns fit the headings' width (the list's), then
+    --- lay the headings out; a width not known yet sets nothing aside.
+    PlaceHeadings = function()
+        local headings = widgets.headings
+        if not headings then return end
+        local ok, room = pcall(headings.GetWidth, headings)
+        local wishing = ns.WishlistUI ~= nil and ns.WishlistUI.Shown()
+        local found = ns.Columns:Squeeze("recipes", COLUMNS, ok and room or nil, {
+            order = SQUEEZE_ORDER, nameMin = NAME_MIN, gap = 8,
+            left = 30 + (wishing and ns.WishlistUI.STAR_ROOM or 0) })
+        local keys = {}
+        for _, key in ipairs(SQUEEZE_ORDER) do
+            if found[key] then keys[#keys + 1] = key end
+        end
+        squeezed = found
+        ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8, visible = ColumnVisible })
+        -- Every time, not only when the set aside changes: a heading set
+        -- aside keeps its old spot, and its click must go with it. The game
+        -- can lay the headings out while the sort arrows are still being
+        -- made (asking a heading's width does it), before there is a sorter
+        -- to tell; a player's SKILL click then sorted by DISENCHANT.
+        if widgets.sorter then widgets.sorter:Sync() end
+        local key = table.concat(keys, ",")
+        if key ~= squeezedKey then
+            squeezedKey = key
+            layoutVersion = layoutVersion + 1
+            if widgets.list then widgets.list:Refresh() end
+        end
+    end
+    instance.PlaceHeadings = PlaceHeadings
+
+    --- Have Skill and Learn From, the Level Up tab's filters for its
+    --- recipes to learn (UI/Tab_LevelUp.lua's LEARN NEXT line has the same
+    --- two and shares the choice), on a line of their own under the top bar.
+    local function BuildFilters(view)
+        local LearnNext = ns.LearnNext
+        local words = {
+            trainerVendor = L["Trainer or Vendor"], trainer = L["Trainer"], vendor = L["Vendor"],
+            drop = L["Drop"], quest = L["Quest or Other"], any = L["Any Way"],
+        }
+        local function Options(counts)
+            local options = {}
+            for _, choice in ipairs(LearnNext.LEARN_FROM) do
+                options[#options + 1] = { text = words[choice], value = choice, note = counts and counts[choice] or nil }
+            end
+            return options
+        end
+        widgets.learnFromOptions = Options
+
+        local haveSkill = Widgets.CreateCheckbox(view, L["Have Skill"], function(checked)
+            state.haveSkill = checked and true or false
+            if ns.Config then ns.Config:Set("levelUpHaveSkill", state.haveSkill) end
+            instance.Refresh()
+        end, state.haveSkill)
+        haveSkill:SetPoint("TOPLEFT", 8, -36)
+        haveSkill:HookScript("OnEnter", function(box)
+            GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(L["Only shows recipes your skill is high enough to learn now."], 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        haveSkill:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        widgets.haveSkill = haveSkill
+
+        local label = Theme.CreateLabel(view, "small", "text", "LEFT")
+        label:SetPoint("LEFT", haveSkill, "RIGHT", 16, 0)
+        label:SetText(L["Learn From:"])
+        widgets.learnFromLabel = label
+
+        local learnFrom = Widgets.CreateDropdown(view, Options(nil), function(value)
+            state.learnFrom = value
+            if ns.Config then ns.Config:Set("levelUpLearnFrom", value) end
+            instance.Refresh()
+        end, { width = 150 })
+        learnFrom:SetHeight(18)
+        learnFrom:SetPoint("LEFT", label, "RIGHT", 6, 0)
+        learnFrom:SetValue(state.learnFrom)
+        learnFrom:HookScript("OnEnter", function(box)
+            GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(L["Pick where the recipes are learned. Trainers and vendors can show you the way."], 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        learnFrom:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        widgets.learnFrom = learnFrom
+    end
+
+    --- Read the shared filter choice again (the LEARN NEXT line may have
+    --- changed it).
+    ReadFilters = function()
+        local LearnNext = ns.LearnNext
+        state.haveSkill = ns.Config ~= nil and ns.Config:Get("levelUpHaveSkill") == true
+        local from = ns.Config and ns.Config:Get("levelUpLearnFrom")
+        local known = from == "any"
+        for _, choice in ipairs(LearnNext.LEARN_FROM) do
+            if choice == from then known = true end
+        end
+        state.learnFrom = known and from or LearnNext.LEARN_FROM_DEFAULT
+    end
+
     --- Fill `view`, a frame covering a tab below its view switch.
     function instance.Build(view)
         -- Before any row or heading is laid out: they read these widths.
+        -- PROFIT carries its longest way tag, in this client's words.
+        local tag, widest = "", -1
+        local labels = ns.Profit and ns.Profit.WAY_LABELS or {}
+        for _, label in pairs(labels) do
+            local text = L.Format("(%s)", label)
+            local width = type(Theme.MeasureText) == "function" and Theme.MeasureText("small", text) or #text
+            if type(width) ~= "number" then width = #text end
+            if width > widest then tag, widest = text, width end
+        end
+        for _, column in ipairs(COLUMNS) do
+            if column.key == "profit" then
+                column.sample = "-" .. MONEY_SAMPLE .. (tag ~= "" and " " .. tag or "")
+            end
+        end
         if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
         local right = -DETAIL_WIDTH - 16
@@ -679,23 +923,54 @@ local function NewView(opts)
             function(value)
                 state.profession = value
                 state.selected = nil
+                SharePick(value)
                 instance.Refresh()
             end, { width = 150 })
         profession:SetPoint("TOPLEFT", 8, -8)
         widgets.profession = profession
 
+        -- The Profit: choice from My Crafts (2026-11-21). The PROFIT column
+        -- already counts by it; without it here a player on "Vendor" saw
+        -- "(Vendor)" on every row and could not tell why. One setting.
+        local before = profession
+        if opts.methodChoice and ns.Profit and ns.Profit.MethodOptions then
+            local method = Widgets.CreateDropdown(view, ns.Profit.MethodOptions(), function(value)
+                ns.Profit:SetMethod(value)
+                instance.Refresh()
+            end, { width = METHOD_WIDTH })
+            method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+            widgets.method = method
+            before = method
+        end
+
         local search = Widgets.CreateSearchBox(view, L["Search recipes"], function(text)
             state.search = text or ""
             instance.Refresh()
         end)
-        search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
-        search:SetWidth(Widgets.SEARCH_WIDTH)
+        search:SetPoint("LEFT", before, "RIGHT", 8, 0)
+        -- Narrower beside the Profit: choice, so the skill at the top right
+        -- keeps its room.
+        search:SetWidth(widgets.method and METHOD_SEARCH_WIDTH or Widgets.SEARCH_WIDTH)
 
         local known = Widgets.CreateCheckbox(view, L["Show learned too"], function(checked)
             state.includeKnown = checked and true or false
             instance.Refresh()
         end, false)
         known:SetPoint("LEFT", search, "RIGHT", 12, 0)
+        widgets.known = known
+
+        if ns.WishlistUI then
+            local firstBox = Widgets.CreateCheckbox(view, L["Wishlist First"], function(checked)
+                state.wishlistFirst = checked and true or false
+                if ns.Config then ns.Config:Set("recipeBookWishlistFirst", state.wishlistFirst) end
+                instance.Refresh()
+            end, state.wishlistFirst)
+            firstBox:SetPoint("LEFT", known, "RIGHT", 12, 0)
+            firstBox:HookScript("OnEnter", function(box) ns.WishlistUI.FirstTip(box) end)
+            firstBox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+            firstBox:Hide()
+            widgets.firstBox = firstBox
+        end
 
         if opts.showSkill then
             local skill = Theme.CreateLabel(view, "normal", "accent", "RIGHT")
@@ -705,14 +980,25 @@ local function NewView(opts)
             widgets.skill = skill
         end
 
+        local filters = opts.filters and ns.LearnNext ~= nil
+        state.filters = filters
+        local top = -40
+        if filters then
+            ReadFilters()
+            BuildFilters(view)
+            top = -64
+        end
+
         local headings = CreateFrame("Frame", nil, view)
         headings:SetHeight(16)
-        headings:SetPoint("TOPLEFT", 8, -40)
-        headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right, -40)
+        headings:SetPoint("TOPLEFT", 8, top)
+        headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right, top)
+        widgets.headings = headings
 
         local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
         nameHeading:SetPoint("LEFT", 30, 0)
         nameHeading:SetText(L["RECIPE"])
+        widgets.nameHeading = nameHeading
 
         headings.cells = {}
         for _, column in ipairs(COLUMNS) do
@@ -720,7 +1006,9 @@ local function NewView(opts)
             cell:SetText(column.label)
             headings.cells[column.key] = cell
         end
-        ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8 })
+        ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8, visible = ColumnVisible })
+        -- The name's room follows the list's width.
+        headings:SetScript("OnSizeChanged", function() PlaceHeadings() end)
 
         local sortLabels = { name = nameHeading }
         for key, cell in pairs(headings.cells) do sortLabels[key] = cell end
@@ -738,12 +1026,16 @@ local function NewView(opts)
             price = function(entry) return entry.price end,
             learn = function(entry) return entry.known and L["Known"] or entry.learn end,
         }, function() instance.Refresh() end)
-        if widgets.sorter then widgets.sorter:SetText({ "name", "learn" }) end
+        if widgets.sorter then
+            widgets.sorter:SetText({ "name", "learn" })
+            -- Only headings that show take clicks, from the start.
+            widgets.sorter:Sync()
+        end
 
         -- Right-click the headings to choose the columns.
         ns.Columns:Attach(headings, "recipes", widgets.sorter)
         ns.Columns:OnChange("recipes", function()
-            ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8 })
+            PlaceHeadings()
             if widgets.sorter then widgets.sorter:Sync() end
             if widgets.list then widgets.list:Refresh() end
         end)
@@ -768,9 +1060,14 @@ local function NewView(opts)
 
             onEnter = ShowRowTooltip,
             onLeave = function() GameTooltip:Hide() end,
+            -- The recipe wishlist's line (2026-11-17), while it is on.
+            menu = function(entry)
+                local wish = ns.WishlistUI and ns.WishlistUI.MenuLine(entry.recipeID)
+                return wish and { wish } or nil
+            end,
 
             onScrollbarShown = function(shown)
-                headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right - (shown and 10 or 0), -40)
+                headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right - (shown and 10 or 0), top)
             end,
         })
         list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
@@ -812,6 +1109,7 @@ local function NewView(opts)
     --- For the tests.
     instance._state = state
     instance._widgets = widgets
+    instance._squeezed = function() return squeezed end
 
     return instance
 end
@@ -819,7 +1117,9 @@ end
 RecipeBookView.New = NewView
 
 -- The Profit tab's copy, which /bts recipes and the Settings button open.
-local main = NewView()
+-- It shows your skill above the list too, so a recipe's SKILL reads
+-- against it on either tab.
+local main = NewView({ showSkill = true, methodChoice = true, shareProfession = true })
 RecipeBookView.Build = main.Build
 RecipeBookView.Refresh = main.Refresh
 RecipeBookView.SetProfession = main.SetProfession

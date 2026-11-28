@@ -12,7 +12,7 @@
 --
 -- Prices are the usual ones: Prices:GetValue (your scans, then your guild,
 -- TSM and Auctionator) after the cut and deposit, a vendor's price, or what
--- a disenchant most likely gives (Disenchant:GetValue). A grey is the
+-- a disenchant gives on average (Disenchant:GetValue). A grey is the
 -- vendor's price only. Other materials cost what Cost:GetReagentCost says;
 -- a craft with one it can't price is left out, never guessed.
 --
@@ -105,7 +105,8 @@ function Shuffle:Breaks(itemID, cache)
             local fine, value, _, breakdown = pcall(Disenchant.GetValue, Disenchant, itemID)
             if fine and type(value) == "number" and value > 0 and type(breakdown) == "table" then
                 for _, outcome in ipairs(breakdown.outcomes or {}) do
-                    if outcome.counted then
+                    -- The material a disenchant most often gives.
+                    if outcome.likely or (outcome.likely == nil and outcome.counted) then
                         found = { value = value, itemID = outcome.itemID, average = outcome.average or 1,
                             yours = type(breakdown.facts) == "table" and breakdown.facts.source == "yours" }
                         break
@@ -124,7 +125,8 @@ end
 --------------------------------------------------------------------------------
 
 local function YieldOf(recipe)
-    local low, high = tonumber(recipe.quantityMin) or 1, tonumber(recipe.quantityMax) or low
+    local low = tonumber(recipe.quantityMin) or 1
+    local high = tonumber(recipe.quantityMax) or low
     local yield = (low + high) / 2
     return yield > 0 and yield or 1
 end

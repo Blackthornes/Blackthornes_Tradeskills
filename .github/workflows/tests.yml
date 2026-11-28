@@ -47,6 +47,9 @@ jobs:
       - name: Vendor and trainer spots fold in from a save
         run: python tools/test_forever_vendor_spots.py
 
+      - name: Classic recipes are put right from the client's tables
+        run: python tools/test_forever_recipes.py
+
       - name: Where writs are handed in folds in from a save
         run: python tools/test_forever_writ_customers.py
 
@@ -58,3 +61,18 @@ jobs:
 
       - name: The private-files check catches what it should
         run: python tools/test_check_private_files.py
+
+      - name: The house rules check catches what it should
+        run: python tools/test_check_house_rules.py
+
+      - name: The change checklist reads, and every item is whole
+        run: python tools/test_checklist_for_change.py
+
+      - name: The save measure reads a save and prints no names
+        run: python tools/test_measure_save.py
+
+      - name: House rules on this change (warns only, never fails)
+        continue-on-error: true
+        run: |
+          git fetch --quiet --deepen=300 origin main:refs/remotes/origin/main || true
+          python tools/check_house_rules.py

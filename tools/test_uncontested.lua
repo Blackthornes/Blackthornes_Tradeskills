@@ -150,19 +150,19 @@ print("")
 print("the Woolen Reagent Bag, as he described it")
 
 Reset()
--- 10 wool at 50c is 5s of materials, so the markup price is 7s 50c, which on
--- an item auction rounds up to 8s.
+-- 10 wool at 50c is 5s of materials, so the markup price is 7s 50c. Item
+-- auctions take copper, so it stays 7s 50c.
 Prices:Record(WOOL, 50, 50, 200, time(), 50, nil)
 ScanWithOnlyMine(BAG, 600)      -- his own listings, at 6s
 
 do
     local price, basis, why = Profit:ChoosePostPrice(BAG)
 
-    check("no rival: priced off materials, not market", price, 800)
+    check("no rival: priced off materials, not market", price, 750)
     check("and the basis says so", basis, "uncontested")
     check("with a sentence naming the markup", type(why), "string")
     check("never the market value it used to recommend", price ~= 600, true)
-    check("a price an item auction accepts", Util.IsWholeSilver(price), true)
+    check("a price an item auction accepts", Util.IsItemAuctionPrice(price), true)
 end
 
 do
@@ -196,19 +196,19 @@ end
 
 do
     -- A rival appears at 60s. Nothing about the markup survives that: there
-    -- is someone to undercut again, and undercutting by the silver an item
-    -- auction forces still clears the minimum profit.
+    -- is someone to undercut again, and undercutting by the copper still
+    -- clears the minimum profit.
     Prices:Record(BAG, 5000, 6000, 5, time(), 6000, 5000)
 
     local price, basis = Profit:ChoosePostPrice(BAG)
-    check("a rival is undercut, not marked up", price, 5900)
+    check("a rival is undercut, not marked up", price, 5999)
     check("and the basis is undercut", basis, "undercut")
 end
 
 do
-    -- A rival below what the bag costs to make. The existing rule holds: a
-    -- whole silver is not given away when the sale would not clear the
-    -- minimum profit, so it matches rather than chasing them down.
+    -- A rival below what the bag costs to make. The existing rule holds: no
+    -- undercut when the sale would not clear the minimum profit, so it
+    -- matches rather than chasing them down.
     Prices:Record(BAG, 5000, 400, 5, time(), 400, 5000)
 
     local price, basis = Profit:ChoosePostPrice(BAG)
@@ -244,7 +244,7 @@ do
     -- is no age and no confidence behind it, unlike an uncontested price.
     local price, basis = Profit:ChoosePostPrice(BAG)
     check("never scanned: still the derived basis", basis, "derived")
-    check("never scanned: same number", price, 800)
+    check("never scanned: same number", price, 750)
 end
 
 do
@@ -254,7 +254,7 @@ do
     Prices:RecordEmpty(BAG)
 
     local price, basis = Profit:ChoosePostPrice(BAG)
-    check("empty book: marked up over materials", price, 800)
+    check("empty book: marked up over materials", price, 750)
     check("empty book: basis is uncontested", basis, "uncontested")
     check("empty book: market value survived", Prices:GetValue(BAG, "market"), 600)
 end
@@ -291,7 +291,11 @@ do
 
     check("flagged as uncontested", analysis.priceUncontested, true)
     check("not flagged as never scanned", analysis.priceDerived, nil)
-    check("revenue is the marked-up price", analysis.revenue, 800)
+    -- The owner said build it (2026-11-22): nobody has paid the markup, so
+    -- profit is counted at the market value, what it last sold for. The
+    -- Sell tab still lists at the markup, kept as listsAt.
+    check("revenue is the market value, not the markup", analysis.revenue, 600)
+    check("the listing price is kept for showing", analysis.listsAt, 750)
     check("the scan behind it is still real", analysis.age ~= nil, true)
 end
 
@@ -307,9 +311,11 @@ local function ScanWool(prices)
     for _, price in ipairs(prices) do
         listings[#listings + 1] = { unitPrice = price, quantity = 20 }
     end
-    local market, min, quantity, rival, own, ignored =
+    -- A search reads the book, so its steps go with it, as every caller
+    -- of Summarise passes them (a reading with none is a browse row).
+    local market, min, quantity, rival, own, ignored, ladder =
         Prices:Summarise(listings, Prices:GetValue(WOOL, "market"))
-    Prices:Record(WOOL, market, min, quantity, time(), rival, own, ignored)
+    Prices:Record(WOOL, market, min, quantity, time(), rival, own, ignored, ladder)
 end
 
 Reset()
@@ -322,7 +328,7 @@ do
     check("wool costs the 50c the rest are at", (Cost:GetReagentUnitCost(WOOL)), 50)
 
     local price, basis = Profit:ChoosePostPrice(BAG)
-    check("only seller: marked up off 50c wool", price, 800)
+    check("only seller: marked up off 50c wool", price, 750)
     check("only seller: basis is uncontested", basis, "uncontested")
     check("the Profit tab costs it off 50c wool", Profit:Analyse(BAG_RECIPE).cost.total, 500)
 end

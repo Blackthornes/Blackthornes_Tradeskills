@@ -34,8 +34,15 @@ local MailHaul = ns.NewModule("MailHaul")
 
 local Util = ns.Util
 
--- Visits kept per realm. Each is small; a hundred is months of play.
-local MAX_HAULS = 100
+-- Visits kept per realm: every one from the last KEEP_DAYS, up to MAX_HAULS.
+-- A busy seller can fill a hundred in two days. Each saved visit is small
+-- (KEEP_SALES and KEEP_ITEMS below), so two thousand weigh little. A player
+-- back from a long break still keeps their last KEEP_ANYWAY, and the visits
+-- that hold the best haul and best sale are never dropped.
+local MAX_HAULS = 2000
+local KEEP_DAYS = 60
+local KEEP_ANYWAY = 100
+MailHaul.MAX_HAULS = MAX_HAULS
 
 -- How much of one haul is kept once saved. The report itself sees it all.
 local KEEP_SALES = 10
@@ -220,6 +227,7 @@ local function NewVisit()
     return {
         startedAt = time(),
         gold = { sold = 0, outbid = 0, other = 0 },
+        ownGold = 0,       -- gold mailed from your own characters, never income
         total = 0,
         mailTotal = 0,     -- gold worked out from the mail itself
         moneyIn = 0,       -- gold your purse actually went up by
@@ -290,7 +298,9 @@ function MailHaul:Settle()
     visit.mailTotal = mailGold
 
     if visit.lastMoney ~= nil then
-        visit.total = visit.moneyIn
+        -- Gold one of your own characters mailed raised the purse too, but
+        -- it was yours already, so it is not counted as money made.
+        visit.total = math.max(0, visit.moneyIn - (visit.ownGold or 0))
     else
         visit.total = mailGold
     end
@@ -325,12 +335,24 @@ end
 
 --- Fold what was collected into the visit.
 -- @return gold collected by these events
+--- Whether this mail came from one of the player's own characters (any
+--- character Tradeskills keeps a record of, linked accounts included).
+function MailHaul.FromOwnCharacter(event)
+    if type(event) ~= "table" or event.kind ~= "other" then return false end
+    if type(event.name) ~= "string" or event.name == "" then return false end
+    local log = ns.GoldLog
+    if not (log and log.IsOwnCharacter) then return false end
+    local ok, own = pcall(log.IsOwnCharacter, log, event.name)
+    return ok and own == true
+end
+
 function MailHaul:Record(events)
     local visit = self.visit
     local gained = 0
 
     for _, event in ipairs(events) do
         local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
+        local fromOwn = MailHaul.FromOwnCharacter(event)
         local eventGold = 0
 
         local collected = visit.collected[event.key or "?"] or { amounts = {}, items = {} }
@@ -358,8 +380,12 @@ function MailHaul:Record(events)
             end
         end
 
-        visit.gold[bucket] = visit.gold[bucket] + eventGold
-        gained = gained + eventGold
+        if fromOwn then
+            visit.ownGold = (visit.ownGold or 0) + eventGold
+        else
+            visit.gold[bucket] = visit.gold[bucket] + eventGold
+            gained = gained + eventGold
+        end
 
         local itemKind = (event.kind == "sold" or event.kind == "outbid") and "other" or event.kind
         local hadItems = false
@@ -377,7 +403,7 @@ function MailHaul:Record(events)
         if event.kind == "other" and (eventGold > 0 or hadItems) then
             local sender = tostring(event.name or "?")
             if not visit.senders[sender] then visit.letters = visit.letters + 1 end
-            visit.senders[sender] = (visit.senders[sender] or 0) + eventGold
+            visit.senders[sender] = (visit.senders[sender] or 0) + (fromOwn and 0 or eventGold)
         end
     end
 
@@ -395,7 +421,7 @@ function MailHaul:Reverse(events)
     -- sales set aside below. If it does, the gold really arrived and the
     -- mail that appeared is a new one that only looks the same.
     self:CheckMoney()
-    local counted = visit.gold.sold + visit.gold.outbid + visit.gold.other
+    local counted = visit.gold.sold + visit.gold.outbid + visit.gold.other + (visit.ownGold or 0)
     local paid = Money() ~= nil and visit.moneyIn >= counted and counted > 0
 
     for _, event in ipairs(events) do
@@ -403,13 +429,18 @@ function MailHaul:Reverse(events)
 
         if collected then
             local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
+            local fromOwn = MailHaul.FromOwnCharacter(event)
 
             for _, amount in ipairs(event.monies) do
                 for index, was in ipairs(collected.amounts) do
                     if was == amount then
                         table.remove(collected.amounts, index)
-                        visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
-                        undone = undone + amount
+                        if fromOwn then
+                            visit.ownGold = math.max(0, (visit.ownGold or 0) - amount)
+                        else
+                            visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
+                            undone = undone + amount
+                        end
                         self:Log(("%.0f came back to %s, not counted"):format(amount, event.key))
 
                         -- The sale is set aside rather than forgotten. With
@@ -628,23 +659,106 @@ local function ItemsValue(list)
     return value
 end
 
---- The best haul and best single sale before this one.
+--- Whether a saved visit was left out of the totals by the player. A left
+--- out visit stays saved and listed; it just stops counting toward the best
+--- haul, best sale, Today and Last 7 days.
+function MailHaul.IsLeftOut(haul)
+    return type(haul) == "table" and haul.leftOut == true
+end
+
+--- Leave a saved visit out of the totals, or count it again. Only marks the
+--- record (`leftOut`, never renamed); nothing is deleted.
+-- @return true when the mark changed
+function MailHaul:SetLeftOut(haul, on)
+    if type(haul) ~= "table" then return false end
+    -- A row of the Sales tab is a view of its record; the mark goes on the record.
+    haul = rawget(haul, "record") or haul
+    on = on and true or nil
+
+    -- The saved record and any copy of it (the report of the visit just
+    -- closed is the untrimmed copy) carry the same mark.
+    local targets = { haul }
+    for _, saved in ipairs(self:GetHistory()) do
+        if saved ~= haul and saved.t == haul.t and saved.who == haul.who then targets[#targets + 1] = saved end
+    end
+    if self.last and self.last ~= haul and self.last.t == haul.t and self.last.who == haul.who then
+        targets[#targets + 1] = self.last
+    end
+
+    local changed = false
+    for _, target in ipairs(targets) do
+        if target.leftOut ~= on then
+            target.leftOut = on
+            changed = true
+        end
+    end
+
+    if changed and ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    return changed
+end
+
+--- How many saved visits are left out.
+function MailHaul:LeftOutCount(history)
+    local n = 0
+    for _, haul in ipairs(history or self:GetHistory()) do
+        if MailHaul.IsLeftOut(haul) then n = n + 1 end
+    end
+    return n
+end
+
+--- The best haul and best single sale before this one. Left out visits
+--- don't count.
 function MailHaul:Records(history)
     local bestHaul, bestSale = 0, 0
 
     for _, haul in ipairs(history or self:GetHistory()) do
-        if (haul.total or 0) > bestHaul then bestHaul = haul.total end
-        if haul.best and (haul.best.amount or 0) > bestSale then bestSale = haul.best.amount end
+        if not MailHaul.IsLeftOut(haul) and (haul.total or 0) > bestHaul then bestHaul = haul.total end
+        if not MailHaul.IsLeftOut(haul) and haul.best and (haul.best.amount or 0) > bestSale then
+            bestSale = haul.best.amount
+        end
     end
 
     return bestHaul, bestSale
+end
+
+--- Drop the oldest visits once there are more than MAX_HAULS, or once they
+--- are older than KEEP_DAYS, keeping at least KEEP_ANYWAY. The visits that
+--- hold the best haul and the best sale stay, however old.
+function MailHaul:TrimHistory(history, now)
+    if #history <= KEEP_ANYWAY then return end
+
+    local bestHaul, bestSale = self:Records(history)
+    local keepHaul, keepSale
+    for _, haul in ipairs(history) do
+        if not MailHaul.IsLeftOut(haul) then
+            if not keepHaul and bestHaul > 0 and (haul.total or 0) == bestHaul then keepHaul = haul end
+            if not keepSale and bestSale > 0 and haul.best and (haul.best.amount or 0) == bestSale then
+                keepSale = haul
+            end
+        end
+    end
+
+    local cutoff = (now or time()) - KEEP_DAYS * 86400
+    local index = 1
+    while #history > KEEP_ANYWAY and index <= #history do
+        local haul = history[index]
+        -- Oldest first, so the first one young enough ends the trim.
+        if #history <= MAX_HAULS and (haul.t or 0) >= cutoff then break end
+        if haul == keepHaul or haul == keepSale then
+            index = index + 1
+        else
+            table.remove(history, index)
+        end
+    end
 end
 
 --- Gold collected since `since` (a time()), across saved visits.
 function MailHaul:TotalSince(since)
     local total = 0
     for _, haul in ipairs(self:GetHistory()) do
-        if (haul.t or 0) >= since then total = total + (haul.total or 0) end
+        if (haul.t or 0) >= since and not MailHaul.IsLeftOut(haul) then
+            total = total + (haul.total or 0)
+        end
     end
     return total
 end
@@ -753,7 +867,7 @@ function MailHaul:EndVisit()
 
     local history = self:GetHistory()
     history[#history + 1] = Trimmed(haul)
-    while #history > MAX_HAULS do table.remove(history, 1) end
+    self:TrimHistory(history, time())
 
     self.last = haul
     self:Announce(haul)

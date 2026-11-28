@@ -13,7 +13,7 @@
 --      with only the tabs that help there, Settings last; leaving gives
 --      the drawer and the usual tabs back.
 
-local GLOBALS = { "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
+local GLOBALS = { "ProfessionsFrame", "MailFrame", "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
     "UISpecialFrames", "tinsert", "GetTime", "time" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
@@ -232,8 +232,10 @@ check("on the Auction House tab", Tabs.atAuction and UI.activeTab == "auctionhou
 check("the drawer is laid in the tab", panel.into == 1 and panel.container == UI.ahContainer
     and UI.ahContainer:IsShown())
 check("its own row of tabs shows", UI.ahTabStrip:IsShown() and not UI.tabStrip:IsShown())
-check("only the tabs that help, Settings last",
-    Keys(UI.ahTabStrip) == "auctionhouse,prices,profit,queue,disenchanting,deals,settings")
+-- Every tab stays a click away at the auction house (a player's report,
+-- 2026-11-17: Sales was missing there). The ones that help there first.
+check("the tabs that help first, then every other, Settings last",
+    Keys(UI.ahTabStrip) == "auctionhouse,prices,profit,queue,disenchanting,deals,gather,levelup,sales,characters,settings")
 check("never kept as the tab to open on", ns.db.lastTab == "queue")
 UI:SelectTab("prices")
 check("another tab there", UI.activeTab == "prices" and UI.ahTabStrip.selected == "prices"
@@ -244,6 +246,214 @@ check("leaving hands the drawer back", not Tabs.atAuction and panel.outOf == 1)
 check("the usual tabs come back", UI.tabStrip:IsShown() and not UI.ahTabStrip:IsShown())
 check("on the tab picked before", UI.activeTab == "queue" and UI.tabStrip.selected == "queue")
 _G.AuctionHouseFrame = nil
+
+print("7. at the profession window and the mailbox")
+local craft = { into = 0, outOf = 0, back = 0 }
+ns.CraftPanel = {
+    IntoOne = function(_, container) craft.into = craft.into + 1; craft.container = container end,
+    OutOfOne = function() craft.outOf = craft.outOf + 1 end,
+    BackBeside = function() craft.back = craft.back + 1 end,
+}
+local mail = { into = 0, work = false }
+ns.QueueMailPanel = {
+    HasWork = function() return mail.work end,
+    IntoOne = function() mail.into = mail.into + 1 end,
+    OutOfOne = noop, BackBeside = noop,
+}
+UI:SelectTab("queue")
+_G.ProfessionsFrame = Region()
+_G.ProfessionsFrame.GetRight = function() return 600 end
+_G.ProfessionsFrame.GetTop = function() return 650 end
+hub.place = "profession"
+Tabs:AtDock("profession")
+check("docks beside the profession window", SW.Docked())
+check("on the Crafting tab", Tabs.atDock == "profession" and UI.activeTab == "crafting")
+check("the craft pane is laid in the tab", craft.into == 1
+    and craft.container == UI.dockContainers.profession and UI.dockContainers.profession:IsShown())
+check("its own row of tabs shows", UI.dockStrips.profession:IsShown() and not UI.tabStrip:IsShown())
+-- Favors and Writs and Sales were missing here, so with the auction house
+-- and the profession window both open neither could be reached (a player's
+-- report, 2026-11-17).
+check("Crafting first, then every tab, Settings last", Keys(UI.dockStrips.profession)
+    == "crafting,queue,profit,prices,gather,disenchanting,levelup,deals,sales,characters,settings")
+check("never kept as the tab to open on", ns.db.lastTab == "queue")
+check("opened only once a visit", Tabs.dockOpened.profession == true)
+local function HasTab(strip, key)
+    for _, button in ipairs(strip.tabs) do if button.key == key then return true end end
+    return false
+end
+UI:SelectTab("deals")
+check("Favors and Writs opens there", UI.activeTab == "deals"
+    and HasTab(UI.dockStrips.profession, "deals") and UI.dockStrips.profession:IsShown())
+UI:SelectTab("sales")
+check("Sales opens there", UI.activeTab == "sales" and HasTab(UI.dockStrips.profession, "sales"))
+UI:SelectTab("crafting")
+SW.Left("profession")
+check("leaving hands the pane back", Tabs.atDock == nil and craft.outOf == 1 and craft.back == 1)
+check("the usual tabs come back", UI.tabStrip:IsShown() and UI.activeTab == "queue")
+Tabs:DockClosed("profession")
+check("a new visit opens it again", Tabs.dockOpened.profession == nil)
+_G.ProfessionsFrame = nil
+
+_G.MailFrame = Region()
+_G.MailFrame.GetRight = function() return 600 end
+_G.MailFrame.GetTop = function() return 650 end
+hub.place = "mail"
+pcall(SW.Dock)
+Tabs:SettleDock()
+check("nothing to mail: no Mail tab", Tabs.atDock == nil and mail.into == 0)
+mail.work = true
+Tabs:SettleDock()
+check("something to mail: the Mail tab", Tabs.atDock == "mail" and UI.activeTab == "mail" and mail.into == 1)
+mail.work = false
+Tabs:SettleDock()
+check("all sent: back to the tab before", Tabs.atDock == nil and UI.activeTab == "queue")
+_G.MailFrame = nil
+
+print("8. Small Craft Queue: ticked")
+-- A player asked (2026-11-17) for only the small craft queue at the
+-- profession window while the one window stays on everywhere else.
+pcall(SW.Close)
+Tabs:SettleDock()
+Tabs:DockClosed("profession")
+settings.craftPaneBeside = true
+_G.ProfessionsFrame = Region()
+_G.ProfessionsFrame.GetRight = function() return 600 end
+_G.ProfessionsFrame.GetTop = function() return 650 end
+hub.place = "profession"
+local intoBefore = craft.into
+local took = Tabs:AtDock("profession")
+check("the one window stays shut", not (hub.frame and hub.frame:IsShown()))
+check("the small pane opens beside the window", took == false and craft.into == intoBefore)
+check("the one window is still on", SW.On())
+pcall(SW.Open, "tradeskills")
+Tabs:AtDock("profession")
+check("opened by hand, the pane moves into it as before", Tabs.atDock == "profession"
+    and craft.into == intoBefore + 1)
+pcall(SW.Close)
+Tabs:SettleDock()
+Tabs:DockClosed("profession")
+settings.craftPaneBeside = nil
+_G.ProfessionsFrame = nil
+
+-- How Tradeskills opens in each place (ts-improve-2, the owner said build
+-- it, 2026-11-26): Full Window, Slim Panel, Round Button or Stay Closed.
+local function Reset()
+    pcall(SW.Close)
+    Tabs:SettleDock()
+    Tabs:DockClosed("profession")
+    Tabs:DockClosed("mail")
+    Tabs.ahOpened = false
+    UI.ahAsked = false
+    UI.openedFor = nil
+    hub.place = nil
+end
+local folded = {}
+local keptFold, keptTimer = ns.FoldWindow, C_Timer
+ns.FoldWindow = { Fold = function(_, frame) folded[#folded + 1] = frame; return true end, Unfold = noop,
+    IsFolded = function() return false end }
+C_Timer = { After = function(_, fn) fn() end }
+
+print("9. the defaults stay as before")
+Reset()
+check("auction house: the full window", UI.WindowAt("auction") == "full")
+check("profession: the full window", UI.WindowAt("profession") == "full")
+check("mailbox: the slim list beside it", UI.WindowAt("mail") == "slim")
+settings.windowAtAuction, settings.windowAtProfession, settings.windowAtMail = "auto", "auto", "auto"
+check("auto reads the same", UI.WindowAt("auction") == "full" and UI.WindowAt("profession") == "full"
+    and UI.WindowAt("mail") == "slim")
+settings.openAtAuction, settings.openAtProfessions = false, false
+check("Open By Itself unticked reads as Stay Closed", UI.WindowAt("auction") == "closed"
+    and UI.WindowAt("profession") == "closed" and not UI.OpensAtAuction())
+settings.openAtAuction, settings.openAtProfessions = nil, nil
+settings.craftPaneBeside = true
+check("Small Craft Queue ticked reads as Slim Panel", UI.WindowAt("profession") == "slim")
+settings.craftPaneBeside = nil
+SW.SetOn(false)
+check("One Window off: the slim panel", UI.WindowAt("auction") == "slim" and UI.WindowAt("profession") == "slim")
+SW.SetOn(true)
+check("an older setting is never written", settings.openAtAuction == nil and settings.craftPaneBeside == nil)
+
+print("10. Slim Panel at the auction house")
+settings.windowAtAuction = "slim"
+_G.AuctionHouseFrame = Region()
+_G.AuctionHouseFrame.GetRight = function() return 600 end
+_G.AuctionHouseFrame.GetTop = function() return 650 end
+hub.place = "auction"
+local intoBefore = panel.into
+check("the one window stays shut", Tabs:AtAuctionHouse() == false and not (hub.frame and hub.frame:IsShown()))
+check("the drawer stays beside the auction house", panel.into == intoBefore)
+UI:OpenFullHere()
+check("Full Window opens the one window there", hub.frame:IsShown() and SW.Docked())
+check("the drawer moves into its Auction House tab", Tabs.atAuction and panel.into == intoBefore + 1)
+SW.Left("auction")
+Reset()
+settings.windowAtAuction = "button"
+hub.place = "auction"
+folded = {}
+Tabs:AtAuctionHouse()
+check("Round Button: opens, then folds", hub.frame:IsShown() and folded[1] == hub.frame)
+SW.Left("auction")
+Reset()
+settings.windowAtAuction = "closed"
+hub.place = "auction"
+check("Stay Closed: nothing comes up", not UI.AuctionWanted() and not (hub.frame and hub.frame:IsShown()))
+settings.windowAtAuction = nil
+_G.AuctionHouseFrame = nil
+
+print("11. at the profession window")
+_G.ProfessionsFrame = Region()
+_G.ProfessionsFrame.GetRight = function() return 600 end
+_G.ProfessionsFrame.GetTop = function() return 650 end
+Reset()
+settings.windowAtProfession = "button"
+hub.place = "profession"
+folded = {}
+Tabs:AtDock("profession")
+check("Round Button: the one window opens folded", hub.frame:IsShown() and folded[1] == hub.frame)
+Reset()
+settings.windowAtProfession = "slim"
+settings.craftPaneBeside = nil
+hub.place = "profession"
+check("Slim Panel: the pane stays beside it", Tabs:AtDock("profession") == false
+    and not hub.frame:IsShown())
+Reset()
+settings.windowAtProfession = "full"
+settings.craftPaneBeside = true
+hub.place = "profession"
+Tabs:AtDock("profession")
+check("a pick beats Small Craft Queue", hub.frame:IsShown() and Tabs.atDock == "profession")
+Reset()
+settings.windowAtProfession, settings.craftPaneBeside = nil, nil
+_G.ProfessionsFrame = nil
+
+print("12. at the mailbox")
+_G.MailFrame = Region()
+_G.MailFrame.GetRight = function() return 600 end
+_G.MailFrame.GetTop = function() return 650 end
+Reset()
+hub.place = "mail"
+UI:ArrivedAt("mail")
+check("as before: the one window stays shut", not (hub.frame and hub.frame:IsShown()))
+settings.windowAtMail = "full"
+UI:ArrivedAt("mail")
+check("Full Window: the one window opens there", hub.frame:IsShown() and SW.Docked())
+Reset()
+SW.SetOn(false)
+settings.windowAtAuction = "full"
+UI:ArrivedAt("auction")
+check("One Window off, Full Window: Tradeskills' own window", UI.window:IsShown()
+    and not Tabs:Hosted() and UI.openedFor == "auction")
+UI:CloseWithShop("auction")
+check("it closes with the auction house", not UI.window:IsShown())
+settings.windowAtAuction = "slim"
+UI:ArrivedAt("auction")
+check("One Window off, Slim Panel: it stays shut", not UI.window:IsShown())
+SW.SetOn(true)
+settings.windowAtAuction, settings.windowAtMail = nil, nil
+_G.MailFrame = nil
+Reset()
+ns.FoldWindow, C_Timer = keptFold, keptTimer
 
 SW.SetOn(false)
 _G.BlackthornesWindow = nil

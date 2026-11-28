@@ -43,6 +43,15 @@ local EDGE_PAD = 11
 local TAB_HANG = 28
 local TAB_INSET = 34
 
+-- The slim frame (the owner said build it, 2026-11-21): the name, the scan
+-- button and the gems share one slim bar across the top, and what the scan
+-- knows and the version sit in a footer along the bottom.
+local TITLE_TOP = 5
+local TITLE_BAR = 26
+local FOOTER_HEIGHT = 16
+local FOOTER_BOTTOM = 6
+local SCAN_BUTTON_HEIGHT = 20
+
 -- The strip of controls at the top of the sell list (UI/PostPanel.lua):
 -- what is ready to sell, the scan's status, Post Crafted and Scan. As wide as
 -- the inside of the sell list, which sets it in place.
@@ -150,11 +159,14 @@ function UI:Build()
         local trim = ns.Titanforged:Dress(window, {
             title = "Blackthornes Tradeskills",
             portrait = true,
+            slim = true,
             close = function() UI:Hide() end,
         })
+        TITLE_TOP = ns.Titanforged.TITLE_TOP or TITLE_TOP
+        TITLE_BAR = ns.Titanforged.TITLE_BAR or TITLE_BAR
 
-        -- Kept on the screen whole: the portrait and plate reach out past
-        -- the top left, and the tabs hang below.
+        -- Kept on the screen whole: the portrait and gems reach a little
+        -- past the top corners, and the tabs hang below.
         local left, right, top = ns.Titanforged.Reach(trim)
         if window.SetClampRectInsets then
             window:SetClampRectInsets(-left, right, top, -TAB_HANG)
@@ -168,11 +180,14 @@ function UI:Build()
     -- The fold gem beside the close gem folds the window down to its plate
     -- (UI/FoldWindow.lua, a player asked, 2026-10-24).
     if ns.FoldWindow then
-        ns.FoldWindow:Add(window, { onToggle = function(folded)
+        ns.FoldWindow:Add(window, { key = "Main", onToggle = function(folded)
             if ns.PostPanel then ns.PostPanel:Reflow() end
             if not folded then UI:RefreshActiveTab() end
         end })
     end
+    -- And left of it, the swap gem: it joins every Blackthornes addon into
+    -- the one window (UI/SharedWindow.lua).
+    if ns.SharedWindow and ns.SharedWindow.AddSwap then ns.SharedWindow.AddSwap(window, "tradeskills") end
 
     window:SetScript("OnDragStart", function(self)
         -- Still rising into place: land it first, or the opening would keep
@@ -197,6 +212,7 @@ function UI:Build()
     window:HookScript("OnHide", function(frame) TSTabs:Closed(frame) end)
 
     self:BuildHeader()
+    self:BuildFooter()
     self:BuildTabs()
     self:BuildSizeGrip()
 
@@ -208,84 +224,114 @@ end
 function UI:BuildHeader()
     local window = self.window
 
-    -- The window's name is on the plate across the top edge and the close
-    -- gem sits on the top right corner (UI/Titanforged.lua), so the header
-    -- holds what the scan has done and the scan button, clear of the
-    -- portrait on the left.
+    -- The slim bar across the top (UI/Titanforged.lua, opts.slim) holds the
+    -- portrait and the name on the left and the gems on the right corner;
+    -- the scan button sits in it too, just left of the gems.
     local header = CreateFrame("Frame", nil, window)
-    header:SetPoint("TOPLEFT", EDGE_PAD, -EDGE_PAD)
-    header:SetPoint("TOPRIGHT", -EDGE_PAD, -EDGE_PAD)
-    header:SetHeight(52)
-
-    -- A gold rule under it, bright at the left and fading out to the right.
-    local rule = header:CreateTexture(nil, "ARTWORK")
-    rule:SetPoint("BOTTOMLEFT")
-    rule:SetPoint("BOTTOMRIGHT")
-    rule:SetHeight(1)
-    Theme.SetGradientAlpha(rule, "HORIZONTAL", "accent", 0.6, 0.05)
-
-    -- The installed version, small and faint past the portrait, so a player
-    -- can see at a glance which one they run. The header is on every tab,
-    -- Settings included.
-    local version = Theme.CreateLabel(header, "tiny", "dim")
-    version:SetPoint("LEFT", header, "LEFT", 58, -6)
-    version:SetText(ns.VersionLabel())
-    self.versionLabel = version
-
-    -- Something for the scan button to sit beside, where the close button
-    -- used to be: the gem is on the window's corner now.
-    local close = CreateFrame("Frame", nil, header)
-    close:SetSize(1, 24)
-    close:SetPoint("TOPRIGHT", -8, -12)
+    header:SetPoint("TOPLEFT", EDGE_PAD, -TITLE_TOP)
+    header:SetPoint("TOPRIGHT", -EDGE_PAD, -TITLE_TOP)
+    header:SetHeight(TITLE_BAR)
 
     -- Scan.
     --
     -- The button stays clickable even when a scan is not currently possible:
     -- a greyed-out control that cannot say why is worse than one that tells
-    -- you to open the auction house.
+    -- you to open the auction house. Its hover says why.
     local scanButton = Widgets.CreateButton(header, L["Scan Auctions"], function()
         UI:TriggerScan()
-    end, { width = SCAN_BUTTON_WIDTH, height = 24, primary = true })
+    end, { width = SCAN_BUTTON_WIDTH, height = SCAN_BUTTON_HEIGHT, primary = true })
     FitScanButton(scanButton)
-
-    scanButton:SetPoint("TOPRIGHT", close, "TOPLEFT", -8, -1)
     self.scanButton = scanButton
-
-    -- How old the scan is, a small chip beside the scan button (the house
-    -- kit, 2026-10-29: one header row). What the addon knows, items priced
-    -- and recipes known, is on its hover.
-    local status
-    if Widgets.CreateChip then
-        status = Widgets.CreateChip(header, "", nil, { height = 20 })
-        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
-        status:HookScript("OnEnter", function(self)
-            local tip = rawget(self, "tip")
-            if not tip then return end
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        status:HookScript("OnLeave", function() GameTooltip:Hide() end)
-    else
-        status = Theme.CreateLabel(header, "small", "muted", "RIGHT")
-        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
-    end
-    self.statusLabel = status
-
-    -- Inline explanation, so the reason appears in the window rather than only
-    -- in the chat frame.
-    local hint = Theme.CreateLabel(header, "small", "warn", "RIGHT")
-    hint:SetPoint("TOPRIGHT", scanButton, "BOTTOMRIGHT", 0, -4)
-    hint:SetWidth(260)
-    self.scanHint = hint
-
     self.header = header
+    self:PlaceScanButton(false)
 
     local progress = Widgets.CreateProgressBar(window)
     progress:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     progress:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
     progress:Hide()
     self.progressBar = progress
+end
+
+--- How far in from the window's right edge the gems reach: the close gem on
+--- the corner, then the fold gem, then the swap gem, each its own width.
+function UI:GemRoom()
+    local window = self.window
+    local trim = window and rawget(window, "titan")
+    if type(trim) ~= "table" then return 0 end
+    local function Width(button)
+        if type(button) ~= "table" then return 0 end
+        local ok, width = pcall(button.GetWidth, button)
+        return ok and type(width) == "number" and width or 0
+    end
+    local close = Width(rawget(trim, "closeButton"))
+    local fold = rawget(window, "blackthornesFold")
+    local room = 8 + close / 2
+    for _, width in ipairs({ Width(type(fold) == "table" and fold.button or nil), Width(rawget(window, "blackthornesSwap")) }) do
+        if width > 0 then room = room + width + 2 end
+    end
+    return room
+end
+
+--- Put the scan button in the title bar, just left of the gems; inside the
+--- one window, where the gems are put away, at the right edge.
+function UI:PlaceScanButton(bare)
+    local button, header = self.scanButton, self.header
+    if not (button and header) then return end
+    local room = bare and EDGE_PAD or math.max(EDGE_PAD, self:GemRoom() + 8)
+    button:ClearAllPoints()
+    button:SetPoint("RIGHT", self.window, "TOPRIGHT", -room, -(TITLE_TOP + TITLE_BAR / 2))
+end
+
+--- The footer along the bottom: what the addon knows and how old the scan
+--- is on the left, why a scan can't run (or how far one is) beside the
+--- version on the right.
+function UI:BuildFooter()
+    local window = self.window
+
+    local footer = CreateFrame("Frame", nil, window)
+    footer:SetPoint("BOTTOMLEFT", EDGE_PAD + 4, FOOTER_BOTTOM)
+    footer:SetPoint("BOTTOMRIGHT", -(EDGE_PAD + 4), FOOTER_BOTTOM)
+    footer:SetHeight(FOOTER_HEIGHT)
+    self.footer = footer
+
+    -- The installed version, small and faint on the right, so a player can
+    -- see which one they run. The footer is on every tab, Settings included.
+    local version = Theme.CreateLabel(footer, "tiny", "dim", "RIGHT")
+    version:SetPoint("RIGHT", footer, "RIGHT", 0, 0)
+    version:SetText(ns.VersionLabel())
+    self.versionLabel = version
+
+    -- What the scan knows. The whole line is on its hover when it is cut
+    -- to fit.
+    local status = CreateFrame("Frame", nil, footer)
+    status:SetPoint("LEFT", footer, "LEFT", 0, 0)
+    status:SetHeight(FOOTER_HEIGHT)
+    status:SetWidth(560)
+    local text = Theme.CreateLabel(status, "small", "muted", "LEFT")
+    text:SetPoint("LEFT", status, "LEFT", 0, 0)
+    text:SetWidth(560)
+    pcall(text.SetWordWrap, text, false)
+    status.text = text
+    function status:SetText(words) text:SetText(words or "") end
+    function status:GetText() return text:GetText() end
+    status:EnableMouse(true)
+    status:SetScript("OnEnter", function(self)
+        local tip = rawget(self, "tip")
+        if not tip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    status:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    self.statusLabel = status
+
+    -- Inline explanation, so the reason appears in the window rather than only
+    -- in the chat frame, and the scan's progress while one runs.
+    local hint = Theme.CreateLabel(footer, "small", "warn", "RIGHT")
+    hint:SetPoint("RIGHT", version, "LEFT", -12, 0)
+    hint:SetWidth(380)
+    pcall(hint.SetWordWrap, hint, false)
+    self.scanHint = hint
 end
 
 --- Start or cancel a scan, explaining itself when it cannot.
@@ -335,7 +381,7 @@ function UI:BuildTabs()
 
     local content = Theme.CreatePanel(window, "panel")
     content:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)
-    content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, EDGE_PAD)
+    content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, FOOTER_BOTTOM + FOOTER_HEIGHT + 2)
     Theme.Recess(content)
     self.content = content
 
@@ -356,7 +402,7 @@ function UI:BuildTabs()
     -- (the owner, 2026-10-30): Auction House first, holding the drawer,
     -- then what helps there, Settings last. TSTabs:Settle swaps the rows.
     local ahDefinitions = { { key = "auctionhouse", text = L["Auction House"] } }
-    for _, key in ipairs(UI.AUCTION_TABS) do
+    for _, key in ipairs(self:EveryTab(UI.AUCTION_TABS)) do
         local tab = self.tabs[key]
         if tab then
             ahDefinitions[#ahDefinitions + 1] = { key = key, text = tab.text, right = key == "settings" }
@@ -376,10 +422,75 @@ function UI:BuildTabs()
     self.ahContainer = ahContainer
     -- Not in tabOrder, so only the auction house row offers it.
     self.tabs.auctionhouse = { key = "auctionhouse", text = L["Auction House"], container = ahContainer }
+
+    -- The same for the profession window and the mailbox (the owner said
+    -- build it, 2026-11-16): docked there, the one window wears a row with
+    -- the craft pane as its Crafting tab, or the mail list as its Mail tab.
+    self.dockStrips, self.dockContainers = {}, {}
+    for place, dock in pairs(UI.DOCK_TABS) do
+        local defs = { { key = dock.key, text = dock.text } }
+        for _, key in ipairs(self:EveryTab(dock.tabs)) do
+            local tab = self.tabs[key]
+            if tab then defs[#defs + 1] = { key = key, text = tab.text, right = key == "settings" } end
+        end
+        local dockStrip = Widgets.CreateTabStrip(window, defs, function(key)
+            UI:SelectTab(key)
+        end, { width = stripWidth, hanging = true })
+        dockStrip:SetPoint("TOPLEFT", window, "BOTTOMLEFT", TAB_INSET, 0)
+        dockStrip:Hide()
+        self.dockStrips[place] = dockStrip
+        local holder = CreateFrame("Frame", nil, content)
+        holder:SetPoint("TOPLEFT", 1, -1)
+        holder:SetPoint("BOTTOMRIGHT", -1, 1)
+        holder:Hide()
+        self.dockContainers[place] = holder
+        self.tabs[dock.key] = { key = dock.key, text = dock.text, container = holder }
+    end
+end
+
+-- Docked beside the profession window or the mailbox, Tradeskills' row:
+-- the panel that used to hang beside the game's window first, then what
+-- helps there, then every other tab, Settings last. `panel` names the module that moves in
+-- (its IntoOne and OutOfOne). The tab names wait for the owner's yes.
+UI.DOCK_TABS = {
+    profession = { key = "crafting", text = L["Crafting"], panel = "CraftPanel",
+        tabs = { "queue", "profit", "prices", "settings" } },
+    mail = { key = "mail", text = L["Mail"], panel = "QueueMailPanel",
+        tabs = { "queue", "prices", "settings" } },
+}
+
+--- A dock row's tabs: the ones that help there first, in their order, then
+--- every other tab in the usual order, Settings last. Every tab stays a
+--- click away wherever the window docks (a player's report, 2026-11-17:
+--- with the auction house and the profession window both open, Favors and
+--- Writs and Sales could not be reached).
+function UI:EveryTab(first)
+    local keys, seen = {}, { settings = true }
+    for _, key in ipairs(first or {}) do
+        if not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
+    end
+    for _, tab in ipairs(self.tabOrder) do
+        if not seen[tab.key] then
+            seen[tab.key] = true
+            keys[#keys + 1] = tab.key
+        end
+    end
+    keys[#keys + 1] = "settings"
+    return keys
+end
+
+--- The strip showing now: the auction house's, a dock place's, or the usual.
+function UI:ActiveStrip()
+    if TSTabs.atAuction and self.ahTabStrip then return self.ahTabStrip end
+    local dock = TSTabs.atDock and self.dockStrips and self.dockStrips[TSTabs.atDock]
+    return dock or self.tabStrip
 end
 
 -- The tabs beside Auction House while the one window sits at the auction
--- house, in this order. Gather, Level Up, Sales and Characters wait.
+-- house, in this order. Every other tab follows them (UI:EveryTab).
 UI.AUCTION_TABS = { "prices", "profit", "queue", "disenchanting", "deals", "settings" }
 
 --------------------------------------------------------------------------------
@@ -409,17 +520,35 @@ function UI:SelectTab(key)
         end
     end
     if self.ahContainer then self.ahContainer:SetShown(key == "auctionhouse") end
+    local docked = false
+    for place, holder in pairs(self.dockContainers or {}) do
+        local mine = UI.DOCK_TABS[place].key == key
+        holder:SetShown(mine)
+        docked = docked or mine
+    end
 
     self.activeTab = key
-    local strip = TSTabs.atAuction and self.ahTabStrip or self.tabStrip
+    local strip = self:ActiveStrip()
     strip:Select(key)
 
-    -- The Auction House tab is only there at the auction house, so it is
-    -- never the tab the window opens on next time.
-    if ns.db and key ~= "auctionhouse" then ns.db.lastTab = key end
+    -- The Auction House, Crafting and Mail tabs are only there while docked
+    -- at their place, so none is the tab the window opens on next time.
+    if ns.db and key ~= "auctionhouse" and not docked then ns.db.lastTab = key end
 
     if tab.onShow then tab.onShow() end
-    if tab.refresh then tab.refresh() end
+
+    -- A tab whose onShow is its refresh (Settings) drew itself twice here.
+    -- refreshPicked is a tab's lighter redraw for this moment (Profit ranks
+    -- across frames). And one build of the queue's costs and shopping list
+    -- for the whole redraw, as every other redraw has (Queue:Keeping).
+    local redraw = tab.refreshPicked or tab.refresh
+    if redraw and redraw ~= tab.onShow then
+        if ns.Queue and ns.Queue.Keeping then
+            ns.Queue:Keeping(redraw)
+        else
+            redraw()
+        end
+    end
 end
 
 function UI:UpdateHeader()
@@ -438,9 +567,17 @@ function UI:UpdateHeader()
             or L.Format("scanned %s", ago)
     end
 
-    self.statusLabel:SetText(scanText)
-    self.statusLabel.tip = L.Format("%s items priced  ·  %s recipes known  ·  %s",
+    -- The fullest line that fits, the whole of it on the hover.
+    local full = L.Format("%s items priced  ·  %s recipes known  ·  %s",
         Util.Comma(priceCount), Util.Comma(recipeCount), scanText)
+    local label = self.statusLabel
+    local texts = { full, L.Format("%s items priced%s", Util.Comma(priceCount), "  ·  " .. scanText), scanText }
+    if label.text and Theme.FitText then
+        Theme.FitText(label.text, texts)
+    else
+        label:SetText(full)
+    end
+    label.tip = full
 
     -- The scan button stays live and explains itself rather than greying out
     -- into something that looks broken.
@@ -999,6 +1136,8 @@ _G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = L["Disenchant the
 -- The Snipe key buys the top find, as a click on its gold button does. A key
 -- press counts as the player's own action, so the buy goes through.
 _G.BINDING_NAME_BLACKTHORNESTS_SNIPEBUY = L["Snipe: Buy Top"]
+-- Buy One on the Disenchanting tab, as a click on its button does.
+_G.BINDING_NAME_BLACKTHORNESTS_DEBUYNEXT = L["Disenchanting: Buy Next"]
 
 function UI:Toggle()
     self:Build()
@@ -1307,6 +1446,32 @@ function UI:AttachToAuctionHouse()
     if ns.PostPanel then ns.PostPanel:Attach() end
 end
 
+--- The Full Window button left of Scan, while the drawer hangs on its own
+--- beside the auction house (ts-improve-2, the owner said build it,
+--- 2026-11-26), so nobody is stuck with the slim panel. Hidden while the
+--- drawer is the one window's Auction House tab. The button when it shows.
+function UI:PlaceFullWindowButton(bar)
+    local full = self.fullWindowButton
+    if not full then
+        full = Widgets.CreateButton(bar, L["Full Window"], function()
+            UI:OpenFullHere()
+        end, {
+            width = FitButtonWidth({ L["Full Window"] }, 70),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
+        })
+        self.fullWindowButton = full
+    end
+    local panel = ns.PostPanel
+    if (panel and panel.inOne) or not self.auctionButton then
+        full:Hide()
+        return nil
+    end
+    full:ClearAllPoints()
+    full:SetPoint("RIGHT", self.auctionButton, "LEFT", -AUCTION_BAR_GAP, 0)
+    full:Show()
+    return full
+end
+
 --- A Post button beside the Scan button on the auction house window.
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event per
@@ -1376,6 +1541,32 @@ function UI:FitAuctionText()
     FitBarText(bar, (bar.buttonsWidth or 0) + counter)
 end
 
+--- The Full Window button left of Scan, while the drawer hangs on its own
+--- beside the auction house (ts-improve-2, the owner said build it,
+--- 2026-11-26), so nobody is stuck with the slim panel. Hidden while the
+--- drawer is the one window's Auction House tab. The button when it shows.
+function UI:PlaceFullWindowButton(bar)
+    local full = self.fullWindowButton
+    if not full then
+        full = Widgets.CreateButton(bar, L["Full Window"], function()
+            UI:OpenFullHere()
+        end, {
+            width = FitButtonWidth({ L["Full Window"] }, 70),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
+        })
+        self.fullWindowButton = full
+    end
+    local panel = ns.PostPanel
+    if (panel and panel.inOne) or not self.auctionButton then
+        full:Hide()
+        return nil
+    end
+    full:ClearAllPoints()
+    full:SetPoint("RIGHT", self.auctionButton, "LEFT", -AUCTION_BAR_GAP, 0)
+    full:Show()
+    return full
+end
+
 --- A Post button beside the Scan button on the auction house window.
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event
@@ -1390,7 +1581,9 @@ function UI:AttachPostButton()
     if not UI.POST_CRAFTED_BUTTON then
         if button then button:Hide() end
         bar.buttonsWidth = scanWidth + gap
-        if ns.SaleTotal then ns.SaleTotal:Attach(bar, self.auctionButton) end
+        local full = self:PlaceFullWindowButton(bar)
+        if full then bar.buttonsWidth = bar.buttonsWidth + full:GetWidth() + AUCTION_BAR_GAP end
+        if ns.SaleTotal then ns.SaleTotal:Attach(bar, full or self.auctionButton) end
         self:FitAuctionText()
         return
     end
@@ -1511,12 +1704,41 @@ end
 --- has just loaded, the owned auctions read, and whether listing is open
 --- (blocked, a scan, the house busy, a listing still being confirmed). The
 --- lists are rebuilt only when it changes.
-local itemInfoSeen = 0
+--
+-- Item data is counted in two parts. Data for an item in the bags counts at
+-- once. Data for any other item (a reagent a cost reads, a shopping list's
+-- item) counts too, but while it streams in, as it does all through a scan
+-- or while the game's own list is paged, it moves the key at most once
+-- every UI.ITEM_INFO_GAP seconds: the lists were built again every second
+-- of a scan for items they do not show.
+UI.ITEM_INFO_GAP = 5
+local itemInfoSeen, itemInfoOther, itemInfoCounted, itemInfoAt = 0, 0, 0, nil
 do
     local watcher = {}
-    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function()
-        itemInfoSeen = itemInfoSeen + 1
+    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
+        local inventory = ns.Inventory
+        local carried = true
+        if itemID and inventory and inventory.GetBagCount then
+            local ok, count = pcall(inventory.GetBagCount, inventory, itemID)
+            carried = not ok or (tonumber(count) or 0) > 0
+        end
+        if carried then
+            itemInfoSeen = itemInfoSeen + 1
+        else
+            itemInfoOther = itemInfoOther + 1
+        end
     end)
+end
+
+--- Item data for items not in the bags, counted at most once a gap.
+local function OtherItemInfo()
+    if itemInfoOther ~= itemInfoCounted then
+        local now = GetTime and GetTime() or nil
+        if not (now and itemInfoAt) or now - itemInfoAt >= UI.ITEM_INFO_GAP or now < itemInfoAt then
+            itemInfoCounted, itemInfoAt = itemInfoOther, now
+        end
+    end
+    return itemInfoCounted
 end
 
 function UI.SellListKey()
@@ -1542,10 +1764,49 @@ function UI.SellListKey()
         shown, tab,
         ns.Inventory.changes or 0, ns.Prices.changes or 0,
         queued, amount,
-        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen,
+        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen, OtherItemInfo(),
         ns.Auctions.readCount or 0,
         tostring(blocked), tostring(ns.Scanner.isScanning), tostring(throttled), pending,
     }, ":")
+end
+
+--- One look at the sell lists: built again when what they are made from
+--- changed (UI.SellListKey). True when they were.
+function UI:SellListLook()
+    if not ns.Scanner.isAuctionHouseOpen then return false end
+
+    local key = UI.SellListKey()
+    if key == UI.sellListKey then return false end
+    UI.sellListKey = key
+    UI.sellListAt = GetTime and GetTime() or nil
+
+    UI:UpdatePostButton()
+    if ns.PostPanel then ns.PostPanel:Refresh() end
+    return true
+end
+
+-- The least time between two looks asked for by SellListSoon, so a burst of
+-- changes is still one build.
+UI.SELL_LIST_GAP = 0.2
+
+--- Look at the sell lists on the next frame, not at the next tick of the
+--- one-second ticker. After a listing went up, or a buy landed in the bags,
+--- the list and its buttons stood as they were for up to a second. Called
+--- when the bags settle, a listing starts or is settled, the owned auctions
+--- are read and the auction house stops being busy. Many calls, one look.
+function UI:SellListSoon()
+    if self.sellListSoon or not ns.Scanner.isAuctionHouseOpen then return end
+    if not (C_Timer and C_Timer.After) then return end
+    self.sellListSoon = true
+
+    local wait = 0
+    local last, now = self.sellListAt, GetTime and GetTime()
+    if last and now then wait = math.max(0, self.SELL_LIST_GAP - (now - last)) end
+
+    C_Timer.After(wait, function()
+        UI.sellListSoon = nil
+        UI:SellListLook()
+    end)
 end
 
 function UI:UpdatePostButton()
@@ -1668,25 +1929,12 @@ function UI:ShowTransferDialog(mode)
         -- A long code runs past the bottom of the box. A slim bar down its
         -- right edge and the mouse wheel move through it; before, only the
         -- first lines could be seen.
-        local bar = CreateFrame("Slider", nil, box)
-        bar:SetOrientation("VERTICAL")
-        bar:SetWidth(6)
+        -- Drawn by hand: the game's Slider runs backwards on Forever.
+        local bar = Widgets.CreateScrollbar(box, 6)
         bar:SetPoint("TOPRIGHT", -3, -6)
         bar:SetPoint("BOTTOMRIGHT", -3, 6)
-        bar:SetValueStep(1)
-        bar:SetMinMaxValues(0, 0)
-        bar:SetValue(0)
+        bar:SetThumbHeight(30)
         bar:Hide()
-
-        local track = bar:CreateTexture(nil, "BACKGROUND")
-        track:SetAllPoints(bar)
-        track:SetColorTexture(Theme.Unpack("panel"))
-
-        local thumb = bar:CreateTexture(nil, "ARTWORK")
-        thumb:SetColorTexture(Theme.Unpack("borderLit"))
-        thumb:SetSize(6, 30)
-        bar:SetThumbTexture(thumb)
-        Widgets.LightThumb(bar, thumb)
 
         local function ScrollTo(offset)
             local range = scroll:GetVerticalScrollRange() or 0
@@ -1695,7 +1943,7 @@ function UI:ShowTransferDialog(mode)
             if bar:GetValue() ~= offset then bar:SetValue(offset) end
         end
 
-        bar:SetScript("OnValueChanged", function(_, value) scroll:SetVerticalScroll(value) end)
+        bar.onValueChanged = function(value) scroll:SetVerticalScroll(value) end
 
         scroll:SetScript("OnScrollRangeChanged", function(_, _, range)
             range = tonumber(range) or 0
@@ -1819,8 +2067,9 @@ local function FitMerchantButton(button)
 end
 
 --- True while Blackthornes Butler is loaded and its window comes up at a
---- vendor ("Open at a vendor", on unless unticked there). Butler's Buy from
---- a vendor row then buys the queue's materials, so this button hides.
+--- vendor ("Open at a vendor", on unless unticked there). The Wishlist card
+--- reads it: Butler shows those recipes itself then. The Buy materials
+--- button no longer stands down for it (2026-11-21).
 function UI.ButlerBuysHere()
     local ok, yes = pcall(function()
         if type(_G.BlackthornesButler) ~= "table" then return false end
@@ -1828,6 +2077,24 @@ function UI.ButlerBuysHere()
         return not (type(db) == "table" and db.openAtVendor == false)
     end)
     return ok and yes == true
+end
+
+--- True while Blackthornes Butler is loaded. Butler's bar at a vendor has its
+--- own Sell button, so the Buy materials button hides there when nothing
+--- here is needed, rather than reading "Nothing needed here".
+function UI.ButlerLoaded()
+    local ok, yes = pcall(function() return type(_G.BlackthornesButler) == "table" end)
+    return ok and yes == true
+end
+
+--- Show or hide the vendor button. The Sell marked button hangs beside it,
+--- so it is placed again when the Buy button comes or goes.
+local function ShowMerchantButton(button, on)
+    local was = button:IsShown() and true or false
+    if on then button:Show() else button:Hide() end
+    if was ~= on and ns.SellMarked and ns.SellMarked.Update then
+        pcall(ns.SellMarked.Update, ns.SellMarked)
+    end
 end
 
 --- The gold plaque the house's buttons out on the screen wear (UI/Plaque.lua,
@@ -1888,14 +2155,11 @@ function UI:AttachToMerchant()
         return
     end
 
-    -- Blackthornes Butler has the same Buy button on its Buy from a vendor
-    -- row, and its window comes up at the vendor, so this one stands down
-    -- (the owner, 2026-10-18). Butler buys through Butler:VendorOffer and
-    -- Butler:BuyFromVendor, so nothing is lost.
-    if UI.ButlerBuysHere() then
-        if self.merchantButton then self.merchantButton:Hide() end
-        return
-    end
+    -- With Blackthornes Butler loaded this button used to stand down
+    -- (2026-10-18), trusting the Buy row in Butler's window. That row is out
+    -- of sight when the window is shut, folded or on All Characters, so
+    -- players lost Buy (2026-11-21). It stays now; with Butler loaded it only
+    -- hides when this vendor has nothing the queue needs (UpdateMerchantButton).
 
     local button = self.merchantButton
 
@@ -1937,7 +2201,6 @@ function UI:AttachToMerchant()
         button:SetPoint("TOP", UIParent, "TOP", 0, -180)
     end
 
-    button:Show()
     self:UpdateMerchantButton()
 end
 
@@ -1945,7 +2208,14 @@ function UI:UpdateMerchantButton()
     local button = self.merchantButton
     if not button then return end
 
+    -- Never over the game world once the vendor has closed, whoever asks.
+    if not (ns.Vendor and ns.Vendor.isMerchantOpen) then
+        button:Hide()
+        return
+    end
+
     if ns.Vendor:IsBuying() then
+        ShowMerchantButton(button, true)
         MerchantWords(button, L["Buying..."])
         button:SetEnabledState(false)
         button.tooltipText = L["Purchases in progress"]
@@ -1965,6 +2235,15 @@ function UI:UpdateMerchantButton()
         cheaperNote = L.Format("%d materials are cheaper at the auction house.",
             cheaperElsewhere)
     end
+
+    if #lines == 0 and UI.ButlerLoaded() then
+        -- Butler's bar sits at the vendor with its own buttons, so an inert
+        -- one here is only in the way.
+        ShowMerchantButton(button, false)
+        return
+    end
+
+    ShowMerchantButton(button, true)
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
@@ -2076,6 +2355,8 @@ function UI:BuildMinimapButton()
     end
 
     local function UpdatePosition(angle)
+        -- A button drawer moved it (UI/SharedMinimap.lua): leave it there.
+        if ns.SharedMinimap and ns.SharedMinimap.TakenAway and ns.SharedMinimap.TakenAway(button) then return end
         local radius = GetOrbitRadius()
 
         button:ClearAllPoints()
@@ -2179,6 +2460,8 @@ function UI:JoinSharedMinimap()
             key = "tradeskills", order = 2, name = "Tradeskills", icon = [[Interface\Icons\Trade_BlackSmithing]],
             open = function() UI:Toggle() end,
             settings = function() UI:OpenSettings() end,
+            -- The settings every Blackthornes addon shares (the rail's gear).
+            allAddons = function() UI:OpenAllAddons() end,
             db = function() return ns.db end,
             host = TSTabs.host,
         })
@@ -2271,12 +2554,111 @@ end
 --- as either opens and closes again as it closes (a player's request,
 --- 2026-10-02). Only a window opened this way is closed: one the player
 --- already had open stays open.
---- "Open at AH:" on the Auction page (`openAtAuction`, on unless unticked;
+--- "Open By Itself At:" Auction House on the Windows page (`openAtAuction`, on unless unticked;
 --- a player's request, 2026-11-05). Unticked, Tradeskills stays shut at the
 --- auction house until the player opens it there; then the sell list and
 --- the one window's Auction House tab come up as usual for that visit.
 function UI.OpensAtAuction()
-    return ns.Config:Get("openAtAuction") ~= false
+    return UI.WindowAt("auction") ~= "closed"
+end
+
+-- How Tradeskills opens in each place (the owner said build it from a
+-- mockup, 2026-11-26): "At The Auction House:", "At A Profession:" and "At
+-- The Mailbox:" on the Windows page, each Full Window, Slim Panel, Round
+-- Button or Stay Closed. Saved as windowAtAuction, windowAtProfession and
+-- windowAtMail (never rename them); "auto", the default, keeps what the
+-- older settings gave, so nothing changes for a player who never picks:
+-- openAtAuction or openAtProfessions unticked reads as Stay Closed,
+-- craftPaneBeside ticked as Slim Panel, the mailbox as Slim Panel (the
+-- mail list beside it, as before), else Full Window with the one window
+-- on and Slim Panel with it off. Those older keys are only read, never
+-- written here. Tested in tools/test_onewindow.lua (parts 9 to 12).
+UI.WINDOW_AT = { auction = "windowAtAuction", profession = "windowAtProfession", mail = "windowAtMail" }
+UI.WINDOW_CHOICES = { "full", "slim", "button", "closed" }
+local WINDOW_CHOICE = { full = true, slim = true, button = true, closed = true }
+
+--- True while "One Window:" is on and Tradeskills has moved in.
+function UI.OneWindowOn()
+    local One = TSTabs.One()
+    if not (One and One.Hosts) then return false end
+    local ok, on = pcall(One.Hosts, "tradeskills")
+    return ok and on == true
+end
+
+--- What opens at `place` ("auction", "profession" or "mail"): "full",
+--- "slim", "button" or "closed".
+function UI.WindowAt(place)
+    local key = UI.WINDOW_AT[place]
+    local picked = key and ns.Config:Get(key)
+    if WINDOW_CHOICE[picked] then return picked end
+    if place == "auction" then
+        if ns.Config:Get("openAtAuction") == false then return "closed" end
+    elseif place == "profession" then
+        if ns.Config:Get("openAtProfessions") == false then return "closed" end
+        if ns.Config:Get("craftPaneBeside") == true then return "slim" end
+    elseif place == "mail" then
+        return "slim"
+    end
+    return UI.OneWindowOn() and "full" or "slim"
+end
+
+--- Fold a window into its round button, a moment after it opened so it
+--- folds where it settled. The one window folds through the copy that
+--- draws it, whose fold it wears.
+function UI.FoldSoon(frame, shared)
+    local function fold()
+        if not (frame and frame.IsShown and frame:IsShown()) then return end
+        local fw = ns.FoldWindow
+        local SharedWindow = ns.SharedWindow
+        if shared and SharedWindow and SharedWindow.Drawer then
+            local ok, drawer = pcall(SharedWindow.Drawer)
+            local theirs = ok and type(drawer) == "table" and type(drawer.ns) == "table" and drawer.ns.FoldWindow
+            if type(theirs) == "table" then fw = theirs end
+        end
+        if fw and fw.Fold then pcall(fw.Fold, fw, frame) end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, fold) else fold() end
+end
+
+--- The one window's frame, else nil.
+function TSTabs.OneFrame()
+    local hub = rawget(_G, "BlackthornesWindow")
+    return type(hub) == "table" and hub.frame or nil
+end
+
+--- A game window opened at `place`. With the one window on, the auction
+--- house and the profession window are handled as they open
+--- (TSTabs:AtAuctionHouse, TSTabs:AtDock); the mailbox opens the one window
+--- here when Full Window or Round Button is picked. With it off, those two
+--- open Tradeskills' own window beside the slim panel, and close it again
+--- when the game's window closes, if it was opened for it.
+function UI:ArrivedAt(place)
+    local choice = UI.WindowAt(place)
+    if choice ~= "full" and choice ~= "button" then return end
+    if UI.OneWindowOn() then
+        if place == "mail" then TSTabs:AtDock("mail") end
+        return
+    end
+    self:Build()
+    if not self.window or self.window:IsShown() then return end
+    self.openedFor = place
+    self:Show()
+    if choice == "button" then UI.FoldSoon(self.window) end
+end
+
+--- The Full Window button on the slim panel: the full window, here.
+function UI:OpenFullHere()
+    self:Build()
+    if UI.OneWindowOn() then
+        local One = TSTabs.One()
+        TSTabs.ahOpened = true
+        local ok, opened = pcall(One.Open, "tradeskills")
+        if ok and opened then
+            TSTabs:Settle()
+            return
+        end
+    end
+    self:Show()
 end
 
 --- True while Tradeskills may come up at the auction house: ticked, or the
@@ -2346,10 +2728,72 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- The game's own AddOns options list
+--
+-- As in the other four addons: a small line under Options > AddOns with a
+-- button that opens this addon's Settings tab, rather than the Settings page
+-- squeezed into Blizzard's frame. Every call is guarded, because a missing
+-- options entry is no reason for the addon to fail to load.
+--------------------------------------------------------------------------------
+
+local OPTIONS_TITLE = "Blackthornes Tradeskills"
+
+function UI:RegisterGameOptions()
+    if self.optionsPanel then return end
+
+    local panel = CreateFrame("Frame")
+    panel.name = OPTIONS_TITLE
+
+    local title = Theme.CreateLabel(panel, "title", "accent")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText(OPTIONS_TITLE)
+
+    local blurb = Theme.CreateLabel(panel, "normal", "text")
+    blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+    blurb:SetText(L["Tradeskills' settings have a window of their own."])
+
+    local open = Widgets.CreateButton(panel, L["Open Tradeskills settings"], function()
+        -- The game's panel is left as it is: hiding a stock frame runs the
+        -- game's own code as this addon and taints it. The window comes up
+        -- over the panel. Already on Settings, the press leaves it open.
+        if UI.window and UI.window:IsShown() and UI.activeTab == "settings" then return end
+        UI:OpenSettings()
+    end, { width = 210, height = 24 })
+    open:SetPoint("TOPLEFT", blurb, "BOTTOMLEFT", 0, -14)
+
+    local hint = Theme.CreateLabel(panel, "small", "muted")
+    hint:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -10)
+    hint:SetText(L["Or right-click the minimap button."])
+
+    self.optionsPanel = panel
+    -- It sits inside the game's own Settings window: kept off the gamepad's
+    -- window cursor (see Compat.KeepOffGamepad). The mouse works as before.
+    if ns.Compat and ns.Compat.KeepOffGamepad then ns.Compat.KeepOffGamepad(panel) end
+
+    local registered = false
+
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        registered = pcall(function()
+            local category = Settings.RegisterCanvasLayoutCategory(panel, OPTIONS_TITLE)
+            Settings.RegisterAddOnCategory(category)
+            UI.optionsCategory = category
+        end)
+    end
+
+    -- The older options API, in case this client still has it instead.
+    if not registered and type(InterfaceOptions_AddCategory) == "function" then
+        registered = pcall(InterfaceOptions_AddCategory, panel)
+    end
+
+    return registered
+end
+
 function UI:OnEnable()
     self:Build()
     self:BuildMinimapButton()
     self:HookAltClickSearch()
+    pcall(self.RegisterGameOptions, self)
 
     -- The minimap's final size is not always settled at login, and other addons
     -- resize it afterwards, so re-seat the button once things have calmed down.
@@ -2396,20 +2840,15 @@ function UI:OnEnable()
         UI.postTicker = C_Timer.NewTicker(1, function()
             if not ns.Scanner.isAuctionHouseOpen then return end
 
-            local key = UI.SellListKey()
-            if key == UI.sellListKey then
+            if not UI:SellListLook() then
                 -- Still each second, and cheap: the panel steps back in when
                 -- the character window closes, and follows the main window
                 -- when it is dragged, and neither has an event.
                 if ns.PostPanel and ns.PostPanel.Place then ns.PostPanel:Place() end
-                return
+                -- The Sell list held its order under the mouse; sorted
+                -- again once the mouse has left it.
+                if ns.PostPanel and ns.PostPanel.LetGoOfOrder then ns.PostPanel:LetGoOfOrder() end
             end
-            UI.sellListKey = key
-
-            UI:UpdatePostButton()
-
-            if ns.PostPanel then ns.PostPanel:Refresh() end
-
         end)
 
         -- A second, faster ticker purely for the countdown. One second is too
@@ -2425,8 +2864,29 @@ function UI:OnEnable()
         end)
     end)
 
+    -- The sell lists follow the bags and the auction house at once
+    -- (UI:SellListSoon), with the ticker above as the backstop.
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function() UI:SellListSoon() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function() UI:SellListSoon() end)
+
     -- Settings: Open with the auction house and vendors.
-    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() UI:OpenWithShop("auction") end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
+        UI:OpenWithShop("auction")
+        pcall(UI.ArrivedAt, UI, "auction")
+    end)
+    -- "At The Mailbox:" Full Window or Round Button (UI.WindowAt). A moment
+    -- later, so the one window knows it is at the mailbox.
+    ns.RegisterEvent(self, "MAIL_SHOW", function()
+        local function arrive()
+            if ns.QueueMailPanel and ns.QueueMailPanel.MailboxOpen and not ns.QueueMailPanel.MailboxOpen() then return end
+            pcall(UI.ArrivedAt, UI, "mail")
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, arrive) else arrive() end
+    end)
+    ns.RegisterEvent(self, "MAIL_CLOSED", function()
+        TSTabs:DockClosed("mail")
+        UI:CloseWithShop("mail")
+    end)
     ns.RegisterEvent(self, "MERCHANT_SHOW", function() UI:OpenWithShop("merchant") end)
     ns.RegisterEvent(self, "MERCHANT_CLOSED", function() UI:CloseWithShop("merchant") end)
 
@@ -2498,6 +2958,8 @@ local function TSBare(bare)
     if trim and trim.SetShown then trim:SetShown(not bare) end
     local grip = UI.sizeGrip
     if grip and grip.SetShown then grip:SetShown(not bare) end
+    -- The gems go with the trim, so the scan button moves up to the edge.
+    UI:PlaceScanButton(bare)
     if bare then
         if TSTabs.bareRim then return end
         local kept = {}
@@ -2545,15 +3007,23 @@ function TSTabs:HangStrips()
         if okA and okO and type(a) == "number" and type(o) == "number" then drop = a - o end
     end
     local ok, width = pcall(area.GetWidth, area)
-    for _, strip in ipairs({ UI.tabStrip, UI.ahTabStrip }) do
+    for _, strip in ipairs(TSTabs.AllStrips()) do
         strip:ClearAllPoints()
         strip:SetPoint("TOPLEFT", area, "BOTTOMLEFT", TAB_INSET, -drop)
         if ok and type(width) == "number" and width > 0 and strip.SetRoom then
             strip:SetRoom(width - 2 * TAB_INSET)
         end
     end
-    if UI.ahTabStrip then UI.ahTabStrip:SetShown(self.atAuction) end
-    if UI.tabStrip then UI.tabStrip:SetShown(not self.atAuction) end
+    local showing = UI:ActiveStrip()
+    for _, strip in ipairs(TSTabs.AllStrips()) do strip:SetShown(strip == showing) end
+end
+
+--- Every row of tabs the window has: the usual, the auction house's and
+--- each dock place's.
+function TSTabs.AllStrips()
+    local list = { UI.tabStrip, UI.ahTabStrip }
+    for _, strip in pairs(UI.dockStrips or {}) do list[#list + 1] = strip end
+    return list
 end
 
 --- Give the window back its own place, size and scale. After the area is
@@ -2563,13 +3033,12 @@ function TSTabs:LayOut()
     if not frame then return end
     frame:SetParent(UIParent)
     TSBare(false)
-    for _, strip in ipairs({ UI.tabStrip, UI.ahTabStrip }) do
+    for _, strip in ipairs(TSTabs.AllStrips()) do
         strip:ClearAllPoints()
         strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
         if strip.SetRoom then strip:SetRoom(WINDOW_WIDTH - 2 * TAB_INSET) end
+        strip:SetShown(strip == UI.tabStrip)
     end
-    if UI.ahTabStrip then UI.ahTabStrip:Hide() end
-    if UI.tabStrip then UI.tabStrip:Show() end
     frame:ClearAllPoints()
     frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     frame:SetScale(UI:GetWindowScale())
@@ -2637,17 +3106,87 @@ function TSTabs:AtAuctionHouse()
         self.watching = true
         pcall(One.Watch, function() TSTabs:Settle() end)
     end
-    if not self.ahOpened and UI.AuctionWanted() then
+    -- "At The Auction House:" (UI.WindowAt): Slim Panel leaves the one
+    -- window shut and the drawer hangs beside the auction house; Round
+    -- Button opens it folded. Opened by the player on this visit, it opens.
+    local choice = UI.WindowAt("auction")
+    local fold = false
+    if not self.ahOpened and UI.AuctionWanted() and (choice ~= "slim" or UI.ahAsked == true) then
         self.ahOpened = true
         local okOpen, isOpen = pcall(One.IsOpen)
-        if not self.area and not (okOpen and isOpen) then UI.openedFor = "auction" end
+        if not self.area and not (okOpen and isOpen) then
+            UI.openedFor = "auction"
+            fold = choice == "button" and UI.ahAsked ~= true
+        end
         pcall(One.Open, "tradeskills")
     end
     local okPlace, place = pcall(One.Place)
     local okDocked, docked = pcall(One.Docked)
     if okPlace and place == "auction" and not (okDocked and docked) then pcall(One.Dock) end
+    if fold then UI.FoldSoon(TSTabs.OneFrame(), true) end
     TSTabs:Settle()
     return self.atAuction
+end
+
+--- The profession window or the mailbox opened (CraftPanel:Attach,
+--- QueueMailPanel). With the one window on, it opens there once a visit,
+--- on Tradeskills, and the panel becomes that place's first tab. True while
+--- that is so, so the panel stays in the one window. In a fight nothing
+--- moves and the panel hangs beside the game's window as before.
+function TSTabs:AtDock(place)
+    local One = TSTabs.One()
+    if not (One and One.Hosts and One.Hosts("tradeskills")) then return false end
+    if InCombatLockdown and InCombatLockdown() then return self.atDock == place end
+    if not self.watching and One.Watch then
+        self.watching = true
+        pcall(One.Watch, function() TSTabs:Settle() end)
+    end
+    self.dockOpened = self.dockOpened or {}
+    -- Slim Panel or Stay Closed for this place (UI.WindowAt; "Small Craft
+    -- Queue:" ticked reads as Slim Panel, a player's request, 2026-11-17):
+    -- the small pane or list hangs beside the game's window, and the one
+    -- window stays shut there. Opened already, the pane moves into it as
+    -- always.
+    local choice = UI.WindowAt(place)
+    local fold = false
+    if not self.dockOpened[place] and (choice == "slim" or choice == "closed") then
+        local okOpenNow, openNow = pcall(One.IsOpen)
+        if not (okOpenNow and openNow) then return false end
+    end
+    if not self.dockOpened[place] then
+        self.dockOpened[place] = true
+        -- No room beside the profession window for the one window at a
+        -- size that can be read: it stays shut, and the slim strip inside
+        -- the profession window shows (UI/CraftStrip.lua). Opened already,
+        -- the one window docks as always.
+        local Strip = ns.CraftStrip
+        local okOpenNow, openNow = pcall(One.IsOpen)
+        if place == "profession" and not (okOpenNow and openNow) and Strip and Strip.OneHasRoom then
+            local okRoom, room = pcall(Strip.OneHasRoom, Strip, One)
+            if okRoom and room == false then
+                self.noRoomAt = place
+                return false
+            end
+        end
+        self.noRoomAt = nil
+        local okOpen, isOpen = pcall(One.IsOpen)
+        if not self.area and not (okOpen and isOpen) then
+            UI.openedFor = place
+            fold = choice == "button"
+        end
+        pcall(One.Open, "tradeskills")
+    end
+    local okPlace, now = pcall(One.Place)
+    local okDocked, docked = pcall(One.Docked)
+    if okPlace and now == place and not (okDocked and docked) then pcall(One.Dock) end
+    TSTabs:Settle()
+    if fold then UI.FoldSoon(TSTabs.OneFrame(), true) end
+    return self.atDock == place
+end
+
+--- The game's window closed: the next visit opens the one window again.
+function TSTabs:DockClosed(place)
+    if self.dockOpened then self.dockOpened[place] = nil end
 end
 
 --- True while the one window is up and docked beside the auction house.
@@ -2662,6 +3201,7 @@ end
 --- docks at the auction house or leaves it. Called after every dock and
 --- undock (One.Watch), and as Tradeskills goes in or out.
 function TSTabs:Settle()
+    TSTabs:SettleDock()
     local One = TSTabs.One()
     local on = false
     if self.area and One then
@@ -2704,10 +3244,74 @@ function TSTabs:Settle()
     end
 end
 
+--- The same swap for the profession window and the mailbox (UI.DOCK_TABS):
+--- docked there with Tradeskills in the one window, the panel that hung
+--- beside the game's window moves in as the first tab; leaving, it goes
+--- back and the tab open before comes back.
+function TSTabs:SettleDock()
+    local One = TSTabs.One()
+    local want = nil
+    if self.area and One then
+        local okPlace, place = pcall(One.Place)
+        local okDocked, docked = pcall(One.Docked)
+        if okPlace and okDocked and docked == true and UI.DOCK_TABS[place] then want = place end
+    end
+    -- The Mail tab only while the list has something on it.
+    if want then
+        local panel = ns[UI.DOCK_TABS[want].panel]
+        if panel and panel.HasWork then
+            local ok, work = pcall(panel.HasWork, panel)
+            if not (ok and work) then want = nil end
+        end
+    end
+    if want == self.atDock then
+        if want then TSTabs:HangStrips() end
+        return
+    end
+    local was = self.atDock
+    if was then
+        local panel = ns[UI.DOCK_TABS[was].panel]
+        if panel and panel.OutOfOne then pcall(panel.OutOfOne, panel) end
+    end
+    self.atDock = want
+    TSTabs:HangStrips()
+    if want then
+        local dock = UI.DOCK_TABS[want]
+        local key = UI.activeTab
+        local wasDockTab = false
+        for _, other in pairs(UI.DOCK_TABS) do
+            if other.key == key then wasDockTab = true end
+        end
+        if not wasDockTab and key ~= "auctionhouse" then self.beforeDock = key end
+        local panel = ns[dock.panel]
+        local holder = UI.dockContainers and UI.dockContainers[want]
+        if panel and panel.IntoOne and holder then pcall(panel.IntoOne, panel, holder) end
+        UI:SelectTab(dock.key)
+    else
+        local key = self.beforeDock
+        self.beforeDock = nil
+        if not (key and UI.tabs and UI.tabs[key]) then key = (ns.db and ns.db.lastTab) or "profit" end
+        key = UI.MOVED_TABS[key] or key
+        if not (UI.tabs and UI.tabs[key]) then key = "profit" end
+        if not self.atAuction then UI:SelectTab(key) end
+        -- The game's window may still be open (another addon picked on the
+        -- rail): the panel goes back beside it, as before.
+        if was then
+            local panel = ns[UI.DOCK_TABS[was].panel]
+            if panel and panel.BackBeside then pcall(panel.BackBeside, panel) end
+        end
+    end
+end
+
 --- What Tradeskills gives the one window when it joins.
 TSTabs.host = {
     enter = function(area) TSTabs:Enter(area) end,
     leave = function() TSTabs:Leave() end,
+    -- For the swap gem (SharedWindow.AddSwap): the tab up now, open on a
+    -- tab wherever Tradeskills now belongs, and close its own window.
+    tab = function() return TSTabs:SwapTab() end,
+    show = function(key) TSTabs:SwapShow(key) end,
+    hide = function() TSTabs:SwapHide() end,
 }
 
 --- The window is asked to open. With "One Window:" ticked and Tradeskills
@@ -2735,7 +3339,7 @@ function TSTabs:Closed(frame)
     if One and One.Close then pcall(One.Close) end
 end
 
---- "One Window:" on the General page: written to every loaded addon's save.
+--- "One Window:" on the Windows page: written to every loaded addon's save.
 --- Settings stays open, in the one window or on its own.
 function TSTabs:SetOneWindow(on)
     local SharedWindow = ns.SharedWindow
@@ -2747,4 +3351,52 @@ function TSTabs:SetOneWindow(on)
         if One and One.Close then pcall(One.Close) end
     end
     if onSettings then UI:OpenSettings() end
+end
+
+--- True for the tabs that are only there while docked beside a game
+--- window (the Auction House, Crafting and Mail tabs).
+function TSTabs.DockTab(key)
+    if key == "auctionhouse" then return true end
+    for _, dock in pairs(UI.DOCK_TABS) do
+        if dock.key == key then return true end
+    end
+    return false
+end
+
+--- The tab up now, or nil when the window is shut.
+function TSTabs:SwapTab()
+    if not TSShown(UI.window) then return nil end
+    return UI.activeTab
+end
+
+--- Open on `key` (nil: the tab it would open on anyway), in the one window
+--- when it is on, else in Tradeskills' own window. A docked tab (the
+--- auction house's, the profession window's, the mailbox's) is left where
+--- it goes by itself: its drawer or pane hangs beside the game's window
+--- again, as before the one window, and the own window stays shut.
+function TSTabs:SwapShow(key)
+    UI:Build()
+    if key and TSTabs.DockTab(key) then
+        if self.area or not TSTabs.One() or not TSTabs.One().On() then return end
+        key = nil
+    end
+    if key and not UI.tabs[UI.MOVED_TABS[key] or key] then key = nil end
+    if TSTabs:Route(key) then return end
+    if key == "settings" then
+        UI:OpenSettings()
+        return
+    end
+    UI:Show()
+    if key then UI:SelectTab(key) end
+end
+
+--- Close Tradeskills' own window.
+function TSTabs:SwapHide()
+    if self.area then return end
+    if TSShown(UI.window) then UI:Hide() end
+end
+
+-- Kept folded through a /reload, its round button opens it (UI/FoldWindow.lua).
+if ns.FoldWindow and ns.FoldWindow.Opener then
+    ns.FoldWindow:Opener("Main", { open = function() UI:Show() end })
 end

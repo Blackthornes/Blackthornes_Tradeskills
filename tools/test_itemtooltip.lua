@@ -211,7 +211,7 @@ check("a stale price is still shown", lines[1][2], "<1500>  (3h ago)")
 
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
 check("a stack adds a second line", #lines, 2)
-check("named for the count", lines[2][1], "Stack of 20")
+check("named for the count", lines[2][1], "Stack of 20:")
 check("worth the multiple", lines[2][2], ("<%d>"):format(2300 * 20))
 
 check("a single item adds nothing", #ItemTooltip:LinesFor(LINEN_CLOTH, 1), 1)
@@ -270,6 +270,24 @@ check("with the stack total", tooltip.lines[2][2], ("<%d>"):format(2300 * 20))
 
 -- ...and only once, however many setters fire.
 check("a second count is refused", ItemTooltip:AddStackLine(tooltip, 20), false)
+
+-- The stack line is sized again a frame later, as the first lines are, so a
+-- long total is not cut at the right edge.
+do
+  local realTimer = C_Timer
+  local later = {}
+  C_Timer = { After = function(_, fn) later[#later + 1] = fn end }
+  local late = Tooltip(LINEN_CLOTH)
+  function late:IsShown() return true end
+  ItemTooltip:Decorate(late, nil, nil)
+  for _, fn in ipairs(later) do fn() end
+  later = {}
+  check("the stack total lands", ItemTooltip:AddStackLine(late, 20), true)
+  local before = late.shown
+  for _, fn in ipairs(later) do fn() end
+  check("and the tooltip is sized again on the next frame", late.shown, before + 1)
+  C_Timer = realTimer
+end
 check("still two lines", #tooltip.lines, 2)
 
 -- A client that hands the count over in time writes both at once, and the late
@@ -319,9 +337,45 @@ ns.settings.showValueOnItemTooltips = false
 check("off when switched off", ItemTooltip:IsEnabled(), false)
 
 tooltip = Tooltip(LINEN_CLOTH)
-check("and nothing is written", ItemTooltip:Decorate(tooltip, nil, nil), "quiet")
+check("and no value is written", ItemTooltip:Decorate(tooltip, nil, nil), "quiet")
 check("nothing at all", #tooltip.lines, 0)
 check("not even a stack total", ItemTooltip:AddStackLine(tooltip, 20), false)
+
+-- Value off hides only the value lines (a player's report, 2026-11-22: with
+-- Value on Tooltips off and Sales Details on Always, no sales or disenchant
+-- lines showed). The other lines keep their own settings.
+do
+  local addDemand = ItemTooltip.AddDemandLines
+  ItemTooltip.AddDemandLines = function(_, lines) lines[#lines + 1] = { "Demand", "Sells well" } end
+  local valueOff = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
+  local labels = {}
+  for _, line in ipairs(valueOff) do labels[#labels + 1] = line[1] end
+  check("value off keeps the demand line", table.concat(labels, ","), "Demand")
+  local tip = Tooltip(LINEN_CLOTH)
+  ItemTooltip:Decorate(tip, nil, nil)
+  check("and writes it", #tip.lines, 1)
+  check("with no value line", tip.lines[1] and tip.lines[1][1], "Demand")
+  local block = ItemTooltip:BlockLines(Tooltip(LINEN_CLOTH), nil)
+  check("the shared block gets it too", block and #block, 1)
+  ItemTooltip.AddDemandLines = addDemand
+end
+
+-- The Disenchant Value line is a price, so it follows Value on Tooltips
+-- (a player's report, 2026-11-24: every tooltip setting off, and the
+-- disenchant value still showed).
+do
+  local disenchant = ns.Disenchant
+  ns.Disenchant = { GetValue = function() return 900 end }
+  local labels = {}
+  for _, l in ipairs(ItemTooltip:LinesFor(LINEN_CLOTH, nil)) do labels[#labels + 1] = l[1] end
+  check("value off hides the disenchant value", table.concat(labels, ","), "")
+  ns.settings.showValueOnItemTooltips = true
+  labels = {}
+  for _, l in ipairs(ItemTooltip:LinesFor(LINEN_CLOTH, nil)) do labels[#labels + 1] = l[1] end
+  check("value on shows it", table.concat(labels, ","):find("Disenchant value", 1, true) ~= nil, true)
+  ns.settings.showValueOnItemTooltips = false
+  ns.Disenchant = disenchant
+end
 
 ns.settings.showValueOnItemTooltips = true
 check("on when switched on", ItemTooltip:IsEnabled(), true)
@@ -366,10 +420,23 @@ do
   ns.Prices.LowestListed = module.LowestListed
 end
 
--- As Summarise records a book of 200, 1900, 1900: the 200 is ignored.
+-- As Summarise records a book of 200, 1900, 1900: the value leaves the 200
+-- out, but the lowest posting is the lowest posting (a player's report,
+-- 2026-11-22: an earring listed at 20s and 4.83g said 4.83g for both).
 RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 1900, ignoredLow = 200 }
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
-check("a lone low listing is left out", lines[2][2], "<1900>")
+check("a lone low listing is still the lowest posting", lines[2][2], "<200>")
+
+-- Once that one is bought, its price is gone with it, though min still
+-- holds it until the next look.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 1900 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("a bought lone listing is not shown", lines[2][2], "<1900>")
+
+-- A browse row far under the usual price (Prices.BrowseLow) shows too.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, ignoredLow = 200 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("a lone low browse row is the lowest posting", lines[2][2], "<200>")
 
 -- Two low ones are a real price and count.
 RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 200 }
@@ -380,7 +447,7 @@ RECORDS[LINEN_CLOTH] = { market = 2300, min = 1900 }
 ns.Prices.LowestListed = nil
 
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
-check("a stack total comes after it", lines[3][1], "Stack of 20")
+check("a stack total comes after it", lines[3][1], "Stack of 20:")
 
 tooltip = Tooltip(LINEN_CLOTH)
 ItemTooltip:Decorate(tooltip, nil, nil)
@@ -417,13 +484,13 @@ ns.Writs = {
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
 local opened
 for i, line in ipairs(lines) do
-    if line[1] == "You opened 6" then opened = i end
+    if line[1] == "You Opened 6:" then opened = i end
 end
 check("a sealed writ says how many were opened", opened ~= nil, true)
 check("then each writ that came out", lines[opened + 1][1] .. " " .. lines[opened + 1][2], "Bolt of Silk Cloth 3 of 6")
 check("and what the writ inside is worth", lines[opened + 3][1], "Writ inside worth about")
 check("other items get no sealed lines", #ItemTooltip:LinesFor(SILK_CLOTH, nil) > 0
-    and ItemTooltip:LinesFor(SILK_CLOTH, nil)[1][1] ~= "You opened 6", true)
+    and ItemTooltip:LinesFor(SILK_CLOTH, nil)[1][1] ~= "You Opened 6:", true)
 ns.Writs = nil
 
 ns.Prices.Get = nil
@@ -474,5 +541,120 @@ check("turned off, nothing", Find(ItemTooltip:LinesFor(LINEN_CLOTH, nil), "Bough
 ns.settings.tooltipBoughtFor = nil
 ns.MethodProfit = nil
 time = realTime
+
+-- Random suffix gear (a player asked, 2026-11-16): the auction house listed
+-- Zircon Band of Power at 1g 13s 99c, the tooltip said 21s 61c, every
+-- Zircon Band together. The value and lowest posting are this suffix's.
+local ZIRCON_BAND = 11967
+local POWER = 1205
+ITEMS[ZIRCON_BAND] = { classID = 4, bindType = 2 }
+PRICES[ZIRCON_BAND] = 2161
+time = function() return 1000000 end
+ns.Util.LinkSuffix = function(link)
+    local roll = tonumber(link:match("item:%d+:[%-%d]*:[%-%d]*:[%-%d]*:[%-%d]*:[%-%d]*:([%-%d]+)") or "")
+    if roll and roll ~= 0 then return roll end
+end
+ns.Prices.SuffixOf = function(link) return ns.Util.LinkSuffix(link) end
+local suffixRows = { [POWER] = { market = 11399, min = 11399, seen = 1000000 - 120 } }
+ns.Prices.GetSuffixEntry = function(_, itemID, roll) return itemID == ZIRCON_BAND and suffixRows[roll] or nil end
+ns.Prices.GetSuffixValue = function(_, itemID, roll, which)
+    local entry = itemID == ZIRCON_BAND and suffixRows[roll]
+    return entry and entry[which]
+end
+ns.Prices.Get = function(_, itemID) if itemID == ZIRCON_BAND then return { min = 2075 } end end
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "|cff1eff00|Hitem:11967:0:0:0:0:0:1205:0|h[Zircon Band of Power]|h|r")
+check("a suffix's own auction value", Find(lines, "Auction value")[2], "<11399>")
+check("and its own lowest posting", Find(lines, "Lowest posting")[2], "<11399>")
+check("said once, not twice", Find(lines, "This one"), nil)
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:0")
+check("no suffix, the item's value", Find(lines, "Auction value")[2], "<2161>")
+check("and the item's lowest", Find(lines, "Lowest posting")[2], "<2075>")
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:999")
+check("a suffix never seen, the item's value", Find(lines, "Auction value")[2], "<2161>")
+
+suffixRows[POWER].seen = 1000000 - 72 * 3600
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:1205")
+check("an old suffix price says its age", Find(lines, "Auction value")[2], "<11399>  (72h ago)")
+suffixRows[POWER].seen = 1000000 - 120
+
+-- The auction house list draws a row with SetItemKey, and the link it hands
+-- back names no suffix. The suffix comes from the call's arguments.
+local keyTip = Tooltip(ZIRCON_BAND)
+function keyTip:GetPrimaryTooltipInfo()
+    return { getterName = "GetItemKey", getterArgs = { ZIRCON_BAND, 18, POWER, 18 } }
+end
+check("an item key row reads its suffix", ItemTooltip:LinkForTooltip(keyTip, { hyperlink = "item:11967:0:0:0" }),
+    "item:11967:0:0:0:0:0:1205")
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, ItemTooltip:LinkForTooltip(keyTip, nil))
+check("and is priced as that suffix", Find(lines, "Auction value")[2], "<11399>")
+local plainTip = Tooltip(ZIRCON_BAND)
+check("a link with its suffix is kept", ItemTooltip:LinkForTooltip(plainTip, { hyperlink = "item:11967:0:0:0:0:0:77" }),
+    "item:11967:0:0:0:0:0:77")
+check("no item key, the plain link", ItemTooltip:LinkForTooltip(plainTip, nil):match("Hitem:11967") ~= nil, true)
+function keyTip:GetPrimaryTooltipInfo() error("secret") end
+check("a key that raises costs nothing", ItemTooltip.KeySuffix(keyTip), nil)
+time = realTime
+
+
+-- Your other account's scan (the account link): a second account that
+-- never scans was sent prices, but its tooltips said "not scanned yet"
+-- on every item, so players thought sharing did nothing (2026-11-18).
+do
+  local realTime = time
+  local now = 1790000000
+  time = function() return now end
+  local LINKED = { [RUNECLOTH] = { market = 5000, lowest = 4800, at = now - 60 },
+                   [COPPER_BAR] = { market = 1700, lowest = 1650, at = now - 3 * 24 * 3600 } }
+  ns.Prices.GetLinkedValue = function(_, itemID, which)
+    local held = LINKED[itemID]
+    if not held then return nil end
+    return (which == "lowest") and held.lowest or held.market, held.at
+  end
+  ns.settings.staleAfterSeconds = 48 * 3600
+  local linked = ItemTooltip:LinesFor(RUNECLOTH, nil)
+  check("the other account's price shows on the tooltip", Find(linked, "Auction value")[2], "<5000>")
+  check("with its cheapest listing", Find(linked, "Lowest posting")[2], "<4800>")
+  linked = ItemTooltip:LinesFor(COPPER_BAR, nil)
+  check("an old one from the other account says how old", Find(linked, "Auction value")[2], "<1700>  (72h ago)")
+  ns.Prices.GetLinkedValue = nil
+  ns.settings.staleAfterSeconds = nil
+  check("not linked: back to not scanned yet", ItemTooltip:LinesFor(RUNECLOTH, nil)[1][2], "not scanned yet")
+  time = realTime
+end
+
+-- The shared tooltip block (2026-11-21): Tradeskills hands its lines over,
+-- named in Title Case ending ":", with the stack read from the bag slot.
+do
+  check("block name for a value line", ItemTooltip.BlockLabel("Auction value"), "Auction Value:")
+  check("block name keeps an indent", ItemTooltip.BlockLabel("   Sold a day"), "   Sold a Day:")
+  check("a name not in the list stays", ItemTooltip.BlockLabel("   Linen Cloth"), "   Linen Cloth")
+  local plain = ItemTooltip.ToBlock({ "Auction value", "<2300>" })
+  check("value line name", plain[1], "Auction Value:")
+  check("value line answer", plain[2], "<2300>")
+  check("plain answer left white", plain.rightColor, nil)
+  local stale = ItemTooltip.ToBlock({ "Auction value", "not scanned yet", true })
+  check("an old or missing price is grey", stale.rightColor and math.floor(stale.rightColor[1] * 255 + 0.5), 0x7a)
+  check("an empty answer is a line on its own", ItemTooltip.ToBlock({ "On your wishlist", "" })[2], nil)
+
+  local realContainer = C_Container
+  C_Container = { GetContainerItemInfo = function(bag, slot)
+    if bag == 0 and slot == 3 then return { stackCount = 20 } end
+  end }
+  local tip = Tooltip(LINEN_CLOTH)
+  local button = { GetBagID = function() return 0 end, GetID = function() return 3 end }
+  function tip:GetOwner() return button end
+  local got, held = ItemTooltip:BlockLines(tip, nil)
+  check("block gets the value", got and got[1][1], "Auction Value:")
+  check("block reads the stack from the bag slot", got and got[2] and got[2][1], "Stack of 20:")
+  check("nothing held", held, nil)
+  function tip:GetOwner() error("secret value") end
+  got = ItemTooltip:BlockLines(tip, nil)
+  check("an owner that can't be read costs only the stack", got and #got, 1)
+  check("no lines for an item with nothing to say", ItemTooltip:BlockLines(Tooltip(123456), nil), nil)
+  C_Container = realContainer
+end
 
 print("test_itemtooltip: ok")

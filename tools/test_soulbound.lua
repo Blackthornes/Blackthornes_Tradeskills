@@ -7,13 +7,15 @@
 -- something that cannot be sold at all.
 --
 -- What this pins down:
---   * bind on pickup and quest items are left out of the ranked list and the
+--   * bind on pickup and quest items are left out of the AH-ranked list and the
 --     star, and say why;
 --   * bind on equip and bind on use still sell, so they stay;
 --   * an item the client has not cached yet stays too -- dropping a craft on
 --     a guess would hide one that may well sell;
 --   * "Show unpriced" still lists a soulbound craft, with its skill-up tier,
 --     for anyone levelling on it.
+--   * under Best, Vendor, DE and Vendor and DE a soulbound craft is ranked
+--     by vendor or disenchant, whichever pays more (2026-11-17).
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -185,6 +187,49 @@ for index = 2, #tied do
 end
 check("rows tied on profit and name go by recipe", inOrder)
 for itemID, name in pairs(names) do recipes[itemID].name = name end
+
+-- A soulbound craft can still go to a vendor or be disenchanted. Only the
+-- auction house is out (Profit tab, a player's report, 2026-11-17).
+print("\nsoulbound, vendored or disenchanted")
+
+ns.Disenchant = {
+    IsDisenchantable = function(_, itemID) return itemID == 100 end,
+    GetValue = function() return 800, nil, { outcomes = {} } end,
+    GetBestEnchanter = function() return 300 end,
+    GetItemFacts = function() return { skill = 1 } end,
+}
+
+local best = Profit:Analyse(100, nil, "best")
+check("under Best it is priced", best.priceable == true)
+check("by disenchanting, which pays more than the vendor", best.via == "disenchant")
+check("with the auction house left out", best.ways.auction == nil)
+check("and still says it is soulbound", best.soulbound == true)
+check("and its profit is the disenchant's", best.profit == 800 * 0.95 - 100)
+check("and it earns its star when it pays", best.recommended == true)
+
+local byVendor = Profit:Analyse(100, nil, "vendor")
+check("under Vendor it is ranked at the vendor", byVendor.priceable == true
+    and byVendor.via == "vendor" and byVendor.profit == 50 - 100)
+check("a loss at the vendor wears no star", not byVendor.recommended)
+
+local byDE = Profit:Analyse(100, nil, "disenchant")
+check("under DE it is ranked by disenchanting", byDE.priceable == true and byDE.via == "disenchant")
+
+local both = Profit:Analyse(100, nil, "vendordisenchant")
+check("under Vendor and DE it takes the better", both.priceable == true and both.via == "disenchant")
+
+local byAH = Profit:Analyse(100, nil, "auction")
+check("under AH it stays unpriced", not byAH.priceable)
+check("with the soulbound reason", byAH.reason == "binds on pickup, so it cannot be sold")
+
+local sale = Profit:Analyse(100)
+check("the sale the Sell tab would make stays out", not sale.priceable and sale.soulbound == true)
+
+check("the Best list ranks it", ids(Profit:GetRanked({ method = "best" }))[100] == true)
+check("the AH list does not", not ids(Profit:GetRanked({ method = "auction" }))[100])
+check("the star list follows the Profit tab's choice", ids(ns.SkillUp:GetRecommended())[100] == true)
+
+ns.Disenchant = nil
 
 C_Item, GetTime = saved.C_Item, saved.GetTime
 

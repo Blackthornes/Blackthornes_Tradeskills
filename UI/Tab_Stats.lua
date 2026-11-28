@@ -31,6 +31,9 @@ local StatsUI = {}
 ns.StatsUI = StatsUI
 
 local LIST_WIDTH = 236
+-- A search finding this many items or fewer opens their suffix rows, the
+-- way the Prices tab does.
+local AUTO_OPEN_MOST = 30
 local ROW_HEIGHT = 22
 local HEADER_HEIGHT = 50
 local KPI_HEIGHT = 50
@@ -47,8 +50,15 @@ local DAY = 24 * 3600
 local state = {
     search = "",
     selected = nil,
+    -- The random suffix picked on the Prices tab's Details, or nil for the
+    -- plain item (a player's report, 2026-11-21).
+    suffix = nil,
     key = nil,
     stats = nil,
+    -- itemID -> true or false: suffix rows the player opened or closed.
+    -- Session only, nothing saved.
+    open = {},
+    openVersion = 0,
 }
 
 local widgets = {}
@@ -171,6 +181,8 @@ local function BuildList(search)
                 name = name or "",
                 net = net[itemID] or 0,
                 worth = type(record) == "table" and tonumber(record.market) or 0,
+                suffixCount = type(record) == "table" and type(record.suffixes) == "table"
+                    and ns.Prices.SuffixCount and ns.Prices:SuffixCount(itemID) or 0,
             }
         end
     end
@@ -180,18 +192,77 @@ local function BuildList(search)
         if a.worth ~= b.worth then return a.worth > b.worth end
         return a.itemID < b.itemID
     end)
-    return rows
+    return StatsUI.AddSuffixRows(rows, search ~= "" and #rows <= AUTO_OPEN_MOST)
+end
+
+--- The item rows with each open item's suffixes under it, each its own row
+--- with its own worth (a player's report, 2026-11-25: Stats did not split
+--- suffixes). Open while a short search shows the item, unless the player
+--- closed it.
+function StatsUI.AddSuffixRows(rows, searching)
+    if not (ns.Prices and ns.Prices.SuffixRows) then return rows end
+    local out = {}
+    for _, row in ipairs(rows) do
+        out[#out + 1] = row
+        if (row.suffixCount or 0) > 0 then
+            local open = state.open[row.itemID]
+            if open == nil then open = searching == true end
+            row.open = open
+            if open then
+                for _, suffixRow in ipairs(ns.Prices:SuffixRows(row.itemID)) do
+                    out[#out + 1] = {
+                        kid = true,
+                        itemID = row.itemID,
+                        suffix = suffixRow.suffix,
+                        name = type(suffixRow.name) == "string" and suffixRow.name
+                            or L.Format("Suffix %d", tonumber(suffixRow.suffix) or 0),
+                        worth = tonumber(suffixRow.market) or 0,
+                    }
+                end
+            end
+        end
+    end
+    return out
 end
 
 -- For the tests.
 UI._StatsList = BuildList
 
+--- Open or close an item's suffix rows.
+local function ToggleSuffixes(entry)
+    if not (entry and not entry.kid and (entry.suffixCount or 0) > 0) then return end
+    state.open[entry.itemID] = not entry.open
+    state.openVersion = state.openVersion + 1
+    if StatsUI.RefreshList then StatsUI.RefreshList() end
+end
+StatsUI.ToggleSuffixes = ToggleSuffixes
+
 local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, 16)
-    row.icon:SetPoint("LEFT", 6, 0)
+    row.icon:SetPoint("LEFT", 18, 0)
+
+    -- The gold + or - that opens an item's suffix rows, before its icon.
+    local fold = CreateFrame("Button", nil, row)
+    fold:SetSize(14, 18)
+    fold:SetPoint("LEFT", 2, 0)
+    fold.text = Theme.CreateLabel(fold, "small", "accent", "CENTER")
+    fold.text:SetPoint("CENTER")
+    fold:SetScript("OnClick", function()
+        ToggleSuffixes(row.data)
+        if GameTooltip:IsOwned(fold) then fold:GetScript("OnEnter")(fold) end
+    end)
+    fold:SetScript("OnEnter", function(self)
+        local entry = row.data
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(entry and entry.open and L["Hide the suffixes"] or L["Show each suffix"], 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    fold:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    fold:Hide()
+    row.fold = fold
 
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 28, 0)
+    row.name:SetPoint("LEFT", 40, 0)
     row.name:SetPoint("RIGHT", -70, 0)
 
     row.worth = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
@@ -200,10 +271,52 @@ local function CreateRow(row)
 end
 
 local function UpdateRow(row, entry)
+    row.data = entry
     entry.label = Util.GetItemLabel(entry.itemID)
-    Theme.SetRowName(row.name, entry.label)
-    Theme.SetItemIcon(row.icon, entry.itemID)
+    local count = not entry.kid and entry.suffixCount or 0
+    row.fold:SetShown(count > 0)
+    if count > 0 then row.fold.text:SetText(entry.open and "-" or "+") end
+    row.icon:SetShown(not entry.kid)
+
+    if entry.kid then
+        -- Under its item, past the icon: the suffix's full name in the
+        -- item's colour.
+        local color = type(entry.label) == "string" and entry.label:match("^|c%x%x%x%x%x%x%x%x") or ""
+        row.name:SetPoint("LEFT", 40, 0)
+        Theme.SetRowName(row.name, color .. entry.name .. (color ~= "" and "|r" or ""))
+    else
+        local label = entry.label
+        if count > 0 then
+            local words = count == 1 and L["1 suffix"] or L.Format("%d suffixes", count)
+            label = ("%s  |c%s%s|r"):format(label, ns.COLORS.muted, words)
+        end
+        row.name:SetPoint("LEFT", 40, 0)
+        Theme.SetRowName(row.name, label)
+        Theme.SetItemIcon(row.icon, entry.itemID)
+    end
     Theme.SetMoneyText(row.worth, entry.worth > 0 and entry.worth or nil, { short = true })
+end
+
+-- For the tests.
+UI._StatsRow = { create = CreateRow, update = UpdateRow }
+
+--- The hover on a row: the item's card, or that suffix's.
+function StatsUI.RowTooltip(row, entry)
+    if not (entry and entry.itemID) then return end
+    if not entry.kid then return Widgets.ShowItemOnly(row, entry.itemID, entry.label) end
+    local link
+    if ns.Prices and ns.Prices.SuffixLink then
+        local ok, found = pcall(ns.Prices.SuffixLink, entry.itemID, entry.suffix)
+        link = ok and found or nil
+    end
+    Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, entry.name, link)
+    GameTooltip:Show()
+end
+
+--- Whether a row is the one picked: the item alone, or that suffix.
+function StatsUI.IsPicked(entry)
+    if not (entry and entry.itemID == state.selected) then return false end
+    return (entry.kid and tonumber(entry.suffix) or nil) == state.suffix
 end
 
 --------------------------------------------------------------------------------
@@ -1036,12 +1149,22 @@ local function Draw_(animate)
 
     local itemID = stats.itemID
     Theme.SetItemIcon(panel.icon, itemID)
-    Theme.SetRowName(panel.name, Util.GetItemLabel(itemID))
+    local label = Util.GetItemLabel(itemID)
+    -- A suffix picked: its own name, in the item's colour.
+    local suffixName = stats.suffix and ns.Prices and ns.Prices.SuffixName
+        and ns.Prices.SuffixName(itemID, stats.suffix)
+    if type(suffixName) == "string" and suffixName ~= "" then
+        local color = type(label) == "string" and label:match("^|c%x%x%x%x%x%x%x%x") or ""
+        label = color .. suffixName .. (color ~= "" and "|r" or "")
+    end
+    Theme.SetRowName(panel.name, label)
 
     local bits = {}
     if stats.craft then bits[#bits + 1] = L["You craft this"] end
     if ns.Prices and ns.Prices.IsFavourite and ns.Prices:IsFavourite(itemID) then bits[#bits + 1] = L["starred"] end
     local age = ns.Prices and ns.Prices.GetAge and ns.Prices:GetAge(itemID)
+    local suffixSeen = stats.suffixRecord and tonumber(stats.suffixRecord.seen)
+    if suffixSeen then age = math.max(0, time() - suffixSeen) end
     if age then
         bits[#bits + 1] = L.Format("scanned %s", Util.FormatAgeAgo(age))
     else
@@ -1051,7 +1174,7 @@ local function Draw_(animate)
 
     FillTiles(stats)
 
-    if widgets.graph then widgets.graph:SetItem(itemID) end
+    if widgets.graph then widgets.graph:SetItem(itemID, stats.suffix) end
 
     for _, definition in ipairs(CARDS) do
         local card = widgets.cards[definition.key]
@@ -1082,15 +1205,17 @@ local function Redraw(animate)
     animate = animate or state.grow
     state.grow = nil
 
-    local key = ns.ItemStats:Key(itemID)
+    local key = ns.ItemStats:Key(itemID, state.suffix)
     if key == state.key and state.stats and not animate then return end
     state.key = key
-    state.stats = ns.ItemStats:Build(itemID)
+    state.stats = ns.ItemStats:Build(itemID, nil, state.suffix)
     Draw_(animate)
 end
 
-local function Select(itemID)
+--- Pick an item, or one random suffix of it.
+local function Select(itemID, suffix)
     state.selected = itemID
+    state.suffix = suffix
     state.key = nil
     if widgets.list then widgets.list:Refresh() end
     Redraw(true)
@@ -1184,7 +1309,7 @@ local function ListKey()
         end
     end
     return table.concat({ state.search or "", #entries, type(last) == "table" and tostring(last.t) or "",
-        tostring(ns.Prices and ns.Prices.changes or 0), stars, recipes,
+        tostring(ns.Prices and ns.Prices.changes or 0), stars, recipes, state.openVersion,
         -- And the day, so "the last 30 days" moves on.
         math.floor(time() / DAY) }, "\1")
 end
@@ -1205,6 +1330,7 @@ local function RefreshList()
 
     if not state.selected and rows[1] then Select(rows[1].itemID) end
 end
+StatsUI.RefreshList = RefreshList
 
 local function Build(container)
     local search = Widgets.CreateSearchBox(container, L["Search items"], function(text)
@@ -1220,10 +1346,10 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, entry) Widgets.ShowItemOnly(row, entry.itemID, entry.label) end,
+        onEnter = function(row, entry) StatsUI.RowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
-        isSelected = function(entry) return entry.itemID == state.selected end,
-        onClick = function(entry) Select(entry.itemID) end,
+        isSelected = StatsUI.IsPicked,
+        onClick = function(entry) Select(entry.itemID, entry.kid and tonumber(entry.suffix) or nil) end,
     })
     list:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -8)
     list:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 8, 8)
@@ -1270,18 +1396,26 @@ function StatsUI.Showing()
     return UI.activeTab == "stats"
 end
 
---- Pick an item for the charts, when one is given (the Details view's pick).
-function StatsUI:Pick(itemID)
-    if not itemID or itemID == state.selected then return end
+--- Pick an item for the charts, when one is given (the Details view's
+--- pick), and the suffix Details had picked, if any.
+function StatsUI:Pick(itemID, suffix)
+    suffix = tonumber(suffix)
+    if suffix == 0 then suffix = nil end
+    if not itemID or (itemID == state.selected and suffix == state.suffix) then return end
     state.selected = itemID
+    state.suffix = suffix
     state.key = nil
-    if widgets.list then Select(itemID) end
+    if widgets.list then Select(itemID, suffix) end
 end
+
+--- For the tests: the item and suffix picked.
+function UI._StatsPicked() return state.selected, state.suffix end
 
 --- Open the window on the Prices tab's Stats view, at `itemID` when given.
 function StatsUI:ShowItem(itemID)
     if itemID then
         state.selected = itemID
+        state.suffix = nil
         state.key = nil
     end
     UI:Show()

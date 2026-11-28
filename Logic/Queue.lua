@@ -4,6 +4,14 @@
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
+--- A craft's profit as the Profit tab counts it (Profit:Counted); a Profit
+--- without it (an older test stub) gives the plain sale.
+local function CountedProfit(recipeID)
+    local Profit = ns.Profit
+    if Profit.Counted then return Profit:Counted(recipeID) end
+    return Profit:Analyse(recipeID)
+end
+
 --- One key for a realm name, the same on every account of one player.
 --- Forever's GetRealmName names the server behind the realm, and each of a
 --- player's accounts can sit on a different one ("CAMWOW US2 Realm 7 PvE"
@@ -29,6 +37,35 @@ end
 
 function Queue:Count()
     return #self:GetAll()
+end
+
+--- Is this queued craft made by the character playing?
+--- When the client won't say who is playing, every craft counts as theirs,
+--- so nothing is hidden on a guess (one key per character).
+function Queue:IsMine(entry)
+    local selfKey = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if not selfKey then return true end
+    local crafter = self:GetCrafter(entry)
+    local characters = ns.Characters
+    if characters and characters.IsPlaying then
+        local ok, playing = pcall(characters.IsPlaying, characters, crafter)
+        if ok then return playing == true end
+    end
+    return crafter == selfKey
+end
+
+--- The crafts the Queue tab and the craft pane list: the whole queue, or
+--- with "Only My Crafts:" ticked, only the crafts this character makes.
+--- The stored queue is never changed; other characters see their crafts
+--- when they log in.
+function Queue:Shown()
+    local all = self:GetAll()
+    if not (ns.Config and ns.Config:Get("queueOnlyMine") == true) then return all end
+    local shown = {}
+    for _, entry in ipairs(all) do
+        if self:IsMine(entry) then shown[#shown + 1] = entry end
+    end
+    return shown
 end
 
 --- @param manualOnly skip derived sub-craft entries
@@ -1052,7 +1089,9 @@ function Queue:Add(recipeID, quantity, options)
     local recipe = ns.Recipes:GetAny(recipeID)
     if not recipe then return false end
 
-    local analysis = ns.Profit:Analyse(recipeID)
+    -- Counted as the Profit tab counts it (Profit:Counted), so the
+    -- snapshot matches the row's profit.
+    local analysis = CountedProfit(recipeID)
 
     -- Queued to make: whatever was on the list to buy for it now comes from
     -- the craft's own materials.
@@ -1112,7 +1151,7 @@ function Queue:AddUpToLimit(analyses)
                     if existing then
                         existing.quantity = existing.quantity + count
                     else
-                        local current = ns.Profit:Analyse(analysis.recipeID)
+                        local current = CountedProfit(analysis.recipeID)
                         queue[#queue + 1] = {
                             recipeID = analysis.recipeID,
                             quantity = count,
@@ -1155,10 +1194,13 @@ function Queue:RecipeFor(itemID)
     return nil
 end
 
---- One of your auctions sold: queue one more of it while there is room
---- under Keep in stock, or under what your sales taught when no number is
---- set (the owner, 2026-10-11: stock that tops itself up). Never for a craft
---- that loses money, nor while "Wait until it runs low" is waiting.
+--- One of your auctions sold: queue enough to fill the room under Keep in
+--- stock, or under what your sales taught when no number is set (the owner,
+--- 2026-10-11: stock that tops itself up). It once queued one craft a sale,
+--- so stock that had dropped by more (an expired listing, Restock When Down
+--- To letting go) stayed short (the owner asked for the full amount).
+--- Never for a craft that loses money, nor while "Wait until it runs low"
+--- is waiting.
 --- @return the recipe ID queued, or nil and why: "off", "nocraft",
 ---   "nostock" (no number to keep), "full", "waiting", "loss" or "failed"
 function Queue:RestockSold(itemID)
@@ -1174,7 +1216,8 @@ function Queue:RestockSold(itemID)
     local ok, analysis = pcall(ns.Profit.Analyse, ns.Profit, recipeID)
     if ok and analysis and analysis.profit and analysis.profit <= 0 then return nil, "loss" end
 
-    if self:Add(recipeID, 1) then return recipeID end
+    local crafts = ns.Profit.RoomInCrafts(room, ns.Recipes:GetAny(recipeID)) or 1
+    if self:Add(recipeID, math.max(1, crafts)) then return recipeID end
     return nil, "failed"
 end
 
@@ -1362,8 +1405,15 @@ function Queue:ApplyOrder()
         end
     end
 
+    local ordered = Queue.LayOut(queue, pref)
+    for i, entry in ipairs(ordered) do queue[i] = entry end
+end
+
+--- The rows of `list` laid out lowest `pref[entry]` first, never a part
+--- below the craft it feeds (ApplyOrder and Ordered).
+function Queue.LayOut(list, pref)
     local left, ordered = {}, {}
-    for _, entry in ipairs(queue) do left[#left + 1] = entry end
+    for _, entry in ipairs(list) do left[#left + 1] = entry end
     while #left > 0 do
         local pick, pickAt
         for i, entry in ipairs(left) do
@@ -1381,7 +1431,112 @@ function Queue:ApplyOrder()
         end
         ordered[#ordered + 1] = table.remove(left, pick)
     end
-    for i, entry in ipairs(ordered) do queue[i] = entry end
+    return ordered
+end
+
+--------------------------------------------------------------------------------
+-- Sort By (the owner said do it, 2026-11-26, from the ts-improve-10 mockup)
+--------------------------------------------------------------------------------
+
+-- The Queue tab's Sort By: My Order (today's order, the default), Profit,
+-- Gold per Hour or Frees Bag Space. Saved account wide as `queueSortBy`
+-- (never rename it). It orders the rows shown and what Craft Next makes;
+-- the stored queue and the player's own order stay as they are. A part
+-- still never goes below the craft it feeds, and takes the place of the
+-- best craft it feeds.
+Queue.SORTS = { "mine", "profit", "perHour", "bags" }
+
+--- The Sort By picked: "mine", "profit", "perHour" or "bags".
+function Queue:SortBy()
+    local value = ns.Config and ns.Config:Get("queueSortBy")
+    for _, known in ipairs(Queue.SORTS) do
+        if value == known then return value end
+    end
+    return "mine"
+end
+
+function Queue:SetSortBy(value)
+    if not ns.Config then return end
+    local known = false
+    for _, sort in ipairs(Queue.SORTS) do
+        if value == sort then known = true end
+    end
+    ns.Config:Set("queueSortBy", known and value or "mine")
+    -- Only the drawing changes: nothing is sent or worked out again.
+    if ns.UI and ns.UI.OnQueueUpdated then ns.UI:OnQueueUpdated() end
+end
+
+--- What one queued craft earns: its profit for every time it is queued,
+--- and that over its own casting time, in copper an hour. Either is nil
+--- when it can't be told (no price, never cast, or a part).
+-- @param costs Queue:GetEntryCosts(), when the caller already has it
+function Queue:EntryEarns(entry, costs)
+    if not entry or entry.isDependency then return nil, nil end
+    local count = entry.quantity or 0
+    if count <= 0 then return nil, nil end
+    local priced = (costs or self:GetEntryCosts())[entry]
+    local profit = priced and priced.profit
+    if profit == nil and ns.Profit and (ns.Profit.Counted or ns.Profit.Analyse) then
+        -- The same profit sum as the row shows (CountedProfit).
+        local analysis = CountedProfit(entry.recipeID)
+        if analysis and analysis.priceable and analysis.profit then
+            profit = analysis.profit * count
+        end
+    end
+    if profit == nil then return nil, nil end
+    local cast = ns.CraftTime and ns.CraftTime:GetCast(entry.recipeID)
+    local perHour = (cast and cast > 0) and math.floor(profit / (cast * count) * 3600 + 0.5) or nil
+    return profit, perHour
+end
+
+--- `list` (the whole queue when nil) in the Sort By order, as a new list.
+--- My Order hands back the list as it is.
+function Queue:Ordered(list, costs)
+    list = list or self:GetAll()
+    local sort = self:SortBy()
+    if sort == "mine" or #list < 2 then return list end
+
+    local value = {}
+    if sort == "bags" then
+        for _, entry in ipairs(list) do
+            value[entry] = ns.Crafting and ns.Crafting.SlotsFreed and ns.Crafting:SlotsFreed(entry) or nil
+        end
+    else
+        costs = costs or self:GetEntryCosts()
+        for _, entry in ipairs(list) do
+            local profit, perHour = self:EntryEarns(entry, costs)
+            value[entry] = sort == "profit" and profit or perHour
+        end
+        -- A part counts as the best craft it feeds, so it comes just
+        -- before that craft.
+        for _, part in ipairs(list) do
+            if part.isDependency then
+                for _, entry in ipairs(list) do
+                    if value[entry] ~= nil and not entry.isDependency and self:Feeds(part, entry)
+                        and (value[part] == nil or value[entry] > value[part]) then
+                        value[part] = value[entry]
+                    end
+                end
+            end
+        end
+    end
+
+    -- Highest first; what can't be told goes last; ties keep their place.
+    local pref = {}
+    for i, entry in ipairs(list) do
+        local v = value[entry]
+        pref[entry] = v ~= nil and { 0, -v, i } or { 1, 0, i }
+    end
+    local rank, sorted = {}, {}
+    for i, entry in ipairs(list) do sorted[i] = entry end
+    table.sort(sorted, function(a, b)
+        local x, y = pref[a], pref[b]
+        if x[1] ~= y[1] then return x[1] < y[1] end
+        if x[2] ~= y[2] then return x[2] < y[2] end
+        return x[3] < y[3]
+    end)
+    for i, entry in ipairs(sorted) do rank[entry] = i end
+    return Queue.LayOut(list, rank)
 end
 
 --- Has the player set an order of their own?
@@ -1602,6 +1757,47 @@ function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     return true
 end
 
+--- Road to 300's vendor materials for the steps after the one queued
+--- (vials, thread), so one stop at the vendor buys the whole road's.
+--- Lines tied to that road (`forRoad` = its skill line, never rename it)
+--- are set to exactly `counts`: the rest come off. Set, not added, so the
+--- next Queue Step moves them on and the queue counts that step's own.
+-- @param line    the profession's skill line
+-- @param counts  { [itemID] = count }
+-- @param name    the profession's name, for the tooltip
+function Queue:SetRoadBuys(line, counts, name)
+    line = tonumber(line)
+    if not (line and ns.db) then return false end
+    counts = type(counts) == "table" and counts or {}
+    local selfKey = SelfKey()
+    local buys, left, changed = Buys(next(counts) ~= nil), {}, false
+    for itemID, count in pairs(counts) do
+        count = math.floor(tonumber(count) or 0)
+        if count > 0 then left[itemID] = count end
+    end
+    for index = #buys, 1, -1 do
+        local entry = buys[index]
+        if type(entry) == "table" and entry.forRoad == line and MineToSee(entry, selfKey) then
+            local want = left[entry.itemID]
+            if not want then
+                table.remove(buys, index)
+                changed = true
+            else
+                if entry.count ~= want then entry.count, changed = want, true end
+                if name then entry.forRoadName = name end
+                left[entry.itemID] = nil
+            end
+        end
+    end
+    for itemID, count in pairs(left) do
+        buys[#buys + 1] = { itemID = itemID, count = count, forRoad = line, forRoadName = name,
+            owner = selfKey, addedAt = time() }
+        changed = true
+    end
+    if changed then self:Notify() end
+    return changed
+end
+
 --- Take an item off this character's list to buy (the x on its row).
 function Queue:RemoveBuys(itemID)
     local buys, removed = Buys(false), false
@@ -1814,11 +2010,12 @@ end
 -- bag are cheaper to make, the bag's cost already includes the wool. Adding
 -- the bolt crafts on top paid for that wool twice. Nor are the bolts sold, so
 -- they earn no profit.
-function Queue:GetTotals()
+-- @param list the crafts to add up (Queue:Shown); the whole queue when nil
+function Queue:GetTotals(list)
     local totals = { crafts = 0, cost = 0, profit = 0, priceable = true }
     local entries = self:GetEntryCosts()
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(list or self:GetAll()) do
         local priced = entries[entry]
 
         totals.crafts = totals.crafts + entry.quantity
@@ -1847,11 +2044,12 @@ end
 -- @return { seconds, timed, untimed, byCrafter = { [characterKey] = seconds },
 --   untimedBy = { [characterKey] = crafts } }; seconds is nil when no craft
 --   on the queue has a known time
-function Queue:GetCraftTime()
+-- @param list the crafts to time (Queue:Shown); the whole queue when nil
+function Queue:GetCraftTime(list)
     local result = { seconds = 0, timed = 0, untimed = 0, byCrafter = {}, untimedBy = {} }
     local craftTime = ns.CraftTime
 
-    for _, entry in ipairs(self:GetAll()) do
+    for _, entry in ipairs(list or self:GetAll()) do
         local count = entry.quantity or 0
         if count > 0 then
             local crafter = self:GetCrafter(entry) or "?"
@@ -1938,7 +2136,7 @@ function Queue:BuildEntryCosts()
     end
 
     for _, entry in ipairs(self:GetAll()) do
-        local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
+        local analysis = not entry.isDependency and CountedProfit(entry.recipeID)
         local count = entry.quantity
         local cost
 
@@ -2083,7 +2281,8 @@ function Queue:BuildShoppingList()
         required[line.itemID] = (required[line.itemID] or 0) + line.count
         local forItems = wanted[line.itemID] or {}
         forItems[#forItems + 1] = { forItem = line.forItem, count = line.count,
-            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName }
+            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName,
+            forRoad = line.forRoad, forRoadName = line.forRoadName }
         wanted[line.itemID] = forItems
     end
 

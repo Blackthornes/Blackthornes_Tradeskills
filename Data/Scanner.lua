@@ -16,7 +16,10 @@ local Util = ns.Util
 -- The random suffix a link names, or nil (Util.LinkSuffix, when there).
 local function LinkSuffix(link)
     if type(link) ~= "string" or type(Util.LinkSuffix) ~= "function" then return nil end
-    return Util.LinkSuffix(link)
+    -- Only one that could be placed: a stand-in is never a price's key.
+    local suffix, sure = Util.LinkSuffix(link)
+    if sure == false then return nil end
+    return suffix
 end
 
 -- Blizzard rate-limits the bulk snapshot hard. Asking more often than this just
@@ -35,6 +38,12 @@ local QUICK_SCAN_WAIT = 30
 -- this (the owner, 2026-10-28). The same as the server's own cooldown, so the
 -- quick scan is ready again by then.
 Scanner.AUTO_QUICK_AFTER = 15 * 60
+
+-- A quick scan cut short by leaving the auction house is read again on the
+-- way back in, when that is within this long of asking for it. The game
+-- keeps the rows it sent, and will not send new ones for fifteen minutes.
+-- Short, so the prices are still close to what is listed.
+Scanner.REREAD_WITHIN = 5 * 60
 
 -- A browse sweep that never reports itself complete would otherwise page for
 -- ever, one throttled request at a time.
@@ -76,7 +85,14 @@ local function GetPlayerIdentity()
     local ok, name = pcall(UnitName, "player")
     Scanner.playerName = (ok and name) or "?"
 
-    local realmOk, realm = pcall(GetRealmName)
+    -- An empty name (Forever 1.60.1 gives one) is no realm: "" would
+    -- tell every listing of yours apart from you, and you would undercut
+    -- yourself. Tested and copied inside the pcall, as a dungeon can hand
+    -- back a name that raises when compared.
+    local realmOk, realm = pcall(function()
+        local value = GetRealmName()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
     if realmOk and realm then
         -- ownerFullName arrives as Name-Realm with spaces stripped.
         Scanner.playerRealm = realm:gsub("%s", "")
@@ -199,6 +215,29 @@ local function LocateInBags(itemID)
     end
 end
 
+--- Every item ID in the carried bags, as a set, or nil when they can't be read.
+--
+-- A quick scan asks about thousands of items, almost none of them held.
+-- Looking once and handing the set to IsCommodity spares a walk of every
+-- bag slot for each item that isn't there.
+function Scanner.HeldItems()
+    if type(_G.ItemLocation) ~= "table" or not (ns.Inventory and ns.Inventory.GetCarriedBags) then
+        return nil
+    end
+
+    local held = {}
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+        if slotsOk and slots then
+            for slot = 1, slots do
+                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+                if infoOk and info and info.itemID then held[info.itemID] = true end
+            end
+        end
+    end
+    return held
+end
+
 --- Does the auction house sell this by the stack rather than as one listing?
 --
 -- This decides whether posting uses PostCommodity or PostItem, and getting it
@@ -207,8 +246,8 @@ end
 -- On this client GetItemCommodityStatus takes an ItemLocation. An item ID, an
 -- item link and an item key are all rejected with "bad argument #1", which a
 -- pcall turns into a silent "not a commodity" for everything.
-function Scanner:IsCommodity(itemID, location)
-    return self:GetCommodityStatus(itemID, location) == true
+function Scanner:IsCommodity(itemID, location, held)
+    return self:GetCommodityStatus(itemID, location, held) == true
 end
 
 --- Commodity or not, or nil when nobody has been able to say yet.
@@ -220,7 +259,9 @@ end
 -- @param location  optional ItemLocation the caller already holds, as the
 --   posting path does. It is asked about directly, so a listing never
 --   depends on the bag memo below being fresh.
-function Scanner:GetCommodityStatus(itemID, location)
+-- @param held  optional set from Scanner.HeldItems: an item not in it is
+--   not looked for in the bags.
+function Scanner:GetCommodityStatus(itemID, location, held)
     if not itemID then return nil end
 
     local known = CommodityStore()[itemID]
@@ -233,6 +274,7 @@ function Scanner:GetCommodityStatus(itemID, location)
     if not location then
         local missedAt = notHeld[itemID]
         if missedAt and (GetTime() - missedAt) < NOT_HELD_SECONDS then return nil end
+        if held and not held[itemID] then return nil end
 
         location = LocateInBags(itemID)
         if not location then
@@ -611,6 +653,7 @@ function Scanner:OnBrowseResults()
 
         self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
+        if learned > 0 then self:RedrawAfterLearn() end
         return
     end
 
@@ -860,6 +903,7 @@ local function CombineBrowseRows(results, seen)
             -- (Prices:RecordSuffix), beside the item's.
             local suffix = tonumber(result.itemKey.itemSuffix) or 0
             if suffix ~= 0 then
+                if ns.Prices.LearnKeyName then ns.Prices:LearnKeyName(result.itemKey) end
                 item.suffixes = item.suffixes or {}
                 local own = item.suffixes[suffix]
                 if not own then
@@ -893,6 +937,9 @@ end
 --- @param opts.whole true when the sweep read the whole auction house, so an
 ---   item it did not see has sold out. Partial sweeps leave the rest alone.
 ---   Passing true is the same as both.
+-- Sweeps longer than this are recorded over several frames.
+Scanner.COMMIT_AT_ONCE = 100
+
 function Scanner:CommitBrowseResults(results, opts)
     if opts == true then opts = { ended = true, whole = true } end
     opts = opts or {}
@@ -907,93 +954,144 @@ function Scanner:CommitBrowseResults(results, opts)
     local recorded = 0
     local now = time()
     local unsettled = {}
+    local lonelyLow = {}
     local seen = {}
 
     local items, skipped, implausible = CombineBrowseRows(results, seen)
     local scanned = {}
 
-    for _, item in ipairs(items) do
+    local function One(item)
         -- A browse row is one price, not a book, so market and minimum are
         -- the same figure here: the item's cheapest row.
-        ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
+        local _, held = ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
             item.rivalMin, item.ownMin)
         Scanner.RecordRowSuffixes(item, now)
-        scanned[item.itemID] = true
 
         if item.ask then unsettled[#unsettled + 1] = item.itemID end
+
+        -- One cheap listing far under the usual price (Prices.BrowseLow):
+        -- a search for the item settles it, and until then a click asks
+        -- first rather than list at the scan's price.
+        if held == "lone low" then
+            lonelyLow[#lonelyLow + 1] = item.itemID
+        else
+            scanned[item.itemID] = true
+        end
 
         recorded = recorded + 1
     end
 
-    -- Every item the scan priced lists on one click for a while.
-    if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(scanned, complete) end
+    local function Finish()
+        -- Every item the scan priced lists on one click for a while.
+        if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(scanned, complete) end
 
-    if skipped > 0 then
-        self:Report(("%d row(s) had no item or price"):format(skipped))
-    end
+        if skipped > 0 then
+            self:Report(("%d row(s) had no item or price"):format(skipped))
+        end
 
-    -- Plus anything Prices itself refused, so a price that got past the row
-    -- filter and was stopped at the database is still reported rather than
-    -- quietly dropped.
-    implausible = implausible + ns.Prices:TakeImplausibleCount()
+        -- Plus anything Prices itself refused, so a price that got past the row
+        -- filter and was stopped at the database is still reported rather than
+        -- quietly dropped.
+        implausible = implausible + ns.Prices:TakeImplausibleCount()
 
-    if implausible > 0 then
-        local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
-        if implausible == 1 then
-            ns.Print(L.Format("%d listing ignored: priced above %s", implausible, ceiling))
+        if implausible > 0 then
+            local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
+            if implausible == 1 then
+                ns.Print(L.Format("%d listing ignored: priced above %s", implausible, ceiling))
+            else
+                ns.Print(L.Format("%d listings ignored: priced above %s", implausible, ceiling))
+            end
+        end
+
+        for _, itemID in ipairs(lonelyLow) do unsettled[#unsettled + 1] = itemID end
+        self:FollowUpOwned(unsettled)
+
+        local soldOut = 0
+        if complete then
+            local why
+            soldOut, why = ns.Prices:ClearMissingIfWhole(seen, self.scanStartedWall, now)
+            if why then self:Report(why .. ", so no item is marked sold out") end
+        end
+
+        self.verbose = false
+
+        -- Only a scan that ran to its end counts as a full scan. A cut-short one
+        -- stamped as full hid every deal it had not reached (they looked older
+        -- than the scan) and put off the next automatic scan for two days.
+        local elapsed = GetTime() - (self.scanStartedAt or GetTime())
+        if opts.ended then
+            ns.Prices:SetLastFullScan(now)
+            ns.Print(L.Format("scan complete: %s items in %.1fs", Util.Comma(recorded), elapsed))
+        elseif opts.capped then
+            -- Remembered apart from the full scan stamp, so the automatic scan
+            -- does not start the same capped sweep again on every visit.
+            if ns.db and ns.Config.GetRealmKey then
+                ns.db.lastCappedScanByRealm = ns.db.lastCappedScanByRealm or {}
+                ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()] = now
+            end
+            ns.Print(L.Format("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.",
+                MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
         else
-            ns.Print(L.Format("%d listings ignored: priced above %s", implausible, ceiling))
+            ns.Print(L.Format("scan stopped early: %s items updated in %.1fs", Util.Comma(recorded), elapsed))
         end
-    end
-
-    self:FollowUpOwned(unsettled)
-
-    local soldOut = 0
-    if complete then
-        local why
-        soldOut, why = ns.Prices:ClearMissingIfWhole(seen, self.scanStartedWall, now)
-        if why then self:Report(why .. ", so no item is marked sold out") end
-    end
-
-    self.verbose = false
-
-    -- Only a scan that ran to its end counts as a full scan. A cut-short one
-    -- stamped as full hid every deal it had not reached (they looked older
-    -- than the scan) and put off the next automatic scan for two days.
-    local elapsed = GetTime() - (self.scanStartedAt or GetTime())
-    if opts.ended then
-        ns.Prices:SetLastFullScan(now)
-        ns.Print(L.Format("scan complete: %s items in %.1fs", Util.Comma(recorded), elapsed))
-    elseif opts.capped then
-        -- Remembered apart from the full scan stamp, so the automatic scan
-        -- does not start the same capped sweep again on every visit.
-        if ns.db and ns.Config.GetRealmKey then
-            ns.db.lastCappedScanByRealm = ns.db.lastCappedScanByRealm or {}
-            ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()] = now
+        if soldOut > 0 then
+            ns.Print(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
         end
-        ns.Print(L.Format("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.",
-            MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
-    else
-        ns.Print(L.Format("scan stopped early: %s items updated in %.1fs", Util.Comma(recorded), elapsed))
-    end
-    if soldOut > 0 then
-        ns.Print(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
+
+        if ns.UI and ns.UI.OnScanComplete then
+            ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
+        end
+
+        -- Written out rather than held until logout, because this client loses
+        -- saved variables and a crash would cost the scan. Deferred, though:
+        -- serialising the database and writing several large CVars in the frame
+        -- a scan completes puts that work right where the client is busiest.
+        if ns.Persist then ns.Persist:SaveLater() end
     end
 
-    if ns.UI and ns.UI.OnScanComplete then
-        ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
+    -- A long sweep is recorded a few items a frame, so the frame the last
+    -- page lands in does not hitch. The scan counts as running until
+    -- Finish. Stopped partway (the auction house shut, Cancel), the rest
+    -- is recorded at once: every row was read.
+    if #items > Scanner.COMMIT_AT_ONCE and Util.NewWorker then
+        self.isScanning = true
+        self.committing = true
+        local function Done()
+            self.committing = nil
+            self.isScanning = false
+            Finish()
+        end
+        local commit = Util.NewWorker({
+            budgetMs = ns.Config:Get("scanBudgetMs") or 8,
+            onItem = One,
+            onDone = Done,
+            onCancel = function(stopped)
+                for i = (stopped.index or 0) + 1, #items do
+                    local ok, err = pcall(One, items[i])
+                    if not ok then geterrorhandler()(err) end
+                end
+                Done()
+            end,
+        })
+        self.worker = commit
+        commit:Start(items)
+        return
     end
 
-    -- Written out rather than held until logout, because this client loses
-    -- saved variables and a crash would cost the scan. Deferred, though:
-    -- serialising the database and writing several large CVars in the frame
-    -- a scan completes puts that work right where the client is busiest.
-    if ns.Persist then ns.Persist:SaveLater() end
+    for _, item in ipairs(items) do One(item) end
+    Finish()
 end
 
 function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     -- Only an answer to our own request: another addon can ask too.
     if not self.awaitingReplicate or self.isReading then return end
+
+    -- The answer to a scan the player walked away from, with the auction
+    -- house shut. Its rows wait for the next visit (ReadWaitingSnapshot).
+    if self.stoppedWaiting and not self.isAuctionHouseOpen then
+        self.replicateUnread = true
+        return
+    end
 
     local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
     local answered = ok and type(numItems) == "number" and numItems > 0
@@ -1017,6 +1115,16 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
 
     self.awaitingReplicate = false
 
+    -- The answer to a scan that was stopped while it waited (Cancel, or the
+    -- auction house shut and opened again). The game has counted the scan
+    -- and will not answer another for fifteen minutes, so the answer is
+    -- read all the same: quietly, behind the player's listing, and never
+    -- page by page. One that takes over from a new scan speaks as before.
+    if self.stoppedWaiting then
+        self.stoppedWaiting = nil
+        if not late then self.quickOnly = true end
+    end
+
     if not answered and self.quickOnly then
         self:StopQuickOnly()
         return
@@ -1034,6 +1142,44 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     self.isScanning = true
 
     self:ReadReplicateResults(numItems)
+end
+
+--- Read a quick scan's rows that were never read to the end: the auction
+--- house shut while they were being read, or before they came. Called when
+--- the auction house opens again. Quiet, like the auto scan's quick scan.
+-- @return true when a read started
+function Scanner:ReadWaitingSnapshot()
+    if not self.replicateUnread then return false end
+    if not self.isAuctionHouseOpen or self.isScanning or self.isReading
+        or self.scanQueued or self.browseQueued then
+        return false
+    end
+    self.replicateUnread = nil
+
+    local sent = ns.db and ns.db.lastReplicateRequest
+    if not sent or time() - sent > Scanner.REREAD_WITHIN then
+        -- Too old to pass off as prices read just now. Nothing is waited
+        -- for any longer either.
+        self.awaitingReplicate = false
+        self.stoppedWaiting = nil
+        return false
+    end
+
+    local ok, numItems = pcall(function() return C_AuctionHouse.GetNumReplicateItems() end)
+    if not (ok and type(numItems) == "number" and numItems > 0) then return false end
+
+    self.awaitingReplicate = false
+    self.stoppedWaiting = nil
+    self.quickOnly = true
+    self.isScanning = true
+    self.scanStartedAt = GetTime()
+    -- From when it was asked for, so a price a search wrote since then is
+    -- not taken for sold out (Prices:ClearMissing).
+    self.scanStartedWall = sent
+    ns.db.lastReplicateAnswered = ns.db.lastReplicateAnswered or time()
+
+    self:ReadReplicateResults(numItems, true)
+    return true
 end
 
 --- The auto scan's quick scan gave nothing back: stand down, saying nothing.
@@ -1059,7 +1205,9 @@ function Scanner:StopBrowse()
 end
 
 --- Walk the snapshot, accumulating per-item listings.
-function Scanner:ReadReplicateResults(numItems)
+-- @param reread true for rows read again after the auction house was shut
+--        (ReadWaitingSnapshot): the game may no longer hand them out.
+function Scanner:ReadReplicateResults(numItems, reread)
     -- An automatic quick scan reads its answer without a word in chat.
     local Say = self.quickOnly and ns.Debug or ns.Print
     self.isReading = true
@@ -1078,10 +1226,153 @@ function Scanner:ReadReplicateResults(numItems)
     local suffixObservations = {}
     local suffixGear = {}
 
+    -- What each item, seller and stack size turned out to be, asked once a
+    -- read. A big auction house has thousands of rows of the same few
+    -- thousand items, and asking again for every row (with a walk of the
+    -- bags for each item not held) made the read take minutes.
+    local held = Scanner.HeldItems()
+    local commodityOf, stackOf, ownBy = {}, {}, {}
+
+    local function RowIsCommodity(itemID)
+        local known = commodityOf[itemID]
+        if known == nil then
+            known = self:IsCommodity(itemID, nil, held) == true
+            commodityOf[itemID] = known
+        end
+        return known
+    end
+
+    local function StackOf(itemID)
+        local stack = stackOf[itemID]
+        if stack == nil then
+            stack = Util.GetMaxStackSize(itemID) or false
+            stackOf[itemID] = stack
+        end
+        return stack or nil
+    end
+
+    local function RowIsOwn(owner, ownerFullName)
+        if (owner ~= nil and type(owner) ~= "string")
+            or (ownerFullName ~= nil and type(ownerFullName) ~= "string") then
+            return self:IsOwnAuction(owner, ownerFullName)
+        end
+        local key = (owner or "") .. "\1" .. (ownerFullName or "")
+        local own = ownBy[key]
+        if own == nil then
+            own = self:IsOwnAuction(owner, ownerFullName) == true
+            ownBy[key] = own
+        end
+        return own
+    end
+
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
     for i = 0, numItems - 1 do
         indices[i + 1] = i
+    end
+
+    -- Fold what was read into the prices. Shared by a scan read to its end
+    -- and one stopped partway (closing the auction house, Cancel): the game
+    -- will not hand out another snapshot for fifteen minutes, and throwing
+    -- away the rows already read cost the player all of them. A partial
+    -- read is never a full scan and never marks anything sold out.
+    local function KeepRead(now, partial)
+        -- Market value is an average carried from scan to scan, so the
+        -- ones built from whole-row prices would take many scans to come
+        -- down. Once, the first time this reading prices it, a commodity
+        -- starts its market afresh from this scan. Its history is kept.
+        --
+        -- Marked on each price rather than once for the account: prices
+        -- are kept per realm and faction, and one account-wide mark let
+        -- only the first realm scanned start afresh. That old mark,
+        -- commodityRowPriceFixed, is left in the saved data unread.
+        local table_ = ns.Prices:GetTable()
+        for itemID in pairs(commodities) do
+            local record = table_ and table_[itemID]
+            if record and observations[itemID] and not record.rowPriceFixed then
+                record.market = nil
+            end
+        end
+
+        local recorded = ns.Prices:CommitScan(observations, now, partial)
+        -- Every item the scan priced lists on one click for a while. Not
+        -- after a stop partway: an item may have had only some of its
+        -- listings read, so posting searches it first as usual.
+        if not partial and ns.Posting and ns.Posting.NoteScanned then
+            ns.Posting:NoteScanned(observations, true)
+        end
+
+        -- Each random suffix beside its item, now the item has a price.
+        if ns.Prices.CommitSuffixes then
+            for itemID, bySuffix in pairs(suffixObservations) do
+                ns.Prices:CommitSuffixes(itemID, bySuffix, now)
+            end
+        end
+
+        -- After the commit, so a commodity priced for the first time in
+        -- this scan is marked too and never starts afresh later.
+        for itemID in pairs(commodities) do
+            local record = table_ and table_[itemID]
+            if record and observations[itemID] then record.rowPriceFixed = true end
+        end
+
+        return recorded
+    end
+
+    -- KeepRead for a scan read to its end, a few items a frame. Every item
+    -- used to be summed up and recorded in the frame the read finished,
+    -- thousands at once, and the game froze there for a moment. Each item
+    -- gets what KeepRead gives it, in the same order: its commodity market
+    -- started afresh, its price, its suffixes, its mark. The scan stays
+    -- "reading" until `done(recorded)` runs. Stopped partway (the auction
+    -- house shut, Cancel), the rest is recorded at once: every row was
+    -- read, so it is still a whole scan.
+    local function KeepReadSoon(now, done)
+        local table_ = ns.Prices:GetTable()
+        local ids = {}
+        for itemID in pairs(observations) do ids[#ids + 1] = itemID end
+
+        local recorded = 0
+        local function One(itemID)
+            local isCommodity = commodities[itemID]
+            local record = table_ and table_[itemID]
+            if isCommodity and record and not record.rowPriceFixed then record.market = nil end
+
+            if ns.Prices:CommitOne(itemID, observations[itemID], now) then recorded = recorded + 1 end
+
+            local bySuffix = suffixObservations[itemID]
+            if bySuffix and ns.Prices.CommitSuffixes then ns.Prices:CommitSuffixes(itemID, bySuffix, now) end
+
+            if isCommodity then
+                record = table_ and table_[itemID]
+                if record then record.rowPriceFixed = true end
+            end
+        end
+
+        local function Done()
+            self.committing = nil
+            ns.Prices:SetLastFullScan(now)
+            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations, true) end
+            -- Nothing is left to read on the next visit.
+            self.replicateUnread = nil
+            done(recorded)
+        end
+
+        self.committing = true
+        local commit = Util.NewWorker({
+            budgetMs = ns.Config:Get("scanBudgetMs") or 8,
+            onItem = One,
+            onDone = Done,
+            onCancel = function(stopped)
+                for i = (stopped.index or 0) + 1, #ids do
+                    local ok, err = pcall(One, ids[i])
+                    if not ok then geterrorhandler()(err) end
+                end
+                Done()
+            end,
+        })
+        self.worker = commit
+        commit:Start(ids)
     end
 
     local worker = Util.NewWorker({
@@ -1131,8 +1422,8 @@ function Scanner:ReadReplicateResults(numItems)
             -- stack-size guard kept its whole price as the price of one, and
             -- Wool Cloth at 1s each was stored at 40s.
             local unitPrice
-            if self:IsCommodity(itemID)
-                or (quantity > 1 and quantity > (Util.GetMaxStackSize(itemID) or quantity)) then
+            if RowIsCommodity(itemID)
+                or (quantity > 1 and quantity > (StackOf(itemID) or quantity)) then
                 commodities[itemID] = true
                 if quantity > 1 and buyoutPrice >= quantity then
                     unitPrice = math.floor(buyoutPrice / quantity + 0.5)
@@ -1140,7 +1431,15 @@ function Scanner:ReadReplicateResults(numItems)
                     unitPrice = buyoutPrice
                 end
             else
-                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity)
+                -- The stack size only matters for a row of more than one.
+                -- Asked for every row, it sent the client off for thousands
+                -- of items it hadn't cached (most gear is listed one at a
+                -- time), and their answers came back over the next seconds
+                -- as a flood of item data events: the game stuttered while
+                -- a quick scan was read (a player's report, 2026-11-27).
+                local stack = false
+                if quantity > 1 and buyoutPrice >= quantity then stack = StackOf(itemID) or false end
+                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity, stack)
             end
 
             -- A price nothing can pay is not a market observation, so it is
@@ -1168,7 +1467,7 @@ function Scanner:ReadReplicateResults(numItems)
             local listing = {
                 unitPrice = unitPrice,
                 quantity = quantity,
-                isOwn = self:IsOwnAuction(owner, ownerFullName),
+                isOwn = RowIsOwn(owner, ownerFullName),
                 -- Only counted, for the Stats tab's sellers (Data/StatsLog.lua).
                 seller = type(owner) == "string" and owner or nil,
             }
@@ -1203,91 +1502,82 @@ function Scanner:ReadReplicateResults(numItems)
             local startedWall = self.scanStartedWall
             local now = time()
 
-            -- Market value is an average carried from scan to scan, so the
-            -- ones built from whole-row prices would take many scans to come
-            -- down. Once, the first time this reading prices it, a commodity
-            -- starts its market afresh from this scan. Its history is kept.
-            --
-            -- Marked on each price rather than once for the account: prices
-            -- are kept per realm and faction, and one account-wide mark let
-            -- only the first realm scanned start afresh. That old mark,
-            -- commodityRowPriceFixed, is left in the saved data unread.
-            local table_ = ns.Prices:GetTable()
-            for itemID in pairs(commodities) do
-                local record = table_ and table_[itemID]
-                if record and observations[itemID] and not record.rowPriceFixed then
-                    record.market = nil
-                end
+            -- Rows the game would not hand out a second time are no scan
+            -- at all: nothing is stamped and nothing is marked sold out.
+            if reread and not next(observations) then
+                self.isScanning = false
+                self.isReading = false
+                if ns.UI and ns.UI.OnScanComplete then ns.UI:OnScanComplete() end
+                return
             end
 
-            local recorded = ns.Prices:CommitScan(observations, now)
-            -- Every item the scan priced lists on one click for a while.
-            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations, true) end
+            local function Finish(recorded)
+                local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 
-            -- Each random suffix beside its item, now the item has a price.
-            if ns.Prices.CommitSuffixes then
-                for itemID, bySuffix in pairs(suffixObservations) do
-                    ns.Prices:CommitSuffixes(itemID, bySuffix, now)
-                end
-            end
-
-            -- After the commit, so a commodity priced for the first time in
-            -- this scan is marked too and never starts afresh later.
-            for itemID in pairs(commodities) do
-                local record = table_ and table_[itemID]
-                if record and observations[itemID] then record.rowPriceFixed = true end
-            end
-
-            local elapsed = GetTime() - (self.scanStartedAt or GetTime())
-
-            -- The snapshot is the whole auction house, so an item it did not
-            -- list has sold out. A row that could not be read at all might be
-            -- any item, though, so a snapshot with more than a handful of
-            -- those does not get to decide. (Prices:ClearMissing also refuses
-            -- to clear a large share of the book in one go.)
-            local soldOut = 0
-            if unreadable <= 5 then
-                local why
-                soldOut, why = ns.Prices:ClearMissingIfWhole(seen, startedWall, now)
-                if why then self:Report(why .. ", so no item is marked sold out") end
-            else
-                self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
-            end
-
-            self.isScanning = false
-            self.isReading = false
-
-            Say(L.Format("scan complete: %s listings across %s items in %.1fs%s",
-                Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
-                skipped > 0 and L.Format(" (%s skipped)", Util.Comma(skipped)) or ""))
-
-            if soldOut > 0 then
-                Say(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
-            end
-
-            implausible = implausible + ns.Prices:TakeImplausibleCount()
-
-            if implausible > 0 then
-                local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
-                if implausible == 1 then
-                    Say(L.Format("%s listing ignored: priced above %s", Util.Comma(implausible), ceiling))
+                -- The snapshot is the whole auction house, so an item it did not
+                -- list has sold out. A row that could not be read at all might be
+                -- any item, though, so a snapshot with more than a handful of
+                -- those does not get to decide. (Prices:ClearMissing also refuses
+                -- to clear a large share of the book in one go.)
+                local soldOut = 0
+                if unreadable <= 5 then
+                    local why
+                    soldOut, why = ns.Prices:ClearMissingIfWhole(seen, startedWall, now)
+                    if why then self:Report(why .. ", so no item is marked sold out") end
                 else
-                    Say(L.Format("%s listings ignored: priced above %s", Util.Comma(implausible), ceiling))
+                    self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
+                end
+
+                self.isScanning = false
+                self.isReading = false
+
+                Say(L.Format("scan complete: %s listings across %s items in %.1fs%s",
+                    Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
+                    skipped > 0 and L.Format(" (%s skipped)", Util.Comma(skipped)) or ""))
+
+                if soldOut > 0 then
+                    Say(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
+                end
+
+                implausible = implausible + ns.Prices:TakeImplausibleCount()
+
+                if implausible > 0 then
+                    local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
+                    if implausible == 1 then
+                        Say(L.Format("%s listing ignored: priced above %s", Util.Comma(implausible), ceiling))
+                    else
+                        Say(L.Format("%s listings ignored: priced above %s", Util.Comma(implausible), ceiling))
+                    end
+                end
+
+                if ns.UI and ns.UI.OnScanComplete then
+                    ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
                 end
             end
 
-            if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
+            -- Recorded a few items a frame, then finished (KeepReadSoon).
+            if ns.Prices.CommitOne then
+                KeepReadSoon(now, Finish)
+            else
+                Finish(KeepRead(now, false))
             end
         end,
 
         onCancel = function()
+            -- Keep the rows read so far (see KeepRead).
+            local recorded = next(observations) and KeepRead(time(), true) or 0
+            local elapsed = GetTime() - (self.scanStartedAt or GetTime())
+
             self.isScanning = false
             self.isReading = false
-            Say(L["scan cancelled"])
+            if recorded > 0 then
+                Say(L.Format("scan stopped early: %s items updated in %.1fs", Util.Comma(recorded), elapsed))
+            else
+                Say(L["scan cancelled"])
+            end
 
             if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete()
+                ns.UI:OnScanComplete(recorded > 0 and { items = recorded, soldOut = 0 } or nil)
             end
         end,
     })
@@ -1312,7 +1602,12 @@ function Scanner:CancelScan()
     self.isBrowsing = false
     self.scanQueued = false
     self.browseQueued = false
-    self.awaitingReplicate = false
+
+    -- A quick scan already sent is still listened for. The game counted it
+    -- when it was sent and will not answer another for fifteen minutes, so
+    -- dropping the answer here left the player with no prices and the wait
+    -- (a player's report, 2026-11-22). See REPLICATE_ITEM_LIST_UPDATE.
+    if self.awaitingReplicate then self.stoppedWaiting = true end
 
     -- A cancelled sweep's last page must not stand in for the next sweep's
     -- rows, where it would be recorded as prices read just now.
@@ -1339,6 +1634,8 @@ function Scanner:CancelScan()
 end
 
 function Scanner:GetProgress()
+    -- Every row is read and the prices are being written: the bar stays full.
+    if self.committing then return 1 end
     if self.worker and self.worker:IsRunning() then
         return self.worker:GetProgress()
     end
@@ -1643,7 +1940,13 @@ end
 --
 -- Returns true only when the database actually changed, so callers can report
 -- what happened rather than what was attempted.
-function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
+--
+-- `book` sums up the rest of what was seen (cheapest, count, each suffix's
+-- cheapest). A repeat is the same value AND the same book: a new listing up
+-- the book, or a cheaper copy of a dear suffix, leaves the item's cheap end
+-- and so its value alone, and was skipped as "seen" for a minute.
+function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder, partial,
+    book)
     if not itemID or not marketValue or marketValue <= 0 then return false end
 
     self.passiveSeen = self.passiveSeen or {}
@@ -1651,13 +1954,13 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
     local now = GetTime()
     local seen = self.passiveSeen[itemID]
 
-    if seen and seen.price == marketValue and (now - seen.at) < PASSIVE_REPEAT_SECONDS then
+    if seen and seen.price == marketValue and seen.book == book and (now - seen.at) < PASSIVE_REPEAT_SECONDS then
         return false
     end
 
-    self.passiveSeen[itemID] = { at = now, price = marketValue }
+    self.passiveSeen[itemID] = { at = now, price = marketValue, book = book }
 
-    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder)
+    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder, partial)
 
     self.passiveCount = (self.passiveCount or 0) + 1
 
@@ -1680,6 +1983,28 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
     return true
 end
 
+--- A short key for one look at a book: its cheapest, count, rival and own
+--- prices, and each suffix's cheapest and count. Two looks with one key saw
+--- the same thing.
+function Scanner.BookKey(minBuyout, quantity, rivalMin, ownMin, partial, bySuffix)
+    local parts = { tostring(minBuyout), tostring(quantity), tostring(rivalMin), tostring(ownMin),
+        partial and "p" or "" }
+    if type(bySuffix) == "table" then
+        local suffixes = {}
+        for suffix in pairs(bySuffix) do suffixes[#suffixes + 1] = suffix end
+        table.sort(suffixes)
+        for _, suffix in ipairs(suffixes) do
+            local cheapest, count = nil, 0
+            for _, listing in ipairs(bySuffix[suffix]) do
+                count = count + (listing.quantity or 1)
+                if not cheapest or listing.unitPrice < cheapest then cheapest = listing.unitPrice end
+            end
+            parts[#parts + 1] = ("%s=%s/%d"):format(tostring(suffix), tostring(cheapest), count)
+        end
+    end
+    return table.concat(parts, ":")
+end
+
 --- Read the shared browse results after somebody else's query filled them.
 function Scanner:CapturePassiveBrowse()
     if not self:PassiveCaptureEnabled() then return 0 end
@@ -1695,7 +2020,9 @@ function Scanner:CapturePassiveBrowse()
     -- ownership included and an item's rows taken together. A row priced
     -- past what anyone can pay is passed over for the same reason it is there.
     for _, item in ipairs((CombineBrowseRows(results))) do
-        if self:RecordPassive(item.itemID, item.price, item.price, item.quantity,
+        if self:HeldAfterBuy(item.itemID, item.price) then
+            -- The listing just bought, still in the browse row: not read.
+        elseif self:RecordPassive(item.itemID, item.price, item.price, item.quantity,
             item.rivalMin, item.ownMin) then
             learned = learned + 1
         end
@@ -1705,6 +2032,33 @@ function Scanner:CapturePassiveBrowse()
     if learned > 0 and ns.Persist then ns.Persist:SaveLater() end
 
     return learned
+end
+
+--- Seconds after a buy that a browse row still at the price paid is
+--- taken as the listing just bought, not as another one.
+Scanner.BOUGHT_HOLD = 15
+
+--- A buy of one listing went through at this unit price (AHBuys:Confirm).
+--- On Forever the browse row can still show it for a moment after, and
+--- reading that put the sold out price back on the Disenchanting tab.
+function Scanner:NoteBought(itemID, unitPrice)
+    if not itemID then return end
+    self:ForgetPassive(itemID)
+    if not unitPrice then return end
+    self.boughtHold = self.boughtHold or {}
+    self.boughtHold[itemID] = { at = time(), price = unitPrice }
+end
+
+--- Is this browse row the listing just bought? Within BOUGHT_HOLD of the
+--- buy, at the price paid or under it. A dearer row is the next listing.
+function Scanner:HeldAfterBuy(itemID, price)
+    local hold = self.boughtHold and self.boughtHold[itemID]
+    if not hold then return false end
+    if time() - hold.at > self.BOUGHT_HOLD then
+        self.boughtHold[itemID] = nil
+        return false
+    end
+    return price ~= nil and price <= hold.price + 1
 end
 
 --- Forget the last price passive capture read for an item, so the next
@@ -1824,7 +2178,21 @@ function Scanner:SettleNameSearch()
 end
 
 --- Record the order book of a search the player ran on a single item.
-function Scanner:CapturePassiveListings(itemID, listings)
+--- Did a look at one item read the whole book? Asks the client's
+-- HasFull...SearchResults with the look's item id or key. Anything but a
+-- plain yes (no such call, an error, false) is taken as a part read, so the
+-- look's count stays out of Sold a day; its price is still learned.
+function Scanner.HasFullResults(path, arg)
+    if not Util.HasFunction(path) then return false end
+    local fn = C_AuctionHouse and C_AuctionHouse[path:match("[^.]+$")]
+    if type(fn) ~= "function" then return false end
+    local ok, full = pcall(fn, arg)
+    return ok and full == true
+end
+
+-- `bySuffix` ({ [suffix] = listings }) is the same book split by random
+-- suffix, when it has any: it counts toward whether this is a new look.
+function Scanner:CapturePassiveListings(itemID, listings, partial, bySuffix)
     if not self:PassiveCaptureEnabled() then return false end
 
     -- Empty is not recorded; see the rules above.
@@ -1838,11 +2206,34 @@ function Scanner:CapturePassiveListings(itemID, listings)
     -- said before this is the estimate a purchase is held to.
     if ns.Prices.KeepBeforeLook then ns.Prices:KeepBeforeLook(itemID) end
 
-    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
+    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder,
+        partial, Scanner.BookKey(minBuyout, quantity, rivalMin, ownMin, partial, bySuffix))
 
     if learned and ns.Persist then ns.Persist:SaveLater() end
+    if learned then self:RedrawAfterLearn() end
 
     return learned
+end
+
+--- Tabs that show what a listing costs right now, so a price read from the
+--- player's own search (or Blizzard's refresh button) is shown at once.
+Scanner.REDRAW_TABS = { disenchanting = true, deals = true }
+
+--- A search the addon did not start taught a new price: redraw the tab
+--- showing it, once for a burst of results. Nothing redrew before, so
+--- Buy for on the Disenchanting tab kept a listing someone had bought
+--- until something else happened to redraw it.
+function Scanner:RedrawAfterLearn()
+    if self.learnRedrawQueued then return end
+    local ui = ns.UI
+    if not (ui and ui.RefreshActiveTab and self.REDRAW_TABS[ui.activeTab]) then return end
+    if not (C_Timer and C_Timer.After) then return end
+
+    self.learnRedrawQueued = true
+    C_Timer.After(0.2, function()
+        Scanner.learnRedrawQueued = false
+        if ns.UI and Scanner.REDRAW_TABS[ns.UI.activeTab] then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -2015,12 +2406,16 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     -- emptied by the credibility filter would otherwise unlearn it.
     if #raw > 0 then self:LearnCommodity(itemID, true) end
 
+    -- Only part of the book may have come back. Its count is then not what
+    -- is listed, and Sold a day must not read the gap as sales.
+    local partial = not Scanner.HasFullResults("C_AuctionHouse.HasFullCommoditySearchResults", itemID)
+
     if not ours then
-        self:CapturePassiveListings(itemID, listings)
+        self:CapturePassiveListings(itemID, listings, partial)
         return
     end
 
-    self:FinishItemScan(itemID, listings, true)
+    self:FinishItemScan(itemID, listings, true, partial)
 end
 
 function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
@@ -2089,7 +2484,13 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                     -- Under its random suffix too: the key's own, or the
                     -- listing's link when the search was for every suffix.
                     local suffix = tonumber(key.itemSuffix) or 0
-                    if suffix == 0 then suffix = LinkSuffix(info.itemLink) or 0 end
+                    if suffix == 0 then
+                        suffix = LinkSuffix(info.itemLink) or 0
+                    elseif ns.Prices.LearnSuffix then
+                        -- The listing's link beside its key: which bonus
+                        -- is which suffix, for the copies in the bags.
+                        ns.Prices:LearnSuffix(info.itemLink, suffix)
+                    end
                     if suffix ~= 0 then
                         bySuffix[suffix] = bySuffix[suffix] or {}
                         table.insert(bySuffix[suffix], listing)
@@ -2105,19 +2506,23 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     -- commodity, and that is now known without ever holding one.
     if #raw > 0 then self:LearnCommodity(itemID, false) end
 
+    -- As on the commodity path: a book only partly read gives no count.
+    local partial = not Scanner.HasFullResults("C_AuctionHouse.HasFullItemSearchResults", key)
+
     if not ours then
-        if self:CapturePassiveListings(itemID, listings) and next(bySuffix) and ns.Prices.CommitSuffixes then
+        if self:CapturePassiveListings(itemID, listings, partial, bySuffix) and next(bySuffix)
+            and ns.Prices.CommitSuffixes then
             ns.Prices:CommitSuffixes(itemID, bySuffix, time())
         end
         return
     end
 
-    self:FinishItemScan(itemID, listings, false)
+    self:FinishItemScan(itemID, listings, false, partial)
     -- After the item's own price, so the suffixes have one to sit beside.
     if next(bySuffix) and ns.Prices.CommitSuffixes then ns.Prices:CommitSuffixes(itemID, bySuffix, time()) end
 end
 
-function Scanner:FinishItemScan(itemID, listings, isCommodity)
+function Scanner:FinishItemScan(itemID, listings, isCommodity, partial)
     local pending = self.pendingItem
     self.pendingItem = nil
 
@@ -2133,7 +2538,7 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
     local status = "fresh"
 
     if marketValue then
-        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow, ladder)
+        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow, ladder, partial)
     else
         -- The search came back with nothing in it. Recording that is the whole
         -- point of asking: it clears the rival price, so the next listing
@@ -2168,7 +2573,10 @@ function Scanner:AUCTION_HOUSE_SHOW()
     -- strictly needs, on purpose: the player often opens the house to post
     -- something, and a sweep starting underneath their first click is how their
     -- own listing ended up refused for going too fast.
-    C_Timer.After(3, function() Scanner:ConsiderAutoScan() end)
+    C_Timer.After(3, function()
+        -- First the rows of a quick scan the last visit cut short.
+        if not Scanner:ReadWaitingSnapshot() then Scanner:ConsiderAutoScan() end
+    end)
 end
 
 --- Scan without being asked when there is nothing useful to work from.
@@ -2230,6 +2638,9 @@ end
 function Scanner:AUCTION_HOUSE_CLOSED()
     self.isAuctionHouseOpen = false
     self.settledSearchDisplay = false
+    -- Rows still being read are kept as far as they got (CancelScan), and
+    -- read to the end on the way back in (ReadWaitingSnapshot).
+    if self.isReading then self.replicateUnread = true end
     self:CancelScan()
 end
 

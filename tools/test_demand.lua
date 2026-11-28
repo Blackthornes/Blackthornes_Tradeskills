@@ -23,10 +23,22 @@ ns.Mail = {
 
 local prices = {}
 local liquidity = {}
+local gone = {}
+local priceTable = {}
 ns.Prices = {
   Get = function(_, itemID) return prices[itemID] end,
   GetSalesPerDay = function(_, itemID) return liquidity[itemID] end,
+  -- Listings gone over the readings; plenty unless a test says otherwise.
+  GetListingsGone = function(_, itemID) return gone[itemID] or 99 end,
+  GetTable = function() return priceTable end,
+  scanCount = 0,
 }
+
+-- Item classes: 0 consumable, 4 armour, 7 trade goods.
+local classes = {}
+_G.C_Item = { GetItemInfoInstant = function(itemID)
+  return itemID, nil, nil, nil, nil, classes[itemID] or 7, 0
+end }
 
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/Demand.lua"))
 chunk("Blackthornes_TS", ns)
@@ -76,12 +88,50 @@ check("the tooltip says why", Demand:TooltipText(r), "High (35% of its stock sel
 liquidity[2] = 0.01
 check("barely moving is low", Demand:Get(2).level, "low")
 
+-- A player's report (2026-11-22): one helm up, one gone, read as
+-- "100% of stock sells daily". Three must have gone first.
+liquidity[2] = 1
+gone[2] = 1
+check("one listing gone is too few to say", Demand:Get(2), nil)
+gone[2] = 2
+check("two is still too few", Demand:Get(2), nil)
+gone[2] = 3
+check("three gone gives a reading", Demand:Get(2) and Demand:Get(2).level, "high")
+gone[2] = nil
+
 liquidity[2] = nil
 check("too little time to go on has no reading", Demand:Get(2), nil)
 
 check("never seen has no reading", Demand:Get(99), nil)
 check("and no label", Demand:Label(nil), nil)
 check("sorts below anything known", Demand:Rank(nil) < Demand:Rank({ level = "low", rate = 0 }), true)
+
+print("\nhigh among its own kind")
+-- Twelve potions, all over the plain bar; three pieces of gear.
+for i = 1, 12 do
+  local id = 100 + i
+  classes[id] = 0
+  priceTable[id] = {}
+  liquidity[id] = 0.30 + i * 0.05
+end
+for i = 1, 3 do
+  local id = 200 + i
+  classes[id] = 4
+  priceTable[id] = {}
+  liquidity[id] = 0.31
+end
+ns.Prices.scanCount = 1
+Demand:ForgetKinds()
+check("the fastest potion is high", Demand:Get(112).level, "high")
+check("the top third of potions is high", Demand:Get(109).level, "high")
+check("a slower potion over the old bar is some", Demand:Get(108).level, "some")
+check("the slowest potion is some", Demand:Get(101).level, "some")
+check("too few gear read keeps the plain bar", Demand:Get(201).level, "high")
+liquidity[101] = 0.05
+check("low stays low", Demand:Get(101).level, "low")
+check("with no item, the plain bar", Demand.MarketLevel(0.35), "high")
+check("a consumable's kind", Demand.Kind(105), "consumable")
+check("armour is gear", Demand.Kind(201), "gear")
 
 print("\nthe queue warning")
 Ledger({ { itemID = 3, sold = 0, expired = 6 }, { itemID = 4, sold = 6, expired = 0 } })

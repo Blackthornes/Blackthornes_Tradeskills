@@ -11,24 +11,24 @@ local Theme = {}
 ns.Theme = Theme
 
 Theme.colors = {
-    window    = { 0.055, 0.063, 0.078 },   -- #0E1014 outermost shell
-    panel     = { 0.086, 0.094, 0.114 },   -- #16181D
-    header    = { 0.110, 0.122, 0.145 },
-    row       = { 0.133, 0.145, 0.172 },   -- #22252C
-    rowAlt    = { 0.106, 0.118, 0.141 },
-    rowHover  = { 0.180, 0.200, 0.239 },
+    window    = { 0.067, 0.055, 0.039 },   -- #110E0A outermost shell
+    panel     = { 0.102, 0.086, 0.067 },   -- #1A1611
+    header    = { 0.129, 0.106, 0.075 },   -- #211B13
+    row       = { 0.165, 0.137, 0.094 },   -- #2A2318
+    rowAlt    = { 0.133, 0.110, 0.075 },   -- #221C13
+    rowHover  = { 0.204, 0.169, 0.114 },   -- #342B1D
     rowActive = { 0.220, 0.190, 0.110 },
     -- Dark glass (2026-10-10, asked to calm the gold glare behind list
     -- rows): table rows sit in the well they are recessed in, a faint band
     -- apart, with a fine line under each. Hover and the picked row lift a
     -- little and keep the gold to their edge.
-    glass       = { 0.067, 0.075, 0.094 },   -- #111318
-    glassAlt    = { 0.039, 0.047, 0.063 },   -- #0A0C10, the well itself
-    glassHover  = { 0.094, 0.106, 0.129 },   -- #181B21
+    glass       = { 0.090, 0.075, 0.055 },   -- #17130E
+    glassAlt    = { 0.059, 0.047, 0.031 },   -- #0F0C08, the well itself
+    glassHover  = { 0.125, 0.102, 0.071 },   -- #201A12
     glassActive = { 0.141, 0.122, 0.078 },   -- #241F14, gold in the dark
 
-    border    = { 0.204, 0.224, 0.263 },
-    borderLit = { 0.302, 0.333, 0.388 },
+    border    = { 0.290, 0.235, 0.141 },   -- #4A3C24
+    borderLit = { 0.420, 0.353, 0.227 },   -- #6B5A3A
 
     accent    = { 0.784, 0.643, 0.302 },   -- #C8A44D
     -- Titanforged (2026-10-04): the lit gold of a hovered edge, the gold of
@@ -37,7 +37,7 @@ Theme.colors = {
     accentHi  = { 0.945, 0.831, 0.533 },   -- #F1D488
     gilt      = { 0.941, 0.824, 0.494 },   -- #F0D27E
     ink       = { 0.110, 0.078, 0.024 },   -- #1C1406
-    well      = { 0.039, 0.047, 0.063 },   -- #0A0C10
+    well      = { 0.059, 0.047, 0.031 },   -- #0F0C08
     metal     = { 0.541, 0.427, 0.180 },   -- #8A6D2E
     profit    = { 0.310, 0.820, 0.545 },   -- #4FD18B
     loss      = { 0.898, 0.376, 0.310 },   -- #E5604F
@@ -56,23 +56,42 @@ Theme.colors = {
     way_vendor     = { 0.910, 0.800, 0.560 },   -- #E8CC8F
     way_disenchant = { 0.776, 0.580, 0.957 },   -- #C694F4
 
-    text      = { 0.902, 0.910, 0.925 },   -- #E6E8EC
+    -- Column headings in the game's own yellow.
+    heading   = { 1.000, 0.820, 0.000 },   -- #FFD100
+    text      = { 1.000, 1.000, 1.000 },   -- #FFFFFF, plain values in white as the game draws them
     -- Secondary text, a step brighter than Farmer's so the small print in
     -- the dense tables (ages, column headings, hints) is readable.
-    muted     = { 0.545, 0.569, 0.608 },   -- #8B919B
-    dim       = { 0.420, 0.440, 0.482 },   -- #6B707B
+    muted     = { 0.608, 0.573, 0.486 },   -- #9B927C
+    dim       = { 0.478, 0.443, 0.369 },   -- #7A715E
 
     -- Untinted, for Blizzard border textures that already carry their own
     -- gold colouring and only look muddy when tinted again.
     natural   = { 1, 1, 1 },
 }
 
-local FONT do
+-- The house font, the game's own. The Font choice on the All Addons page
+-- (UI/SharedChoices.lua) can swap it once the save is in, so Theme.FONT is
+-- looked up as it is read rather than kept.
+local HOUSE_FONT do
     local ok, path = pcall(function() return (GameFontNormal:GetFont()) end)
-    FONT = (ok and path) or [[Fonts\FRIZQT__.TTF]]
+    HOUSE_FONT = (ok and path) or [[Fonts\FRIZQT__.TTF]]
+end
+Theme.HOUSE_FONT = HOUSE_FONT
+
+--- The font to draw with. Also puts the Colors choice into the palette,
+--- once, the first time it is asked after the save is in.
+function Theme.Font()
+    local Shared = ns.SharedChoices
+    if Shared and Shared.FontPath then
+        Shared:Recolor(Theme.colors)
+        return Shared:FontPath(HOUSE_FONT)
+    end
+    return HOUSE_FONT
 end
 
-Theme.FONT = FONT
+setmetatable(Theme, { __index = function(_, key)
+    if key == "FONT" then return Theme.Font() end
+end })
 
 -- The sizes at Normal text size.
 Theme.BASE_SIZES = {
@@ -115,6 +134,8 @@ Theme.sizes = setmetatable({}, {
 --------------------------------------------------------------------------------
 
 function Theme.Unpack(key, alpha)
+    local Shared = ns.SharedChoices
+    if Shared and Shared.Recolor then Shared:Recolor(Theme.colors) end
     local color = Theme.colors[key] or Theme.colors.text
     return color[1], color[2], color[3], alpha or 1
 end
@@ -192,7 +213,7 @@ end
 --- A text label.
 function Theme.CreateLabel(parent, size, colorKey, justify)
     local label = parent:CreateFontString(nil, "OVERLAY")
-    label:SetFont(FONT, Theme.sizes[size] or size or Theme.sizes.normal, "")
+    label:SetFont(Theme.Font(), Theme.sizes[size] or size or Theme.sizes.normal, "")
     label:SetTextColor(Theme.Unpack(colorKey or "text"))
     label:SetJustifyH(justify or "LEFT")
     label:SetWordWrap(false)
@@ -272,7 +293,7 @@ end
 --- Red" over "Swashbuckler's Shirt").
 function Theme.SetRowName(label, text, size)
     size = Theme.sizes[size or "small"] or Theme.sizes.small
-    pcall(label.SetFont, label, FONT, size, "")
+    pcall(label.SetFont, label, Theme.Font(), size, "")
     pcall(label.SetWordWrap, label, false)
     pcall(label.SetHeight, label, 0)
     label.rowNeed, label.rowNeedText = nil, nil
@@ -284,7 +305,7 @@ function Theme.SetRowName(label, text, size)
     if type(width) ~= "number" or width <= room then return end
 
     local small = math.min(size, Theme.sizes.tiny)
-    pcall(label.SetFont, label, FONT, small, "")
+    pcall(label.SetFont, label, Theme.Font(), small, "")
     pcall(label.SetWordWrap, label, true)
     label:SetText(text)
 
@@ -445,7 +466,7 @@ function Theme.Recess(frame)
         Theme.SetBorderColor(frame, "border", 0.8)
         -- The top edge in shadow, so the panel reads as sunk rather than raised.
         local top = frame.borderTextures[1]
-        if top then top:SetColorTexture(0.016, 0.020, 0.028, 1) end
+        if top then top:SetColorTexture(0.024, 0.020, 0.012, 1) end
     end
     return shadow
 end

@@ -33,31 +33,59 @@ local SECTION_GAP = -22
 
 -- The category switch along the top, and the room it takes.
 local BAR_HEIGHT = 34
+-- Each more line the switch wraps to when its names would reach the search
+-- box (seen in game 2026-11-17: ABOUT ran under it). The bar grows by it.
+local LINE_HEIGHT = 26
+-- Between two names on the switch, and round the search box.
+local SWITCH_GAP = 22
+local TOOLS_GAP = 16
 
 -- A player's request (2026-10-07): the one long page grew crowded, so the
 -- settings sit on category pages picked along the top, like Recipes /
 -- Recipes to learn. Every setting kept its saved name; only its place moved.
 local PAGES = {
     { key = "pricing", text = L["PRICING"],
-      tip = L["Undercut, the auction house cut, markups and what counts as profit"] },
+      tip = L["Undercut, the auction house cut, markups, profit and other price addons"] },
     { key = "queue", text = L["QUEUE"],
       tip = L["What gets queued, sub-crafts, alts, ignored crafts and items, export and import"] },
     { key = "mail", text = L["MAIL & VENDORS"],
       tip = L["The mailbox, your disenchanter, selling to vendors and the mail report"] },
     { key = "auction", text = L["AUCTION HOUSE"],
       tip = L["Buying, posting and scanning"] },
-    { key = "look", text = L["LOOK"],
-      tip = L["Values on tooltips, columns, the arrow and Goblin Gold"] },
-    { key = "sharing", text = L["SHARING"],
-      tip = L["Your other account and guild prices"] },
     { key = "data", text = L["DATA"],
       tip = L["What is saved and clearing old prices"] },
-    { key = "general", text = L["GENERAL"],
-      tip = L["Window position, text size and What's New"] },
+    -- From here on, the pages every Blackthornes addon shares, in the same
+    -- order in all five (the owner said build it, 2026-11-17): Tooltips,
+    -- Sounds, Windows, Sharing, All Addons, About. Look and General became
+    -- Tooltips and Windows (2026-11-16); a saved "look" or "general" opens
+    -- the new one.
+    { key = "tooltips", text = L["TOOLTIPS"],
+      tip = L["What shows on item tooltips, in the profession window and in chat"] },
+    { key = "sounds", text = L["SOUNDS"],
+      tip = L["Every sound the addon plays, each with its own switch"] },
+    { key = "windows", text = L["WINDOWS"],
+      tip = L["Window look and size, what opens by itself, the small windows and the arrow"] },
+    { key = "sharing", text = L["SHARING"],
+      tip = L["Your other account and guild prices"] },
+    -- The settings every Blackthornes addon shares (2026-11-16): reached
+    -- by the one window's gear while One Window is on, so it is left off
+    -- the switch then; on the switch while each addon has its own window.
+    { key = "all", text = L["ALL ADDONS"] },
     { key = "about", text = L["ABOUT"],
-      tip = L["How these addons are made, the version, the Discord and the other Blackthornes addons"] },
+      tip = L["How these addons are made, the version, the Discord, What's New and the other Blackthornes addons"] },
 }
 local DEFAULT_PAGE = "pricing"
+-- Pages that were folded into others, and where their rows went.
+local FORMER_PAGES = { look = "tooltips", general = "windows" }
+
+-- "Queue From Sell List:" only means something while Craft First is on,
+-- so it is greyed and takes no clicks while that is off.
+local function GreyQueueFromSell(widgets, on)
+    local box, row = widgets.queueFromSell, widgets.queueFromSellRow
+    if not box then return end
+    if row then row:SetAlpha(on and 1 or 0.4) else box:SetAlpha(on and 1 or 0.4) end
+    box:EnableMouse(on and true or false)
+end
 
 -- "Prefer TSM Prices:" only means something while TSM Prices is on, so it
 -- is greyed and takes no clicks while that is off.
@@ -74,6 +102,9 @@ local function GreyPreferTSM(widgets, tsmOn)
         source.editBox:EnableMouse(tsmOn and true or false)
         if not tsmOn then source.editBox:ClearFocus() end
     end
+    -- "TSM Sold a Day:" too.
+    if widgets.tsmSoldRow then widgets.tsmSoldRow:SetAlpha(tsmOn and 1 or 0.4) end
+    if widgets.tsmSoldPerDay then widgets.tsmSoldPerDay:EnableMouse(tsmOn and true or false) end
     -- "TSM BoE Price Source:" too.
     local gearRow, gear = widgets.tsmGearRow, widgets.tsmGearPriceSource
     if gearRow then gearRow:SetAlpha(tsmOn and 1 or 0.4) end
@@ -85,12 +116,71 @@ end
 
 local widgets = {}
 
+-- The Queue page's lists box, made in Build and filled in Refresh.
+local ShowQueueList, FindQueueList
+local IGNORED_ROW_HEIGHT = 22
+local STOCK_ROW_HEIGHT = 26
+-- Where Minimums by Profession's profit and margin boxes start in a row.
+local MINIMUM_PROFIT_X = 150
+local MINIMUM_MARGIN_X = 290
+-- "Show:" is short, so the box starts early and has room for a list's name.
+local LIST_BOX_X = 60
+
 --- An Off / Shift / Always box (see the Look page) set to the saved mode,
 --- without calling its onSelect.
 local function ShowShiftMode(dropdown)
     local setting = dropdown.shiftSetting
     local isOn = setting == nil or ns.Config:Get(setting) ~= false
     dropdown:SetValue(ns.TooltipShift:Mode(isOn, dropdown.shiftKey), true)
+end
+
+-- The tooltip line boxes on the Tooltips page, in order, by their widgets key.
+local TOOLTIP_LINES = {
+    "tooltipValue", "tooltipSalesShift", "tooltipTrend", "recipeTooltips",
+    "enchantTooltips", "disenchantTooltips", "crateTooltips", "boughtTooltips",
+    "usedInTooltips",
+}
+
+--- "All Lines:" shows the choice every line shares, or Mixed while they
+--- differ. The sales lines have no Off, so they agree with an Off.
+local function ShowAllLinesMode()
+    local box = widgets.tooltipAll
+    if not box then return end
+    local Shift = ns.TooltipShift
+    local common, same = nil, true
+    for _, name in ipairs(TOOLTIP_LINES) do
+        local dropdown = widgets[name]
+        if dropdown and dropdown.shiftSetting then
+            local isOn = ns.Config:Get(dropdown.shiftSetting) ~= false
+            local mode = Shift:Mode(isOn, dropdown.shiftKey)
+            if common == nil then common = mode elseif common ~= mode then same = false end
+        end
+    end
+    if same and common ~= nil then
+        for _, name in ipairs(TOOLTIP_LINES) do
+            local dropdown = widgets[name]
+            if dropdown and not dropdown.shiftSetting and common ~= Shift.OFF
+                and Shift:Mode(true, dropdown.shiftKey) ~= common then
+                same = false
+            end
+        end
+    end
+    box:SetValue(same and common or nil)
+end
+
+--- "All Lines:" picked: every line takes that choice, through its own box,
+--- so each line's own setting is what is saved. Off skips the sales lines,
+--- which have no Off.
+local function SetAllTooltipLines(mode)
+    for _, name in ipairs(TOOLTIP_LINES) do
+        local dropdown = widgets[name]
+        if dropdown and dropdown.applyMode
+            and not (mode == ns.TooltipShift.OFF and not dropdown.shiftSetting) then
+            dropdown.applyMode(mode)
+            dropdown:SetValue(mode)
+        end
+    end
+    ShowAllLinesMode()
 end
 
 -- [key] = { holder, scroll, content, last = { [1], [2] }, rows }; built in Build.
@@ -130,12 +220,15 @@ local function AddFoundGlow(page, frame)
 end
 
 --- Let the search find `frame` by its words, on `page`.
-local function Searchable(page, frame, words)
+--- `onFound()`, when given, is called when the search shows this one (the
+--- Queue page's lists: it picks the list the words belong to).
+local function Searchable(page, frame, words, onFound)
     searchables[#searchables + 1] = {
         page = page.key,
         frame = frame,
         words = (words or ""):lower(),
         glow = AddFoundGlow(page, frame),
+        onFound = onFound,
     }
 end
 
@@ -298,6 +391,7 @@ end
 --- The page showing now: the one saved, or Pricing.
 local function CurrentPage()
     local saved = ns.Config:Get("settingsPage")
+    saved = FORMER_PAGES[saved] or saved
     return pages[saved] and saved or DEFAULT_PAGE
 end
 
@@ -332,18 +426,71 @@ local function PaintSwitch()
 end
 
 --- Lay the switch out left to right, each part as wide as its name.
+--- True while the one window is on: All Addons is behind its gear then.
+local function AllAddonsHidden()
+    local tabs = ns.TSTabs
+    local One = tabs and tabs.One and tabs.One()
+    return One ~= nil and One.On() == true
+end
+
+--- How tall the bar stands: one line, and a line more for each the switch
+--- wraps to.
+local function BarHeight()
+    return BAR_HEIGHT + ((widgets.switchLines or 1) - 1) * LINE_HEIGHT
+end
+
+--- The room the search box and Show Descriptions take at the bar's right.
+local function ToolsWidth()
+    local describe = widgets.describe
+    local tick = describe and Theme.TextWidth and describe.label and Theme.TextWidth(describe.label)
+    tick = (type(tick) == "number" and tick or 110) + 24
+    local find = widgets.find and widgets.find:GetWidth()
+    find = (type(find) == "number" and find > 0) and find or (Widgets.SEARCH_WIDTH or 170)
+    return TOOLS_GAP + find + TOOLS_GAP + tick + 16
+end
+
+--- Lay the switch out left to right, each part as wide as its name. All
+--- Addons is left off while the one window is on (its gear opens it). A
+--- name that would reach the search box starts a new line under the first,
+--- and the bar and the pages under it move down by a line.
 local function LayoutSwitch()
-    local previous
+    local bar = widgets.bar
+    if not bar then return end
+    local width = bar:GetWidth()
+    local room = (type(width) == "number" and width > 0)
+        and (width - COLUMN_ONE_X - ToolsWidth()) or math.huge
+    local previous, x, line = nil, 0, 1
     for _, part in ipairs(widgets.switch or {}) do
-        local width = Theme.TextWidth and Theme.TextWidth(part.label)
-        part.button:SetWidth((type(width) == "number" and width or 100) + 4)
-        part.button:ClearAllPoints()
-        if previous then
-            part.button:SetPoint("LEFT", previous, "RIGHT", 22, 0)
-        else
-            part.button:SetPoint("LEFT", widgets.bar, "LEFT", COLUMN_ONE_X, 0)
+        local hidden = part.key == "all" and AllAddonsHidden()
+        part.button:SetShown(not hidden)
+        if not hidden then
+            local measured = Theme.TextWidth and Theme.TextWidth(part.label)
+            local w = (type(measured) == "number" and measured or 100) + 4
+            part.button:SetWidth(w)
+            part.button:ClearAllPoints()
+            if previous and x + SWITCH_GAP + w > room then
+                line = line + 1
+                previous, x = nil, 0
+            end
+            if previous then
+                part.button:SetPoint("LEFT", previous, "RIGHT", SWITCH_GAP, 0)
+                x = x + SWITCH_GAP + w
+            else
+                part.button:SetPoint("LEFT", bar, "TOPLEFT", COLUMN_ONE_X,
+                    -BAR_HEIGHT / 2 - (line - 1) * LINE_HEIGHT)
+                x = w
+            end
+            previous = part.button
         end
-        previous = part.button
+    end
+    local changed = (widgets.switchLines or 1) ~= line
+    widgets.switchLines = line
+    if bar:GetHeight() ~= BarHeight() then bar:SetHeight(BarHeight()) end
+    if changed then
+        for _, page in pairs(pages) do
+            page.holder:SetPoint("TOPLEFT", 0, -BarHeight() - 2)
+        end
+        if widgets.shownPage then FitScroll(widgets.shownPage) end
     end
 end
 
@@ -379,14 +526,21 @@ local function Search(text)
     local query = (text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     widgets.query = query ~= "" and query or nil
 
-    local counts, firstFound = {}, {}
+    local counts, firstFound, onFound = {}, {}, {}
     for _, entry in ipairs(searchables) do
         local found = widgets.query and entry.words:find(widgets.query, 1, true) ~= nil
-        entry.glow:SetShown(found and true or false)
+        -- One glow on a frame several entries share (the lists' Show: row).
+        local lit = found and not (entry.onFound and onFound[entry.page])
+        entry.glow:SetShown(lit and true or false)
         if found then
             counts[entry.page] = (counts[entry.page] or 0) + 1
             firstFound[entry.page] = firstFound[entry.page] or entry.frame
+            if entry.onFound then onFound[entry.page] = onFound[entry.page] or entry.onFound end
         end
+    end
+    if widgets.queueListFound and not onFound.queue then
+        widgets.queueListFound = nil
+        ShowQueueList()
     end
 
     -- No counts beside the names: the switch has to stay clear of the
@@ -402,6 +556,7 @@ local function Search(text)
         end
     end
     if show ~= CurrentPage() then ShowPage(show) else PaintSwitch() end
+    if onFound[show] then onFound[show]() end
     if widgets.query and firstFound[show] then ScrollTo(show, firstFound[show]) end
 end
 
@@ -447,9 +602,11 @@ local function BuildBar(outer)
         button:SetScript("OnEnter", function(self)
             part.hovered = true
             PaintSwitch()
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(definition.tip, 1, 1, 1, 1, true)
-            GameTooltip:Show()
+            if definition.tip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                GameTooltip:SetText(definition.tip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
         end)
         button:SetScript("OnLeave", function()
             part.hovered = false
@@ -459,18 +616,28 @@ local function BuildBar(outer)
 
         widgets.switch[#widgets.switch + 1] = part
     end
-    LayoutSwitch()
 
     -- The house order for an option bar: search, then tick boxes.
     widgets.describe = Widgets.CreateCheckbox(bar, L["Show Descriptions"], function(checked)
         ns.Config:Set("settingsDescriptions", checked)
         ShowDescriptions(checked)
     end, false)
-    widgets.describe:SetPoint("RIGHT", bar, "RIGHT", -16, 0)
+    -- Held to the first line, so a switch that wraps leaves them in place.
+    widgets.describe:SetPoint("RIGHT", bar, "TOPRIGHT", -16, -BAR_HEIGHT / 2)
 
     widgets.find = Widgets.CreateSearchBox(bar, L["Find a setting"], Search)
     widgets.find:SetWidth(Widgets.SEARCH_WIDTH or 170)
-    widgets.find:SetPoint("RIGHT", widgets.describe, "LEFT", -16, 0)
+    widgets.find:SetPoint("RIGHT", widgets.describe, "LEFT", -TOOLS_GAP, 0)
+
+    LayoutSwitch()
+    -- The bar's width comes from the window: lay the switch out again
+    -- whenever it changes (a resize, the one window, a bigger font).
+    bar:SetScript("OnSizeChanged", function()
+        if widgets.laying then return end
+        widgets.laying = true
+        LayoutSwitch()
+        widgets.laying = false
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -513,7 +680,7 @@ local function Build(outer)
     -- hiding a page hides its bar too.
     for _, definition in ipairs(PAGES) do
         local holder = CreateFrame("Frame", nil, outer)
-        holder:SetPoint("TOPLEFT", 0, -BAR_HEIGHT - 2)
+        holder:SetPoint("TOPLEFT", 0, -BarHeight() - 2)
         holder:SetPoint("BOTTOMRIGHT", 0, 0)
         holder:Hide()
 
@@ -609,7 +776,9 @@ local function Build(outer)
     end, true)
     widgets.valueOwned:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
+    -- The Queue page in three groups (the owner said build it, 2026-11-16,
+    -- from a mockup): how many to keep, sub-crafts and alts, the list.
+    CreateSection(pages.queue, 1, L["RESTOCKING"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in Stock:"],
         L["The most of each craft to keep. Listings, bags, bank, mail and queue all count. At 0 it keeps about two days of your sales. Set one per profession below or per item on the Profit tab."])
 
@@ -634,22 +803,30 @@ local function Build(outer)
     end, true)
     widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local sellOutRow = CreateRow(pages.queue, 1, L["Raise When Sold Out:"],
-        L["When every copy you listed sells, Keep in Stock goes up by 1. When it comes back unsold 3 times in a row, it goes down by 1, but never below where it started."])
+    -- Stock From Sales and Raise When Sold Out in one box (the owner said
+    -- build it, 2026-11-16, from a mockup). Each keeps its own saved key,
+    -- learnStockFromSales and raiseStockOnSellOut, and every player's pair
+    -- shows as one of the four choices; only a key that changes is written.
+    local fromSalesRow = CreateRow(pages.queue, 1, L["Stock From Sales:"],
+        L["Follow Sales: at 0, Keep in Stock follows about two days of your sales. Without it, crafts with no number are never queued. Raise When Sold Out: when every copy you listed sells, Keep in Stock goes up by 1. After 3 unsold in a row it goes down by 1, never below where it started."])
 
-    widgets.raiseOnSellOut = Widgets.CreateCheckbox(sellOutRow, L["On"], function(checked)
-        Config:Set("raiseStockOnSellOut", checked)
-    end, true)
-    widgets.raiseOnSellOut:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local learnRow = CreateRow(pages.queue, 1, L["Stock From Sales:"],
-        L["At 0, Keep in Stock follows about two days of your sales. Off, crafts with no number are never queued."])
-
-    widgets.learnStock = Widgets.CreateCheckbox(learnRow, L["On"], function(checked)
-        Config:Set("learnStockFromSales", checked)
+    widgets.stockFromSales = Widgets.CreateDropdown(fromSalesRow, {
+        { text = L["Off"], value = "off" },
+        { text = L["Follow Sales"], value = "sales" },
+        { text = L["Raise When Sold Out"], value = "sellout" },
+        { text = L["Both"], value = "both" },
+    }, function(value)
+        local learn = value == "sales" or value == "both"
+        local raise = value == "sellout" or value == "both"
+        if (Config:Get("learnStockFromSales") ~= false) ~= learn then
+            Config:Set("learnStockFromSales", learn)
+        end
+        if (Config:Get("raiseStockOnSellOut") == true) ~= raise then
+            Config:Set("raiseStockOnSellOut", raise)
+        end
         UI:RefreshActiveTab()
-    end, true)
-    widgets.learnStock:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end, { width = COLUMN_WIDTH - CONTROL_X })
+    widgets.stockFromSales:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- One row each (the owner, 2026-10-15): the number, and beside it the
     -- tick box that turns it on. Same saved keys as the two rows before.
@@ -689,15 +866,7 @@ local function Build(outer)
     end, true)
     widgets.fastSellerBoost:SetPoint("TOPLEFT", CONTROL_X + 82, -2)
 
-    local hideMaxedRow = CreateRow(pages.queue, 1, L["Hide Maxed Crafts:"],
-        L["Hides crafts at their limit."])
-
-    widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, L["On"], function(checked)
-        Config:Set("hideAtPostLimit", checked)
-        UI:RefreshActiveTab()
-    end, true)
-    widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
-
+    CreateSection(pages.queue, 1, L["SUB-CRAFTS AND ALTS"])
     local subCraftRow = CreateRow(pages.queue, 1, L["Queue Sub-Crafts:"],
         L["Also queues materials that are cheaper to make than buy."])
 
@@ -710,34 +879,6 @@ local function Build(outer)
         ns.Queue:Notify()
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local freeSpaceRow = CreateRow(pages.queue, 1, L["Free Bag Space First:"],
-        L["Craft Next picks the craft that frees the most bag slots."])
-
-    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["On"], function(checked)
-        Config:Set("craftFreesSpaceFirst", checked)
-        UI:RefreshActiveTab()
-        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
-    end, true)
-    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local altCraftRow = CreateRow(pages.queue, 1, L["Suggest Other Characters:"],
-        L["Points out materials an alt can make for less."])
-
-    widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, L["On"], function(checked)
-        Config:Set("suggestOtherCharacters", checked)
-        UI:RefreshActiveTab()
-    end, true)
-    widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local followRow = CreateRow(pages.queue, 1, L["Goals Follow the Queue:"],
-        L["With Farmer, goals from Set Goal change with the queue."])
-
-    widgets.followGoals = Widgets.CreateCheckbox(followRow, L["On"], function(checked)
-        Config:Set("farmerGoalsFollowQueue", checked)
-        if checked then ns.FarmerGoals:Follow() end
-    end, true)
-    widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local shareRow = CreateRow(pages.queue, 1, L["Alts Make Sub-Crafts:"],
         L["Puts a sub-craft on the alt who can make it, and the mailbox lists what to send."])
@@ -754,6 +895,54 @@ local function Build(outer)
         end
     end, false)
     widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local altCraftRow = CreateRow(pages.queue, 1, L["Suggest Other Characters:"],
+        L["Points out materials an alt can make for less."])
+
+    widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, L["On"], function(checked)
+        Config:Set("suggestOtherCharacters", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    CreateSection(pages.queue, 1, L["THE LIST"])
+    local hideMaxedRow = CreateRow(pages.queue, 1, L["Hide Maxed Crafts:"],
+        L["Hides crafts at their limit."])
+
+    widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, L["On"], function(checked)
+        Config:Set("hideAtPostLimit", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local onlyMineRow = CreateRow(pages.queue, 1, L["Only My Crafts:"],
+        L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."])
+
+    widgets.onlyMine = Widgets.CreateCheckbox(onlyMineRow, L["On"], function(checked)
+        Config:Set("queueOnlyMine", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.OnQueueChanged then ns.CraftPanel:OnQueueChanged() end
+    end, true)
+    widgets.onlyMine:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local freeSpaceRow = CreateRow(pages.queue, 1, L["Free Bag Space First:"],
+        L["Craft Next picks the craft that frees the most bag slots."])
+
+    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["On"], function(checked)
+        Config:Set("craftFreesSpaceFirst", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
+    end, true)
+    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local followRow = CreateRow(pages.queue, 1, L["Goals Follow the Queue:"],
+        L["With Farmer, goals from Set Goal change with the queue."])
+
+    widgets.followGoals = Widgets.CreateCheckbox(followRow, L["On"], function(checked)
+        Config:Set("farmerGoalsFollowQueue", checked)
+        if checked then ns.FarmerGoals:Follow() end
+    end, true)
+    widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     CreateSection(pages.mail, 1, L["AT THE MAILBOX"])
     local queueMailRow = CreateRow(pages.mail, 1, L["Queue Mail:"],
@@ -867,6 +1056,18 @@ local function Build(outer)
     end, false)
     widgets.vendorMapPins:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The recipe wishlist (the owner said build it, 2026-11-17): stars on
+    -- recipes to learn, and a note at a vendor or trainer that teaches one.
+    -- Off to start; off, nothing of it shows. See Logic/Wishlist.lua.
+    CreateSection(pages.mail, 2, L["RECIPES"])
+    local wishlistRow = CreateRow(pages.mail, 2, L["Recipe Wishlist:"],
+        L["Star recipes you want to learn. A vendor or trainer that teaches one will tell you."])
+
+    widgets.recipeWishlist = Widgets.CreateCheckbox(wishlistRow, L["On"], function(checked)
+        if ns.Wishlist then ns.Wishlist:SetOn(checked) else Config:Set("recipeWishlistOn", checked) end
+    end, false)
+    widgets.recipeWishlist:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
     CreateSection(pages.auction, 1, L["BUYING AND POSTING"])
     local fillBuyRow = CreateRow(pages.auction, 1, L["Fill In Buy Amount:"],
@@ -926,6 +1127,18 @@ local function Build(outer)
     end, false)
     widgets.neverBelowPaid:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The owner asked (2026-11-16): crafts list at the least that still
+    -- makes Minimum Profit when others sell for less (Logic/Profit.lua).
+    local minProfitPostRow = CreateRow(pages.pricing, 1, L["Post at Minimum Profit:"],
+        L["When others sell for less, your crafts list at the lowest price that still makes your Minimum Profit for their profession."])
+
+    widgets.postAtMinProfit = Widgets.CreateCheckbox(minProfitPostRow, L["On"], function(checked)
+        Config:Set("postAtMinProfit", checked)
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.postAtMinProfit:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Logic/SisterKeeps.lua (2026-10-16): what the other Blackthornes
     -- addons want kept stays off List all.
     local sisterKeepsRow = CreateRow(pages.pricing, 1, L["Keep What Other Addons Need:"],
@@ -951,6 +1164,33 @@ local function Build(outer)
         if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
     end, false)
     widgets.altKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Off unless ticked (a player asked, the owner said build it
+    -- 2026-11-17): what a known craft makes worth more stays off List all.
+    local craftFirstRow = CreateRow(pages.pricing, 1, L["Craft First:"],
+        L["Keeps items in your bags when a craft you know makes them worth more."])
+
+    widgets.craftFirst = Widgets.CreateCheckbox(craftFirstRow, L["On"], function(checked)
+        Config:Set("sellHoldsCraftFirst", checked)
+        if ns.SisterKeeps then ns.SisterKeeps:Forget() end
+        GreyQueueFromSell(widgets, checked)
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.craftFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Off unless ticked (the owner said build it, 2026-11-23): a row Craft
+    -- First keeps back gets a Queue button, and Queue All shows by List
+    -- Next. Greyed while Craft First is off, since nothing is kept to queue.
+    local queueFromSellRow = CreateRow(pages.pricing, 1, L["Queue From Sell List:"],
+        L["Adds a Queue button to items worth more crafted, and a Queue All button above the list."])
+    widgets.queueFromSellRow = queueFromSellRow
+
+    widgets.queueFromSell = Widgets.CreateCheckbox(queueFromSellRow, L["On"], function(checked)
+        Config:Set("sellQueueFromList", checked)
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.queueFromSell:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The old "Confirm before each listing" switch (confirmBeforePosting)
     -- never did anything and its saved value is left where it is. The Yes/No
@@ -1016,6 +1256,18 @@ local function Build(outer)
     end, false)
     widgets.snipeTab:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The crate list on Buy (the owner said build it, 2026-11-16).
+    local crateListRow = CreateRow(pages.auction, 1, L["Crate Shopping List:"],
+        L["Shows what your Waylaid Crates need on the Buy list at the auction house."])
+    widgets.crateShoppingList = Widgets.CreateCheckbox(crateListRow, L["On"], function(checked)
+        Config:Set("crateShoppingList", checked)
+        if ns.PostPanel and ns.PostPanel.Refresh then
+            ns.PostPanel.crateAt = nil
+            ns.PostPanel:Refresh()
+        end
+    end, false)
+    widgets.crateShoppingList:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local snipeWheelRow = CreateRow(pages.auction, 1, L["Wheel Buys:"],
         L["On the Snipe tab, wheel up buys the best find."])
     widgets.snipeWheel = Widgets.CreateCheckbox(snipeWheelRow, L["On"], function(checked)
@@ -1057,7 +1309,7 @@ local function Build(outer)
     CreateSection(pages.pricing, 2, L["WHAT COUNTS AS PROFIT"])
 
     local profitRow = CreateRow(pages.pricing, 2, L["Minimum Profit:"],
-        L["Crafts that make less than this are hidden on the Profit tab."])
+        L["Crafts that make less than this are hidden on the Profit tab. Set your own for a profession below."])
 
     widgets.minProfit = Widgets.CreateNumberBox(profitRow, {
         width = 70, min = 0, max = 1000000,
@@ -1087,6 +1339,48 @@ local function Build(outer)
     widgets.minMargin:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(marginRow, widgets.minMargin, "%")
 
+    -- Minimums by profession (the owner said build it, 2026-11-17, from a
+    -- mockup): a profit and a margin box per profession, empty for the
+    -- numbers above (Profit:MinimumsFor). Rows made in Refresh, as the
+    -- Keep in Stock by Profession list's are.
+    local minimums = CreateFrame("Frame", nil, pages.pricing.content)
+    minimums:SetSize(COLUMN_WIDTH, 1)
+    Place(pages.pricing, 2, minimums)
+
+    local minimumsLabel = Theme.CreateLabel(minimums, "small", "text")
+    minimumsLabel:SetPoint("TOPLEFT", 0, -4)
+    minimumsLabel:SetWidth(COLUMN_WIDTH)
+    minimumsLabel:SetWordWrap(true)
+    minimumsLabel:SetText(L["Minimums by Profession:"])
+
+    local minimumsHint = Theme.CreateLabel(minimums, "tiny", "muted")
+    minimumsHint:SetPoint("TOPLEFT", minimumsLabel, "BOTTOMLEFT", 0, -4)
+    minimumsHint:SetWidth(COLUMN_WIDTH)
+    minimumsHint:SetWordWrap(true)
+    minimumsHint:SetText(L["Leave a box empty to use Minimum Profit and Minimum Margin above."])
+
+    local minimumsHeads = CreateFrame("Frame", nil, minimums)
+    minimumsHeads:SetSize(COLUMN_WIDTH, 16)
+    minimumsHeads:SetPoint("TOPLEFT", minimumsHint, "BOTTOMLEFT", 0, -6)
+    for _, head in ipairs({
+        { L["PROFESSION"], 8 }, { L["PROFIT"], MINIMUM_PROFIT_X }, { L["MARGIN"], MINIMUM_MARGIN_X },
+    }) do
+        local text = Theme.CreateLabel(minimumsHeads, "tiny", "dim")
+        text:SetPoint("LEFT", head[2], 0)
+        text:SetText(head[1])
+    end
+
+    local minimumsEmpty = Theme.CreateLabel(minimums, "small", "dim")
+    minimumsEmpty:SetPoint("TOPLEFT", minimumsHeads, "BOTTOMLEFT", 0, -4)
+    minimumsEmpty:SetWidth(COLUMN_WIDTH)
+    minimumsEmpty:SetWordWrap(true)
+    minimumsEmpty:SetText(L["None yet. Open a profession window on each character once, and its professions show here."])
+
+    widgets.minimums, widgets.minimumsLabel, widgets.minimumsHint = minimums, minimumsLabel, minimumsHint
+    widgets.minimumsHeads, widgets.minimumsEmpty, widgets.minimumRows = minimumsHeads, minimumsEmpty, {}
+    Searchable(pages.pricing, minimums, L["Minimums by Profession:"] .. " "
+        .. L["minimum profit margin by profession per profession alchemy blacksmithing tailoring leatherworking"])
+
     -- Gold an hour, buy the parts or make them (a Discord player, the
     -- owner said build it 2026-11-12, casting time only). Off unless ticked.
     local hourRow = CreateRow(pages.pricing, 2, L["Gold an Hour:"],
@@ -1112,148 +1406,105 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Six lists in one box (the owner said build it, 2026-11-16, from a
+    -- mockup): "Show:" picks the list drawn, each name with how many are in
+    -- it. Each list keeps its own hint, rows and buttons in a holder of its
+    -- own, and only the one picked shows (ShowQueueList). The pick is kept
+    -- in `settingsQueueList`, as the page is in settingsPage.
+    CreateSection(pages.queue, 2, L["YOUR LISTS"])
+    local listRow = CreateRow(pages.queue, 2, L["Show:"], nil)
+    widgets.queueList = Widgets.CreateDropdown(listRow, {}, function(key)
+        Config:Set("settingsQueueList", key)
+        widgets.queueListFound = nil
+        ShowQueueList()
+    end, { width = COLUMN_WIDTH - LIST_BOX_X })
+    widgets.queueList:SetPoint("TOPLEFT", LIST_BOX_X, 0)
+    widgets.queueLists = {}
+
+    --- One list's holder: its hint (or a line to hang rows on), and the
+    --- words for when it is empty.
+    local function ListGroup(key, title, hintText, emptyText, words, step)
+        local holder = CreateFrame("Frame", nil, pages.queue.content)
+        holder:SetPoint("TOPLEFT", listRow, "BOTTOMLEFT", 0, -8)
+        holder:SetSize(COLUMN_WIDTH, 1)
+        holder:Hide()
+
+        local hint
+        if hintText then
+            hint = Theme.CreateLabel(holder, "tiny", "muted")
+            hint:SetPoint("TOPLEFT", 0, 0)
+            hint:SetWidth(COLUMN_WIDTH)
+            hint:SetWordWrap(true)
+            hint:SetText(hintText)
+        else
+            -- Rows hang 6 under their hint; this one sits 6 up so they start at the top.
+            hint = CreateFrame("Frame", nil, holder)
+            hint:SetSize(COLUMN_WIDTH, 1)
+            hint:SetPoint("TOPLEFT", 0, 7)
+        end
+
+        local empty = Theme.CreateLabel(holder, "small", "dim")
+        empty:SetWidth(COLUMN_WIDTH)
+        empty:SetWordWrap(true)
+        empty:SetText(emptyText)
+
+        local group = { key = key, title = title, holder = holder, hint = hint,
+            empty = empty, count = 0, shown = 0, step = step or (IGNORED_ROW_HEIGHT + 2) }
+        widgets.queueLists[#widgets.queueLists + 1] = group
+        widgets.queueLists[key] = group
+        Searchable(pages.queue, listRow, words, function() FindQueueList(key) end)
+        return group
+    end
+
     -- Keep in stock by profession (a player asked, the owner agreeing
     -- 2026-10-13): one box per profession your characters craft with,
-    -- empty for the usual number. Rows made in Refresh, as the lists
-    -- below are.
-    widgets.ignoredParent = pages.queue.content
-    local stockSection = CreateSection(pages.queue, 2, L["KEEP IN STOCK BY PROFESSION"])
-    Searchable(pages.queue, stockSection, L["Keep in stock by profession per profession alchemy blacksmithing tailoring leatherworking stock limit"])
-
-    local stockHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    stockHint:SetPoint("TOPLEFT", stockSection, "BOTTOMLEFT", 0, ROW_GAP)
-    stockHint:SetWidth(COLUMN_WIDTH)
-    stockHint:SetWordWrap(true)
-    stockHint:SetText(L["Leave a box empty to use Keep in Stock. A number on one item in the Profit tab still wins."])
-    widgets.stockHint = stockHint
-
-    widgets.stockEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.stockEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.stockEmpty:SetWordWrap(true)
-    widgets.stockEmpty:SetText(L["None yet. Open a profession window on each character once, and its professions show here."])
-    widgets.stockRows = {}
-
-    local stockEnd = CreateFrame("Frame", nil, pages.queue.content)
-    stockEnd:SetSize(COLUMN_WIDTH, 1)
-    stockEnd:SetPoint("TOPLEFT", widgets.stockEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.stockEnd = stockEnd
-    pages.queue.last[2] = stockEnd
+    -- empty for the usual number. Rows made in Refresh, as the lists are.
+    local stock = ListGroup("stock", L["Keep in Stock by Profession"],
+        L["Leave a box empty to use Keep in Stock. A number on one item in the Profit tab still wins."],
+        L["None yet. Open a profession window on each character once, and its professions show here."],
+        L["Keep in stock by profession per profession alchemy blacksmithing tailoring leatherworking stock limit"],
+        STOCK_ROW_HEIGHT)
+    widgets.stockHint, widgets.stockEmpty, widgets.stockRows = stock.hint, stock.empty, {}
 
     -- Items Raise When Sold Out changed (the owner, 2026-10-16), with
-    -- Reset to put each back. Rows made in Refresh, as the lists below are.
-    local changed = CreateSection(pages.queue, 2, L["CHANGED WHEN SOLD OUT"])
-    widgets.changedSection = changed
-    Searchable(pages.queue, changed, L["Changed when sold out raise when sold out keep in stock reset"])
+    -- Reset to put each back.
+    local changed = ListGroup("changed", L["Changed When Sold Out"],
+        L["Keep in Stock numbers that Raise When Sold Out changed. Click Reset to put one back."],
+        L["None yet."],
+        L["Changed when sold out raise when sold out keep in stock reset"])
+    widgets.changedHint, widgets.changedEmpty, widgets.changedRows = changed.hint, changed.empty, {}
 
-    local changedHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    changedHint:SetPoint("TOPLEFT", changed, "BOTTOMLEFT", 0, ROW_GAP)
-    changedHint:SetWidth(COLUMN_WIDTH)
-    changedHint:SetWordWrap(true)
-    changedHint:SetText(L["Keep in Stock numbers that Raise When Sold Out changed. Click Reset to put one back."])
-    widgets.changedHint = changedHint
+    -- Crafts never made to go into another craft (2026-10-07), marked from
+    -- the Level Up tab or the x on a queued sub-craft.
+    local never = ListGroup("never", L["Never Made as Sub-Crafts"],
+        L["These are bought, not made, when another craft needs them. Click Allow to put one back."],
+        L["None. Click Make beside a craft on the Level Up tab (tick Sub-crafts only), or the x on a sub-craft in the queue."],
+        L["Never made as sub-crafts bought instead intermediates allow light leather"])
+    widgets.neverHint, widgets.neverEmpty, widgets.neverRows = never.hint, never.empty, {}
 
-    widgets.changedEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.changedEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.changedEmpty:SetWordWrap(true)
-    widgets.changedEmpty:SetText(L["None yet."])
-    widgets.changedRows = {}
-
-    local changedEnd = CreateFrame("Frame", nil, pages.queue.content)
-    changedEnd:SetSize(COLUMN_WIDTH, 1)
-    changedEnd:SetPoint("TOPLEFT", widgets.changedEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.changedEnd = changedEnd
-    pages.queue.last[2] = changedEnd
-
-    -- Crafts never made to go into another craft (2026-10-07),
-    -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
-    -- as Ignored crafts below is, rows made in Refresh.
-    local never = CreateSection(pages.queue, 2, L["NEVER MADE AS SUB-CRAFTS"])
-    widgets.neverSection = never
-    Searchable(pages.queue, never, L["Never made as sub-crafts bought instead intermediates allow light leather"])
-
-    local neverHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    neverHint:SetPoint("TOPLEFT", never, "BOTTOMLEFT", 0, ROW_GAP)
-    neverHint:SetWidth(COLUMN_WIDTH)
-    neverHint:SetWordWrap(true)
-    neverHint:SetText(L["These are bought, not made, when another craft needs them. Click Allow to put one back."])
-    widgets.neverHint = neverHint
-
-    widgets.neverEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.neverEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.neverEmpty:SetWordWrap(true)
-    widgets.neverEmpty:SetText(L["None. Click Make beside a craft on the Level Up tab (tick Sub-crafts only), or the x on a sub-craft in the queue."])
-    widgets.neverRows = {}
-
-    local neverEnd = CreateFrame("Frame", nil, pages.queue.content)
-    neverEnd:SetSize(COLUMN_WIDTH, 1)
-    neverEnd:SetPoint("TOPLEFT", widgets.neverEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.neverEnd = neverEnd
-    pages.queue.last[2] = neverEnd
-
-    -- Crafts taken off the Profit tab with its Ignore button. The rows are
-    -- made in Refresh, one per craft, since the list grows and shrinks.
-    local ignored = CreateSection(pages.queue, 2, L["IGNORED CRAFTS"])
-    widgets.ignoredSection = ignored
-    Searchable(pages.queue, ignored, L["Ignored crafts Restore puts one back on the Profit tab"])
-
-    local ignoredHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    ignoredHint:SetPoint("TOPLEFT", ignored, "BOTTOMLEFT", 0, ROW_GAP)
-    ignoredHint:SetWidth(COLUMN_WIDTH)
-    ignoredHint:SetWordWrap(true)
-    ignoredHint:SetText(L["These never show on the Profit tab, on any character. Click Restore to bring one back."])
-    widgets.ignoredHint = ignoredHint
-
-    widgets.ignoredEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.ignoredEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.ignoredEmpty:SetWordWrap(true)
-    widgets.ignoredEmpty:SetText(L["None. Pick a craft on the Profit tab and click Ignore."])
-    widgets.ignoredRows = {}
-
-    -- Where the ignored crafts end, moved under the last of them in Refresh,
-    -- so the section below follows the list as it grows and shrinks.
-    local ignoredEnd = CreateFrame("Frame", nil, pages.queue.content)
-    ignoredEnd:SetSize(COLUMN_WIDTH, 1)
-    ignoredEnd:SetPoint("TOPLEFT", widgets.ignoredEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.ignoredEnd = ignoredEnd
+    -- Crafts taken off the Profit tab with its Ignore button.
+    local ignored = ListGroup("ignored", L["Ignored Crafts"],
+        L["These never show on the Profit tab, on any character. Click Restore to bring one back."],
+        L["None. Pick a craft on the Profit tab and click Ignore."],
+        L["Ignored crafts Restore puts one back on the Profit tab"])
+    widgets.ignoredHint, widgets.ignoredEmpty, widgets.ignoredRows = ignored.hint, ignored.empty, {}
 
     -- Items taken off Ready to sell at the auction house with the x on
-    -- their row (2026-10-04). Laid out as Ignored crafts is.
-    pages.queue.last[2] = ignoredEnd
-    local ignoredItems = CreateSection(pages.queue, 2, L["IGNORED ITEMS"])
-    widgets.ignoredItemsSection = ignoredItems
-    Searchable(pages.queue, ignoredItems, L["Ignored items Restore puts one back on Ready to sell"])
-
-    local ignoredItemsHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
-    ignoredItemsHint:SetWidth(COLUMN_WIDTH)
-    ignoredItemsHint:SetWordWrap(true)
-    ignoredItemsHint:SetText(L["These are never offered for sale on Ready to sell, on any character. Click Restore to bring one back."])
-    widgets.ignoredItemsHint = ignoredItemsHint
-
-    widgets.ignoredItemsEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.ignoredItemsEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.ignoredItemsEmpty:SetWordWrap(true)
-    widgets.ignoredItemsEmpty:SetText(L["None. Click the x on an item in Ready to sell at the auction house."])
-    widgets.ignoredItemsRows = {}
-
-    local ignoredItemsEnd = CreateFrame("Frame", nil, pages.queue.content)
-    ignoredItemsEnd:SetSize(COLUMN_WIDTH, 1)
-    ignoredItemsEnd:SetPoint("TOPLEFT", widgets.ignoredItemsEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.ignoredItemsEnd = ignoredItemsEnd
+    -- their row (2026-10-04).
+    local ignoredItems = ListGroup("items", L["Ignored Items"],
+        L["These are never offered for sale on Ready to sell, on any character. Click Restore to bring one back."],
+        L["None. Click the x on an item in Ready to sell at the auction house."],
+        L["Ignored items Restore puts one back on Ready to sell"])
+    widgets.ignoredItemsHint, widgets.ignoredItemsEmpty, widgets.ignoredItemsRows =
+        ignoredItems.hint, ignoredItems.empty, {}
 
     -- What this character keeps back from the Sell list (Logic/KeepHere.lua,
     -- a player asked, the owner said build it 2026-10-18). Set by
     -- right-clicking a Sell list row; Clear takes one off.
-    pages.queue.last[2] = ignoredItemsEnd
-    local keepHere = CreateSection(pages.queue, 2, L["KEEP ON THIS CHARACTER"])
-    widgets.keepHereSection = keepHere
-    Searchable(pages.queue, keepHere, L["Keep on this character Sell list right-click"])
-
-    widgets.keepHereEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.keepHereEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.keepHereEmpty:SetWordWrap(true)
-    widgets.keepHereEmpty:SetText(L["Right-click an item on the Sell list to keep some on this character."])
-    widgets.keepHereRows = {}
+    local keepHere = ListGroup("keep", L["Keep on This Character"], nil,
+        L["Right-click an item on the Sell list to keep some on this character."],
+        L["Keep on this character Sell list right-click"])
+    widgets.keepHereSection, widgets.keepHereEmpty, widgets.keepHereRows = keepHere.hint, keepHere.empty, {}
 
     local data = CreateSection(pages.data, 1, L["SAVED DATA"])
 
@@ -1297,6 +1548,50 @@ local function Build(outer)
     end, { width = 80, height = 20 })
     pruneButton:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(pruneButton)
+
+    -- A lighter save (the owner said build it, 2026-11-26, from the
+    -- mockup): how big the save is, Tidy Up, and Keep Price History For.
+    -- Logic/TidyUp.lua and UI/TidyUpBox.lua; nothing is removed until the
+    -- Tidy Up window's Confirm.
+    local sizeRow = CreateRow(pages.data, 1, L["Saved Data:"],
+        L["A smaller save makes logging in and /reload faster."])
+    widgets.saveSize = Theme.CreateLabel(sizeRow, "small", "text")
+    widgets.saveSize:SetPoint("TOPLEFT", CONTROL_X, -5)
+    widgets.saveSize:SetText("...")
+    widgets.tidyUp = Widgets.CreateButton(sizeRow, L["Tidy Up"], function(self)
+        if self.disabled or not ns.TidyUpBox then return end
+        ns.TidyUpBox:Open(ns.TidyUp:Days(), nil, function()
+            if ns.TidyUp then ns.TidyUp:Measure() end
+            UI:RefreshActiveTab()
+        end)
+    end, { width = 80, height = 20 })
+    widgets.tidyUp:SetPoint("LEFT", widgets.saveSize, "RIGHT", 10, 0)
+    FitButton(widgets.tidyUp)
+
+    local keepRow = CreateRow(pages.data, 1, L["Keep Price History For:"],
+        L["For items you don't craft, star or sell. Yours are always kept in full."])
+    widgets.keepHistory = Widgets.CreateDropdown(keepRow, {
+        { text = L["30 Days"], value = 30 },
+        { text = L["90 Days"], value = 90 },
+        { text = L["A Year"], value = 365 },
+        { text = L["Always"], value = 0 },
+    }, function(days)
+        if not ns.TidyUp then return end
+        if days == 0 then
+            ns.TidyUp:KeepAlways()
+            UI:RefreshActiveTab()
+            return
+        end
+        -- Ask first: the choice is saved only by Confirm.
+        ns.TidyUpBox:Open(days, function()
+            widgets.keepHistory:SetValue(ns.TidyUp:Days())
+            UI:RefreshActiveTab()
+        end, function()
+            ns.TidyUp:Measure()
+            UI:RefreshActiveTab()
+        end)
+    end, { width = 110 })
+    widgets.keepHistory:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- Clear price data and Reset to defaults are typed commands now (the
     -- owner, 2026-10-15): /bts clearprices confirm and /bts reset confirm.
@@ -1368,67 +1663,21 @@ local function Build(outer)
     end, true)
     widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- My Auctions (the owner said build it, 2026-11-11, from a mockup whose
-    -- words he approved): a small window of what you have up. Off unless
-    -- ticked. See Logic/AuctionTracker.lua and UI/AuctionTracker.lua.
-    CreateSection(pages.auction, 2, L["AUCTION TRACKER"])
-    local trackerRow = CreateRow(pages.auction, 2, L["Auction Tracker:"], nil)
-    widgets.auctionTracker = Widgets.CreateCheckbox(trackerRow, L["On"], function(checked)
-        if ns.AuctionTracker then ns.AuctionTracker:SetOn(checked) else Config:Set("auctionTracker", checked) end
-    end, false)
-    widgets.auctionTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local soldFxRow = CreateRow(pages.auction, 2, L["Sold Effects:"], nil)
-    widgets.auctionTrackerEffects = Widgets.CreateDropdown(soldFxRow, {
-        { text = L["Full"], value = "full" },
-        { text = L["Subtle"], value = "subtle" },
-        { text = L["Off"], value = "off" },
-    }, function(value)
-        Config:Set("auctionTrackerEffects", value)
-    end, { width = 110 })
-    widgets.auctionTrackerEffects:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    local trackerClearRow = CreateRow(pages.auction, 2, L["Transparent:"], nil)
-    widgets.auctionTrackerSeeThrough = Widgets.CreateDropdown(trackerClearRow, {
-        { text = L["Off"], value = 0 },
-        { text = L["Some"], value = 1 },
-        { text = L["More"], value = 2 },
-        { text = L["Most"], value = 3 },
-    }, function(value)
-        if ns.AuctionTrackerUI then
-            ns.AuctionTrackerUI:SetSeeThrough(value)
-        else
-            Config:Set("auctionTrackerSeeThrough", value)
-        end
-    end, { width = 110 })
-    widgets.auctionTrackerSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    local trackerPlaceRow = CreateRow(pages.auction, 2, L["Tracker Place:"], nil)
-    local trackerPlace = Widgets.CreateButton(trackerPlaceRow, L["Set Default"], function()
-        if ns.AuctionTrackerUI then ns.AuctionTrackerUI:ResetPlace() end
-    end, { width = 90, height = 20 })
-    trackerPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(trackerPlace)
-
-    CreateSection(pages.look, 1, L["SHOWN IN THE GAME"])
-    local professionValueRow = CreateRow(pages.look, 1, L["Value in Profession Window:"],
-        L["Shows what each recipe sells for beside its name."])
-
-    widgets.professionValue = Widgets.CreateCheckbox(professionValueRow, L["On"], function(checked)
-        Config:Set("showValueInProfessionWindow", checked)
-        if ns.RecipeValue then ns.RecipeValue:Refresh() end
-    end, true)
-    widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local craftProfitRow = CreateRow(pages.look, 1, L["Craft Cost and Profit:"],
-        L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."])
-
-    widgets.craftProfit = Widgets.CreateCheckbox(craftProfitRow, L["On"], function(checked)
-        Config:Set("craftProfitInProfessionWindow", checked)
-        if ns.RecipeValue then ns.RecipeValue:Refresh() end
-        if ns.CraftProfitCard then ns.CraftProfitCard:Refresh() end
-    end, true)
-    widgets.craftProfit:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- The Tooltips page (the owner said build it, 2026-11-16, from a mockup):
+    -- one box on top sets every tooltip line at once, and each line keeps a
+    -- box of its own. Nothing new is saved: All Lines writes each line's own
+    -- setting, and shows Mixed while the lines differ.
+    CreateSection(pages.tooltips, 1, L["ON ITEM TOOLTIPS"])
+    local allLinesRow = CreateRow(pages.tooltips, 1, L["All Lines:"],
+        L["Sets every line below at once. You can still change each one after."])
+    widgets.tooltipAll = Widgets.CreateDropdown(allLinesRow, {
+        { text = ns.TooltipShift.NAMES[ns.TooltipShift.OFF], value = ns.TooltipShift.OFF },
+        { text = ns.TooltipShift.NAMES[ns.TooltipShift.SHIFT], value = ns.TooltipShift.SHIFT },
+        { text = ns.TooltipShift.NAMES[ns.TooltipShift.ALWAYS], value = ns.TooltipShift.ALWAYS },
+    }, function(mode)
+        SetAllTooltipLines(mode)
+    end, { width = 110, placeholder = L["Mixed"] })
+    widgets.tooltipAll:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- Off, Shift or Always for each tooltip line (asked 2026-10-18, see
     -- UI/TooltipShift.lua). Whether the line is on stays in its own
@@ -1440,43 +1689,48 @@ local function Build(outer)
         options[#options + 1] = { text = Shift.NAMES[Shift.SHIFT], value = Shift.SHIFT }
         options[#options + 1] = { text = Shift.NAMES[Shift.ALWAYS], value = Shift.ALWAYS }
 
-        local dropdown = Widgets.CreateDropdown(row, options, function(mode)
+        local function ApplyMode(mode)
             local isOn = setting == nil or Config:Get(setting) ~= false
             Shift:Apply(mode, key, isOn, setting and function(on)
                 Config:Set(setting, on)
                 if onChange then onChange() end
             end or nil)
+        end
+        local dropdown = Widgets.CreateDropdown(row, options, function(mode)
+            ApplyMode(mode)
+            ShowAllLinesMode()
         end, { width = 110 })
         dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
         dropdown.shiftKey, dropdown.shiftSetting = key, setting
+        dropdown.applyMode = ApplyMode
         return dropdown
     end
 
-    local tooltipValueRow = CreateRow(pages.look, 1, L["Value on Tooltips:"])
+    local tooltipValueRow = CreateRow(pages.tooltips, 1, L["Value on Tooltips:"])
 
     widgets.tooltipValue = ShiftDropdown(tooltipValueRow, "value", "showValueOnItemTooltips")
 
     -- Asked 2026-10-13: the sales lines under Demand, kept for Shift.
-    local salesShiftRow = CreateRow(pages.look, 1, L["Sales Details:"],
+    local salesShiftRow = CreateRow(pages.tooltips, 1, L["Sales Details:"],
         L["The sales lines under Demand."])
 
     widgets.tooltipSalesShift = ShiftDropdown(salesShiftRow, "sales", nil)
 
     -- Asked 2026-10-14: the Prices tab's trend on the tooltip too.
-    local trendRow = CreateRow(pages.look, 1, L["Price Trend on Tooltips:"],
+    local trendRow = CreateRow(pages.tooltips, 1, L["Price Trend on Tooltips:"],
         L["How much the price moved from its 7 or 14 day average."])
 
     widgets.tooltipTrend = ShiftDropdown(trendRow, "trend", "tooltipTrend")
 
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
-    local recipeTipRow = CreateRow(pages.look, 1, L["Recipe Value on Tooltips:"],
+    local recipeTipRow = CreateRow(pages.tooltips, 1, L["Recipe Value on Tooltips:"],
         L["On a recipe, shows its cost, what it sells for, and how many crafts pay it back."])
 
     widgets.recipeTooltips = ShiftDropdown(recipeTipRow, "recipe", "showRecipeValueOnTooltips")
 
     -- Asked 2026-10-14: what an enchant's materials cost, on its tooltip.
-    local enchantTipRow = CreateRow(pages.look, 1, L["Enchant Costs on Tooltips:"],
+    local enchantTipRow = CreateRow(pages.tooltips, 1, L["Enchant Costs on Tooltips:"],
         L["On an enchant, shows what each material costs and who knows it."])
 
     widgets.enchantTooltips = ShiftDropdown(enchantTipRow, "enchant", "tooltipEnchantCosts", function()
@@ -1484,33 +1738,58 @@ local function Build(outer)
     end)
 
     -- Asked 2026-10-29: what gear can break into, and the chance of each.
-    local disenchantTipRow = CreateRow(pages.look, 1, L["Disenchant Results on Tooltips:"],
+    local disenchantTipRow = CreateRow(pages.tooltips, 1, L["Disenchant Results on Tooltips:"],
         L["On gear you can disenchant, shows what it can break into and the chance of each."])
 
     widgets.disenchantTooltips = ShiftDropdown(disenchantTipRow, "disenchant", "tooltipDisenchantResults")
 
     -- Asked 2026-10-20: what a Waylaid Crate costs to fill, on its tooltip.
-    local crateTipRow = CreateRow(pages.look, 1, L["Crate Costs:"])
+    local crateTipRow = CreateRow(pages.tooltips, 1, L["Crate Costs:"])
 
     widgets.crateTooltips = ShiftDropdown(crateTipRow, "crate", "tooltipCrateCosts")
 
     -- A player asked (2026-11-12): what you paid on the auction house.
-    local boughtTipRow = CreateRow(pages.look, 1, L["Bought For on Tooltips:"],
+    local boughtTipRow = CreateRow(pages.tooltips, 1, L["Bought For on Tooltips:"],
         L["What you last paid for an item on the auction house. Hold Shift for the average."])
 
     widgets.boughtTooltips = ShiftDropdown(boughtTipRow, "bought", "tooltipBoughtFor")
 
-    -- Its own row (a player's report, 2026-10-09): beside the tick box it
-    -- started 340 pixels in and ran past the column into the next one.
-    local recipeListRow = CreateRow(pages.look, 1, L["Recipes to Learn:"])
+    -- Asked 2026-11-17: which professions use a material.
+    local usedInTipRow = CreateRow(pages.tooltips, 1, L["Used In Recipes:"],
+        L["Shows which professions use a material and how many of your recipes need it. Hold Shift for the recipe names."])
 
-    local recipeList = Widgets.CreateButton(recipeListRow, L["Open"], function()
-        if ns.ProfitTab and ns.ProfitTab.ShowRecipesToLearn then ns.ProfitTab.ShowRecipesToLearn() end
-    end, { width = 60, height = 20 })
-    recipeList:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(recipeList)
+    widgets.usedInTooltips = ShiftDropdown(usedInTipRow, "usedin", "tooltipUsedIn")
 
-    local upgradeRow = CreateRow(pages.look, 1, L["Upgrade Arrows:"],
+    CreateSection(pages.tooltips, 2, L["IN THE PROFESSION WINDOW"])
+    local professionValueRow = CreateRow(pages.tooltips, 2, L["Value in Profession Window:"],
+        L["Shows what each recipe sells for beside its name."])
+
+    widgets.professionValue = Widgets.CreateCheckbox(professionValueRow, L["On"], function(checked)
+        Config:Set("showValueInProfessionWindow", checked)
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+    end, true)
+    widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local craftProfitRow = CreateRow(pages.tooltips, 2, L["Craft Cost and Profit:"],
+        L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."])
+
+    widgets.craftProfit = Widgets.CreateCheckbox(craftProfitRow, L["On"], function(checked)
+        Config:Set("craftProfitInProfessionWindow", checked)
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+        if ns.CraftProfitCard then ns.CraftProfitCard:Refresh() end
+    end, true)
+    widgets.craftProfit:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Enchant window (the owner said build it, 2026-11-05): since 2026-11-06 a
+    -- strip under the recipe in the Enchanting window. Off unless ticked (Logic/EnchantWindow.lua).
+    local enchantRow = CreateRow(pages.tooltips, 2, L["Enchant Window:"], nil)
+    widgets.enchantWindow = Widgets.CreateCheckbox(enchantRow, L["On"], function(checked)
+        if ns.EnchantWindow then ns.EnchantWindow:SetOn(checked) else Config:Set("enchantWindow", checked) end
+    end, false)
+    widgets.enchantWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    CreateSection(pages.tooltips, 2, L["SHOWN IN THE GAME"])
+    local upgradeRow = CreateRow(pages.tooltips, 2, L["Upgrade Arrows:"],
         L["A green arrow on gear that's an upgrade for you. Needs Blackthornes Equipment."])
 
     widgets.upgradeArrows = Widgets.CreateCheckbox(upgradeRow, L["On"], function(checked)
@@ -1524,7 +1803,7 @@ local function Build(outer)
     -- transmute, Mooncloth or the Salt Shaker is ready on any character,
     -- and a step for it in Blackthornes Butler. The list stays typed:
     -- /bts cooldowns (the owner, 2026-10-15).
-    local cooldownRow = CreateRow(pages.look, 1, L["Profession Cooldowns:"],
+    local cooldownRow = CreateRow(pages.tooltips, 2, L["Profession Cooldowns:"],
         L["Says in chat when a transmute, Mooncloth or the Salt Shaker is ready."])
 
     widgets.cooldownAlerts = Widgets.CreateCheckbox(cooldownRow, L["On"], function(checked)
@@ -1535,7 +1814,7 @@ local function Build(outer)
 
     -- Logic/CraftRequests.lua (asked 2026-10-12): a line in chat when
     -- someone in Trade asks for something one of your characters makes.
-    local requestsRow = CreateRow(pages.look, 1, L["Trade Requests:"],
+    local requestsRow = CreateRow(pages.tooltips, 2, L["Trade Requests:"],
         L["Says in chat when someone in Trade asks for something you can make."])
 
     widgets.tradeRequests = Widgets.CreateCheckbox(requestsRow, L["On"], function(checked)
@@ -1543,57 +1822,81 @@ local function Build(outer)
     end, false)
     widgets.tradeRequests:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- UI/Tab_Stats.lua (asked 2026-10-14): one item at a time, in charts.
-    -- The button is /bts stats.
-    local statsRow = CreateRow(pages.look, 1, L["Stats:"])
-    local statsOpen = Widgets.CreateButton(statsRow, L["Open"], function()
-        if ns.StatsUI then ns.StatsUI:ShowItem(nil) end
-    end, { width = 60, height = 20 })
-    statsOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(statsOpen)
-
-    -- The Welcome card (2026-10-20): which professions' roads come first on
-    -- the Level Up tab's Road to 300. Opens the card again.
-    local roadRow = CreateRow(pages.look, 1, L["Road to 300:"])
-    local roadOpen = Widgets.CreateButton(roadRow, L["Open"], function()
-        if ns.WelcomeUI then ns.WelcomeUI:Show() end
-    end, { width = 60, height = 20 })
-    roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(roadOpen)
-
-    -- What comes up by itself (a player's request, 2026-11-05): ticked
-    -- unless unticked, so nothing changed for anyone.
-    CreateSection(pages.auction, 1, L["AUTO OPEN"])
-
-    local ahRow = CreateRow(pages.auction, 1, L["Open at AH:"],
-        L["Opens Tradeskills when you open the auction house."])
-    widgets.openAtAuction = Widgets.CreateCheckbox(ahRow, L["On"], function(checked)
-        Config:Set("openAtAuction", checked)
+    -- What each disenchant gave, in chat (a player asked, 2026-11-13).
+    local deChatRow = CreateRow(pages.tooltips, 2, L["Disenchant Results:"],
+        L["Says in chat what each disenchant gave."])
+    widgets.disenchantChat = Widgets.CreateCheckbox(deChatRow, L["Show"], function(checked)
+        if ns.DisenchantLog then ns.DisenchantLog:SetChat(checked) else Config:Set("disenchantChat", checked) end
     end, true)
-    widgets.openAtAuction:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.disenchantChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local profRow = CreateRow(pages.auction, 1, L["Open at Professions:"],
-        L["Opens the craft pane beside your profession window."])
-    widgets.openAtProfessions = Widgets.CreateCheckbox(profRow, L["On"], function(checked)
-        Config:Set("openAtProfessions", checked)
+    -- Disenchants at an Arcane Salvager in their own record (the owner said
+    -- build it, 2026-11-24; Logic/DisenchantLog.lua, `salvagerApart`).
+    local salvagerRow = CreateRow(pages.tooltips, 2, L["Keep Salvager Results Apart:"],
+        L["Disenchants you do at an Arcane Salvager go in their own record, so you can see how much more they give. Your other disenchants and their chances stay the same."])
+    widgets.salvagerApart = Widgets.CreateCheckbox(salvagerRow, L["On"], function(checked)
+        Config:Set("salvagerApart", checked)
+        if not checked and ns.DisenchantLog then ns.DisenchantLog:StopSalvager() end
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
     end, true)
-    widgets.openAtProfessions:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.salvagerApart:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local shopsRow = CreateRow(pages.auction, 1, L["Open With AH and Vendors:"],
-        L["Opens this window with the auction house or a vendor."])
+    -- Old plain results (a player asked, the owner said build it,
+    -- 2026-11-25): disenchants from before Keep Salvager Results Apart all
+    -- sit in the plain record. Move them into the Salvager one, or clear
+    -- them, each after a Confirm. Logic/DisenchantLog.lua does the work.
+    local plainRow = CreateRow(pages.tooltips, 2, L["Plain Disenchant Results:"],
+        L["If you did your old disenchants at an Arcane Salvager, move them there. Or clear them to start fresh. Your Salvager results stay as they are."])
+    local function AskPlain(title, text, act, done)
+        local log = ns.DisenchantLog
+        local count = log and log:PlainCount() or 0
+        if count == 0 or not ns.PostConfirm then return end
+        ns.PostConfirm:Show({
+            title = title, text = L.Format(text, count), yes = L["Confirm"], no = L["Cancel"], noIcon = true,
+            accept = function()
+                local n = log[act](log)
+                if n > 0 then ns.Print(done(n)) end
+                UI:RefreshSettingsPlain()
+            end,
+        })
+    end
+    widgets.plainMove = Widgets.CreateButton(plainRow, L["Move to Salvager"], function()
+        AskPlain(L["Move to Salvager"],
+            L["Move all %d plain disenchants into your Salvager results. Do this only if you did them at an Arcane Salvager."],
+            "MovePlainToSalvager",
+            function(n) return L.Format(L["Moved %d disenchants to your Salvager results."], n) end)
+    end, { width = 60, height = 20 })
+    widgets.plainMove:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(widgets.plainMove)
+    widgets.plainClear = Widgets.CreateButton(plainRow, L["Clear"], function()
+        AskPlain(L["Clear Plain Results"],
+            L["Clear all %d plain disenchants. Values use the built-in table until you disenchant more. This can't be undone."],
+            "ClearPlain",
+            function() return L["Your plain disenchant results are cleared."] end)
+    end, { width = 40, height = 20 })
+    widgets.plainClear:SetPoint("LEFT", widgets.plainMove, "RIGHT", 4, 0)
+    FitButton(widgets.plainClear)
 
-    widgets.openWithShops = Widgets.CreateCheckbox(shopsRow, L["On"], function(checked)
-        Config:Set("openWithShops", checked)
-    end, false)
-    widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- The "made 1 of X, 4 left" lines while crafting from the queue (a
+    -- player asked, the owner said build it, 2026-11-17).
+    local craftChatRow = CreateRow(pages.tooltips, 2, L["Craft Messages:"],
+        L["Says in chat each time you make something from your queue."])
+    widgets.craftChat = Widgets.CreateCheckbox(craftChatRow, L["On"], function(checked)
+        Config:Set("craftChat", checked)
+    end, true)
+    widgets.craftChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- The General page (2026-10-29): the same WINDOWS and ADDONS sections
-    -- in every Blackthornes addon, then the sounds.
-    CreateSection(pages.general, 1, L["WINDOWS"])
+    -- All Addons: the rows every Blackthornes addon shares, shown once in
+    -- the one window behind its gear (the owner said build it,
+    -- 2026-11-16). Windows keeps Tradeskills' own: Window Size, what opens
+    -- by itself, the small windows and the sounds. No setting was renamed
+    -- and no saved choice changed.
+    CreateSection(pages.all, 1, L["ALL BLACKTHORNES ADDONS"])
+    CreateSection(pages.windows, 1, L["WINDOWS"])
     -- Asked 2026-10-10: the game's own look for players who would rather
     -- the windows matched the rest of their screen. Read at login, so it
     -- waits for /reload as Text size does. See UI/BlizzardLook.lua.
-    local styleRow = CreateRow(pages.general, 1, L["Window Style:"])
+    local styleRow = CreateRow(pages.all, 1, L["Window Style:"])
 
     widgets.windowStyle = Widgets.CreateDropdown(styleRow, {
         { text = "Titanforged", value = "titanforged" },
@@ -1614,7 +1917,7 @@ local function Build(outer)
 
     -- Asked 2026-10-07 ("I'm getting old"): bigger letters in the same
     -- window. Every size is read as text is drawn, so it waits for /reload.
-    local textRow = CreateRow(pages.general, 1, L["Text Size:"])
+    local textRow = CreateRow(pages.all, 1, L["Text Size:"])
 
     widgets.textSize = Widgets.CreateDropdown(textRow, {
         { text = L["Normal"], value = "normal" },
@@ -1636,17 +1939,84 @@ local function Build(outer)
     ReloadUnder(textRow, widgets.textSize, widgets.textReload)
     widgets.textReload:Hide()
 
+    -- Look choices (the owner said build it, 2026-11-26): the same three
+    -- rows in every Blackthornes addon, picked once for all of them. Font
+    -- and Colors are read at login, so they wait for /reload. See
+    -- UI/SharedChoices.lua.
+    local Shared = ns.SharedChoices
+    -- "Clear" is a button's word elsewhere, so the font names carry
+    -- "##font" (as "Queue##sell"), shown without it where no translation.
+    local function FontWord(english, word)
+        if word:find("##", 1, true) then return english end
+        return word
+    end
+    widgets.look = {}
+    local LOOK_ROWS = {
+        { kind = "font", label = L["Font:"],
+          tip = L["House, Game or Clear. Clear is plain and easy to read, and it has Russian letters."],
+          names = { house = FontWord("House", L["House##font"]), game = FontWord("Game", L["Game##font"]), clear = FontWord("Clear", L["Clear##font"]) } },
+        { kind = "colors", label = L["Colors:"],
+          tip = L["Warm is the look today. Darker takes the warm tint out of the glass."],
+          names = { warm = L["Warm"], darker = L["Darker"] } },
+        { kind = "fold", label = L["Fold Gem:"],
+          tip = L["What a folded window turns into: the round button, or a small bar with its title."],
+          names = { round = L["Round Button"], bar = L["Small Bar"] } },
+    }
+    for _, look in ipairs(Shared and Shared.LOOKS and LOOK_ROWS or {}) do
+        local kind = look.kind
+        local row = CreateRow(pages.all, 1, look.label, look.tip)
+        local items = {}
+        for _, value in ipairs(Shared.LOOKS[kind]) do
+            items[#items + 1] = { text = look.names[value], value = value }
+        end
+        local entry = {}
+        entry.dropdown = Widgets.CreateDropdown(row, items, function(value)
+            Shared:SetLook(kind, value)
+            if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
+        end, { width = 130 })
+        entry.dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        if kind ~= "fold" then
+            entry.reload = Widgets.CreateButton(row, L["Reload"], function()
+                if ReloadUI then ReloadUI() end
+            end, { width = 90, height = 20 })
+            FitButton(entry.reload)
+            ReloadUnder(row, entry.dropdown, entry.reload)
+            entry.reload:Hide()
+        end
+        widgets.look[kind] = entry
+    end
+
     -- A player's request (2026-10-07): the window was too big on a 4K
     -- screen. The grip below its bottom right corner does the same, to any
     -- size; one dragged to shows in the box as its percent.
-    local sizeRow = CreateRow(pages.general, 1, L["Window Size:"])
+    local sizeRow = CreateRow(pages.windows, 1, L["Window Size:"])
 
     widgets.windowSize = Widgets.CreateDropdown(sizeRow, {}, function(value)
         UI:SetWindowScale(value)
     end, { width = 150 })
     widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local effectsRow = CreateRow(pages.general, 1, L["Effects:"])
+    -- Row Size (the owner said build it, 2026-11-21): roomy rows as always,
+    -- or the game's tighter ones so more fit. Read once, so it waits for
+    -- /reload as Text Size does. See Widgets.RowHeight.
+    local rowSizeRow = CreateRow(pages.windows, 1, L["Row Size:"],
+        L["Compact fits more rows in each list. Type /reload to see it."])
+    widgets.rowSize = Widgets.CreateDropdown(rowSizeRow, {
+        { text = L["Roomy"], value = "roomy" },
+        { text = L["Compact"], value = "compact" },
+    }, function(value)
+        Config:Set("rowSize", value)
+        widgets.rowSizeReload:SetShown((value == "compact") ~= (Widgets.Compact and Widgets.Compact() or false))
+    end, { width = 110 })
+    widgets.rowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
+    widgets.rowSizeReload = Widgets.CreateButton(rowSizeRow, L["Reload"], function()
+        if ReloadUI then ReloadUI() end
+    end, { width = 90, height = 20 })
+    FitButton(widgets.rowSizeReload)
+    ReloadUnder(rowSizeRow, widgets.rowSize, widgets.rowSizeReload)
+    widgets.rowSizeReload:Hide()
+
+    local effectsRow = CreateRow(pages.all, 1, L["Effects:"])
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
         { text = L["Full"], value = "full" },
@@ -1661,7 +2031,7 @@ local function Build(outer)
 
     -- A player asked (2026-10-28): one minimap button for every Blackthornes
     -- addon loaded. Ticked unless unticked; see UI/SharedMinimap.lua.
-    local combineRow = CreateRow(pages.general, 1, L["Combine Addon Buttons:"])
+    local combineRow = CreateRow(pages.all, 1, L["Combine Addon Buttons:"])
     widgets.combineButtons = Widgets.CreateCheckbox(combineRow, L["On"], function(checked)
         if ns.SharedMinimap then ns.SharedMinimap.SetCombined(checked) end
     end, true)
@@ -1669,56 +2039,242 @@ local function Build(outer)
 
     -- The one Blackthornes window (the owner, 2026-10-30): every addon's tabs
     -- in one window with a rail. Ticked unless unticked; see UI/SharedWindow.lua.
-    local oneRow = CreateRow(pages.general, 1, L["One Window:"])
+    local oneRow = CreateRow(pages.all, 1, L["One Window:"])
     widgets.oneWindow = Widgets.CreateCheckbox(oneRow, L["On"], function(checked)
         if ns.TSTabs then ns.TSTabs:SetOneWindow(checked) end
     end, true)
     widgets.oneWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    CreateSection(pages.general, 1, L["ADDONS"])
-    -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
-    -- addons the player does not have. Off here is off in all of them.
-    local sistersRow = CreateRow(pages.general, 1, L["Sister Addons:"],
-        L["Says once in chat which Blackthornes addons you don't have."])
+    -- How Tradeskills opens in each place (the owner said build it from a
+    -- mockup, 2026-11-26): Full Window, Slim Panel, Round Button or Stay
+    -- Closed. Each row shows what the older settings give until a choice
+    -- is picked (UI.WindowAt in UI/Main.lua). These took over the Auction
+    -- House and Professions ticks of "Open By Itself At:" and the "Small
+    -- Craft Queue:" box; their saved keys are still read, never changed.
+    local windowChoices = {
+        { text = L["Full Window"], value = "full" },
+        { text = L["Slim Panel"], value = "slim" },
+        { text = L["Round Button"], value = "button" },
+        { text = L["Stay Closed"], value = "closed" },
+    }
+    widgets.windowAt = {}
+    for _, place in ipairs({
+        { "auction", L["At The Auction House:"], L["What opens when you talk to an auctioneer."] },
+        { "profession", L["At A Profession:"], L["What opens with a profession window."] },
+        { "mail", L["At The Mailbox:"], L["What opens at a mailbox."] },
+    }) do
+        local key = UI.WINDOW_AT[place[1]]
+        local row = CreateRow(pages.windows, 1, place[2], place[3])
+        local dropdown = Widgets.CreateDropdown(row, windowChoices, function(value)
+            Config:Set(key, value)
+        end, { width = 150 })
+        dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        widgets.windowAt[place[1]] = dropdown
+    end
 
-    widgets.sisters = Widgets.CreateCheckbox(sistersRow, L["On"], function(checked)
-        ns.SisterNote:SetOn(checked)
-    end, true)
-    widgets.sisters:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- What comes up by itself (a player's request, 2026-11-05). The
+    -- auction house and professions moved to the rows above; vendors stay
+    -- here (`openWithShops`, off unless ticked).
+    local openRow = CreateRow(pages.windows, 1, L["Open By Itself At:"],
+        L["Opens Tradeskills by itself at each place you tick."])
+    widgets.openWithShops = Widgets.CreateCheckbox(openRow, L["Vendors"], function(checked)
+        Config:Set("openWithShops", checked and true or false)
+    end, false)
+    widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- UI/WhatsNew.lua: one window after an update for every Blackthornes
-    -- addon. Off here is off in all of them, as the sister note is.
-    local whatsNewRow = CreateRow(pages.general, 1, L["What's New:"])
-    widgets.whatsnew = Widgets.CreateButton(whatsNewRow, L["Open"], function()
-        ns.WhatsNew:Toggle()
+    -- A window dragged off the screen comes back (a player's report, 2026-11-11).
+    local windowPlacesRow = CreateRow(pages.all, 1, L["Window Locations:"],
+        L["Puts every Blackthornes window back where it started. Your settings and data stay the same."])
+    local windowPlaces = Widgets.CreateButton(windowPlacesRow, L["Set Default"], function()
+        UI:ResetAllWindows()
     end, { width = 60, height = 20 })
-    FitButton(widgets.whatsnew)
-    widgets.whatsnew:SetPoint("TOPLEFT", CONTROL_X, 0)
+    windowPlaces:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(windowPlaces)
 
-    local whatsNewPopupRow = CreateRow(pages.general, 1, L["What's New After Updates:"],
-        L["Opens What's New the first time you play after an update."])
-    widgets.whatsNewPopup = Widgets.CreateCheckbox(whatsNewPopupRow, L["On"], function(checked)
-        ns.WhatsNew:SetOn(checked)
-    end, true)
-    widgets.whatsNewPopup:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- Tradeskills Settings: Set Default (the owner said build it,
+    -- 2026-11-23): a red Confirm first, then every setting back.
+    local restoreRow = CreateRow(pages.all, 1, L["Tradeskills Settings:"],
+        L["Puts every Tradeskills setting back to how it started. Your prices, queue, sales and recipes stay. So do your window locations and the choices on this page."])
+    local restore
+    restore = Widgets.CreateButton(restoreRow, L["Set Default"], function()
+        local now = GetTime and GetTime() or 0
+        if restore.armedUntil and now <= restore.armedUntil then
+            restore.armedUntil = nil
+            restore:SetText(L["Set Default"])
+            if restore.SetConfirming then restore:SetConfirming(false) end
+            UI:ResetSettings()
+            return
+        end
+        restore.armedUntil = now + UI.RESTORE_CONFIRM_SECONDS
+        restore:SetText(L["Confirm"])
+        if restore.SetConfirming then restore:SetConfirming(true) end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(UI.RESTORE_CONFIRM_SECONDS, function()
+                if restore.armedUntil and (GetTime and GetTime() or 0) >= restore.armedUntil then
+                    restore.armedUntil = nil
+                    restore:SetText(L["Set Default"])
+                    if restore.SetConfirming then restore:SetConfirming(false) end
+                end
+            end)
+        end
+    end, { width = 60, height = 20 })
+    restore:SetPoint("TOPLEFT", CONTROL_X, -2)
+    -- As wide as the longer of its two words.
+    restore:SetText(L["Confirm"])
+    FitButton(restore)
+    restore:SetText(L["Set Default"])
+    FitButton(restore)
+    widgets.restoreDefaults = restore
 
-    local whatsNewMotionRow = CreateRow(pages.general, 1, L["What's New Motion:"])
-    widgets.whatsNewMotion = Widgets.CreateCheckbox(whatsNewMotionRow, L["On"], function(checked)
-        ns.WhatsNew:SetMotionOn(checked)
+    -- My Auctions (the owner said build it, 2026-11-11, from a mockup whose
+    -- words he approved): a small window of what you have up. Off unless
+    -- ticked. See Logic/AuctionTracker.lua and UI/AuctionTracker.lua.
+    CreateSection(pages.windows, 1, L["AUCTION TRACKER"])
+    local trackerRow = CreateRow(pages.windows, 1, L["Auction Tracker:"], nil)
+    widgets.auctionTracker = Widgets.CreateCheckbox(trackerRow, L["On"], function(checked)
+        if ns.AuctionTracker then ns.AuctionTracker:SetOn(checked) else Config:Set("auctionTracker", checked) end
+    end, false)
+    widgets.auctionTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local soldFxRow = CreateRow(pages.windows, 1, L["Sold Effects:"], nil)
+    widgets.auctionTrackerEffects = Widgets.CreateDropdown(soldFxRow, {
+        { text = L["Full"], value = "full" },
+        { text = L["Subtle"], value = "subtle" },
+        { text = L["Off"], value = "off" },
+    }, function(value)
+        Config:Set("auctionTrackerEffects", value)
+    end, { width = 110 })
+    widgets.auctionTrackerEffects:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local trackerClearRow = CreateRow(pages.windows, 1, L["Transparent:"], nil)
+    widgets.auctionTrackerSeeThrough = Widgets.CreateDropdown(trackerClearRow, {
+        { text = L["Off"], value = 0 },
+        { text = L["Some"], value = 1 },
+        { text = L["More"], value = 2 },
+        { text = L["Most"], value = 3 },
+    }, function(value)
+        if ns.AuctionTrackerUI then
+            ns.AuctionTrackerUI:SetSeeThrough(value)
+        else
+            Config:Set("auctionTrackerSeeThrough", value)
+        end
+    end, { width = 110 })
+    widgets.auctionTrackerSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    -- Goblin Gold (asked 2026-10-17): the gold on every character of this
+    -- realm and side, on a small bar, with a goal. Off unless ticked; its
+    -- sound is under SOUNDS. Logic/GoldGoal.lua, UI/GoldGoal.lua. The
+    -- buttons are /bts gold on, off, goal and reset.
+    CreateSection(pages.windows, 1, L["GOBLIN GOLD"])
+    local goldRow = CreateRow(pages.windows, 1, L["Gold Tracker:"],
+        L["A small bar with the gold on all your characters on this realm and side."])
+
+    widgets.goldTracker = Widgets.CreateCheckbox(goldRow, L["On"], function(checked)
+        if ns.GoldGoal then ns.GoldGoal:SetOn(checked) end
+    end, false)
+    widgets.goldTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Count Gold On (asked 2026-10-21): every character, or only the one
+    -- playing, with a goal of its own (Logic/GoldGoal.lua).
+    local countRow = CreateRow(pages.windows, 1, L["Count Gold On:"])
+    widgets.goldCount = Widgets.CreateDropdown(countRow, {
+        { text = L["All Characters"], value = "all" },
+        { text = L["This Character"], value = "character" },
+    }, function(value)
+        if ns.GoldGoal then
+            ns.GoldGoal:SetCount(value)
+        else
+            Config:Set("goldTrackerCount", value)
+        end
+        -- The goal box shows the goal of what is counted now.
+        local goal = ns.GoldGoal and ns.GoldGoal:Goal()
+        widgets.goldGoal:SetValue(goal and math.floor(goal / 10000) or nil, true)
+    end, { width = 130 })
+    widgets.goldCount:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local goalRow = CreateRow(pages.windows, 1, L["Gold Goal:"],
+        L["Each tenth of the way gets a cheer. Leave it empty for no goal."])
+
+    widgets.goldGoal = Widgets.CreateNumberBox(goalRow, {
+        width = 80, min = 1, max = 99999999, allowEmpty = true, placeholder = L["None"],
+        onChange = function(value)
+            if not ns.GoldGoal then return end
+            local goal = ns.GoldGoal:Goal()
+            if value and goal and math.floor(goal / 10000) == value then return end
+            ns.GoldGoal:SetGoalGold(value)
+        end,
+    })
+    widgets.goldGoal:SetPoint("TOPLEFT", CONTROL_X, 0)
+    AddUnit(goalRow, widgets.goldGoal, "g")
+
+    -- Transparent (asked 2026-10-19), as Farmer's panels have it: the
+    -- bar's glass thins out and comes back under the mouse. Off by default.
+    local goldClearRow = CreateRow(pages.windows, 1, L["Transparent:"])
+    widgets.goldSeeThrough = Widgets.CreateDropdown(goldClearRow, {
+        { text = L["Off"], value = 0 },
+        { text = L["Some"], value = 1 },
+        { text = L["More"], value = 2 },
+        { text = L["Most"], value = 3 },
+    }, function(value)
+        if ns.GoldGoalUI then
+            ns.GoldGoalUI:SetSeeThrough(value)
+        else
+            Config:Set("goldTrackerSeeThrough", value)
+        end
+    end, { width = 110 })
+    widgets.goldSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    CreateSection(pages.windows, 1, L["ARROW"])
+    -- Show the way aims the arrow (Logic/WayArrow.lua); with TomTom
+    -- installed, its arrow instead while this is ticked (Logic/TomTom.lua,
+    -- the same file in every addon with an arrow). On unless unticked.
+    local tomtomRow = CreateRow(pages.windows, 1, L["Use TomTom:"],
+        L["With TomTom installed, its arrow shows the way instead."])
+    widgets.useTomTom = Widgets.CreateCheckbox(tomtomRow, L["On"], function(checked)
+        if ns.TomTom then ns.TomTom:SetOn(checked) end
     end, true)
-    widgets.whatsNewMotion:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.useTomTom:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Show the way to a trainer or vendor far away step by step
+    -- (Logic/Travel.lua, the same in every addon). On unless unticked.
+    local guideRow = CreateRow(pages.windows, 1, L["Guide Me:"],
+        L["When the place is in another zone or across the sea, the arrow leads you there step by step."])
+    widgets.arrowRoute = Widgets.CreateCheckbox(guideRow, L["On"], function(checked)
+        if ns.Travel then ns.Travel:SetOn(checked) end
+    end, true)
+    widgets.arrowRoute:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- How big the whole arrow is drawn, 100% unless picked (the owner,
+    -- 2026-10-26). The arrow keeps its spot.
+    local arrowSizeRow = CreateRow(pages.windows, 1, L["Arrow Size:"])
+    widgets.arrowSize = Widgets.CreateDropdown(arrowSizeRow, {
+        { text = "50%", value = 50 },
+        { text = "75%", value = 75 },
+        { text = "100%", value = 100 },
+    }, function(value)
+        if ns.WayArrowUI then ns.WayArrowUI:SetSize(value) end
+    end, { width = 80 })
+    widgets.arrowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
     -- load, which is about losing data rather than an effect.
-    CreateSection(pages.general, 2, L["SOUNDS"])
+    -- They have their own page since 2026-11-17, with Mute All Sounds on
+    -- top: the same switch as on All Addons, so ticking one ticks both.
+    CreateSection(pages.sounds, 1, L["SOUNDS"])
     widgets.sounds = {}
 
+    local muteHereRow = CreateRow(pages.sounds, 1, L["Mute All Sounds:"], nil)
+    widgets.muteSoundsHere = Widgets.CreateCheckbox(muteHereRow, L["On"], function(checked)
+        UI:SetMuteSounds(checked)
+    end, false)
+    widgets.muteSoundsHere:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local function SoundRow(key, label, description, test)
-        local row = CreateRow(pages.general, 2, label, description)
+        local row = CreateRow(pages.sounds, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
-        end, true)
+        end, key ~= "queueDoneSound")
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.sounds[key] = box
 
@@ -1733,7 +2289,7 @@ local function Build(outer)
 
     -- One box quiets every sound every Blackthornes addon plays, this
     -- warning about saved data included (UI/SharedChoices.lua).
-    local muteRow = CreateRow(pages.general, 2, L["Mute All Sounds:"], nil)
+    local muteRow = CreateRow(pages.all, 1, L["Mute All Sounds:"], nil)
     widgets.muteSounds = Widgets.CreateCheckbox(muteRow, L["On"], function(checked)
         UI:SetMuteSounds(checked)
     end, false)
@@ -1742,7 +2298,7 @@ local function Build(outer)
     -- The sale alarm picks its sound (asked 2026-10-11: players found the
     -- raid warning too much and asked for an old cash register). Off is the
     -- saleAlarm switch; the sound is saleSound. Picking one plays it.
-    local saleRow = CreateRow(pages.general, 2, L["An Auction Sells:"],
+    local saleRow = CreateRow(pages.sounds, 1, L["An Auction Sells:"],
         L["Plays a sound when one of your auctions sells."])
 
     local function SaleSound()
@@ -1780,6 +2336,12 @@ local function Build(outer)
         L["The coins as the mail report counts up, and the fanfare on a new record."])
     SoundRow("craftDoneSound", L["Crafting Finishes:"],
         L["A chime when a run of two or more crafts is done."])
+    -- Our own chime at the queue's last craft (2026-11-26), off unless ticked.
+    SoundRow("queueDoneSound", L["Queue Done Sound:"],
+        L["Plays a short sound when the last craft in the queue is made."],
+        function()
+            if ns.Crafting then pcall(ns.PlaySoundFile, ns.Crafting.QUEUE_DONE_SOUND, "Master") end
+        end)
     SoundRow("bagsFullSound", L["Bags Are Full:"],
         L["A warning the moment your last free bag slot fills."])
     SoundRow("disenchantSound", L["Disenchant Finds:"],
@@ -1800,8 +2362,8 @@ local function Build(outer)
 
     -- Which columns each list shows (asked 2026-10-09). The same tick list
     -- a right-click on a list's headings opens. See UI/Columns.lua.
-    CreateSection(pages.look, 1, L["COLUMNS"])
-    local columnsRow = CreateRow(pages.look, 1, L["Columns Shown:"],
+    CreateSection(pages.windows, 2, L["COLUMNS"])
+    local columnsRow = CreateRow(pages.windows, 2, L["Columns Shown:"],
         L["Pick a list to choose its columns. Right-click a list's headings does the same."])
 
     local listOptions = {}
@@ -1815,7 +2377,7 @@ local function Build(outer)
     widgets.columnsList:SetPoint("TOPLEFT", CONTROL_X, 0)
     if listOptions[1] then widgets.columnsList:SetValue(listOptions[1].value) end
 
-    local showAllRow = CreateRow(pages.look, 1, L["Hidden Columns:"])
+    local showAllRow = CreateRow(pages.windows, 2, L["Hidden Columns:"])
     widgets.columnsHidden = Theme.CreateLabel(showAllRow, "small", "muted")
     widgets.columnsHidden:SetPoint("TOPLEFT", CONTROL_X, -4)
 
@@ -1837,134 +2399,6 @@ local function Build(outer)
 
     -- Debug, the client check and the speed check are typed only (/bts
     -- debug, probe, perf; the owner, 2026-10-23): players don't need them.
-
-    CreateSection(pages.look, 2, L["ARROW"])
-    -- Show the way aims the arrow (Logic/WayArrow.lua); with TomTom
-    -- installed, its arrow instead while this is ticked (Logic/TomTom.lua,
-    -- the same file in every addon with an arrow). On unless unticked.
-    local tomtomRow = CreateRow(pages.look, 2, L["Use TomTom:"],
-        L["With TomTom installed, its arrow shows the way instead."])
-    widgets.useTomTom = Widgets.CreateCheckbox(tomtomRow, L["On"], function(checked)
-        if ns.TomTom then ns.TomTom:SetOn(checked) end
-    end, true)
-    widgets.useTomTom:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    -- Show the way to a trainer or vendor far away step by step
-    -- (Logic/Travel.lua, the same in every addon). On unless unticked.
-    local guideRow = CreateRow(pages.look, 2, L["Guide Me:"],
-        L["When the place is in another zone or across the sea, the arrow leads you there step by step."])
-    widgets.arrowRoute = Widgets.CreateCheckbox(guideRow, L["On"], function(checked)
-        if ns.Travel then ns.Travel:SetOn(checked) end
-    end, true)
-    widgets.arrowRoute:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    -- How big the whole arrow is drawn, 100% unless picked (the owner,
-    -- 2026-10-26). The arrow keeps its spot.
-    local arrowSizeRow = CreateRow(pages.look, 2, L["Arrow Size:"])
-    widgets.arrowSize = Widgets.CreateDropdown(arrowSizeRow, {
-        { text = "50%", value = 50 },
-        { text = "75%", value = 75 },
-        { text = "100%", value = 100 },
-    }, function(value)
-        if ns.WayArrowUI then ns.WayArrowUI:SetSize(value) end
-    end, { width = 80 })
-    widgets.arrowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    -- Goblin Gold (asked 2026-10-17): the gold on every character of this
-    -- realm and side, on a small bar, with a goal. Off unless ticked; its
-    -- sound is under SOUNDS. Logic/GoldGoal.lua, UI/GoldGoal.lua. The
-    -- buttons are /bts gold on, off, goal and reset.
-    CreateSection(pages.look, 2, L["GOBLIN GOLD"])
-    local goldRow = CreateRow(pages.look, 2, L["Gold Tracker:"],
-        L["A small bar with the gold on all your characters on this realm and side."])
-
-    widgets.goldTracker = Widgets.CreateCheckbox(goldRow, L["On"], function(checked)
-        if ns.GoldGoal then ns.GoldGoal:SetOn(checked) end
-    end, false)
-    widgets.goldTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    -- Count Gold On (asked 2026-10-21): every character, or only the one
-    -- playing, with a goal of its own (Logic/GoldGoal.lua).
-    local countRow = CreateRow(pages.look, 2, L["Count Gold On:"])
-    widgets.goldCount = Widgets.CreateDropdown(countRow, {
-        { text = L["All Characters"], value = "all" },
-        { text = L["This Character"], value = "character" },
-    }, function(value)
-        if ns.GoldGoal then
-            ns.GoldGoal:SetCount(value)
-        else
-            Config:Set("goldTrackerCount", value)
-        end
-        -- The goal box shows the goal of what is counted now.
-        local goal = ns.GoldGoal and ns.GoldGoal:Goal()
-        widgets.goldGoal:SetValue(goal and math.floor(goal / 10000) or nil, true)
-    end, { width = 130 })
-    widgets.goldCount:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    local goalRow = CreateRow(pages.look, 2, L["Gold Goal:"],
-        L["Each tenth of the way gets a cheer. Leave it empty for no goal."])
-
-    widgets.goldGoal = Widgets.CreateNumberBox(goalRow, {
-        width = 80, min = 1, max = 99999999, allowEmpty = true, placeholder = L["None"],
-        onChange = function(value)
-            if not ns.GoldGoal then return end
-            local goal = ns.GoldGoal:Goal()
-            if value and goal and math.floor(goal / 10000) == value then return end
-            ns.GoldGoal:SetGoalGold(value)
-        end,
-    })
-    widgets.goldGoal:SetPoint("TOPLEFT", CONTROL_X, 0)
-    AddUnit(goalRow, widgets.goldGoal, "g")
-
-    -- Transparent (asked 2026-10-19), as Farmer's panels have it: the
-    -- bar's glass thins out and comes back under the mouse. Off by default.
-    local goldClearRow = CreateRow(pages.look, 2, L["Transparent:"])
-    widgets.goldSeeThrough = Widgets.CreateDropdown(goldClearRow, {
-        { text = L["Off"], value = 0 },
-        { text = L["Some"], value = 1 },
-        { text = L["More"], value = 2 },
-        { text = L["Most"], value = 3 },
-    }, function(value)
-        if ns.GoldGoalUI then
-            ns.GoldGoalUI:SetSeeThrough(value)
-        else
-            Config:Set("goldTrackerSeeThrough", value)
-        end
-    end, { width = 110 })
-    widgets.goldSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
-
-    local goldPlaceRow = CreateRow(pages.look, 2, L["Gold Tracker Place:"])
-    local goldPlace = Widgets.CreateButton(goldPlaceRow, L["Reset"], function()
-        if ns.GoldGoalUI then ns.GoldGoalUI:ResetPlace() end
-    end, { width = 60, height = 20 })
-    goldPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(goldPlace)
-
-    -- A window dragged off the screen comes back (a player's report, 2026-11-11).
-    local windowPlacesRow = CreateRow(pages.look, 2, L["Window Spots:"],
-        L["Puts every Blackthornes window back where it started. Your settings and data stay the same."])
-    local windowPlaces = Widgets.CreateButton(windowPlacesRow, L["Set Default"], function()
-        UI:ResetAllWindows()
-    end, { width = 60, height = 20 })
-    windowPlaces:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(windowPlaces)
-
-    -- Enchant window (the owner said build it, 2026-11-05): since 2026-11-06 a
-    -- strip under the recipe in the Enchanting window. Off unless ticked (Logic/EnchantWindow.lua).
-    CreateSection(pages.look, 2, L["ENCHANTING"])
-    local enchantRow = CreateRow(pages.look, 2, L["Enchant Window:"], nil)
-    widgets.enchantWindow = Widgets.CreateCheckbox(enchantRow, L["On"], function(checked)
-        if ns.EnchantWindow then ns.EnchantWindow:SetOn(checked) else Config:Set("enchantWindow", checked) end
-    end, false)
-    widgets.enchantWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    -- What each disenchant gave, in chat (a player asked, 2026-11-13).
-    local deChatRow = CreateRow(pages.look, 2, L["Disenchant Results:"],
-        L["Says in chat what each disenchant gave."])
-    widgets.disenchantChat = Widgets.CreateCheckbox(deChatRow, L["Show"], function(checked)
-        if ns.DisenchantLog then ns.DisenchantLog:SetChat(checked) else Config:Set("disenchantChat", checked) end
-    end, true)
-    widgets.disenchantChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Sharing (asked 2026-10-07): your characters on another account of
     -- yours, and prices within your guild. Logic/AccountLink.lua and
@@ -2044,7 +2478,7 @@ local function Build(outer)
 
     CreateSection(pages.sharing, 2, L["GUILD"])
     local guildRow = CreateRow(pages.sharing, 2, L["Guild Prices:"],
-        L["Swaps scans with guildmates who use Tradeskills. Your own scans always win."])
+        L["Swaps scans with guildmates who use Tradeskills. The newest scan is used, yours or theirs."])
     widgets.guildPrices = Widgets.CreateCheckbox(guildRow, L["On"], function(checked)
         Config:Set("guildPrices", checked)
         UI:RefreshActiveTab()
@@ -2079,8 +2513,16 @@ local function Build(outer)
     widgets.realmStatus:SetWidth(COLUMN_WIDTH)
     widgets.realmStatus:SetWordWrap(true)
 
-    CreateSection(pages.sharing, 2, L["OTHER PRICE ADDONS"])
-    local tsmRow = CreateRow(pages.sharing, 2, L["TSM Prices:"],
+    -- Chat Notice (2026-11-18): GuildPrices:NoteHeard, RealmPrices:NoteHeard.
+    local noticeRow = CreateRow(pages.sharing, 2, L["Chat Notice:"],
+        L["Says in chat when prices come in from your guild or realm."])
+    widgets.sharedChatNotice = Widgets.CreateCheckbox(noticeRow, L["On"], function(checked)
+        Config:Set("sharedChatNotice", checked)
+    end, false)
+    widgets.sharedChatNotice:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    CreateSection(pages.pricing, 2, L["OTHER PRICE ADDONS"])
+    local tsmRow = CreateRow(pages.pricing, 2, L["TSM Prices:"],
         L["Uses TradeSkillMaster prices for items you haven't priced."])
     widgets.tsmPrices = Widgets.CreateCheckbox(tsmRow, L["On"], function(checked)
         Config:Set("tsmPrices", checked)
@@ -2090,15 +2532,15 @@ local function Build(outer)
     end, false)
     widgets.tsmPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    widgets.tsmStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
-    Place(pages.sharing, 2, widgets.tsmStatus, -4)
+    widgets.tsmStatus = Theme.CreateLabel(pages.pricing.content, "tiny", "muted")
+    Place(pages.pricing, 2, widgets.tsmStatus, -4)
     widgets.tsmStatus:SetWidth(COLUMN_WIDTH)
     widgets.tsmStatus:SetWordWrap(true)
 
     -- TSM's price over your own once your scan is an hour old (the owner,
     -- 2026-11-12). Off unless ticked, greyed while TSM Prices is off.
     -- `preferTsmPrices`, account wide; never rename it. See Prices:PreferredTSM.
-    local preferRow = CreateRow(pages.sharing, 2, L["Prefer TSM Prices:"],
+    local preferRow = CreateRow(pages.pricing, 2, L["Prefer TSM Prices:"],
         L["Uses TSM's price once your own scan is more than 1 hour old. Posting prices still come from your scans."])
     widgets.preferTsmPrices = Widgets.CreateCheckbox(preferRow, L["On"], function(checked)
         Config:Set("preferTsmPrices", checked)
@@ -2112,7 +2554,7 @@ local function Build(outer)
     -- 2026-11-13): DBRecent unless the player types another, or one of
     -- their own TSM custom prices. `tsmPriceSource`, account wide; never
     -- rename it. Saved on Enter or leaving the box. See TSMPrices:MarketSource.
-    local sourceRow = CreateRow(pages.sharing, 2, L["TSM Price Source:"],
+    local sourceRow = CreateRow(pages.pricing, 2, L["TSM Price Source:"],
         L["The TSM price to use, like DBRecent or DBMarket. You can also type one of your own TSM custom prices."])
     widgets.tsmPriceSource = Widgets.CreateSearchBox(sourceRow, "DBRecent")
     widgets.tsmPriceSource:SetWidth(150)
@@ -2140,8 +2582,8 @@ local function Build(outer)
         self:ClearFocus()
     end)
 
-    widgets.tsmSourceNote = Theme.CreateLabel(pages.sharing.content, "tiny", "warn")
-    Place(pages.sharing, 2, widgets.tsmSourceNote, -4)
+    widgets.tsmSourceNote = Theme.CreateLabel(pages.pricing.content, "tiny", "warn")
+    Place(pages.pricing, 2, widgets.tsmSourceNote, -4)
     widgets.tsmSourceNote:SetWidth(COLUMN_WIDTH)
     widgets.tsmSourceNote:SetWordWrap(true)
 
@@ -2149,7 +2591,7 @@ local function Build(outer)
     -- owner said build it, 2026-11-14). `tsmGearPriceSource`, account wide,
     -- nil or empty reads the TSM Price Source; never rename it. See
     -- TSMPrices:GearSource.
-    local gearRow = CreateRow(pages.sharing, 2, L["TSM BoE Price Source:"],
+    local gearRow = CreateRow(pages.pricing, 2, L["TSM BoE Price Source:"],
         L["Used for gear that binds when worn. Leave it empty to use your TSM Price Source."])
     widgets.tsmGearPriceSource = Widgets.CreateSearchBox(gearRow, "DBRecent")
     widgets.tsmGearPriceSource:SetWidth(150)
@@ -2177,12 +2619,26 @@ local function Build(outer)
         self:ClearFocus()
     end)
 
-    widgets.tsmGearNote = Theme.CreateLabel(pages.sharing.content, "tiny", "warn")
-    Place(pages.sharing, 2, widgets.tsmGearNote, -4)
+    widgets.tsmGearNote = Theme.CreateLabel(pages.pricing.content, "tiny", "warn")
+    Place(pages.pricing, 2, widgets.tsmGearNote, -4)
     widgets.tsmGearNote:SetWidth(COLUMN_WIDTH)
     widgets.tsmGearNote:SetWordWrap(true)
 
-    local auctionatorRow = CreateRow(pages.sharing, 2, L["Auctionator Prices:"],
+    -- The tooltip's "Sold a day" from TSM (a player asked, the owner said
+    -- build it, 2026-11-16). Off unless ticked, greyed while TSM Prices is
+    -- off. `tsmSoldPerDay`, account wide; never rename it. See
+    -- TSMPrices:SoldPerDay.
+    local soldRow = CreateRow(pages.pricing, 2, L["TSM Sold a Day:"],
+        L["Takes the Sold a day number on item tooltips from TSM."])
+    widgets.tsmSoldPerDay = Widgets.CreateCheckbox(soldRow, L["On"], function(checked)
+        Config:Set("tsmSoldPerDay", checked)
+        if ns.TSMPrices then ns.TSMPrices:Forget() end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.tsmSoldPerDay:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.tsmSoldRow = soldRow
+
+    local auctionatorRow = CreateRow(pages.pricing, 2, L["Auctionator Prices:"],
         L["Uses Auctionator prices for items nothing else has priced, or when its price is newer than your old one."])
     widgets.auctionatorPrices = Widgets.CreateCheckbox(auctionatorRow, L["On"], function(checked)
         Config:Set("auctionatorPrices", checked)
@@ -2191,13 +2647,13 @@ local function Build(outer)
     end, false)
     widgets.auctionatorPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    widgets.auctionatorStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
-    Place(pages.sharing, 2, widgets.auctionatorStatus, -4)
+    widgets.auctionatorStatus = Theme.CreateLabel(pages.pricing.content, "tiny", "muted")
+    Place(pages.pricing, 2, widgets.auctionatorStatus, -4)
     widgets.auctionatorStatus:SetWidth(COLUMN_WIDTH)
     widgets.auctionatorStatus:SetWordWrap(true)
 
     -- Which of the two is asked first (the owner, 2026-10-26).
-    local orderRow = CreateRow(pages.sharing, 2, L["Price Order:"],
+    local orderRow = CreateRow(pages.pricing, 2, L["Price Order:"],
         L["Which one to ask first for items nothing else has priced."])
     local orderOptions = {
         { text = L["TSM First"], value = "tsm" },
@@ -2259,6 +2715,50 @@ local function Build(outer)
         widgets.shareData = box
     end
 
+    -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
+    -- addons the player does not have. Off here is off in all of them.
+    local sistersRow = CreateRow(pages.all, 1, L["Sister Addons:"],
+        L["Says once in chat which Blackthornes addons you don't have."])
+
+    widgets.sisters = Widgets.CreateCheckbox(sistersRow, L["On"], function(checked)
+        ns.SisterNote:SetOn(checked)
+    end, true)
+    widgets.sisters:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- UI/WhatsNew.lua: one window after an update for every Blackthornes
+    -- addon. Off here is off in all of them, as the sister note is.
+    CreateSection(pages.all, 2, L["WHAT'S NEW"])
+    local whatsNewRow = CreateRow(pages.all, 2, L["What's New:"])
+    widgets.whatsnew = Widgets.CreateButton(whatsNewRow, L["Open"], function()
+        ns.WhatsNew:Toggle()
+    end, { width = 60, height = 20 })
+    FitButton(widgets.whatsnew)
+    widgets.whatsnew:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    -- One drop-down for the two What's New boxes: Off, Show, or Show With
+    -- Motion, over the same two saved choices (Off leaves motion as it was).
+    local afterRow = CreateRow(pages.all, 2, L["After Updates:"],
+        L["Opens What's New the first time you play after an update."])
+    widgets.whatsNewAfter = Widgets.CreateDropdown(afterRow, {
+        { text = L["Off"], value = "off" },
+        { text = L["Show"], value = "show" },
+        { text = L["Show With Motion"], value = "motion" },
+    }, function(value)
+        if not ns.WhatsNew then return end
+        ns.WhatsNew:SetOn(value ~= "off")
+        if value ~= "off" then ns.WhatsNew:SetMotionOn(value == "motion") end
+    end, { width = 170 })
+    widgets.whatsNewAfter:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    -- The Welcome card (2026-10-20): which professions' roads come first on
+    -- the Level Up tab's Road to 300. Opens the card again.
+    local roadRow = CreateRow(pages.about, 2, L["Road to 300:"])
+    local roadOpen = Widgets.CreateButton(roadRow, L["Open"], function()
+        if ns.WelcomeUI then ns.WelcomeUI:Show() end
+    end, { width = 60, height = 20 })
+    roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(roadOpen)
+
     widgets.describe:SetChecked(Config:Get("settingsDescriptions") == true)
     ShowPage(CurrentPage())
 end
@@ -2277,7 +2777,6 @@ local function Put(box, value)
     box:SetValue(value, true)
 end
 
-local IGNORED_ROW_HEIGHT = 22
 local RESTORE_WIDTH = 70
 
 --- One line per ignored craft or item: its name, and Restore at the
@@ -2287,7 +2786,7 @@ local function IgnoredRow(rows, hint, index, onRestore, restoreTip, buttonText)
     local row = rows[index]
     if row then return row end
 
-    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row = CreateFrame("Frame", nil, hint:GetParent())
     row:SetSize(COLUMN_WIDTH, IGNORED_ROW_HEIGHT)
     row:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0,
         -6 - (index - 1) * (IGNORED_ROW_HEIGHT + 2))
@@ -2343,13 +2842,13 @@ local function NeverLine(entry)
     end
 
     if not entry.outputItemID then
-        return L.Format("%s |cff7a8089· no character knows it|r", name)
+        return L.Format("%s |cff857c68· no character knows it|r", name)
     end
     local buy = ns.Cost:GetReagentUnitCost(entry.outputItemID)
     if not buy then
-        return L.Format("%s |cff7a8089·|r |c%sno price to buy it|r", name, ns.COLORS.warn)
+        return L.Format("%s |cff857c68·|r |c%sno price to buy it|r", name, ns.COLORS.warn)
     end
-    return L.Format("%s |cff7a8089· buy %s each|r", name,
+    return L.Format("%s |cff857c68· buy %s each|r", name,
         Util.FormatMoney(buy, { noColor = true, short = true }))
 end
 
@@ -2362,7 +2861,7 @@ local function AlwaysLine(entry)
         name = ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5),
             math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
     end
-    return L.Format("%s |cff7a8089· always made|r", name)
+    return L.Format("%s |cff857c68· always made|r", name)
 end
 
 local function RefreshNeverSubCrafts()
@@ -2388,11 +2887,8 @@ local function RefreshNeverSubCrafts()
         L["Make it as a sub-craft again whenever that is cheaper than buying it"],
         nil, L["Allow"])
 
-    widgets.neverEnd:ClearAllPoints()
-    widgets.neverEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.never.count, widgets.queueLists.never.shown = #list, #list
 end
-
-local STOCK_ROW_HEIGHT = 26
 
 --- One profession's line: dark glass by place, its name, its number box
 --- (empty for the usual number) and an x while it has one of its own.
@@ -2400,7 +2896,7 @@ local function StockRow(index)
     local row = widgets.stockRows[index]
     if row then return row end
 
-    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row = CreateFrame("Frame", nil, widgets.stockHint:GetParent())
     row:SetSize(COLUMN_WIDTH, STOCK_ROW_HEIGHT)
     row:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0,
         -6 - (index - 1) * STOCK_ROW_HEIGHT)
@@ -2471,9 +2967,192 @@ local function RefreshStockProfessions()
     widgets.stockEmpty:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0, -6)
     widgets.stockEmpty:SetShown(#professions == 0)
 
-    local last = #professions > 0 and widgets.stockRows[#professions] or widgets.stockEmpty
-    widgets.stockEnd:ClearAllPoints()
-    widgets.stockEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    -- Counted by the professions with a number of their own.
+    local own = 0
+    for _, profession in ipairs(professions) do
+        if ns.Auctions:GetProfessionLimit(profession) ~= nil then own = own + 1 end
+    end
+    widgets.queueLists.stock.count, widgets.queueLists.stock.shown = own, #professions
+end
+
+--- The professions the Minimums by Profession list offers: those your
+--- characters craft with, and any already given a number of its own.
+local function MinimumProfessions()
+    local seen, list = {}, {}
+    local function Add(name)
+        if type(name) == "string" and not seen[name] then
+            seen[name] = true
+            list[#list + 1] = name
+        end
+    end
+    if ns.Auctions and ns.Auctions.StockProfessions then
+        for _, name in ipairs(ns.Auctions:StockProfessions()) do Add(name) end
+    end
+    for name in pairs(ns.db and ns.db.professionMinimums or {}) do Add(name) end
+    -- Buying gear to disenchant (2026-11-22): always offered.
+    if ns.Profit and ns.Profit.DISENCHANTING then Add(ns.Profit.DISENCHANTING) end
+    table.sort(list)
+    return list
+end
+
+--- The row's tooltip: what its numbers hide, in the profession's name.
+local function ShowMinimumTip(row)
+    row.band:SetColorTexture(Theme.Unpack("glassHover"))
+    row.edge:Show()
+    if not (row.profession and GameTooltip) then return end
+    local profit, margin = ns.Profit:MinimumsFor(row.profession)
+    GameTooltip:SetOwner(row, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    GameTooltip:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -2)
+    GameTooltip:SetText(row.label:GetText() or row.profession, Theme.Unpack("accent"))
+    if row.profession == ns.Profit.DISENCHANTING then
+        profit, margin = ns.Profit:DisenchantMinimums()
+        GameTooltip:AddLine(L.Format("Items on the auction house that make less than %s or %d%% when you buy and disenchant them are hidden on the Disenchanting tab.",
+            Util.FormatMoney(profit or 0, { noColor = true, short = true }), margin or 0), 1, 1, 1, true)
+        GameTooltip:Show()
+        return
+    end
+    GameTooltip:AddLine(L.Format("%s crafts that make less than %s or %d%% are hidden on the Profit tab, and Queue All skips them.",
+        row.label:GetText() or row.profession,
+        Util.FormatMoney(profit or 0, { noColor = true, short = true }), margin or 0), 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+local function HideMinimumTip(row)
+    row.band:SetColorTexture(Theme.Unpack(row.index % 2 == 1 and "glass" or "glassAlt"))
+    row.edge:Hide()
+    if GameTooltip and GameTooltip:IsOwned(row) then GameTooltip:Hide() end
+end
+
+--- One profession's line on the Pricing page: dark glass by place, its
+--- name, a profit box in silver with what it means in g, s and c, a margin
+--- box, and an x while it has a number of its own.
+local function MinimumRow(index)
+    local row = widgets.minimumRows[index]
+    if row then return row end
+
+    row = CreateFrame("Frame", nil, widgets.minimums)
+    row.index = index
+    row:SetSize(COLUMN_WIDTH, STOCK_ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", widgets.minimumsHeads, "BOTTOMLEFT", 0,
+        -2 - (index - 1) * STOCK_ROW_HEIGHT)
+
+    row.band = row:CreateTexture(nil, "BACKGROUND")
+    row.band:SetAllPoints(row)
+    row.band:SetColorTexture(Theme.Unpack(index % 2 == 1 and "glass" or "glassAlt"))
+
+    row.line = row:CreateTexture(nil, "BORDER")
+    row.line:SetPoint("BOTTOMLEFT", 0, 0)
+    row.line:SetPoint("BOTTOMRIGHT", 0, 0)
+    row.line:SetHeight(1)
+    row.line:SetColorTexture(Theme.Unpack("border"))
+    row.line:SetAlpha(0.6)
+
+    row.edge = row:CreateTexture(nil, "ARTWORK")
+    row.edge:SetPoint("TOPLEFT")
+    row.edge:SetPoint("BOTTOMLEFT")
+    row.edge:SetWidth(2)
+    row.edge:SetColorTexture(Theme.Unpack("accentHi"))
+    row.edge:Hide()
+
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", ShowMinimumTip)
+    row:SetScript("OnLeave", HideMinimumTip)
+
+    row.label = Theme.CreateLabel(row, "small", "text")
+    row.label:SetPoint("LEFT", 8, 0)
+    row.label:SetPoint("RIGHT", row, "LEFT", MINIMUM_PROFIT_X - 6, 0)
+    row.label:SetWordWrap(false)
+
+    -- Typed in silver, as Minimum Profit is.
+    row.profit = Widgets.CreateNumberBox(row, {
+        width = 56, min = 0, max = 1000000, allowEmpty = true,
+        onChange = function(value)
+            if row.profession then
+                ns.Profit:SetProfessionMinimum(row.profession, "profit", value and value * 100)
+            end
+        end,
+    })
+    row.profit:SetPoint("LEFT", row, "LEFT", MINIMUM_PROFIT_X, 0)
+
+    row.preview = Theme.CreateLabel(row, "tiny", "dim")
+    row.preview:SetPoint("LEFT", row.profit, "RIGHT", 6, 0)
+    row.preview:SetPoint("RIGHT", row, "LEFT", MINIMUM_MARGIN_X - 4, 0)
+    row.preview:SetWordWrap(false)
+
+    row.margin = Widgets.CreateNumberBox(row, {
+        width = 40, min = 0, max = 100, allowEmpty = true,
+        onChange = function(value)
+            if row.profession then ns.Profit:SetProfessionMinimum(row.profession, "margin", value) end
+        end,
+    })
+    row.margin:SetPoint("LEFT", row, "LEFT", MINIMUM_MARGIN_X, 0)
+
+    row.percent = Theme.CreateLabel(row, "small", "muted")
+    row.percent:SetPoint("LEFT", row.margin, "RIGHT", 4, 0)
+    row.percent:SetText("%")
+
+    row.clear = Widgets.CreateButton(row, "x", function()
+        if row.profession then ns.Profit:ClearProfessionMinimums(row.profession) end
+    end, { width = 20, height = 20, tooltip = L["Use the usual minimums for this profession again"] })
+    row.clear:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+
+    widgets.minimumRows[index] = row
+    return row
+end
+
+local function RefreshProfessionMinimums()
+    if not widgets.minimums or not (ns.Profit and ns.Profit.GetProfessionMinimums) then return end
+
+    local professions = MinimumProfessions()
+    local usualProfit = ns.Config:Get("minProfit") or 0
+    local usualMargin = ns.Config:Get("minMarginPercent") or 0
+
+    for index, profession in ipairs(professions) do
+        local row = MinimumRow(index)
+        row.profession = profession
+        row.label:SetText(ns.Auctions and ns.Auctions.ProfessionLabel
+            and ns.Auctions:ProfessionLabel(profession) or profession)
+
+        local profit, margin = ns.Profit:GetProfessionMinimums(profession)
+        row.profit:SetPlaceholder(tostring(math.floor(usualProfit / 100)))
+        row.margin:SetPlaceholder(tostring(usualMargin))
+        if not (row.profit.editBox.HasFocus and row.profit.editBox:HasFocus()) then
+            row.profit:SetValue(profit and profit / 100, true)
+        end
+        if not (row.margin.editBox.HasFocus and row.margin.editBox:HasFocus()) then
+            row.margin:SetValue(margin, true)
+        end
+
+        if profit then
+            row.preview:SetText(Util.FormatMoney(profit, { short = true }))
+        elseif margin == nil then
+            row.preview:SetText(L["usual"])
+        else
+            row.preview:SetText("")
+        end
+        row.clear:SetShown(profit ~= nil or margin ~= nil)
+        row:Show()
+    end
+    for index = #professions + 1, #widgets.minimumRows do
+        widgets.minimumRows[index].profession = nil
+        widgets.minimumRows[index]:Hide()
+    end
+    widgets.minimumsEmpty:SetShown(#professions == 0)
+
+    -- The box grows with its rows, so what sits under it moves down.
+    local function Tall(text, fallback)
+        local height = text.GetStringHeight and text:GetStringHeight()
+        return type(height) == "number" and math.ceil(height) or fallback
+    end
+    local top = 4 + Tall(widgets.minimumsLabel, 14) + 4 + Tall(widgets.minimumsHint, 12) + 6 + 16
+    local body = #professions > 0 and (2 + #professions * STOCK_ROW_HEIGHT)
+        or (4 + Tall(widgets.minimumsEmpty, 14))
+    local height = top + body + 4
+    if widgets.minimums:GetHeight() ~= height then
+        widgets.minimums:SetHeight(height)
+        FitScroll("pricing")
+    end
 end
 
 local function RefreshChangedStock()
@@ -2492,12 +3171,12 @@ local function RefreshChangedStock()
         function(itemID) return Util.GetItemQualityColor(itemID) end,
         L["Reset"])
 
-    widgets.changedEnd:ClearAllPoints()
-    widgets.changedEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.changed.count, widgets.queueLists.changed.shown = #list, #list
 end
 
 local function RefreshIgnored()
     RefreshStockProfessions()
+    RefreshProfessionMinimums()
     RefreshChangedStock()
     RefreshNeverSubCrafts()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
@@ -2519,8 +3198,7 @@ local function RefreshIgnored()
             if itemID then return Util.GetItemQualityColor(itemID) end
         end)
 
-    widgets.ignoredEnd:ClearAllPoints()
-    widgets.ignoredEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.ignored.count, widgets.queueLists.ignored.shown = #crafts, #crafts
 
     if not widgets.ignoredItemsHint or not (ns.Posting and ns.Posting.GetIgnored) then return end
 
@@ -2536,28 +3214,84 @@ local function RefreshIgnored()
         L["Offer this item on Ready to sell again"],
         function(itemID) return Util.GetItemQualityColor(itemID) end)
 
-    if widgets.ignoredItemsEnd then
-        widgets.ignoredItemsEnd:ClearAllPoints()
-        widgets.ignoredItemsEnd:SetPoint("TOPLEFT", lastIgnored, "BOTTOMLEFT", 0, 0)
-    end
+    widgets.queueLists.items.count, widgets.queueLists.items.shown = #items, #items
 
     if not widgets.keepHereSection or not ns.KeepHere then return end
     local keeps = {}
     for _, entry in ipairs(ns.KeepHere:Items()) do
         keeps[#keeps + 1] = { key = entry.itemID,
-            name = L.Format("%s  |cff7a8089Keep: %s|r", entry.name, ns.KeepHere.Shown(entry.count)) }
+            name = L.Format("%s  |cff857c68Keep: %s|r", entry.name, ns.KeepHere.Shown(entry.count)) }
     end
     FillIgnored(keeps, widgets.keepHereRows, widgets.keepHereSection, widgets.keepHereEmpty,
         function(itemID) ns.KeepHere:Set(itemID, 0) end, nil,
         function(itemID) return Util.GetItemQualityColor(itemID) end,
         L["Clear"])
+    widgets.queueLists.keep.count, widgets.queueLists.keep.shown = #keeps, #keeps
+end
+
+--- The list the box shows: one the search found, the one picked, else the
+--- first with something in it, else the first.
+local function QueueListShown()
+    local lists = widgets.queueLists
+    local key = widgets.queueListFound or ns.Config:Get("settingsQueueList")
+    if lists[key] then return key end
+    for _, group in ipairs(lists) do
+        if group.count > 0 then return group.key end
+    end
+    return lists[1].key
+end
+
+--- Show the list picked, size its holder to what it holds so the page
+--- scrolls to its foot, and name each list in the box with its count.
+ShowQueueList = function()
+    local lists = widgets.queueLists
+    if not (lists and lists[1]) then return end
+    local key = QueueListShown()
+
+    local options = {}
+    for _, group in ipairs(lists) do
+        options[#options + 1] = { text = L.Format("%s (%d)", group.title, group.count), value = group.key }
+    end
+    widgets.queueList:SetOptions(options)
+    widgets.queueList:SetValue(key)
+
+    for _, group in ipairs(lists) do
+        local on = group.key == key
+        group.holder:SetShown(on)
+        if on then
+            local top = 0
+            if group.hint.GetStringHeight then
+                local height = group.hint:GetStringHeight()
+                top = (type(height) == "number" and math.ceil(height) or 14) + 6
+            end
+            local body
+            if group.shown > 0 then
+                body = group.shown * group.step
+            else
+                local height = group.empty.GetStringHeight and group.empty:GetStringHeight()
+                body = type(height) == "number" and math.ceil(height) or 14
+            end
+            group.holder:SetHeight(math.max(1, top + body))
+        end
+    end
+    FitScroll("queue")
+end
+
+--- The search found one of the lists: show it, without keeping the pick.
+FindQueueList = function(key)
+    widgets.queueListFound = key
+    ShowQueueList()
 end
 
 local function Refresh()
     if not widgets.undercut then return end
 
     RefreshIgnored()
+    ShowQueueList()
 
+    -- One Window may have been ticked or unticked since: All Addons comes
+    -- off or back on the switch.
+    LayoutSwitch()
     if widgets.shownPage ~= CurrentPage() then ShowPage(CurrentPage()) end
 
     if widgets.paintHiddenColumns then widgets.paintHiddenColumns() end
@@ -2599,24 +3333,33 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
-    widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") == true)
-    widgets.learnStock:SetChecked(Config:Get("learnStockFromSales") ~= false)
+    do
+        local learn = Config:Get("learnStockFromSales") ~= false
+        local raise = Config:Get("raiseStockOnSellOut") == true
+        widgets.stockFromSales:SetValue(learn and (raise and "both" or "sales") or (raise and "sellout" or "off"))
+    end
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
     local extra = Config:Get("fastSellerExtra")
     Put(widgets.fastSellerExtra, type(extra) == "number" and extra or 2)
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
+    widgets.onlyMine:SetChecked(Config:Get("queueOnlyMine") == true)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.ignoreDeposit:SetChecked(Config:Get("ignoreDeposit") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
+    widgets.postAtMinProfit:SetChecked(Config:Get("postAtMinProfit") == true)
     widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
+    widgets.craftFirst:SetChecked(Config:Get("sellHoldsCraftFirst") == true)
+    widgets.queueFromSell:SetChecked(Config:Get("sellQueueFromList") == true)
+    GreyQueueFromSell(widgets, Config:Get("sellHoldsCraftFirst") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.askBeforeListing:SetChecked(Config:Get("askBeforeListing") == true)
     widgets.postAnyway:SetChecked(Config:Get("postAnyway") == true)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
     widgets.snipeTab:SetChecked(Config:Get("snipeTab") == true)
+    widgets.crateShoppingList:SetChecked(Config:Get("crateShoppingList") == true)
     widgets.snipeWheel:SetChecked(Config:Get("snipeWheel") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
@@ -2655,17 +3398,22 @@ local function Refresh()
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     if ns.WhatsNew then
-        widgets.whatsNewPopup:SetChecked(ns.WhatsNew:IsOn())
-        widgets.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
+        local after = "show"
+        if not ns.WhatsNew:IsOn() then after = "off"
+        elseif ns.WhatsNew:IsMotionOn() then after = "motion" end
+        widgets.whatsNewAfter:SetValue(after)
     end
     ShowShiftMode(widgets.recipeTooltips)
     ShowShiftMode(widgets.enchantTooltips)
     ShowShiftMode(widgets.disenchantTooltips)
     ShowShiftMode(widgets.crateTooltips)
     ShowShiftMode(widgets.boughtTooltips)
+    ShowShiftMode(widgets.usedInTooltips)
+    ShowAllLinesMode()
+    for place, dropdown in pairs(widgets.windowAt) do
+        dropdown:SetValue(UI.WindowAt(place))
+    end
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
-    widgets.openAtAuction:SetChecked(Config:Get("openAtAuction") ~= false)
-    widgets.openAtProfessions:SetChecked(Config:Get("openAtProfessions") ~= false)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
@@ -2675,7 +3423,17 @@ local function Refresh()
         widgets.windowStyle:SetValue(Look.Wanted(), true)
         widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
     end
+    local Shared = ns.SharedChoices
+    for kind, entry in pairs(widgets.look or {}) do
+        entry.dropdown:SetValue(Shared:Look(kind), true)
+        if entry.reload then entry.reload:SetShown(Shared:NeedsReload(kind)) end
+    end
     widgets.combineButtons:SetChecked(not ns.SharedMinimap or ns.SharedMinimap.Combined())
+    if widgets.rowSize then
+        local rowSize = Config:Get("rowSize") == "compact" and "compact" or "roomy"
+        widgets.rowSize:SetValue(rowSize, true)
+        widgets.rowSizeReload:SetShown((rowSize == "compact") ~= (Widgets.Compact and Widgets.Compact() or false))
+    end
     if widgets.oneWindow then
         widgets.oneWindow:SetChecked(ns.SharedWindow and ns.SharedWindow.On() or false)
     end
@@ -2697,13 +3455,20 @@ local function Refresh()
     widgets.hideSaleChat:SetChecked(Config:Get("hideSaleChat") == true)
     widgets.goldAnHour:SetChecked(Config:Get("profitGoldAnHour") == true)
     for key, box in pairs(widgets.sounds) do
-        box:SetChecked(Config:Get(key) ~= false)
+        -- Queue Done Sound is off unless ticked; the rest on unless unticked.
+        if key == "queueDoneSound" then
+            box:SetChecked(Config:Get(key) == true)
+        else
+            box:SetChecked(Config:Get(key) ~= false)
+        end
     end
     widgets.muteSounds:SetChecked(ns.Muted and ns.Muted() or false)
+    widgets.muteSoundsHere:SetChecked(ns.Muted and ns.Muted() or false)
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
+    widgets.recipeWishlist:SetChecked(Config:Get("recipeWishlistOn") == true)
     widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute ~= false)
     widgets.useTomTom:SetChecked(type(ns.db) ~= "table" or ns.db.useTomTom ~= false)
     widgets.arrowSize:SetValue(ns.WayArrowUI and ns.WayArrowUI.Size() or 100, true)
@@ -2742,12 +3507,17 @@ local function Refresh()
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Status() or "")
     widgets.realmPrices:SetChecked(Config:Get("realmPrices") ~= false)
+    widgets.sharedChatNotice:SetChecked(Config:Get("sharedChatNotice") == true)
     if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     if widgets.disenchantChat then widgets.disenchantChat:SetChecked(Config:Get("disenchantChat") ~= false) end
+    if widgets.salvagerApart then widgets.salvagerApart:SetChecked(Config:Get("salvagerApart") == true) end
+    UI:RefreshSettingsPlain()
+    if widgets.craftChat then widgets.craftChat:SetChecked(Config:Get("craftChat") ~= false) end
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
     widgets.preferTsmPrices:SetChecked(Config:Get("preferTsmPrices") == true)
+    widgets.tsmSoldPerDay:SetChecked(Config:Get("tsmSoldPerDay") == true)
     GreyPreferTSM(widgets, Config:Get("tsmPrices") ~= false)
     local sourceBox = widgets.tsmPriceSource.editBox
     if not (sourceBox.HasFocus and sourceBox:HasFocus()) then
@@ -2769,6 +3539,23 @@ local function Refresh()
     widgets.auctionatorPrices:SetChecked(Config:Get("auctionatorPrices") ~= false)
     widgets.auctionatorStatus:SetText(ns.AuctionatorPrices and ns.AuctionatorPrices:Describe() or "")
     widgets.priceOrder:SetValue(Config:Get("priceOrder") == "auctionator" and "auctionator" or "tsm")
+
+    if widgets.keepHistory and ns.TidyUp then
+        local days = ns.TidyUp:Days()
+        widgets.keepHistory:SetValue(days)
+        widgets.tidyUp:SetEnabledState(days > 0)
+        widgets.tidyUp.tooltipText = days == 0 and L["Pick how long to keep price history first."] or nil
+        local function ShowSize(bytes)
+            widgets.saveSize:SetText(L.Format("%s on this account", ns.TidyUp.FormatSize(bytes)))
+        end
+        if ns.TidyUp.bytes and time() - (ns.TidyUp.measuredAt or 0) < 600 then
+            ShowSize(ns.TidyUp.bytes)
+        else
+            -- The last size stays up while it is measured again.
+            if ns.TidyUp.bytes then ShowSize(ns.TidyUp.bytes) else widgets.saveSize:SetText("...") end
+            ns.TidyUp:Measure(ShowSize)
+        end
+    end
 
     local lastScan, capped = ns.Prices:GetLastScan()
 
@@ -2832,6 +3619,7 @@ function UI:SetMuteSounds(on)
         ns.Config:Set("muteSoundsAt", at)
     end
     if widgets and widgets.muteSounds then widgets.muteSounds:SetChecked(on) end
+    if widgets and widgets.muteSoundsHere then widgets.muteSoundsHere:SetChecked(on) end
 end
 
 function UI:ClearPriceData()
@@ -2849,12 +3637,33 @@ function UI:ClearPriceData()
     if UI.UpdateHeader then UI:UpdateHeader() end
 end
 
+--- Settings a reset leaves alone (the owner said build Tradeskills Settings:
+--- Set Default, 2026-11-23): the ALL ADDONS choices, shared by all five and
+--- changed in the others too when changed here; small windows' spots; and
+--- the characters and account names picked, which are kept like data.
+UI.RESET_KEEPS = {
+    textSize = true, windowStyle = true, windowEffects = true,
+    goldTrackerX = true, goldTrackerY = true,
+    auctionTrackerX = true, auctionTrackerY = true,
+    disenchanterName = true, disenchanterGuess = true, linkNames = true,
+}
+
+--- Settings with no entry in the defaults (nil is how they start), put back
+--- with the rest.
+UI.RESET_ALSO = { "tsmPriceSource", "tsmGearPriceSource", "snipeConfirmOver" }
+
 --- Put every setting back to how it started.
 function UI:ResetSettings()
     -- Through Config:Set, as every other setting change is, so a session
     -- keeping its settings in the backup store saves these too.
     for key, value in pairs(ns.Config.DEFAULTS.settings) do
-        ns.Config:Set(key, value)
+        if not UI.RESET_KEEPS[key] then
+            if type(value) == "table" then value = CopyTable and CopyTable(value) or value end
+            ns.Config:Set(key, value)
+        end
+    end
+    for _, key in ipairs(UI.RESET_ALSO) do
+        ns.Config:Set(key, nil)
     end
 
     -- What each control does on a change, done for the reset too. Only the
@@ -2874,8 +3683,19 @@ function UI:ResetSettings()
         end
     end
 
-    ns.Print(L["settings reset to defaults"])
+    ns.Print(L["Every Tradeskills setting is back to how it started."])
     if UI.RefreshActiveTab then UI:RefreshActiveTab() end
+end
+
+--- How long the red Confirm waits for the second click, in seconds.
+UI.RESTORE_CONFIRM_SECONDS = 4
+
+--- Grey the old disenchant results buttons when there is nothing to move.
+function UI:RefreshSettingsPlain()
+    local any = ns.DisenchantLog ~= nil and ns.DisenchantLog:PlainCount() > 0
+    for _, button in ipairs({ widgets.plainMove, widgets.plainClear }) do
+        if button and button.SetEnabledState then button:SetEnabledState(any) end
+    end
 end
 
 --- True when the typed words are "confirm".
@@ -2967,4 +3787,16 @@ if ns.SharedChoices then
         if not ns.db or not ns.db.settings then return nil end
         return ns.db.settings.muteSounds == true, ns.db.settings.muteSoundsAt
     end)
+end
+
+--- Settings on the All Addons page (the one window's gear): the page is
+--- saved as the one to show, then the Settings tab opens on it.
+function UI:OpenAllAddons()
+    ns.Config:Set("settingsPage", "all")
+    if self.window and self.window:IsShown() and self.activeTab == "settings" then
+        if pages.all then ShowPage("all") end
+        return
+    end
+    self:OpenSettings()
+    if pages.all and widgets.bar then ShowPage("all") end
 end

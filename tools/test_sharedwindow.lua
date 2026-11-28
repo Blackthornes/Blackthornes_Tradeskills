@@ -30,9 +30,28 @@
 --      lets it go back to the addon open before.
 --  12. Dragged while docked it keeps that spot by the game's window; a small
 --      window keeps where it was dragged; Set Default puts every one back.
+--  13. The free side: it docks on the right when that fits, on the left
+--      when only that fits, and shrinks to the bigger gap when neither
+--      does (a little only; with far too little room it keeps its size and
+--      overlaps; once resized by hand it never shrinks); undocked it has
+--      its own size.
+--  15. Shelves: pieces in their first spot line up down the top shelf in
+--      order, a dragged or hidden one takes no room, the ones after it are
+--      laid again when one shows, hides or changes height, the right shelf
+--      stands left of the game's quest list, and nothing moves in a fight.
+--  16. The gear at the foot of the rail shows once an addon has the All
+--      Addons page and opens it there, on the addon showing when it can.
+--  17. A place's own addon (`prefer`): up on another addon as a vendor
+--      opens, the window turns to Butler when it has moved in and wants
+--      the vendor, and goes back to the addon open before as it closes,
+--      every visit; Butler opening it first changes nothing; without
+--      Butler, or with Butler not wanting it, it stays where it was.
+--  14. Two game windows at once (the character sheet at a vendor, heard by
+--      HookScript): it docks beside the newest and goes back beside the
+--      other when that one closes.
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "time", "BlackthornesWindow",
-    "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum" }
+    "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum", "CharacterFrame", "ContainerFrame1", "BlackthornesShelves", "ObjectiveTrackerFrame" }
 local saved = {}
 for _, name in ipairs(NAMES) do saved[name] = _G[name] end
 
@@ -155,7 +174,15 @@ assert(dbA.oneWindowPick == "alpha" and dbC.oneWindowPick == "alpha", "the pick 
 assert(not SW.Pick("beta"), "one that has not moved in is not picked")
 assert(log[#log] == "open beta", "it opens its own window")
 
+-- A tall addon stretched the window; the next one starts from the usual
+-- size, its top left corner kept (2026-11-16).
+frame:SetHeight(1000)
+frame.left, frame.top = 100, 600
 assert(SW.Pick("gamma"), "picks the next")
+assert(frame:GetHeight() == SW.HEIGHT and frame:GetWidth() == SW.WIDTH, "back to the usual size for the next addon")
+assert(frame.point and frame.point[1] == "TOPLEFT" and frame.point[4] == 100 and frame.point[5] == 600,
+    "its top left corner stays put")
+assert(select(2, SW.BaseSize()) == SW.HEIGHT, "the usual height undocked")
 assert(log[#log - 1] == "leave alpha" and log[#log] == "enter gamma", "the last one lets go first")
 frame.rail.buttons[1].scripts.OnClick(frame.rail.buttons[1], "RightButton")
 assert(log[#log] == "settings alpha", "right-click opens its settings")
@@ -166,6 +193,13 @@ assert(dbA.oneWindowLeft == 100 and dbB.oneWindowTop == 600, "the place is kept 
 frame.grip.scripts.OnClick(frame.grip, "RightButton")
 assert(dbA.oneWindowScale == 100, "right-click is the normal size")
 assert(SW.Clamp(10) == 50 and SW.Clamp(400) == 150 and SW.Clamp(nil) == 100, "the scale stays in range")
+
+-- Folding into the round button hides the pages; a page asking for a
+-- close as it hides is no close (it vanished for good, 2026-11-22).
+rawset(frame, "blackthornesFold", { folding = true })
+SW.Close()
+assert(frame:IsShown(), "no close while it folds")
+rawset(frame, "blackthornesFold", nil)
 
 SW.Close()
 assert(log[#log] == "leave gamma", "closing lets the pages go")
@@ -334,7 +368,8 @@ Enum = nil
 assert(SW.InteractionPlace(17) == "mail" and SW.InteractionPlace(5) == "vendor"
     and SW.InteractionPlace(7) == "trainer" and SW.InteractionPlace(21) == "auction",
     "the numbers stand in without an Enum")
-assert(SW.InteractionPlace(8) == nil and SW.InteractionPlace("mail") == nil, "a bank or junk is no place")
+assert(SW.InteractionPlace(8) == "bank" and SW.InteractionPlace(22) == "stable", "the bank and stable too")
+assert(SW.InteractionPlace(3) == nil and SW.InteractionPlace("mail") == nil, "a gossip or junk is no place")
 Enum = { PlayerInteractionType = { MailInfo = 40, Merchant = 41, Trainer = 42, Auctioneer = 43 } }
 assert(SW.InteractionPlace(40) == "mail" and SW.InteractionPlace(17) == nil, "the client's Enum wins")
 now = now + 5
@@ -402,6 +437,27 @@ do
     SW.Arrived("auction")
     SW.Open("tradeskills")
     assert(SW.Docked() and frame.point[4] == 900 and frame.point[5] == 650, "next visit, the same spot")
+    -- Mid-drag, nothing puts it back, even when the game's window or the
+    -- bags shift under it (players saw it snap back at the profession
+    -- window, 2026-11-17); the drop is kept as before.
+    frame.scripts.OnDragStart(frame)
+    assert(SW.Dragging(), "a drag is heard")
+    frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 500, 500 }
+    AuctionHouseFrame.right = 850
+    assert(SW.Keep() == false and frame.point[4] == 500, "the watcher leaves it alone while dragged")
+    assert(SW.Dock(true) == false and frame.point[4] == 500, "nothing docks it mid-drag")
+    frame.left, frame.top = 500, 500
+    frame.scripts.OnDragStop(frame)
+    assert(not SW.Dragging(), "the drag ends on the drop")
+    assert(SW.Keep() == false and frame.point[4] == 500, "dropped there, it stays")
+    AuctionHouseFrame.right = 840
+    assert(SW.Keep() and frame.point[4] == 490 and frame.point[5] == 500,
+        "the game's window moved back: the drop's spot from it")
+    -- A drop never heard ends once the mouse button is up.
+    frame.scripts.OnDragStart(frame)
+    _G.IsMouseButtonDown = function() return false end
+    assert(not SW.Dragging(), "button up: the drag is over")
+    _G.IsMouseButtonDown = nil
     local ran = 0
     SW.AddSpotReset("beta", function() ran = ran + 1 end)
     SW.AddSpotReset("alpha", function() error("broken") end)
@@ -440,6 +496,249 @@ do
     SW.ResetAllSpots()
     assert(dbA.windowSpots == nil, "Set Default forgets it")
     assert(small.point[1] == "CENTER" and small.point[5] == 40, "and puts it back where it started")
+end
+
+-- 13. The free side.
+do
+    local savedW, savedS = UIParent.width, UIParent.GetEffectiveScale
+    MerchantFrame.left, MerchantFrame.right, MerchantFrame.top = 100, 400, 650
+    UIParent.width = 5000
+    now = now + 5
+    SW.Arrived("vendor")
+    SW.Open("alpha")
+    assert(SW.Docked() and frame.point[4] == 400 + SW.DOCK_GAP, "room on the right: the right")
+    local w = frame:GetWidth()
+    local own = SW.Clamp(dbA.oneWindowScale) / 100
+    MerchantFrame.left, MerchantFrame.right = 2000, 2300
+    UIParent.width = 2350
+    assert(SW.Keep() and frame.point[4] == 2000 - w - SW.DOCK_GAP, "room on the left only: the left")
+    -- A little short on both sides: a little smaller, on the right.
+    local gap = math.floor(w * 0.95)
+    MerchantFrame.left, MerchantFrame.right = gap, gap + 300
+    UIParent.width = 2 * gap + 300
+    assert(SW.Keep() and math.abs(frame.point[4] - ((gap + 300) * own / frame.scale + SW.DOCK_GAP)) < 1e-6,
+        "neither fits: the right, the bigger gap on a tie")
+    assert(frame.scale < own and frame.scale >= own * SW.SHRINK_LEAST - 1e-9, "shrunk a little to fit")
+    -- Far too little room: it keeps its size and stays on the screen.
+    MerchantFrame.left, MerchantFrame.right = 300, 600
+    UIParent.width = 900
+    SW.Keep()
+    assert(frame.scale == own, "never shrunk out of reading: it keeps its size")
+    -- (The stand-in frames give an effective scale of 1.)
+    assert(frame.point[4] >= 0 and frame.point[4] + w <= 900 + 1e-6, "and stays on the screen")
+    -- Resized by hand while docked: that size wins, even with no room.
+    MerchantFrame.left, MerchantFrame.right = gap, gap + 300
+    UIParent.width = 2 * gap + 300
+    SW.Keep()
+    assert(frame.scale < own, "shrunk a little before the grip")
+    local shrunk = frame.scale
+    local grip = frame.grip
+    -- Grabbing the grip starts from the saved size, not the shrunk one.
+    local savedCursor = GetCursorPosition
+    GetCursorPosition = function() return 500, 500 end
+    grip.scripts.OnMouseDown(grip, "LeftButton")
+    grip.scripts.OnUpdate(grip)
+    grip.scripts.OnMouseUp(grip)
+    GetCursorPosition = savedCursor
+    assert(dbA.oneWindowScale == own * 100 and frame.scale == own,
+        "a grab with no move keeps the saved size and shows it")
+    SW.Undock()
+    SW.Dock()
+    assert(frame.scale < own, "shrunk a little again on a fresh dock")
+    grip.scripts.OnClick(grip, "RightButton")
+    assert(dbA.oneWindowScale == 100 and frame.scale == 1, "the grip's size is kept, not the shrunk one")
+    dbA.oneWindowScale = own * 100
+    SW.Dock(true)
+    assert(frame.scale == own and shrunk < own, "after the grip it no longer shrinks")
+    SW.Undock()
+    UIParent.width = 5000
+    assert(SW.Keep() and frame.scale == own, "room again: its own size")
+    MerchantFrame.left, MerchantFrame.right = 1000, 1300
+    ContainerFrame1 = Object()
+    ContainerFrame1.left = 1500
+    assert(SW.Keep() and frame.point[4] == 1000 - w - SW.DOCK_GAP, "bags open on the right: the left")
+    ContainerFrame1:Hide()
+    assert(SW.Keep() and frame.point[4] == 1300 + SW.DOCK_GAP, "bags shut: the right again")
+    ContainerFrame1 = nil
+    MerchantFrame.left, MerchantFrame.right = 2000, 2300
+    UIParent.width = 2350
+    SW.Keep()
+    -- 14. The character sheet opens at the vendor.
+    CharacterFrame = Object()
+    CharacterFrame.left, CharacterFrame.right, CharacterFrame.top = 50, 380, 700
+    SW.HookPlaces()
+    SW.HookPlaces()
+    assert(#CharacterFrame.hooks.OnShow == 1, "the sheet is watched once")
+    UIParent.width = 5000
+    CharacterFrame:Fire("OnShow")
+    assert(SW.Place() == "character" and SW.Docked() and frame.point[4] == 380 + SW.DOCK_GAP,
+        "beside the character sheet")
+    CharacterFrame:Fire("OnHide")
+    assert(SW.Place() == "vendor" and SW.Docked() and frame.point[4] == 2300 + SW.DOCK_GAP,
+        "back beside the vendor")
+    SW.Close()
+    SW.Left("vendor")
+    assert(not SW.Docked() and SW.Place() == nil, "the vendor closes: no place")
+    CharacterFrame:Fire("OnShow")
+    assert(SW.Place() == "character" and not SW.Docked(), "closed, the sheet docks nothing")
+    CharacterFrame:Fire("OnHide")
+    assert(SW.Place() == nil, "and lets go")
+    UIParent.width = savedW
+    SW.Open("gamma")
+end
+
+-- 15. Shelves.
+do
+    BlackthornesShelves.pieces = {}
+    UIParent.width = 1000
+    local function Piece(h)
+        local f = Object()
+        f.height = h
+        return f
+    end
+    local arrow, bar, gold = Piece(160), Piece(30), Piece(20)
+    local laid = {}
+    local barFree = true
+    SW.ShelfJoin("arrow.test", { frame = arrow, place = function() laid[#laid + 1] = "arrow" end })
+    SW.ShelfJoin("xpbar.test", { frame = bar, free = function() return barFree end,
+        place = function() laid[#laid + 1] = "bar" end })
+    SW.ShelfJoin("goldbar.test", { frame = gold, place = function() laid[#laid + 1] = "gold" end })
+    local stack = 0
+    SW.ShelfJoin("notice", { shown = function() return stack > 0 end, height = function() return stack end })
+    local top = SW.SHELVES.top
+    local point, x, y = SW.ShelfSpot("goldbar.test")
+    assert(point == "TOP" and x == 0 and y == top.y, "the first piece takes the shelf's top")
+    local _, _, ya = SW.ShelfSpot("arrow.test")
+    assert(ya == top.y - 20 - top.gap, "the arrow under the gold bar")
+    local _, _, yb = SW.ShelfSpot("xpbar.test")
+    assert(yb == ya - 160 - top.gap, "the bar under the arrow")
+    local _, _, yn = SW.ShelfSpot("notice")
+    assert(yn == yb - 30 - top.gap, "notes last")
+    barFree = false
+    local _, _, yn2 = SW.ShelfSpot("notice")
+    assert(yn2 == yb, "a dragged piece takes no room")
+    barFree = true
+    arrow:Hide()
+    local _, _, yb2 = SW.ShelfSpot("xpbar.test")
+    assert(yb2 == ya, "a hidden piece takes no room")
+    laid = {}
+    SW.ShelfChanged("arrow.test")
+    assert(#laid == 1 and laid[1] == "bar", "only the shown pieces after it are laid again")
+    laid = {}
+    arrow:Show()
+    arrow:Fire("OnShow")
+    assert(#laid == 1 and laid[1] == "bar", "showing is heard by itself")
+    SW.ShelfJoin("arrow.test", { frame = arrow, place = function() end })
+    assert(#arrow.hooks.OnShow == 1, "joined again, it is watched once")
+    local fight = _G.InCombatLockdown
+    _G.InCombatLockdown = function() return true end
+    laid = {}
+    SW.ShelfChanged("goldbar.test")
+    assert(#laid == 0, "nothing moves in a fight")
+    _G.InCombatLockdown = fight
+    SW.events.scripts.OnEvent(SW.events, "PLAYER_REGEN_ENABLED")
+    assert(#laid >= 1, "laid once the fight ends")
+    local card = Object()
+    card.height = 80
+    SW.ShelfJoin("travel.test", { shelf = "right", frame = card })
+    local rp, rx, ry = SW.ShelfSpot("travel.test")
+    assert(rp == "TOPRIGHT" and rx == SW.SHELVES.right.x and ry == SW.SHELVES.right.y, "the right shelf, in from the edge")
+    ObjectiveTrackerFrame = Object()
+    ObjectiveTrackerFrame.left = 760
+    local _, rx2 = SW.ShelfSpot("travel.test")
+    assert(rx2 == 760 - 1000 - SW.SHELVES.right.gap, "left of the quest list")
+    ObjectiveTrackerFrame:Hide()
+    local _, rx3 = SW.ShelfSpot("travel.test")
+    assert(rx3 == SW.SHELVES.right.x, "quest list hidden: in from the edge")
+    BlackthornesShelves.pieces = {}
+end
+
+-- 16. The gear.
+do
+    SW.FillRail()
+    assert(not rawget(frame.rail, "gear") or not frame.rail.gear:IsShown(), "no gear while no addon has the page")
+    local opened = {}
+    b.allAddons = function() opened[#opened + 1] = "beta" end
+    c.allAddons = function() opened[#opened + 1] = "gamma" end
+    SW.FillRail()
+    local gear = rawget(frame.rail, "gear")
+    assert(gear and gear:IsShown() and gear.point[1] == "BOTTOM", "the gear at the foot of the rail")
+    SW.Open("gamma")
+    gear.scripts.OnClick(gear, "LeftButton")
+    assert(opened[#opened] == "gamma", "opened on the addon showing")
+    SW.Open("alpha")
+    gear.scripts.OnClick(gear, "LeftButton")
+    assert(opened[#opened] == "beta", "else the first that has it")
+    b.allAddons, c.allAddons = nil, nil
+    SW.FillRail()
+    assert(not gear:IsShown(), "gone again with the page")
+    SW.Open("gamma")
+end
+
+-- 17. Butler at the vendor (a player saw Farmer instead, 2026-11-17).
+do
+    assert(SW.PLACES.vendor.prefer == "butler", "the vendor names Butler")
+    assert(SW.PLACES.vendor.only == nil, "the rail stays at the vendor")
+    SW.Open("gamma")
+    assert(not SW.Docked(), "up on gamma, away from any vendor")
+    -- Without Butler the vendor changes nothing.
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(SW.Docked() and BlackthornesWindow.current == c, "no Butler: it stays on gamma")
+    SW.Left("vendor")
+    assert(BlackthornesWindow.current == c and not SW.Docked(), "still gamma after")
+
+    local dbBu = {}
+    local wantsVendor = true
+    local bu = Entry("butler", 6, dbBu, true)
+    bu.host.wants = function(place) return place == "vendor" and wantsVendor end
+    SW:Join(bu)
+    -- Twice over: the second visit must be Butler too.
+    for visit = 1, 2 do
+        now = now + 5
+        SW.Arrived("vendor")
+        assert(SW.Docked(), "docks at the vendor, visit " .. visit)
+        assert(BlackthornesWindow.current == bu, "turns to Butler, visit " .. visit)
+        SW.Left("vendor")
+        assert(SW.IsOpen() and not SW.Docked() and BlackthornesWindow.current == c,
+            "back on gamma as the vendor closes, visit " .. visit)
+    end
+    -- Butler opened it a moment before the event: nothing turns twice.
+    now = now + 5
+    local enters = 0
+    for _, line in ipairs(log) do if line == "enter butler" then enters = enters + 1 end end
+    SW.Open("butler")
+    SW.Arrived("vendor")
+    local after = 0
+    for _, line in ipairs(log) do if line == "enter butler" then after = after + 1 end end
+    assert(after == enters + 1, "Butler laid in once")
+    SW.Left("vendor")
+    assert(BlackthornesWindow.current == c, "back on gamma after Butler opened it")
+    -- Butler's "open at vendors" unticked: it stays on gamma.
+    wantsVendor = false
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(BlackthornesWindow.current == c, "Butler not wanting the vendor: still gamma")
+    SW.Left("vendor")
+    -- A broken answer changes nothing either.
+    bu.host.wants = function() error("broken") end
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(BlackthornesWindow.current == c, "a broken answer: still gamma")
+    SW.Left("vendor")
+    -- Only the vendor turns to Butler.
+    bu.host.wants = nil
+    now = now + 5
+    SW.Arrived("mail")
+    assert(BlackthornesWindow.current == c, "the mailbox keeps gamma")
+    SW.Left("mail")
+    -- Closed, the vendor opens nothing by itself.
+    SW.Close()
+    now = now + 5
+    SW.Arrived("vendor")
+    assert(not SW.IsOpen(), "closed, it stays closed at the vendor")
+    SW.Left("vendor")
+    SW.Open("gamma")
 end
 
 SW.SetOn(false)

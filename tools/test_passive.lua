@@ -458,4 +458,98 @@ Scanner:CommitBrowseResults({
 check("one that ran to its end is", Prices:GetLastFullScan() ~= nil
     and ns.db.lastFullScanByRealm.TestRealm ~= nil)
 
+--------------------------------------------------------------------------------
+-- A random suffix's price follows the auction house even when the item's
+-- cheap end did not move (a player's report, 2026-11-23: "of the Sorcerer"
+-- kept an old high price, and the auction house needed several refreshes).
+--------------------------------------------------------------------------------
+
+reset()
+local HOOP, MONKEY, SORCERER = 11986, 14311, 14325
+-- Forever's link shape: the old suffix field is empty and the suffix is the
+-- one bonus ID at the end. Util.LinkSuffix is not loaded here; this stand-in
+-- reads that bonus, as Util's does once the bonus is placed.
+local function HoopLink(suffix)
+    return ("|cff1eff00|Hitem:%d::::::::39:::::1:%d|h[Thallium Hoop]|h|r"):format(HOOP, suffix)
+end
+ns.Util.LinkSuffix = function(link)
+    local suffix = type(link) == "string" and tonumber(link:match(":1:(%d+)|h"))
+    return suffix, suffix ~= nil
+end
+local function HoopBook(sorcererPrices)
+    local rows = {}
+    for _ = 1, 12 do rows[#rows + 1] = { buyoutAmount = 2000, quantity = 1, itemLink = HoopLink(MONKEY) } end
+    for _, price in ipairs(sorcererPrices) do
+        rows[#rows + 1] = { buyoutAmount = price, quantity = 1, itemLink = HoopLink(SORCERER) }
+    end
+    return rows
+end
+
+itemResults = HoopBook({ 48398, 48399 })
+Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = HOOP, itemSuffix = 0 })
+check("the Sorcerer's own cheapest is kept", Prices:GetSuffixValue(HOOP, SORCERER, "min") == 48398)
+
+-- A refresh a few seconds later: someone listed a cheaper Sorcerer. The
+-- Monkey rows, the item's cheap end, are the same as before.
+clock = clock + 5
+itemResults = HoopBook({ 30000, 48398, 48399 })
+Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = HOOP, itemSuffix = 0 })
+check("a new cheaper Sorcerer is read on the next look",
+    Prices:GetSuffixValue(HOOP, SORCERER, "min") == 30000)
+check("the item's count follows too", Prices:Get(HOOP).quantity == 15)
+
+-- The very same book again is still a repeat: nothing new is kept.
+local readings = #(Prices:GetSuffixEntry(HOOP, SORCERER).history or {})
+clock = clock + 5
+Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = HOOP, itemSuffix = 0 })
+check("the same book twice is not kept twice",
+    #(Prices:GetSuffixEntry(HOOP, SORCERER).history or {}) == readings)
+ns.Util.LinkSuffix = nil
+
+
+-- Buy for on the Disenchanting tab followed the player's own refresh only
+-- now and then: a price read from a search the addon did not start was kept
+-- but nothing redrew the tab, so it showed a listing already bought until
+-- something else redrew it. One redraw per burst, on the tabs that show it.
+do
+    local redraws, waiting = 0, {}
+    ns.UI = { activeTab = "disenchanting", RefreshActiveTab = function() redraws = redraws + 1 end }
+    local oldAfter = C_Timer.After
+    C_Timer.After = function(_, fn) waiting[#waiting + 1] = fn end
+    local function Run() local list = waiting; waiting = {}; for _, fn in ipairs(list) do fn() end end
+
+    local BRACERS = 2868
+    clock = clock + 120
+    itemResults = { { buyoutAmount = 539, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("a refreshed list redraws the Disenchanting tab once", redraws == 1)
+
+    -- Someone bought the 5s 39c one; the refresh shows 5s 40c.
+    clock = clock + 2
+    itemResults = { { buyoutAmount = 540, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("the next refresh redraws it again", redraws == 2)
+    check("and Buy for reads the new cheapest", Prices:Get(BRACERS).rivalMin == 540)
+
+    -- The same list again teaches nothing, so nothing redraws.
+    clock = clock + 2
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("the same list again redraws nothing", redraws == 2)
+
+    -- A tab that does not show listing prices is left alone.
+    ns.UI.activeTab = "prices"
+    clock = clock + 2
+    itemResults = { { buyoutAmount = 545, quantity = 1 } }
+    Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = BRACERS, itemSuffix = 0 })
+    Run()
+    check("other tabs are not redrawn", redraws == 2)
+
+    C_Timer.After = oldAfter
+    ns.UI = nil
+end
+
 print(("\n%d check(s) passed\n"):format(checks))

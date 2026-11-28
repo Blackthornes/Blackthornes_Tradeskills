@@ -21,6 +21,9 @@
 --   _G.BlackthornesButler.Verdicts:Waiting(itemID, bag, slot)
 --                                                        -- { short, reason, cost, now, usual }
 --   _G.BlackthornesButler.Verdicts:SellAnyway(itemID)    -- the drawer's Sell Anyway
+--   _G.BlackthornesButler.Verdicts:AltLevelUpOn()        -- "Send Level Up Materials to Alts:"
+--   _G.BlackthornesButler.Verdicts:AltRecipesOn()        -- "Mail Recipes to Who Can Learn Them:"
+--   _G.BlackthornesButler.Verdicts:AltsLeftOut()         -- { [key] = true }, alts unticked there
 --
 -- Butler's Wait for a Better Price (2026-11-14): a waiting item stays on
 -- the drawer with a Butler Says Wait tag and a Sell Anyway button, and
@@ -53,6 +56,13 @@ end
 
 function SisterKeeps:IsOn()
     return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsSisterKeeps") == true or false
+end
+
+--- "Craft First" (a player asked, the owner said build it 2026-11-17,
+--- off unless ticked): an item a known craft makes worth more stays off
+--- List all. Never rename `sellHoldsCraftFirst`.
+function SisterKeeps:CraftFirst()
+    return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsCraftFirst") == true or false
 end
 
 --- Gear another character could wear is held back only while "Keep
@@ -171,6 +181,58 @@ local function GearReason(itemID, link, bag, slot)
     return nil
 end
 
+--- Where the game keeps a set's piece: { bags, bag, slot }, or nil when
+--- the client won't say. Read through whichever helper this client has.
+local function SetSpot(location)
+    location = tonumber(location)
+    if not location or location < 2 then return nil end
+    local data = rawget(_G, "EquipmentManager_GetLocationData")
+    if type(data) == "function" then
+        local ok, found = pcall(data, location)
+        if ok and type(found) == "table" then
+            return { bags = found.isBags == true, bag = found.bag, slot = found.slot }
+        end
+    end
+    local unpack = rawget(_G, "EquipmentManager_UnpackLocation")
+    if type(unpack) ~= "function" then return nil end
+    local ok, r = pcall(function() return { unpack(location) } end)
+    if not ok or type(r) ~= "table" or r[3] == nil then return nil end
+    -- Newer clients put a void storage flag before the slot.
+    if #r >= 6 then return { bags = r[3] == true, bag = r[6], slot = r[5] } end
+    return { bags = r[3] == true, bag = r[5], slot = r[4] }
+end
+
+--- Is a copy of this item that an equipment set uses in the bags? Butler
+--- answers by item, so a new crafted copy read as the set's while the set's
+--- own copy was worn (a player's Toughened Leather Gloves, 2026-11-27).
+--- False only when the client shows every set copy is somewhere else (worn
+--- or in the bank); true when one is in the bags or the client won't say.
+function SisterKeeps.SetCopyInBags(itemID)
+    local sets = rawget(_G, "C_EquipmentSet")
+    if type(sets) ~= "table" or type(sets.GetEquipmentSetIDs) ~= "function"
+        or type(sets.GetItemIDs) ~= "function" or type(sets.GetItemLocations) ~= "function" then
+        return true
+    end
+    local ok, setIDs = pcall(sets.GetEquipmentSetIDs)
+    if not ok or type(setIDs) ~= "table" then return true end
+    local found = false
+    for _, setID in ipairs(setIDs) do
+        local fine, ids = pcall(sets.GetItemIDs, setID)
+        local good, locations = pcall(sets.GetItemLocations, setID)
+        if not fine or type(ids) ~= "table" then return true end
+        for slot, id in pairs(ids) do
+            if tonumber(id) == itemID then
+                found = true
+                local spot = good and type(locations) == "table" and SetSpot(locations[slot])
+                if not spot or spot.bags then return true end
+            end
+        end
+    end
+    -- Not in any set the client lists: Butler knows something we don't.
+    if not found then return true end
+    return false
+end
+
 --- What Butler's own lists say: why to keep it, or nil.
 local function ButlerReason(itemID)
     local choice, mailTo = Ask("BlackthornesButler", "Verdicts", "Choice", itemID)
@@ -183,7 +245,7 @@ local function ButlerReason(itemID)
     end
 
     local set = Ask("BlackthornesButler", "Verdicts", "InSet", itemID)
-    if type(set) == "string" and set ~= "" then
+    if type(set) == "string" and set ~= "" and SisterKeeps.SetCopyInBags(itemID) then
         return L.Format("In your %s equipment set", set)
     end
 
@@ -266,6 +328,7 @@ function SisterKeeps:Hold(itemID, held, count, price)
 
     local link = held and held.link
     local key = itemID .. ":" .. count .. ":" .. tostring(price or "") .. ":" .. tostring(self:IsOn())
+        .. ":" .. tostring(self:CraftFirst())
     if type(link) == "string" then
         local ok, itemString = pcall(function()
             local found = string.match(link, "item[%-?%d:]+")
@@ -279,12 +342,76 @@ function SisterKeeps:Hold(itemID, held, count, price)
         answer = { self:Work(itemID, held, count, price) }
         kept[key] = answer
     end
-    return answer[1], answer[2]
+    -- The third answer says which keep it was: "craft" for Craft First,
+    -- so the Sell list knows the row can be queued.
+    return answer[1], answer[2], answer[3]
+end
+
+--- Why to craft it first, or nil: a recipe the character playing knows
+--- (Butler:CraftFor, the check Butler's Craft group uses) makes one of it
+--- worth more than one listed at `price` brings after the cut. Only while
+--- "Craft First" is ticked.
+function SisterKeeps:CraftReason(itemID, count, price)
+    if not self:CraftFirst() then return nil end
+    price = tonumber(price)
+    local butler = ns.Butler
+    if not (price and price > 0 and butler and butler.CraftFor) then return nil end
+    local ok, craft = pcall(butler.CraftFor, butler, itemID, count)
+    if not ok or type(craft) ~= "table" then return nil end
+    local perItem = Number(craft.perItem)
+    if not perItem or perItem <= 0 then return nil end
+    local net = price * 0.95
+    if ns.Profit and ns.Profit.NetFromListing then
+        local fine, value = pcall(ns.Profit.NetFromListing, ns.Profit, itemID, price)
+        if fine and type(value) == "number" then net = value end
+    end
+    if perItem <= net then return nil end
+    local name = craft.itemID and ns.Util and ns.Util.GetItemName
+        and ns.Util.GetItemName(craft.itemID, craft.name) or craft.name
+    if type(name) ~= "string" or name == "" then return nil end
+    local copper = math.floor(perItem + 0.5)
+    local money = ns.Util and ns.Util.FormatMoney and ns.Util.FormatMoney(copper) or tostring(copper)
+    return L.Format("Worth more as %s: %s each", name, money)
+end
+
+--- What an alt needs mailed (2026-11-27), while Butler's "Send Level Up
+--- Materials to Alts:" or "Mail Recipes to Who Can Learn Them:" is ticked:
+--- how many to hold back, and why; or nil. The rest still sells.
+function SisterKeeps.AltHold(itemID, count)
+    local butler = ns.Butler
+    if not butler then return nil end
+    -- Alts the player unticked in Butler ("Characters That Get Them:").
+    local leaveOut = Ask("BlackthornesButler", "Verdicts", "AltsLeftOut")
+    if type(leaveOut) ~= "table" then leaveOut = nil end
+    if Ask("BlackthornesButler", "Verdicts", "AltRecipesOn") == true and butler.RecipeFor then
+        local ok, recipe = pcall(butler.RecipeFor, butler, itemID, leaveOut)
+        if ok and type(recipe) == "table" and type(recipe.to) == "string" then
+            return 1, recipe.now and L.Format("%s can learn this", recipe.to)
+                or L.Format("%s can learn this at %s %d", recipe.to, tostring(recipe.profession), recipe.skill or 0)
+        end
+    end
+    if Ask("BlackthornesButler", "Verdicts", "AltLevelUpOn") == true and butler.AltLevelUp then
+        local ok, needs = pcall(butler.AltLevelUp, butler, leaveOut)
+        local need = ok and type(needs) == "table" and needs[itemID]
+        if need and (need.count or 0) > 0 then
+            return math.min(count, need.count),
+                L.Format("Used to level %s's %s. Needs %d more.", need.to, tostring(need.profession), need.count)
+        end
+    end
+    return nil
 end
 
 function SisterKeeps:Work(itemID, held, count, price)
     local butler, butlerWhy = ButlerHold(itemID, count)
     if butler and butler >= count then return count, butlerWhy end
+    -- The player's own pick in Butler: held whether or not "Keep What
+    -- Other Addons Need" is ticked, as Butler's lists are.
+    local alt, altWhy = SisterKeeps.AltHold(itemID, count)
+    if alt and alt > (butler or 0) then butler, butlerWhy = alt, altWhy end
+    if butler and butler >= count then return count, butlerWhy end
+
+    local craftWhy = self:CraftReason(itemID, count, price)
+    if craftWhy then return count, craftWhy, "craft" end
     if not self:IsOn() then
         if butler and butler > 0 then return butler, butlerWhy end
         return 0, nil

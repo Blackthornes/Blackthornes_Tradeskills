@@ -124,8 +124,8 @@ ring = Ring({ ownMin = 380 })
 Prices:NoteBought(RING, 351, 1, now)
 check("your own listing is still the cheapest listed", ring.rivalMin == nil and ring.min == 380)
 
-ring = Ring({ seen = now + 5 })
-check("a record read after the buy already left it out", Prices:NoteBought(RING, 351, 1, now) == false
+ring = Ring({ seen = now + 5, ladderAt = now + 5, ladder = { 351, 1 } })
+check("a whole book read after the buy already left it out", Prices:NoteBought(RING, 351, 1, now) == false
     and ring.rivalMin == 351)
 
 ring = Ring({ rivalMin = 500, min = 500 })
@@ -261,7 +261,56 @@ Scanner.passiveSeen = { [RING] = { at = clock, price = 351 } }
 AHBuys:Await(RING, 1, 77, 351)
 AHBuys:Confirm(77)
 check("a confirmed buyout takes the listing off the record", ring.rivalMin == nil)
+Scanner.boughtHold = nil
 check("and the same price seen again is read, as another listing", Scanner.passiveSeen[RING] == nil)
+
+print("\na browse row read between the buy and its answer")
+
+-- In the game (2026-11-24): a Heavy Mithril Gauntlet bought at 34s from the
+-- Disenchanting tab. Between the click and the client's answer the shared
+-- browse row was read again ("picked up 1 price(s) from a search the addon
+-- did not start"), still saying 34s, so the record looked newer than the buy
+-- and the buy was never taken off it. The tab kept offering 34s after every
+-- 34s listing was gone.
+local realTime = time
+local clockNow = now
+time = function() return clockNow end
+
+ring = Ring({ quantity = 3, ladder = { 3400, 2, 3600, 1 }, rivalMin = 3400, min = 3400, ladderAt = now - 60 })
+Scanner.passiveSeen = {}
+AHBuys:Await(RING, 1, 81, 3400)
+clockNow = now + 1
+Results({ { itemKey = { itemID = RING }, minPrice = 3400, totalQuantity = 2 } })
+AHBuys:Confirm(81)
+check("one of two at 34s bought: one 34s is left", ring.rivalMin == 3400 and ring.ladder[2] == 1)
+
+clockNow = now + 5
+AHBuys:Await(RING, 1, 82, 3400)
+clockNow = now + 6
+Results({ { itemKey = { itemID = RING }, minPrice = 3400, totalQuantity = 2 } })
+AHBuys:Confirm(82)
+check("the last one at 34s bought: the next price is 36s", ring.rivalMin == 3600 and ring.min == 3600)
+
+clockNow = now + 7
+Results({ { itemKey = { itemID = RING }, minPrice = 3400, totalQuantity = 2 } })
+check("a browse row read right after, still saying 34s, does not bring it back", ring.rivalMin == 3600)
+
+Results({ { itemKey = { itemID = RING }, minPrice = 3600, totalQuantity = 1 } })
+check("the browse row at the new price is read as usual", ring.rivalMin == 3600)
+
+clockNow = now + 7 + Scanner.BOUGHT_HOLD + 1
+Results({ { itemKey = { itemID = RING }, minPrice = 3400, totalQuantity = 1 } })
+check("a new listing at 34s later on is read", ring.rivalMin == 3400)
+
+ring = Ring({ quantity = 3, ladder = { 3400, 1, 3600, 2 }, rivalMin = 3400, min = 3400, ladderAt = now - 60 })
+clockNow = now + 100
+AHBuys:Await(RING, 1, 83, 3400)
+ring.ladder, ring.rivalMin, ring.min, ring.ladderAt, ring.seen = { 3600, 2 }, 3600, 3600, now + 101, now + 101
+clockNow = now + 101
+AHBuys:Confirm(83)
+check("the whole book read after the buy already left it out", ring.rivalMin == 3600 and ring.ladder[2] == 2)
+
+time = realTime
 
 for key, value in pairs(saved) do _G[key] = value end
 

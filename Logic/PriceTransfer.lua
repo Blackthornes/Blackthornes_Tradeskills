@@ -48,6 +48,18 @@ local function RealmKey()
     return Squash(ns.Config:GetRealmKey())
 end
 
+--- One realm and side, the same on every account of one player (a player's
+--- report, 2026-11-16): Forever names the server behind a realm, and two
+--- accounts on one realm can sit on different ones ("CAMWOW EU1 Realm 7
+--- Normal" and "... Realm 3 Normal"), so their codes were refused as another
+--- realm. Case, spaces and the "Realm N" part are dropped, as in Queue's and
+--- AccountLink's RealmKey. Codes still carry the full name, so older copies
+--- of the addon read them as before.
+local function SameRealm(name)
+    return (Squash(name):lower():gsub("realm%d+", ""))
+end
+PriceTransfer.SameRealm = SameRealm
+
 --- The records a code would carry, as { { id, market, min, seen } } by item.
 function PriceTransfer:Collect()
     local prices = ns.Prices:GetTable() or {}
@@ -128,7 +140,7 @@ function PriceTransfer:Parse(code)
     if Comm().Hash(realm .. body) ~= checksum then
         return nil, L["that prices code is damaged, copy it again"]
     end
-    if realm ~= RealmKey() then
+    if SameRealm(realm) ~= SameRealm(RealmKey()) then
         return nil, L["that prices code is from another realm or side"]
     end
 
@@ -180,7 +192,7 @@ function PriceTransfer:Import(code)
             record.rivalMin, record.ownMin, record.ignoredLow = nil, nil, nil
             record.ladder, record.ladderAt, record.quantity, record.odd = nil, nil, nil, nil
             record.scans = math.max(1, tonumber(record.scans) or 0)
-            if type(record.history) ~= "table" then record.history = {} end
+            if type(record.history) ~= "table" and type(record.history) ~= "string" then record.history = {} end
             updated = updated + 1
             ns.Prices:Touch(itemID)
         else

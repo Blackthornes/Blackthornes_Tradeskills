@@ -89,6 +89,7 @@ Writs.DEFAULT_GOAL = "honored"
 --   coinBags[itemID]          = { opens, copper (in all), at }
 --   writCustomers[itemID]     = { name, zone, mapID, x, y, at, fromLog }
 --   writSkipZones[zone]       = true
+--   writsDone[guid][questID]  = resetAt (the daily reset after the turn-in)
 local function Store()
     local db = ns.db
     if not db then return nil end
@@ -102,14 +103,23 @@ local function Store()
     store.coinBags = store.coinBags or {}
     store.writCustomers = store.writCustomers or {}
     store.writSkipZones = store.writSkipZones or {}
+    store.writsDone = store.writsDone or {}
     return store
 end
 
 --- Bumped whenever something a list shows has changed, so it rebuilds.
 Writs.version = 0
 
+--- Told when version moves, so a list that shows can redraw.
+Writs.watchers = {}
+
+function Writs:Watch(fn)
+    if type(fn) == "function" then Writs.watchers[#Writs.watchers + 1] = fn end
+end
+
 local function Changed()
     Writs.version = Writs.version + 1
+    for _, fn in ipairs(Writs.watchers) do pcall(fn) end
 end
 
 local function Now()
@@ -125,13 +135,14 @@ end
 -- Writs by name
 --------------------------------------------------------------------------------
 
-local byItem, byName, typedWrit
+local byItem, byName, typedWrit, byQuest
 
 local function Index()
     if byItem then return end
-    byItem, byName, typedWrit = {}, {}, {}
+    byItem, byName, typedWrit, byQuest = {}, {}, {}, {}
     for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
         byItem[writ.item] = writ
+        if writ.quest then byQuest[writ.quest] = writ end
         byName[writ.name:lower()] = writ
         if writ.writ then typedWrit[writ.writ] = writ end
     end
@@ -645,13 +656,174 @@ function Writs:OnFaction()
     self.standing = standing
 end
 
-function Writs:OnTurnIn(_, _, money)
+function Writs:OnTurnIn(questID, _, money)
+    pcall(Writs.MarkDone, Writs, questID)
     recent.paid = { amount = type(money) == "number" and money or 0, at = Now() }
     -- The standing may move before or after this; look now and once more.
     self:OnFaction()
     if C_Timer and C_Timer.After then
         C_Timer.After(1, function() pcall(Writs.OnFaction, Writs) end)
     end
+end
+
+--------------------------------------------------------------------------------
+-- Done today: each order can be turned in once a day
+--------------------------------------------------------------------------------
+
+-- A player asked for the list to show which orders were already turned in
+-- today, and when new ones come in (2026-11-17, from a mockup the owner said
+-- build). merchantsFavor.writsDone[guid][questID] = resetAt, the time of the
+-- daily reset after the turn-in; done means time() is before it. No clean-up
+-- pass: an old mark just stops counting, and the next turn-in of that writ
+-- writes over its own. Written only when the GUID can be read (one key per
+-- character). Neither reset call is seen on Forever yet; `/bts probe` shows
+-- both (docs/FOREVER_API_FINDINGS.md).
+
+-- One day, the upper bound of a reset count, and the stand-in for a mark
+-- written while the game will not say when the reset is.
+local DAY = 86400
+
+local function Clock()
+    return time and time() or 0
+end
+
+--- Seconds until the daily reset, or nil when the game will not say.
+function Writs.SecondsToReset()
+    local calls = {
+        { rawget(_G, "C_DateAndTime"), "GetSecondsUntilDailyReset" },
+        { _G, "GetQuestResetTime" },
+    }
+    for _, call in ipairs(calls) do
+        local owner, name = call[1], call[2]
+        local fn = type(owner) == "table" and rawget(owner, name) or nil
+        if type(fn) == "function" then
+            local ok, seconds = pcall(function()
+                local v = fn()
+                if type(v) == "number" and v > 0 and v <= DAY + 3600 then return v + 0 end
+            end)
+            if ok and seconds then return seconds end
+        end
+    end
+    return nil
+end
+
+--- The time of the next daily reset, or nil when the game will not say.
+function Writs.ResetAt()
+    local seconds = Writs.SecondsToReset()
+    return seconds and math.floor(Clock() + seconds) or nil
+end
+
+--- The GUID of the character playing, only when the game hands one over
+--- that can be read; a dungeon can hand back a value that raises.
+local function ReadableGUID()
+    local ok, guid = pcall(function()
+        local v = UnitGUID("player")
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end)
+    return ok and guid or nil
+end
+
+--- The writ a quest ID starts, or nil.
+function Writs.WritForQuest(questID)
+    Index()
+    return questID and byQuest[questID] or nil
+end
+
+-- Marks written this session: the game's own done flag may lag behind a
+-- turn-in, so it never clears one of these.
+local markedNow = {}
+-- Writs the game says are open again, though a mark written while it would
+-- not say when the reset is still counts them. Session only; nothing written.
+local openAgain = {}
+
+--- Note a writ's quest turned in by the character playing.
+function Writs:MarkDone(questID)
+    questID = tonumber(questID)
+    if not questID or not Writs.WritForQuest(questID) then return false end
+    local guid = ReadableGUID()
+    local store = guid and Store()
+    if not store then return false end
+    local resetAt = Writs.ResetAt() or math.floor(Clock() + DAY)
+    store.writsDone[guid] = store.writsDone[guid] or {}
+    if store.writsDone[guid][questID] == resetAt then return false end
+    store.writsDone[guid][questID] = resetAt
+    markedNow[questID] = true
+    openAgain[questID] = nil
+    Changed()
+    return true
+end
+
+--- Has the character playing turned this writ in since the last reset?
+--- Returns the reset time too, when done.
+function Writs:IsDone(writ)
+    local quest = type(writ) == "table" and writ.quest or nil
+    if not quest or openAgain[quest] then return false end
+    local store = Store()
+    local key = CharacterKey()
+    local mine = store and key and store.writsDone[key]
+    local resetAt = type(mine) == "table" and tonumber(mine[quest]) or nil
+    if resetAt and Clock() < resetAt then return true, resetAt end
+    return false
+end
+
+--- The game's own word on whether a quest is done today, or nil.
+local function Flagged(questID)
+    local log = rawget(_G, "C_QuestLog")
+    local fn = type(log) == "table" and rawget(log, "IsQuestFlaggedCompleted")
+        or rawget(_G, "IsQuestFlaggedCompleted")
+    if type(fn) ~= "function" then return nil end
+    local ok, done = pcall(function()
+        local v = fn(questID)
+        if v == true then return true end
+        if v == false then return false end
+    end)
+    if ok then return done end
+    return nil
+end
+
+--- Ask the game which writs are done today: those turned in with the addon
+--- off. At login and when the writs list opens.
+function Writs:ReadFlagged()
+    local changed = false
+    for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
+        local quest = writ.quest
+        if quest then
+            local flagged = Flagged(quest)
+            if flagged == true and not self:IsDone(writ) then
+                openAgain[quest] = nil
+                if self:MarkDone(quest) then changed = true end
+            elseif flagged == false and not markedNow[quest] and not openAgain[quest]
+                    and self:IsDone(writ) and not Writs.SecondsToReset() then
+                -- Marked under the one-day stand-in, and the day has turned.
+                openAgain[quest] = true
+                changed = true
+            end
+        end
+    end
+    if changed then Changed() end
+    return changed
+end
+
+--- For `/bts probe`: what each reset call and the done flag answer.
+function Writs.ProbeLines()
+    local lines = {}
+    local function Try(label, fn)
+        local text
+        if type(fn) ~= "function" then
+            text = "missing"
+        else
+            local ok, v = pcall(fn)
+            text = ok and tostring(v) or "error"
+        end
+        lines[#lines + 1] = { label, text }
+    end
+    local dates = rawget(_G, "C_DateAndTime")
+    Try("C_DateAndTime.GetSecondsUntilDailyReset", type(dates) == "table" and rawget(dates, "GetSecondsUntilDailyReset") or nil)
+    Try("GetQuestResetTime", rawget(_G, "GetQuestResetTime"))
+    local log = rawget(_G, "C_QuestLog")
+    lines[#lines + 1] = { "C_QuestLog.IsQuestFlaggedCompleted",
+        (type(log) == "table" and type(rawget(log, "IsQuestFlaggedCompleted")) == "function") and "yes" or "missing" }
+    return lines
 end
 
 --------------------------------------------------------------------------------
@@ -744,7 +916,11 @@ function Writs:GetCustomer(writ)
     -- What players' own play learned, shipped at each release
     -- (Data/ForeverWritCustomers.lua); a spot learned here wins.
     local shipped = rawget(ns, "WRIT_CUSTOMERS")
-    return type(shipped) == "table" and shipped[writ.item] or nil
+    local found = type(shipped) == "table" and shipped[writ.item] or nil
+    if found then return found end
+    -- Then the typed hand-in spots (Data/CraftsmansWrits.lua).
+    local typed = rawget(ns, "WRIT_HAND_INS")
+    return type(typed) == "table" and typed[writ.item] or nil
 end
 
 --- The writs the open quest window asks for: by its title, and by any
@@ -979,8 +1155,11 @@ local function ItemCosts(itemID)
     end
 
     local make, recipeID
-    if ns.Cost and ns.Cost.FindAnyRecipeForItem and ns.Cost.GetMaterialValue then
-        recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    -- Never a craft with a cooldown (FindRecipeToMake): one transmute an
+    -- hour can't fill an order for ten.
+    local find = ns.Cost and (ns.Cost.FindRecipeToMake or ns.Cost.FindAnyRecipeForItem)
+    if find and ns.Cost.GetMaterialValue then
+        recipeID = find(ns.Cost, itemID)
         if recipeID then make = ns.Cost:GetMaterialValue(recipeID) end
     end
     return buy, make, make and recipeID or nil
@@ -1029,9 +1208,14 @@ function Writs:GetRows()
         local perRep
         if total and rep and rep > 0 then perRep = total / rep end
 
+        local done, doneUntil = self:IsDone(writ)
+
         rows[#rows + 1] = {
             key = writ.item,
             writ = writ,
+            -- Turned in today by the character playing (Writs:IsDone).
+            done = done or nil,
+            doneUntil = doneUntil,
             -- The client's own name for the item where it has one; search
             -- still finds the English name.
             name = (not EnglishClient() and ItemName(writ.item)) or writ.name,
@@ -1159,6 +1343,8 @@ function Writs:OnEnable()
     pcall(self.OnBags, self)
     pcall(self.OnFaction, self)
     self.money = ReadMoney()
+    -- Writs turned in with the addon off.
+    pcall(self.ReadFlagged, self)
 
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(self.OnBags))
     ns.RegisterEvent(self, "UPDATE_FACTION", Quietly(self.OnFaction))

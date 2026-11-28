@@ -110,7 +110,7 @@ check("a craft with no cooldown is not kept", ns.db.professionCooldowns[ANA]["sp
 check("an unknown craft not cooling down is not kept", ns.db.professionCooldowns[ANA]["spell:90001"], nil)
 check("nothing said while none is ready", #printed, 0)
 check("a timer waits for it", #timers, 1)
-check("23 hours and a second", timers[1] and timers[1].at, 82801)
+check("looks again within the longest wait", timers[1] and timers[1].at, math.min(82801, Cooldowns.MAX_WAIT))
 
 print("\nwhen it comes ready")
 now, clock = now + 82801, clock + 82801
@@ -238,6 +238,28 @@ for _, character in ipairs(Cooldowns:All()) do
 end
 check("is not listed or said", listed, false)
 check("its saved cooldowns are kept", ns.db.professionCooldowns["Player-9"] ~= nil, true)
+
+print("\na start the client shows past its clock wrap")
+-- Seen 2026-11-18: about 50 days left on a one day transmute. The game's
+-- clock counts in a 32 bit number of milliseconds; once it wraps, a start
+-- read before it shows as far in the future. C_Timer.After refused the wait.
+timers = {}
+cooling[17187] = { clock + 4294967.296 - 3600, 86400 }
+Cooldowns:Read()
+local wrapped = ns.db.professionCooldowns[ANA]["spell:17187"]
+check("a wrapped start reads as the day it is", wrapped and wrapped.readyAt, now + 82800)
+cooling[17187] = { clock + 999999999, 86400 }
+Cooldowns:Read()
+check("never more left than the cooldown is long", wrapped and wrapped.readyAt <= now + 86400, true)
+ns.db.professionCooldowns[ANA]["spell:17187"].readyAt = now + 4377767
+timers = {}
+Cooldowns:Schedule()
+check("a far off one waits no more than the longest wait", timers[1] and timers[1].at, Cooldowns.MAX_WAIT)
+ns.db.professionCooldowns[ANA]["spell:17187"].readyAt = now + 600
+timers = {}
+Cooldowns:Schedule()
+check("a near one waits just till it is ready", timers[1] and timers[1].at, 601)
+cooling[17187] = nil
 
 print("\nin a fight at login")
 InCombatLockdown = function() return true end

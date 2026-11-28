@@ -114,11 +114,12 @@ ItemTooltip.SHIFT_SETTINGS = {
     disenchant = "tooltipDisenchantShift",
     crate   = "tooltipCrateShift",
     bought  = "tooltipBoughtShift",
+    usedin  = "tooltipUsedInShift",
 }
 
 local TooltipShift = ns.TooltipShift
 if TooltipShift then
-    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate", "disenchant", "bought" }
+    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate", "disenchant", "bought", "usedin" }
 
     function TooltipShift.Read(key)
         local name = ItemTooltip.SHIFT_SETTINGS[key]
@@ -137,7 +138,7 @@ end
 if TooltipShift then
     local anyShift = TooltipShift.AnyShift
     function TooltipShift:AnyShift()
-        if ItemTooltip.crateHeld or ItemTooltip.boughtHeld then return true end
+        if ItemTooltip.crateHeld or ItemTooltip.boughtHeld or ItemTooltip.usedInHeld then return true end
         return anyShift(self)
     end
 end
@@ -153,6 +154,20 @@ function ItemTooltip.Shows(key)
     local ok, down = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
     return ok and down == true
 end
+
+--- Is this line on Shift? Its lines that show then show only because Shift
+--- is held, so the tooltip block puts them at the bottom (2026-11-26).
+function ItemTooltip.OnShift(key)
+    local shift = ns.TooltipShift
+    if not (shift and shift.Read) then return false end
+    return shift.Read(key) and true or false
+end
+
+--- Mark lines `first` to the end as shown only while Shift is held.
+local function ShiftFrom(lines, first)
+    for i = first, #lines do lines[i].shift = true end
+end
+ItemTooltip.ShiftFrom = ShiftFrom
 
 --------------------------------------------------------------------------------
 -- Which item a tooltip is showing
@@ -237,15 +252,56 @@ end
 --- The link of the copy a tooltip shows, or nil. Only asked for its random
 --- suffix ("of the Monkey"), so a copy is priced as the copy it is.
 function ItemTooltip:LinkForTooltip(tooltip, data)
+    local link
     local fromData = Field(data, "hyperlink")
-    if type(fromData) == "string" then return fromData end
-
-    for _, getter in ipairs({ Field(_G.TooltipUtil, "GetDisplayedItem"), Field(tooltip, "GetItem") }) do
-        if type(getter) == "function" then
-            local ok, _, link = pcall(getter, tooltip)
-            if ok and type(link) == "string" then return link end
+    if type(fromData) == "string" then
+        link = fromData
+    else
+        -- Not ipairs: a client without the first getter would stop the walk
+        -- before the second.
+        local getters = { Field(_G.TooltipUtil, "GetDisplayedItem"), Field(tooltip, "GetItem") }
+        for i = 1, 2 do
+            local getter = getters[i]
+            if type(getter) == "function" then
+                local ok, _, got = pcall(getter, tooltip)
+                if ok and type(got) == "string" then link = got; break end
+            end
         end
     end
+
+    -- The auction house's list draws each row with SetItemKey(itemID,
+    -- itemLevel, itemSuffix), and the link the tooltip then hands back names
+    -- no suffix: "Zircon Band of Power" was priced as every Zircon Band
+    -- together. The suffix is still in the call that drew it.
+    if not (link and Util.LinkSuffix and Util.LinkSuffix(link)) then
+        local itemID, suffix = ItemTooltip.KeySuffix(tooltip)
+        if itemID and suffix then
+            return ("item:%d:0:0:0:0:0:%d"):format(itemID, suffix)
+        end
+    end
+    return link
+end
+
+--- The item and random suffix of a tooltip drawn from an auction house item
+--- key (`GetItemKey`'s arguments), or nil. Read inside a pcall.
+function ItemTooltip.KeySuffix(tooltip)
+    local info
+    local getInfo = Field(tooltip, "GetPrimaryTooltipInfo")
+    if type(getInfo) == "function" then
+        local ok, got = pcall(getInfo, tooltip)
+        if ok then info = got end
+    end
+    info = info or Field(tooltip, "processingInfo")
+    if Field(info, "getterName") ~= "GetItemKey" then return nil end
+
+    local args = Field(info, "getterArgs")
+    local ok, itemID, suffix = pcall(function()
+        local id, roll = args[1], args[3]
+        if type(id) ~= "number" or type(roll) ~= "number" then return nil end
+        if id <= 0 or roll == 0 then return nil end
+        return id + 0, roll + 0
+    end)
+    if ok and itemID and suffix then return itemID, suffix end
     return nil
 end
 
@@ -322,7 +378,94 @@ end
 -- listing. "What is this worth" is the question a tooltip is asked; what it
 -- would cost to buy one right now is a question asked at the auction house,
 -- where the Prices tab answers it with the whole book.
+--- Lines that belong to Value on Tooltips: the price, lowest posting,
+--- stack total and disenchant value. Only these follow that setting; every other line keeps its
+--- own (a player's report, 2026-11-22: Value off hid the sales and
+--- disenchant lines too).
+local function ValueLine(line)
+    if line then line.value = true end
+    return line
+end
+
+--- Every line for an item, then the value lines taken out when Value on
+--- Tooltips is Off, or on Shift with Shift up (then `held` is set).
 function ItemTooltip:LinesFor(itemID, count, link)
+    local key, now = self:LinesKey(itemID, count, link)
+    local kept = self.keptLines
+    if key and kept and kept.key == key and now - kept.at < self.KEEP_FOR then
+        -- What building them left behind for Shift's redraw (AnyShift).
+        self.crateHeld, self.boughtHeld, self.usedInHeld = kept.crateHeld, kept.boughtHeld, kept.usedInHeld
+        return kept.lines
+    end
+
+    local lines = self:BuildLinesFor(itemID, count, link)
+    if key then
+        self.keptLines = { key = key, at = now, lines = lines,
+            crateHeld = self.crateHeld, boughtHeld = self.boughtHeld, usedInHeld = self.usedInHeld }
+    end
+    return lines
+end
+
+-- The game draws a bag item's tooltip again about five times a second
+-- while the mouse rests on it, and each draw asked every module for its
+-- lines afresh: prices, sales, what uses it, what it disenchants into.
+-- The lines are now kept for this long, for the same item, stack, copy and
+-- Shift key, while no price, setting or bag has changed. Nobody writes to
+-- the lines handed back.
+ItemTooltip.KEEP_FOR = 1
+
+--- What the kept lines were built for, and the time now; nil with no clock.
+function ItemTooltip:LinesKey(itemID, count, link)
+    if not itemID or self.KEEP_FOR <= 0 or type(GetTime) ~= "function" then return nil end
+    local now = GetTime()
+    if type(now) ~= "number" then return nil end
+    local shift = ns.TooltipShift
+    local shared = shift and shift.shared
+    local down
+    if shift then
+        down = shift.ShiftDown()
+    else
+        local ok, held = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
+        down = ok and held and true or false
+    end
+    return table.concat({
+        tostring(itemID), tostring(count), tostring(link), tostring(down),
+        tostring(shared and shared.version),
+        tostring(ns.Config and ns.Config.changes),
+        tostring(ns.Prices and ns.Prices.changes),
+        tostring(ns.Inventory and ns.Inventory.changes),
+    }, "|"), now
+end
+
+--- Let the kept lines go, so the next tooltip is built afresh.
+function ItemTooltip:ForgetLines()
+    self.keptLines = nil
+end
+
+function ItemTooltip:BuildLinesFor(itemID, count, link)
+    local lines = self:AllLinesFor(itemID, count, link)
+    local valueOn = self:IsEnabled()
+    if valueOn and ItemTooltip.Shows("value") then
+        if ItemTooltip.OnShift("value") then
+            for i = 1, #lines do
+                if lines[i].value then lines[i].shift = true end
+            end
+        end
+        return lines
+    end
+
+    local kept = { held = lines.held }
+    for i = 1, #lines do
+        if lines[i].value then
+            if valueOn then kept.held = true end
+        else
+            kept[#kept + 1] = lines[i]
+        end
+    end
+    return kept
+end
+
+function ItemTooltip:AllLinesFor(itemID, count, link)
     local lines = {}
 
     if not itemID or not ns.Prices then return lines end
@@ -338,8 +481,8 @@ function ItemTooltip:LinesFor(itemID, count, link)
     end)
     if poorOk and poor then return lines end
 
-    local mine = self:MyPriceLine(itemID)
-    if mine then lines[#lines + 1] = mine end
+    local mine = self:MyPriceLine(itemID, link)
+    if mine then lines[#lines + 1] = ValueLine(mine) end
 
     -- The auction house's own figure: the player's price has its own line.
     local value
@@ -349,14 +492,34 @@ function ItemTooltip:LinesFor(itemID, count, link)
         value = ns.Prices:GetValue(itemID, "market")
     end
 
+    -- Your other account's scan, when it saw the item after this one did:
+    -- that is your own play too, and an account that never scans would
+    -- otherwise say "not scanned yet" on every item it was sent.
+    local linkedAt
+    if ns.Prices.GetLinkedValue then
+        local linked, at = ns.Prices:GetLinkedValue(itemID, "market", value)
+        if linked and linked > 0 then value, linkedAt = linked, at end
+    end
+
+    -- A random suffix with a price of its own ("of the Monkey" can sell for
+    -- far more than "of the Spirit"): the value and lowest posting are this
+    -- suffix's, as the auction house lists it, not every suffix's together.
+    local roll = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link)
+    local rollValue = roll and ns.Prices.GetSuffixValue and ns.Prices:GetSuffixValue(itemID, roll, "market")
+    local rollEntry
+    if rollValue and rollValue > 0 then
+        value = rollValue
+        rollEntry = ns.Prices.GetSuffixEntry and ns.Prices:GetSuffixEntry(itemID, roll) or {}
+    end
+
     -- A stored zero is a scan that saw no listings, not an item the market
     -- values at nothing.
     if not value or value <= 0 then
         if self.IsAuctionable(itemID) then
             -- Searched and found empty is not the same as never looked at.
             local record = ns.Prices.Get and ns.Prices:Get(itemID)
-            lines[#lines + 1] = { L["Auction value"],
-                (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true }
+            lines[#lines + 1] = ValueLine({ L["Auction value"],
+                (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true })
         end
 
         self:AddDemandLines(lines, itemID)
@@ -367,6 +530,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
         self:AddCraftedLines(lines, itemID)
         self:AddBoughtLines(lines, itemID)
+        self:AddUsedInLines(lines, itemID)
         self:AddRecipeLines(lines, itemID)
         self:AddSealedLines(lines, itemID)
         self:AddCrateLines(lines, itemID)
@@ -378,29 +542,47 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     -- An old price is still the best anyone has, so it is shown -- with its
     -- age, which is the part that decides whether to trust it.
-    if ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
+    if rollEntry then
+        local seen = tonumber(rollEntry.seen)
+        local fresh = ns.Config and ns.Config:Get("staleAfterSeconds") or (48 * 3600)
+        if seen and time() - seen > fresh then
+            text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(time() - seen))
+        end
+    elseif linkedAt then
+        local fresh = ns.Config and ns.Config:Get("staleAfterSeconds") or (48 * 3600)
+        local age = time() - linkedAt
+        if age > fresh then
+            text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(age))
+        end
+    elseif ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
         local age = ns.Prices:GetAge(itemID)
         if age then
             text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(age))
         end
     end
 
-    lines[#lines + 1] = { L["Auction value"], text }
+    lines[#lines + 1] = ValueLine({ L["Auction value"], text })
 
-    -- A random suffix with a price of its own ("of the Monkey" can sell for
-    -- far more than "of the Spirit"): what this one goes for.
-    local roll = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link)
-    local rollValue = roll and ns.Prices:GetSuffixValue(itemID, roll, "market")
-    if rollValue and rollValue > 0 then
-        lines[#lines + 1] = { L["This one"], Util.FormatMoney(rollValue, { short = true }) }
+    local lowest
+    if rollEntry then
+        local min = tonumber(rollEntry.min)
+        if min and min > 0 then
+            lowest = { L["Lowest posting"], Util.FormatMoney(min, { short = true }) }
+        end
+    elseif linkedAt then
+        local min = ns.Prices:GetLinkedValue(itemID, "lowest")
+        if min and min > 0 then
+            lowest = { L["Lowest posting"], Util.FormatMoney(min, { short = true }) }
+        end
+    else
+        lowest = self:LowestLine(itemID)
     end
-
-    local lowest = self:LowestLine(itemID)
-    if lowest then lines[#lines + 1] = lowest end
+    if lowest then lines[#lines + 1] = ValueLine(lowest) end
 
     local trend = self:TrendLine(itemID)
     if trend then
         if ItemTooltip.Shows("trend") then
+            if ItemTooltip.OnShift("trend") then trend.shift = true end
             lines[#lines + 1] = trend
         else
             lines.held = true
@@ -409,9 +591,9 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     if count and count > 1 then
         lines[#lines + 1] = {
-            L.Format("Stack of %d", count),
+            L.Format("Stack of %d:", count),
             Util.FormatMoney(value * count, { short = true }),
-            stack = true,
+            stack = true, value = true,
         }
     end
 
@@ -423,6 +605,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     self:AddCraftedLines(lines, itemID)
     self:AddBoughtLines(lines, itemID)
+    self:AddUsedInLines(lines, itemID)
     self:AddRecipeLines(lines, itemID)
     self:AddSealedLines(lines, itemID)
     self:AddCrateLines(lines, itemID)
@@ -440,7 +623,7 @@ function ItemTooltip:AddSealedLines(lines, itemID)
     local info = writs:SealedInfo(itemID, 5)
     if not info then return end
 
-    lines[#lines + 1] = { L.Format("You opened %d", info.opens), "" }
+    lines[#lines + 1] = { L.Format("You Opened %d:", info.opens), "" }
     for _, row in ipairs(info.rows) do
         lines[#lines + 1] = { row.writ.name, L.Format("%d of %d", row.count, info.opens) }
     end
@@ -465,6 +648,8 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         lines.held = true
         return
     end
+    local first = #lines + 1
+    local onShift = ItemTooltip.OnShift("crate")
 
     local function Money(value) return Util.FormatMoney(value, { short = true }) end
     local best = row.best
@@ -483,12 +668,16 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         lines[#lines + 1] = { L["Each Favor"], Money(math.floor(row.perFavor + 0.5)), color = "accent" }
     end
 
+    if onShift then ShiftFrom(lines, first) end
+
     local shift = ns.TooltipShift
     if not (shift and shift.ShiftDown()) then
         lines.held = true
         self.crateHeld = true
         return
     end
+    -- The rest show only while Shift is held, whatever the crate's choice.
+    first = #lines + 1
     lines[#lines + 1] = { L["Crate on the AH"], row.cratePrice and Money(row.cratePrice) or L["none listed"] }
     if best then
         local have = favor.Owned(best.itemID)
@@ -502,6 +691,7 @@ function ItemTooltip:AddCrateLines(lines, itemID)
         local name = favor.NameOf(next.itemID) or "?"
         lines[#lines + 1] = { L["Next Best"], L.Format("%d %s", next.count, name) }
     end
+    ShiftFrom(lines, first)
 end
 
 --- The market value now against its average over the picked period
@@ -524,10 +714,12 @@ end
 
 --- The price the player set on the Prices tab, in gold so it stands out
 --- from the auction figures, saying how it is used. nil when none is set.
-function ItemTooltip:MyPriceLine(itemID)
+function ItemTooltip:MyPriceLine(itemID, link)
     if type(ns.Prices.GetMine) ~= "function" then return nil end
 
-    local mine, mode = ns.Prices:GetMine(itemID)
+    -- A copy with a random suffix shows that suffix's own price, if it has one.
+    local suffix = type(link) == "string" and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link) or nil
+    local mine, mode = ns.Prices:GetMine(itemID, suffix)
     if not mine then return nil end
 
     return { L["My price"], L.Format("%s  (%s)", Util.FormatMoney(mine, { short = true }),
@@ -547,7 +739,35 @@ function ItemTooltip:AddRecipeLines(lines, itemID)
         return
     end
 
-    for _, line in ipairs(recipe) do lines[#lines + 1] = line end
+    -- Copies, since the recipe book may keep its own.
+    local onShift = ItemTooltip.OnShift("recipe")
+    for _, line in ipairs(recipe) do
+        if onShift and type(line) == "table" then
+            local copy = {}
+            for k, v in pairs(line) do copy[k] = v end
+            copy.shift = true
+            line = copy
+        end
+        lines[#lines + 1] = line
+    end
+    local first = #lines + 1
+    self:AddWishlistLine(lines, itemID)
+    if onShift then ShiftFrom(lines, first) end
+end
+
+--- "On your wishlist", one gold line on a recipe item that teaches a
+--- recipe the character playing starred (Logic/Wishlist.lua, 2026-11-17).
+--- It follows the recipe lines' Off, Shift or Always.
+function ItemTooltip:AddWishlistLine(lines, itemID)
+    local wishlist, book = ns.Wishlist, ns.RecipeBook
+    if not (wishlist and wishlist:IsOn() and book and book.ForItem) then return end
+    local ok, record = pcall(book.ForItem, book, itemID)
+    if not ok or type(record) ~= "table" or not wishlist:Has(record.recipeID) then return end
+    if not ItemTooltip.Shows("recipe") then
+        lines.held = true
+        return
+    end
+    lines[#lines + 1] = { L["On your wishlist"], "" }
 end
 
 --- What it cost the last time you made one, what it last went up at, and
@@ -585,7 +805,8 @@ function ItemTooltip:AddBoughtLines(lines, itemID)
         ago = "  (" .. Util.FormatAgeAgo(math.max(0, time() - bought.at)) .. ")"
     end
     lines[#lines + 1] = { L["Bought for"],
-        L.Format("%s each", Util.FormatMoney(bought.each, { short = true })) .. ago }
+        L.Format("%s each", Util.FormatMoney(bought.each, { short = true })) .. ago,
+        shift = ItemTooltip.OnShift("bought") or nil }
 
     -- One buy has no average worth saying.
     if (bought.buys or 0) < 2 then return end
@@ -598,7 +819,63 @@ function ItemTooltip:AddBoughtLines(lines, itemID)
     end
     lines[#lines + 1] = { L["Average paid"],
         Util.FormatMoney(bought.average, { short = true }) .. "  "
-            .. L.Format("(%d in %d buys)", bought.units, bought.buys) }
+            .. L.Format("(%d in %d buys)", bought.units, bought.buys), shift = true }
+end
+
+--- Which professions use a material (asked 2026-11-17, Logic/UsedIn.lua):
+--- "Used in" with each profession your characters know a recipe for and how
+--- many, and with Shift held up to three recipe names for each. When none
+--- of them use it, the professions that could, in grey, and with Shift one
+--- recipe for example. Nothing for an item no recipe uses.
+function ItemTooltip:AddUsedInLines(lines, itemID)
+    self.usedInHeld = nil
+    if ns.Config and ns.Config:Get("tooltipUsedIn") == false then return end
+    local usedIn = ns.UsedIn
+    if not (usedIn and usedIn.For) then return end
+
+    local ok, answer = pcall(usedIn.For, usedIn, itemID)
+    if not ok or type(answer) ~= "table" then return end
+
+    if not ItemTooltip.Shows("usedin") then
+        lines.held = true
+        return
+    end
+
+    local first = #lines + 1
+    local wrap = usedIn.Wrap
+    local grey = not answer.mine or nil
+    local function Add(label, text, muted)
+        for i, part in ipairs(wrap(text)) do
+            lines[#lines + 1] = { i == 1 and label or " ", part, muted }
+        end
+    end
+
+    if answer.mine then
+        Add(L["Used in"], answer.counts)
+    else
+        Add(L["Used in"], answer.list, grey)
+        Add(" ", L["Your characters don't use it yet."], grey)
+    end
+
+    if ItemTooltip.OnShift("usedin") then ShiftFrom(lines, first) end
+
+    local shift = ns.TooltipShift
+    if shift and not shift.ShiftDown() then
+        lines.held = true
+        self.usedInHeld = true
+        return
+    end
+
+    -- The rest show only while Shift is held.
+    first = #lines + 1
+    if answer.mine then
+        for _, profession in ipairs(answer.professions) do
+            Add("   " .. profession[1], profession[2])
+        end
+    elseif answer.example then
+        Add(L["For example"], answer.example)
+    end
+    ShiftFrom(lines, first)
 end
 
 --- How well it sells (Logic/Demand.lua), coloured by level. Nothing when
@@ -716,10 +993,17 @@ function ItemTooltip:AddDemandLines(lines, itemID)
         lines.held = true
         return
     end
+    local first = #lines + 1
 
     local prices = ns.Prices
 
-    if prices and type(prices.GetUnitsSoldPerDay) == "function" then
+    -- TSM's count when "TSM Sold a Day:" is ticked and TSM has one; else
+    -- the player's own scans, as before.
+    local fromTSM = ns.TSMPrices and type(ns.TSMPrices.SoldPerDay) == "function"
+        and ns.TSMPrices:SoldPerDay(itemID)
+    if type(fromTSM) == "number" then
+        lines[#lines + 1] = { INDENT .. L["Sold a day"], L.Format("%s (from TSM)", AboutText(fromTSM)) }
+    elseif prices and type(prices.GetUnitsSoldPerDay) == "function" then
         local ok, perDay = pcall(prices.GetUnitsSoldPerDay, prices, itemID)
         if ok and type(perDay) == "number" then
             lines[#lines + 1] = { INDENT .. L["Sold a day"], L.Format("%s (from your scans)", AboutText(perDay)) }
@@ -767,6 +1051,7 @@ function ItemTooltip:AddDemandLines(lines, itemID)
             lines[#lines + 1] = { INDENT .. L["You sold"], text }
         end
     end
+    if ItemTooltip.OnShift("sales") then ShiftFrom(lines, first) end
 end
 
 --- What one of the item is worth disenchanted, for anything that can be.
@@ -781,7 +1066,9 @@ function ItemTooltip:DisenchantLine(itemID)
     local text = Util.FormatMoney(value, { short = true })
     if partial then text = L.Format("%s or more", text) end
 
-    return { L["Disenchant value"], text }
+    -- A price, so it follows Value on Tooltips (a player's report,
+    -- 2026-11-24: no setting hid it).
+    return ValueLine({ L["Disenchant value"], text })
 end
 
 --- Does the character playing disenchant? The client's spell checks first;
@@ -823,6 +1110,7 @@ function ItemTooltip:AddDisenchantResults(lines, itemID)
         lines.held = true
         return
     end
+    local onShift = ItemTooltip.OnShift("disenchant") or nil
     for _, outcome in ipairs(outcomes) do
         local name = (ns.Disenchant.MaterialName and ns.Disenchant:MaterialName(outcome.itemID))
             or Util.GetItemLabel(outcome.itemID)
@@ -838,16 +1126,17 @@ function ItemTooltip:AddDisenchantResults(lines, itemID)
         if okPrice and type(price) == "number" and price > 0 and Util.FormatMoney then
             right = right .. "   " .. L.Format("%s each", Util.FormatMoney(price, { short = true }))
         end
-        lines[#lines + 1] = { INDENT .. name, right }
+        lines[#lines + 1] = { INDENT .. name, right, shift = onShift }
     end
 end
 
 --- The cheapest listing the last scan saw, beside the smoothed value
 --- (2026-09-26: "items should show the lowest seller value in addition to
 --- auction value"). Marked when the cheapest one is your own. A lone
---- listing far below the rest is left out, as the Enchanting pane and the
---- undercut leave it out, so the tooltip does not quote a price that one
---- purchase would clear.
+--- listing far below the rest is shown too (the owner, 2026-11-25:
+--- "lowest posting should just be the lowest posting"), though the value,
+--- the undercut and the Enchanting pane still leave it out. A lone one
+--- bought since is gone from ignoredLow, so it is not shown again from min.
 function ItemTooltip:LowestLine(itemID)
     if type(ns.Prices.Get) ~= "function" then return nil end
 
@@ -858,6 +1147,8 @@ function ItemTooltip:LowestLine(itemID)
     if lowest and ns.Prices.LowestListed then
         lowest = ns.Prices.LowestListed(record) or lowest
     end
+    local lone = tonumber(record.ignoredLow)
+    if lone and lone > 0 and (not lowest or lowest <= 0 or lone < lowest) then lowest = lone end
     if not lowest or lowest <= 0 then
         -- Scanned, and nobody had one up: say so rather than leave it out.
         return { L["Lowest posting"], L["none listed"], true }
@@ -941,7 +1232,6 @@ end
 -- @return "valued", "unscanned", "quiet", "duplicate" or "noitem"
 function ItemTooltip:Decorate(tooltip, data, count)
     if type(tooltip) ~= "table" then return "noitem" end
-    if not self:IsEnabled() then return "quiet" end
 
     -- Adding lines makes the tooltip taller, which means showing it again; on
     -- a client where that re-enters the hook, this is what stops it.
@@ -959,12 +1249,6 @@ function ItemTooltip:Decorate(tooltip, data, count)
     end
 
     if type(Field(tooltip, "AddDoubleLine")) ~= "function" then return "noitem" end
-
-    -- Every value line on Shift, and Shift is up: only the hint goes on.
-    if not ItemTooltip.Shows("value") then
-        self:HeldBack(tooltip)
-        return "held"
-    end
 
     self.writing = true
 
@@ -1052,7 +1336,7 @@ function ItemTooltip:AddStackLine(tooltip, count)
 
     WriteLine(tooltip, stackLine)
     Try(Field(tooltip, "Show"), tooltip)
-    self:ResizeSoon(tooltip, itemID)
+    self:ResizeSoon(tooltip, mark.itemID)
 
     self.writing = false
 
@@ -1060,6 +1344,129 @@ function ItemTooltip:AddStackLine(tooltip, count)
     mark.lines = Try(Field(tooltip, "NumLines"), tooltip) or mark.lines
 
     return true
+end
+
+--------------------------------------------------------------------------------
+-- The shared tooltip block (UI/TooltipBlock.lua, 2026-11-21)
+--------------------------------------------------------------------------------
+
+-- Each line's name as the block shows it: Title Case ending ":". Mapped
+-- from the text a line was built with, translated, so the lines and the
+-- other windows that reuse them (the Recipes tab says "Demand" too) keep
+-- their own words. A name not in this list (an indented material, a
+-- recipe under "Used In:") is shown as it was built.
+ItemTooltip.BLOCK_LABELS = {
+    ["My price"] = "My Price:",
+    ["Auction value"] = "Auction Value:",
+    ["Lowest posting"] = "Lowest Posting:",
+    ["Trend (7 days)"] = "Trend (7 Days):",
+    ["Trend (14 days)"] = "Trend (14 Days):",
+    ["Demand"] = "Demand:",
+    ["Sold a day"] = "Sold a Day:",
+    ["Listed now"] = "Listed Now:",
+    ["Last 7 days"] = "Last 7 Days:",
+    ["You sold"] = "You Sold:",
+    ["Disenchant value"] = "Disenchant Value:",
+    ["Made for"] = "Made For:",
+    ["Last posted"] = "Last Posted:",
+    ["Costs now"] = "Costs Now:",
+    ["Profit now"] = "Profit Now:",
+    ["Bought for"] = "Bought For:",
+    ["Average paid"] = "Average Paid:",
+    ["Used in"] = "Used In:",
+    ["For example"] = "For Example:",
+    ["On your wishlist"] = "On Your Wishlist:",
+    ["Writ inside worth about"] = "Writ Inside Worth:",
+    ["Fill It With"] = "Fill It With:",
+    ["Fills For"] = "Fills For:",
+    ["Pays Back"] = "Pays Back:",
+    ["Each Favor"] = "Each Favor:",
+    ["Crate on the AH"] = "Crate on the AH:",
+    ["You Have"] = "You Have:",
+    ["Next Best"] = "Next Best:",
+    ["Teaches"] = "Teaches:",
+    ["Known by"] = "Known By:",
+    ["Cost to make"] = "Cost to Make:",
+    ["Makes"] = "Makes:",
+    ["Sells for"] = "Sells For:",
+    ["Disenchants for"] = "Disenchants For:",
+    ["Vendors for"] = "Vendors For:",
+    ["Profit per craft"] = "Profit per Craft:",
+    ["Pays for itself"] = "Pays for Itself:",
+}
+
+local blockNames
+--- The block's name for a line built as `text` (indent kept).
+function ItemTooltip.BlockLabel(text)
+    if type(text) ~= "string" then return text end
+    if not blockNames then
+        blockNames = {}
+        for old, new in pairs(ItemTooltip.BLOCK_LABELS) do blockNames[L[old]] = L[new] end
+    end
+    local indent, rest = text:match("^(%s*)(.-)$")
+    local name = blockNames[rest]
+    if not name then return text end
+    return indent .. name
+end
+
+local function ToRGB(hex)
+    if type(hex) ~= "string" or #hex < 8 then return nil end
+    return { Component(hex, 3), Component(hex, 5), Component(hex, 7) }
+end
+
+--- One `{ label, value, muted, color = }` line as the block takes it.
+function ItemTooltip.ToBlock(line)
+    local right = line[2]
+    if right == "" then right = nil end
+    local rightColor = (line.color and ToRGB(ns.COLORS[line.color]))
+        or (line[3] and ToRGB(ns.COLORS[STALE_COLOR])) or nil
+    return { ItemTooltip.BlockLabel(line[1]), right, rightColor = rightColor, shift = line.shift or nil }
+end
+
+--- The bag and slot a tooltip's owner is, when it is a bag slot: where
+--- the stack count is read from. Nil for anything else or unreadable.
+function ItemTooltip.OwnerSlot(tooltip)
+    local ok, bag, slot = pcall(function()
+        local owner = tooltip:GetOwner()
+        if type(owner) ~= "table" then return nil end
+        local getBag = owner.GetBagID
+        if type(getBag) ~= "function" then
+            local parent = owner.GetParent and owner:GetParent()
+            if type(parent) == "table" and type(parent.GetID) == "function" then
+                return parent:GetID(), owner:GetID()
+            end
+            return nil
+        end
+        return getBag(owner), owner:GetID()
+    end)
+    if ok and type(bag) == "number" and type(slot) == "number" then return bag, slot end
+    return nil
+end
+
+--- Tradeskills' lines for the shared block, and whether one was held back.
+function ItemTooltip:BlockLines(tooltip, data)
+    if type(tooltip) ~= "table" then return nil end
+    local itemID = self:ItemForTooltip(tooltip, data)
+    if not itemID then return nil end
+
+    local bag, slot = ItemTooltip.OwnerSlot(tooltip)
+    local count = bag and ItemTooltip.StackCountIn(bag, slot) or nil
+    local lines = self:LinesFor(itemID, count, self:LinkForTooltip(tooltip, data))
+    if #lines == 0 then return nil, lines.held end
+
+    local out = {}
+    for i = 1, #lines do out[i] = ItemTooltip.ToBlock(lines[i]) end
+
+    self.seen = (self.seen or 0) + 1
+    local outcome = lines[1][3] and "unscanned" or "valued"
+    self.counts[outcome] = (self.counts[outcome] or 0) + 1
+    self.fired["tooltip block"] = (self.fired["tooltip block"] or 0) + 1
+
+    -- The inline bars can be measured short on the first showing.
+    decorated[tooltip] = { itemID = itemID, count = count, lines = 0 }
+    self:ResizeSoon(tooltip, itemID)
+
+    return out, lines.held
 end
 
 --- The entry point every hook funnels into, so the counting is in one place.
@@ -1193,6 +1600,18 @@ end
 function ItemTooltip:InstallHooks()
     local installed = {}
 
+    -- The shared block writes every Blackthornes addon's lines in one go,
+    -- in one order; Tradeskills hands it its lines instead of writing them.
+    local block = ns.TooltipBlock
+    if block then
+        block:Provide("Tradeskills:price", "price", 1, function(tooltip, data)
+            return ItemTooltip:BlockLines(tooltip, data)
+        end)
+        installed["tooltip block"] = block:Install()
+        self.installed = installed
+        return installed
+    end
+
     installed["TooltipDataProcessor"] = self:InstallDataProcessor()
     installed["OnTooltipSetItem"] = self:InstallScriptHooks()
 
@@ -1247,8 +1666,7 @@ function ItemTooltip:PrintReport(input)
     ns.Print(("|c%sAuction value on item tooltips|r"):format(ns.COLORS.accent))
 
     if not self:IsEnabled() then
-        ns.PrintRaw(("  |c%sswitched off in Settings|r"):format(ns.COLORS.muted))
-        return
+        ns.PrintRaw(("  |c%svalue lines switched off in Settings|r"):format(ns.COLORS.muted))
     end
 
     local firing = {}

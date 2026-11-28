@@ -66,6 +66,30 @@ local function Round(value)
     return value and math.floor(value + 0.5) or nil
 end
 
+--- How long until new orders come in: "6h 12m", "12m", "under 1m".
+function DealsWrits.ClockText(seconds)
+    seconds = math.max(0, math.floor(seconds or 0))
+    local hours, minutes = math.floor(seconds / 3600), math.floor(seconds % 3600 / 60)
+    if hours > 0 then return L.Format("%dh %dm", hours, minutes) end
+    if minutes > 0 then return L.Format("%dm", minutes) end
+    return L["under 1m"]
+end
+
+--- The clock to the daily reset, or nil when the game will not say.
+local function ResetClock()
+    local seconds = ns.Writs and ns.Writs.SecondsToReset and ns.Writs.SecondsToReset()
+    return seconds and DealsWrits.ClockText(seconds) or nil
+end
+
+local function TextWidth(label)
+    return Theme.TextWidth and Theme.TextWidth(label) or nil
+end
+
+local function Colored(color, text)
+    local hex = ns.COLORS and ns.COLORS[color]
+    return hex and ("|c%s%s|r"):format(hex, text) or text
+end
+
 local function TierName(tier)
     return ns.WRIT_TIERS and ns.WRIT_TIERS[tier] or "?"
 end
@@ -174,7 +198,8 @@ end
 --- The shown columns from the right edge; the name has the rest.
 local function PlaceRow(row)
     local offset = ns.Columns:Place("writs", COLUMNS, row.cells, { byIndex = true })
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.nameRight = offset - 4
+    row.name:SetPoint("RIGHT", row, "RIGHT", row.nameRight - (rawget(row, "tagRoom") or 0), 0)
     row.columnsVersion = ns.Columns.version
 end
 
@@ -200,6 +225,62 @@ local function CreateRow(row)
     end
 
     PlaceRow(row)
+end
+
+--- The green Done Today tag beside a writ's name, made the first time a
+--- row shows a writ turned in today.
+local function MakeTag(row)
+    if rawget(row, "tag") then return row.tag end
+    local tag = CreateFrame("Frame", nil, row)
+    tag.label = Theme.CreateLabel(tag, "tiny", "profit")
+    tag.label:SetPoint("CENTER", 0, 0)
+    tag.label:SetText(L["Done Today"])
+    local r, g, b = Theme.Unpack("profit")
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+        local line = tag:CreateTexture(nil, "BORDER")
+        line:SetColorTexture(r, g, b, 0.5)
+        if side == "TOP" or side == "BOTTOM" then
+            line:SetPoint(side .. "LEFT", 0, 0)
+            line:SetPoint(side .. "RIGHT", 0, 0)
+            line:SetHeight(1)
+        else
+            line:SetPoint("TOP" .. side, 0, 0)
+            line:SetPoint("BOTTOM" .. side, 0, 0)
+            line:SetWidth(1)
+        end
+    end
+    local width = TextWidth(tag.label) or 60
+    tag:SetSize(math.ceil(width) + 10, 14)
+    row.tag = tag
+    return tag
+end
+
+--- A writ turned in today: the tag beside its name, and the row faded in
+--- place so the open orders stand out. The sort and the zones stay put.
+local function ShowDone(row, done)
+    local room = 0
+    if done then room = (tonumber((MakeTag(row):GetWidth())) or 0) + 6 end
+    if room ~= (rawget(row, "tagRoom") or 0) then
+        row.tagRoom = room
+        row.name:SetPoint("RIGHT", row, "RIGHT", (rawget(row, "nameRight") or -4) - room, 0)
+    end
+    if rawget(row, "tag") then row.tag:SetShown(done and true or false) end
+    local fade = done and 0.5 or 1
+    for _, cell in ipairs(row.cells) do cell:SetAlpha(fade) end
+    if row.make then row.make:SetAlpha(fade) end
+    row.name:SetAlpha(fade)
+    row.icon:SetAlpha(done and 0.45 or 1)
+    if row.icon.SetDesaturated then pcall(row.icon.SetDesaturated, row.icon, done and true or false) end
+end
+
+--- After the name is set: the tag just past where its words end.
+local function PlaceTag(row)
+    if not (rawget(row, "tag") and row.tag:IsShown()) then return end
+    local ok, room = pcall(row.name.GetWidth, row.name)
+    local width = TextWidth(row.name) or 0
+    if ok and type(room) == "number" and room > 0 and width > room then width = room end
+    row.tag:ClearAllPoints()
+    row.tag:SetPoint("LEFT", row.name, "LEFT", math.ceil(width) + 6, 0)
 end
 
 --- A zone heading's pieces, made the first time a row shows one.
@@ -237,7 +318,7 @@ local function MakeHeader(row)
     row.learnHint:SetText(L["Turn one in to learn where"])
 end
 
-local function HeaderInfo(entry)
+local function HeaderCounts(entry)
     if entry.notSeen then
         return entry.count == 1 and L["· 1 writ"] or L.Format("· %d writs", entry.count)
     end
@@ -246,6 +327,14 @@ local function HeaderInfo(entry)
     end
     if entry.count == 1 then return L.Format("· 1 writ · %d rep", entry.rep) end
     return L.Format("· %d writs · %d rep", entry.count, entry.rep)
+end
+
+local function HeaderInfo(entry)
+    local text = HeaderCounts(entry)
+    if (entry.done or 0) > 0 then
+        text = text .. " " .. Colored("profit", L.Format("· %d done today", entry.done))
+    end
+    return text
 end
 
 local function ShowHeader(row, entry)
@@ -311,6 +400,7 @@ local function UpdateRow(row, entry)
     for _, cell in ipairs(row.cells) do cell:SetShown(not header) end
     if header then
         if row.make then row.make:Hide() end
+        if rawget(row, "tag") then row.tag:Hide() end
         ShowHeader(row, entry)
         return
     end
@@ -320,7 +410,9 @@ local function UpdateRow(row, entry)
     row.icon:SetPoint("LEFT", 8 + indent, 0)
     row.name:SetPoint("LEFT", 8 + ICON_GUTTER + indent, 0)
 
+    ShowDone(row, entry.done)
     Theme.SetRowName(row.name, NameText(entry))
+    PlaceTag(row)
     Theme.SetItemIcon(row.icon, entry.itemID)
     -- In its rarity colour, faded while it has no price.
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
@@ -370,6 +462,11 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(L.Format("%s for each reputation.", Plain(Round(entry.perRep))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
+    local clock = entry.done and ResetClock()
+    if clock then
+        local r, g, b = Theme.Unpack("profit")
+        GameTooltip:AddLine(L.Format("Done today. You can do it again in %s.", clock), r, g, b, true)
+    end
     if entry.onAHAtPrice then
         GameTooltip:AddLine(L.Format("On the AH at this price: %d", entry.onAHAtPrice), 0.85, 0.85, 0.85)
     end
@@ -738,8 +835,33 @@ function UpdateWrit(entry)
     else
         parts[#parts + 1] = L["* From guides, until you turn one in."]
     end
-    parts[#parts + 1] = L["Each order can be done once a day."]
-    detail.note:SetText(table.concat(parts, " "))
+    detail.noteParts = parts
+    detail.noteText = nil
+    DealsWrits:UpdateNote(entry)
+end
+
+--- The note's last line: done today and when it comes back, else the old
+--- line with the clock. Without a clock the old line alone. Set again once
+--- a minute while the list shows; the panel is fitted only when it changed.
+function DealsWrits:UpdateNote(entry)
+    local detail = widgets.detail
+    if not (detail and detail.noteParts) then return end
+    local clock = ResetClock()
+    local last
+    if entry and entry.done and clock then
+        last = Colored("profit", L.Format("You turned this one in today. You can do it again in %s.", clock))
+    elseif clock then
+        last = L.Format("Each order can be done once a day. New orders in %s.", clock)
+    else
+        last = L["Each order can be done once a day."]
+    end
+    local parts = {}
+    for index, part in ipairs(detail.noteParts) do parts[index] = part end
+    parts[#parts + 1] = last
+    local text = table.concat(parts, " ")
+    if text == detail.noteText then return end
+    detail.noteText = text
+    detail.note:SetText(text)
     FitDetail()
 end
 
@@ -817,12 +939,15 @@ function DealsWrits.GroupByZone(rows)
 
     local out, skipped = {}, {}
     for _, group in ipairs(order) do
-        local rep = 0
-        for _, row in ipairs(group.rows) do rep = rep + (row.rep or 0) end
+        local rep, done = 0, 0
+        for _, row in ipairs(group.rows) do
+            rep = rep + (row.rep or 0)
+            if row.done then done = done + 1 end
+        end
         local header = {
             header = true, key = "zone:" .. group.zone, zone = group.zone,
             title = ns.Writs.ShownZone and ns.Writs.ShownZone(group.zone) or group.zone,
-            count = #group.rows, rep = rep, place = group.place, writName = group.writName,
+            count = #group.rows, rep = rep, done = done, place = group.place, writName = group.writName,
             skipped = ns.Writs:IsZoneSkipped(group.zone),
         }
         if header.skipped then
@@ -834,8 +959,10 @@ function DealsWrits.GroupByZone(rows)
     end
     for _, header in ipairs(skipped) do out[#out + 1] = header end
     if #unseen > 0 then
+        local done = 0
+        for _, row in ipairs(unseen) do if row.done then done = done + 1 end end
         out[#out + 1] = { header = true, key = "zone:unseen", notSeen = true,
-            title = L["Not Seen Yet"], count = #unseen }
+            title = L["Not Seen Yet"], count = #unseen, done = done }
         for _, row in ipairs(unseen) do out[#out + 1] = row end
     end
     return out
@@ -861,8 +988,7 @@ function DealsWrits:Refresh()
     widgets.emptyLabel:SetShown(#rows == 0)
     if #rows == 0 then widgets.emptyLabel:SetText(L.Format("No writ matching \"%s\".", state.search)) end
 
-    local texts = CountText(rows)
-    if Theme.FitText then Theme.FitText(widgets.countLabel, texts) else widgets.countLabel:SetText(texts[1]) end
+    DealsWrits:UpdateSummary(rows)
 
     -- The goal is worked out over every writ, whatever the search shows.
     UpdateGoal(ns.Writs:GetPlan(DealsWrits:GetGoal(), all))
@@ -873,6 +999,74 @@ function DealsWrits:Refresh()
     end
     state.selected = fresh
     UpdateWrit(fresh)
+end
+
+--- The line over the list: how many writs are priced, how many of those
+--- are done today, and when new orders come in. `rows` is what the list
+--- shows; nil keeps the last count and moves only the clock.
+function DealsWrits:UpdateSummary(rows)
+    if not widgets.countLabel then return end
+    if rows then
+        local priced, done, nextBack = 0, 0, nil
+        for _, row in ipairs(rows) do
+            if row.perRep then
+                priced = priced + 1
+                if row.done then done = done + 1 end
+            end
+            if row.done and row.doneUntil and (not nextBack or row.doneUntil < nextBack) then
+                nextBack = row.doneUntil
+            end
+        end
+        state.countTexts = CountText(rows)
+        state.priced, state.done = priced, done
+        -- The first time a done mark runs out: the list redraws once then.
+        local resetAt = ns.Writs.ResetAt and ns.Writs.ResetAt()
+        if resetAt and (not nextBack or resetAt < nextBack) then nextBack = resetAt end
+        state.redrawAt = nextBack
+    end
+
+    local doneText = ""
+    if (state.priced or 0) > 0 then
+        local text = L.Format("Done Today: %d of %d", state.done or 0, state.priced)
+        -- The label muted, the count green, as in the mockup.
+        local head, tail = text:match("^(.-[:：]%s*)(.+)$")
+        doneText = head and (head .. Colored("profit", tail)) or Colored("profit", text)
+    end
+    widgets.doneLabel:SetText(doneText)
+    widgets.doneLabel:SetShown(doneText ~= "")
+
+    local clock = ResetClock()
+    widgets.clockLabel:SetText(clock and L.Format("New Orders In: %s", Colored("accent", clock)) or "")
+    widgets.clockLabel:SetShown(clock ~= nil)
+
+    -- The priced count takes the room the other two leave, saying less
+    -- rather than running into them.
+    local gap = 14
+    local used = 0
+    for _, label in ipairs({ widgets.doneLabel, widgets.clockLabel }) do
+        if label:IsShown() then used = used + (TextWidth(label) or 0) + gap end
+    end
+    local ok, width = pcall(widgets.summary.GetWidth, widgets.summary)
+    local room = ok and type(width) == "number" and width > 0 and (width - used) or nil
+    local texts = state.countTexts or { "" }
+    if room and room > 0 then widgets.countLabel:SetWidth(room) end
+    if Theme.FitText then Theme.FitText(widgets.countLabel, texts, room) else widgets.countLabel:SetText(texts[1]) end
+    local textWidth = TextWidth(widgets.countLabel)
+    if textWidth and room and room > 0 then widgets.countLabel:SetWidth(math.min(room, math.ceil(textWidth) + 1)) end
+end
+
+--- Once a minute while the list shows: the clocks move, and nothing else
+--- unless a done mark ran out, which redraws the list once.
+function DealsWrits:Tick()
+    if not (widgets.list and widgets.list:IsVisible()) then return end
+    local now = time and time() or 0
+    if state.redrawAt and now >= state.redrawAt then
+        state.redrawAt = nil
+        self:Refresh()
+        return
+    end
+    self:UpdateSummary(nil)
+    self:UpdateNote(state.selected)
 end
 
 function DealsWrits:SetGroupBy(key)
@@ -947,9 +1141,47 @@ function DealsWrits:Build(view, toolbar)
     end
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
+    -- The line over the list: priced, done today, new orders in.
+    local summary = CreateFrame("Frame", nil, view)
+    summary:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 8, -6)
+    summary:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, -6)
+    summary:SetHeight(16)
+    widgets.summary = summary
+
+    local countLabel = Theme.CreateLabel(summary, "tiny", "muted")
+    countLabel:SetPoint("LEFT", 0, 0)
+    countLabel:SetJustifyH("LEFT")
+    countLabel:SetWordWrap(false)
+    widgets.countLabel = countLabel
+
+    local doneLabel = Theme.CreateLabel(summary, "tiny", "muted")
+    doneLabel:SetPoint("LEFT", countLabel, "RIGHT", 14, 0)
+    doneLabel:SetWordWrap(false)
+    widgets.doneLabel = doneLabel
+
+    local clockLabel = Theme.CreateLabel(summary, "tiny", "muted")
+    clockLabel:SetPoint("LEFT", doneLabel, "RIGHT", 14, 0)
+    clockLabel:SetWordWrap(false)
+    widgets.clockLabel = clockLabel
+
+    -- The clocks move once a minute, only while the list shows.
+    local function Shown()
+        pcall(ns.Writs.ReadFlagged, ns.Writs)
+        if widgets.ticker then widgets.ticker:Cancel() end
+        if C_Timer and C_Timer.NewTicker then
+            widgets.ticker = C_Timer.NewTicker(60, function() DealsWrits:Tick() end)
+        end
+    end
+    summary:SetScript("OnShow", Shown)
+    summary:SetScript("OnHide", function()
+        if widgets.ticker then widgets.ticker:Cancel() end
+        widgets.ticker = nil
+    end)
+    if summary:IsVisible() then Shown() end
+
     local headings = CreateFrame("Frame", nil, view)
-    headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
-    headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
+    headings:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", -8, -4)
+    headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -26)
     headings:SetHeight(16)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
@@ -988,7 +1220,7 @@ function DealsWrits:Build(view, toolbar)
 
     local list = Widgets.CreateScrollList(view, {
         onScrollbarShown = function(shown)
-            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -26)
         end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
@@ -1021,20 +1253,14 @@ function DealsWrits:Build(view, toolbar)
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
     hint:SetText(L["Right-click a row to search for both"])
 
-    local countLabel = Theme.CreateLabel(view, "tiny", "dim")
-    countLabel:SetPoint("BOTTOMLEFT", 8, 8)
-    countLabel:SetPoint("RIGHT", hint, "LEFT", -12, 0)
-    countLabel:SetJustifyH("LEFT")
-    countLabel:SetWordWrap(false)
-    widgets.countLabel = countLabel
-
     local detail = BuildDetail(view)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
     -- Writs and items the client had not cached arrive a few at a time,
-    -- and a turn-in moves the standing; one redraw for a burst.
+    -- a turn-in moves the standing, and a hand-in spot can be learned
+    -- while the list shows; one redraw for a burst.
     local queued = false
     local function Soon()
         if queued or not list:IsVisible() then return end
@@ -1046,6 +1272,7 @@ function DealsWrits:Build(view, toolbar)
     end
     ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", Soon)
     ns.RegisterEvent(widgets, "UPDATE_FACTION", Soon)
+    ns.Writs:Watch(Soon)
 
     ns.Writs:FindWrits()
 end

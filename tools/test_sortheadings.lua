@@ -104,7 +104,7 @@ Click("profit")
 check("PROFIT once: biggest first, unknown last, ties in order",
     Names(sorter:Sort(rows)), "Cloak,Bolt,Belt,apron")
 check("the list was redrawn", redrawn, 1)
-check("PROFIT is lit", labels.profit.color and labels.profit.color[1], "accent")
+check("PROFIT is lit", labels.profit.color and labels.profit.color[1], "text")
 check("the rows handed in kept their order", Names(rows), "Bolt,apron,Cloak,Belt")
 
 Click("profit")

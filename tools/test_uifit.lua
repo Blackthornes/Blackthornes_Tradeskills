@@ -70,6 +70,15 @@ local function Region(parent, frameType)
         local was = self.shown
         self.shown = false
         if was and self.scripts.OnHide then self.scripts.OnHide(self) end
+        -- As the game does: a box hidden, or inside something hidden, lets
+        -- go of the keyboard, and that runs its OnEditFocusLost.
+        if was then
+            local function Drop(frame)
+                if rawget(frame, "focus") then frame:ClearFocus() end
+                for _, child in ipairs(rawget(frame, "children") or {}) do Drop(child) end
+            end
+            Drop(self)
+        end
     end
     region.SetShown = function(self, on) if on then self:Show() else self:Hide() end end
     region.IsShown = function(self) return self.shown end
@@ -253,7 +262,8 @@ ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = noop, noop, noop, noop
 
 ns.db = { global = {}, characters = {}, prices = {}, postLimits = {} }
 ns.Config = {
-    DEFAULTS = { settings = { undercutCopper = 1, postPanelCollapsed = false, craftPaneCollapsed = false } },
+    DEFAULTS = { settings = { undercutCopper = 1, postPanelCollapsed = false, craftPaneCollapsed = false,
+        textSize = "normal", windowEffects = "full", goldTrackerX = 0, disenchanterName = "" } },
     Get = function(_, key) return settings[key] end,
     Set = function(_, key, value) settings[key] = value end,
     GetRealmKey = function() return "Forever" end,
@@ -329,6 +339,7 @@ Load("/UI/TooltipShift.lua")
 Load("/UI/Theme.lua")
 Load("/UI/Widgets.lua")
 Load("/UI/HouseKit.lua")
+Load("/UI/SharedChoices.lua")
 Load("/UI/Columns.lua")
 Load("/UI/Collapse.lua")
 Load("/UI/PriceGraph.lua")
@@ -659,6 +670,40 @@ row.mouseOver = false
 list.scripts.OnMouseWheel(list, 1)
 check("after the mouse leaves, nothing is drawn", #entered, drawn)
 
+-- A player's recording (2026-11-24): with the one window folded into its
+-- round button, the mouse over where its lists had been still showed their
+-- rows' tooltips. Forever lets the mouse reach those rows, so a row on a
+-- folded window shows nothing.
+local foldHost = Region()
+local clicked = 0
+local foldList = Widgets.CreateScrollList(foldHost, {
+    rowHeight = 20,
+    onEnter = function(row, entry)
+        entered[#entered + 1] = entry.itemID
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:SetText("item " .. entry.itemID)
+        GameTooltip:Show()
+    end,
+    onClick = function() clicked = clicked + 1 end,
+})
+foldList.height = 100
+foldList:SetData(Items(20))
+foldHost.blackthornesFold = { folded = true }
+local foldRow = foldList.rows[1]
+foldRow.scripts.OnClick(foldRow, "RightButton")
+check("and takes no clicks", clicked, 0)
+local before = #entered
+foldRow.mouseOver = true
+foldRow.scripts.OnEnter(foldRow)
+check("a row on a folded window shows no tooltip", #entered, before)
+foldHost.blackthornesFold.folded = false
+foldRow.scripts.OnEnter(foldRow)
+check("opened again, it does", entered[#entered], 101)
+foldRow.scripts.OnClick(foldRow, "LeftButton")
+check("and takes clicks", clicked, 1)
+foldRow.scripts.OnLeave(foldRow)
+foldRow.mouseOver = false
+
 --------------------------------------------------------------------------------
 print("")
 print("buttons")
@@ -782,7 +827,9 @@ local dialog = UI.transferDialog
 local scroll = dialog.editBox:GetParent()
 local slider
 for _, child in ipairs(scroll:GetParent().children) do
-    if child.frameType == "Slider" then slider = child end
+    -- Drawn by hand (Widgets.CreateScrollbar): the game's Slider runs
+    -- backwards on Forever.
+    if child.Room and child.SetThumbHeight then slider = child end
 end
 check("the code box has a bar down its edge", slider ~= nil, true)
 check("hidden while the code fits", slider.shown, false)
@@ -839,6 +886,82 @@ check("Enter saves it", settings.undercutCopper, 25)
 check("and lets go of the keyboard", undercut.editBox:HasFocus(), false)
 UI.tabs.settings.refresh()
 check("the next redraw shows it", undercut.editBox.text, "25")
+
+-- Minimums by Profession (2026-11-17): a profit and a margin box per
+-- profession under Minimum Margin, empty for the usual, typed in silver.
+local ownMinimums = {}
+ns.Profit.GetProfessionMinimums = function(_, name)
+    local own = ownMinimums[name]
+    if own then return own.profit, own.margin end
+end
+ns.Profit.SetProfessionMinimum = function(_, name, field, value)
+    ownMinimums[name] = ownMinimums[name] or {}
+    ownMinimums[name][field] = value
+end
+ns.Profit.ClearProfessionMinimums = function(_, name) ownMinimums[name] = nil end
+ns.Profit.MinimumsFor = function() return 500, 10 end
+ns.Profit.DISENCHANTING = "Disenchanting"
+ns.Profit.DisenchantMinimums = function()
+    local own = ownMinimums.Disenchanting or {}
+    return own.profit or 500, own.margin or 10, (own.profit or own.margin) ~= nil
+end
+ns.Auctions.StockProfessions = function() return { "Alchemy", "Cooking" } end
+ns.Auctions.ProfessionLabel = function(_, name) return name end
+ns.Auctions.GetProfessionLimit = function() return nil end
+ns.Auctions.SetProfessionLimit = noop
+settings.minProfit, settings.minMarginPercent = 500, 10
+UI.tabs.settings.refresh()
+
+local alchemyBoxes = {}
+for _, box in ipairs(made.CreateNumberBox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Alchemy" then alchemyBoxes[#alchemyBoxes + 1] = box end
+end
+-- The Queue page's Keep in Stock by Profession row is named Alchemy too.
+check("Alchemy gets a profit box and a margin box (and its stock box)", #alchemyBoxes, 3)
+local alchemyProfit, alchemyMargin = alchemyBoxes[2], alchemyBoxes[3]
+if alchemyProfit then
+    check("an empty profit box shows the usual 5 silver", alchemyProfit.editBox.text, "")
+    alchemyProfit.editBox:SetFocus()
+    alchemyProfit.editBox:SetText("1")
+    alchemyProfit.editBox.scripts.OnEnterPressed(alchemyProfit.editBox)
+    check("typing 1 saves 1 silver for Alchemy", ownMinimums.Alchemy and ownMinimums.Alchemy.profit, 100)
+    alchemyMargin.editBox:SetFocus()
+    alchemyMargin.editBox:SetText("0")
+    alchemyMargin.editBox.scripts.OnEnterPressed(alchemyMargin.editBox)
+    check("a margin of 0 is kept, not cleared", ownMinimums.Alchemy.margin, 0)
+    UI.tabs.settings.refresh()
+    check("the redraw shows Alchemy's 1", alchemyProfit.editBox.text, "1")
+    local clear
+    for _, button in ipairs(allButtons) do
+        if button:GetParent() == alchemyProfit:GetParent() then clear = button end
+    end
+    check("an x shows on a row with its own numbers", clear ~= nil, true)
+end
+
+-- The Disenchanting row (2026-11-22): always listed, saved under its name,
+-- and its tip talks about buying to disenchant, not crafts.
+local deBoxes = {}
+for _, box in ipairs(made.CreateNumberBox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Disenchanting" then deBoxes[#deBoxes + 1] = box end
+end
+check("Disenchanting gets a profit box and a margin box", #deBoxes, 2)
+if deBoxes[1] then
+    deBoxes[1].editBox:SetFocus()
+    deBoxes[1].editBox:SetText("3")
+    deBoxes[1].editBox.scripts.OnEnterPressed(deBoxes[1].editBox)
+    check("typing 3 saves 3 silver for Disenchanting", ownMinimums.Disenchanting
+        and ownMinimums.Disenchanting.profit, 300)
+    local deRow = deBoxes[1]:GetParent()
+    deRow.scripts.OnEnter(deRow)
+    check("its tip names the row", GameTooltip.lines[1], "Disenchanting")
+    check("and says what it hides", (GameTooltip.lines[2] or ""):find("buy and disenchant", 1, true) ~= nil
+        and (GameTooltip.lines[2] or ""):find("3s", 1, true) ~= nil, true)
+    deRow.scripts.OnLeave(deRow)
+    ownMinimums.Disenchanting = nil
+    UI.tabs.settings.refresh()
+end
 
 -- Pages (2026-10-08): the settings sit on category pages picked along the
 -- top, with what each does in a tooltip until Show descriptions is ticked.
@@ -907,6 +1030,77 @@ pricingButton.scripts.OnClick(pricingButton)
 check("a click on the switch shows its page", Holder(undercut).shown, true)
 check("and saves it", settings.settingsPage, "pricing")
 
+-- One layout for all five addons (the owner said build it, 2026-11-17):
+-- its own pages first, then the shared ones in the same order.
+local order = {}
+for _, child in ipairs(bar.children) do
+    local text = child.strings[1] and child.strings[1].text
+    if text and text == text:upper() and text ~= "" then order[#order + 1] = text end
+end
+check("the pages run own first, then the shared ones",
+    table.concat(order, ", "):match("PRICING.*ABOUT") or table.concat(order, ", "),
+    "PRICING, QUEUE, MAIL & VENDORS, AUCTION HOUSE, DATA, TOOLTIPS, SOUNDS, WINDOWS, SHARING, ALL ADDONS, ABOUT")
+
+-- Seen in game 2026-11-17: with eleven pages ABOUT was drawn on top of the
+-- search box. A name that would reach the search box starts a new line.
+--- Each switch name's line and right edge, worked out from its anchors.
+local function SwitchPlaces()
+    local places, right, line = {}, 0, 0
+    for _, child in ipairs(bar.children) do
+        local text = child.strings[1] and child.strings[1].text
+        if child.shown and text and text == text:upper() and text ~= "" and child.frameType == "Button" then
+            local _, relativeTo, _, x = child:GetPoint(1)
+            if relativeTo == bar then
+                line, right = line + 1, x
+            else
+                right = right + x
+            end
+            right = right + child:GetWidth()
+            places[#places + 1] = { text = text, line = line, right = right }
+        end
+    end
+    return places
+end
+local holderTop = select(5, Holder(undercut):GetPoint(1))
+bar:SetWidth(700)
+bar.scripts.OnSizeChanged(bar)
+local room = bar:GetWidth() - 16 - describe:GetWidth() - 16 - find:GetWidth() - 16
+local clear, lines = true, 0
+for _, place in ipairs(SwitchPlaces()) do
+    if place.line == 1 and place.right > room then clear = false end
+    lines = math.max(lines, place.line)
+end
+check("a narrow bar keeps the switch clear of the search box", clear, true)
+check("by putting the rest on a second line", lines >= 2, true)
+check("the bar grows to hold it", bar:GetHeight() > 34, true)
+check("and the pages start under it", select(5, Holder(undercut):GetPoint(1)) < holderTop, true)
+check("the search box stays on the first line", select(5, describe:GetPoint(1)), -17)
+bar:SetWidth(4000)
+bar.scripts.OnSizeChanged(bar)
+lines = 0
+for _, place in ipairs(SwitchPlaces()) do lines = math.max(lines, place.line) end
+check("a wide bar puts every name on one line", lines, 1)
+check("and the pages move back up", select(5, Holder(undercut):GetPoint(1)), holderTop)
+
+local muteBoxes = {}
+for _, box in ipairs(made.CreateCheckbox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Mute All Sounds:" then muteBoxes[#muteBoxes + 1] = box end
+end
+check("Mute All Sounds shows on two pages", #muteBoxes, 2)
+check("one of them on Sounds", Holder(muteBoxes[1]) ~= Holder(muteBoxes[2]), true)
+local scanTick
+for _, box in ipairs(made.CreateCheckbox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "A Scan Finishes:" then scanTick = box end
+end
+check("the sounds left Windows for their own page", Holder(scanTick) == Holder(muteBoxes[1])
+    or Holder(scanTick) == Holder(muteBoxes[2]), true)
+ns.UI:SetMuteSounds(true)
+check("ticking Mute ticks both boxes", muteBoxes[1]:GetChecked() and muteBoxes[2]:GetChecked(), true)
+ns.UI:SetMuteSounds(false)
+check("and unticking clears both", not muteBoxes[1]:GetChecked() and not muteBoxes[2]:GetChecked(), true)
+
 --- The control on the row whose label says `text`, if Settings offers one.
 local function Offered(text)
     for _, kind in ipairs({ "CreateCheckbox", "CreateNumberBox" }) do
@@ -931,12 +1125,182 @@ for text, button in pairs(buttons) do
 end
 table.sort(spills)
 check("no settings button runs past its column", table.concat(spills, ", "), "")
-local recipesButton
-for _, button in ipairs(allButtons) do
-    local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
-    if label and label.text == "Recipes to Learn:" then recipesButton = button end
+-- The Tooltips and Windows pages (the owner said build it, 2026-11-16).
+-- The buttons that only opened a tab went; every row moved, none renamed.
+local function RowButton(text)
+    for _, button in ipairs(allButtons) do
+        local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
+        if label and label.text == text then return button end
+    end
 end
-check("Recipes to learn has its own row", recipesButton ~= nil, true)
+check("no Recipes to Learn button (the tab is one click away)", RowButton("Recipes to Learn:"), nil)
+check("no Stats button", RowButton("Stats:"), nil)
+check("no Tracker Place button: Window Spots does it", RowButton("Tracker Place:"), nil)
+check("no Gold Tracker Place button", RowButton("Gold Tracker Place:"), nil)
+check("Window Spots is still offered", RowButton("Window Locations:") ~= nil, true)
+check("Road to 300 is still offered", RowButton("Road to 300:") ~= nil, true)
+check("What's New sits on All Addons, with Window Spots", Holder(RowButton("What's New:")) == Holder(RowButton("Window Locations:")), true)
+check("Road to 300 stays on About", Holder(RowButton("Road to 300:")) ~= Holder(RowButton("What's New:")), true)
+
+-- Tradeskills Settings: Set Default (the owner said build it, 2026-11-23).
+do
+    local restore = RowButton("Tradeskills Settings:")
+    check("Set Default for every setting is offered", restore ~= nil, true)
+    check("on All Addons, under Window Locations", Holder(restore) == Holder(RowButton("Window Locations:")), true)
+    local resets, real = 0, UI.ResetSettings
+    UI.ResetSettings = function() resets = resets + 1 end
+    restore:GetScript("OnClick")(restore, "LeftButton")
+    check("the first click says Confirm", restore.label.text, "Confirm")
+    check("and resets nothing yet", resets, 0)
+    restore:GetScript("OnClick")(restore, "LeftButton")
+    check("the second click resets the settings", resets, 1)
+    check("and the button says Set Default again", restore.label.text, "Set Default")
+    UI.ResetSettings = real
+end
+
+-- Plain Disenchant Results (the owner said build it, 2026-11-25): Move to
+-- Salvager and Clear, each through the Confirm window first.
+do
+    local buttonsOn = {}
+    for _, button in ipairs(allButtons) do
+        local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
+        if label and label.text == "Plain Disenchant Results:" then buttonsOn[#buttonsOn + 1] = button end
+    end
+    check("Plain Disenchant Results has two buttons", #buttonsOn, 2)
+    local move, clear = buttonsOn[1], buttonsOn[2]
+    check("Move to Salvager first", move and move.label.text, "Move to Salvager")
+    check("then Clear", clear and clear.label.text, "Clear")
+    check("sat beside Keep Salvager Results Apart", Holder(move) == Holder(Offered("Keep Salvager Results Apart:")), true)
+    local _, _, _, x = move:GetPoint(1)
+    check("both fit in the column", x + move.width + 4 + clear.width <= 400, true)
+
+    local count, moved, cleared, asked = 5, 0, 0, nil
+    local realLog, realAsk = ns.DisenchantLog, ns.PostConfirm
+    ns.DisenchantLog = {
+        PlainCount = function() return count end,
+        MovePlainToSalvager = function() moved = moved + 1; local n = count; count = 0; return n end,
+        ClearPlain = function() cleared = cleared + 1; local n = count; count = 0; return n end,
+    }
+    ns.PostConfirm = { Show = function(_, ask) asked = ask; return true end }
+    UI:RefreshSettingsPlain() -- as Settings does each time it opens
+    move:GetScript("OnClick")(move, "LeftButton")
+    check("Move asks first", asked and asked.title, "Move to Salvager")
+    check("with the count in the words", asked and asked.text:find("Move all 5 plain") ~= nil, true)
+    check("and Confirm and Cancel", asked and (asked.yes .. "/" .. asked.no), "Confirm/Cancel")
+    check("and moves nothing before Confirm", moved, 0)
+    asked.accept()
+    check("Confirm moves them", moved, 1)
+    check("then both buttons grey out", move.disabled and clear.disabled, true)
+    asked = nil
+    clear:GetScript("OnClick")(clear, "LeftButton")
+    check("with nothing left, Clear asks nothing", asked, nil)
+    count = 3
+    UI:RefreshSettingsPlain()
+    check("with results again, they light up", not move.disabled and not clear.disabled, true)
+    clear:GetScript("OnClick")(clear, "LeftButton")
+    check("Clear asks first too", asked and asked.title, "Clear Plain Results")
+    asked.accept()
+    check("Confirm clears them", cleared, 1)
+    ns.DisenchantLog, ns.PostConfirm = realLog, realAsk
+    UI:RefreshSettingsPlain()
+end
+
+--- The box on the row whose label says `text`.
+local function RowDropdown(text)
+    for _, box in ipairs(made.CreateDropdown) do
+        local label = box:GetParent().strings and box:GetParent().strings[1]
+        if label and label.text == text then return box end
+    end
+end
+local function Pick(box, index)
+    box.scripts.OnMouseDown(box)
+    local entry = box.menu.children[index]
+    entry.scripts.OnClick(entry)
+end
+
+local allLines = RowDropdown("All Lines:")
+check("Tooltips has All Lines", allLines ~= nil, true)
+check("on the same page as the lines", Holder(allLines) == Holder(RowDropdown("Value on Tooltips:")), true)
+settings.showValueOnItemTooltips, settings.tooltipTrend = true, false
+ns.db.tooltipShift = {}
+UI.tabs.settings.refresh()
+check("lines that differ show Mixed", allLines.strings[1].text, "Mixed")
+Pick(allLines, 3)
+check("Always turns each line on", settings.tooltipTrend, true)
+check("and keeps none on Shift", next(ns.db.tooltipShift), nil)
+check("each line's box shows it", RowDropdown("Price Trend on Tooltips:").strings[1].text, "Always")
+check("All Lines says Always", allLines.strings[1].text, "Always")
+Pick(allLines, 1)
+check("Off turns each line off", settings.showValueOnItemTooltips, false)
+check("but the sales lines have no Off", RowDropdown("Sales Details:").strings[1].text, "Always")
+check("All Lines says Off", allLines.strings[1].text, "Off")
+Pick(RowDropdown("Price Trend on Tooltips:"), 2)
+check("one line changed by hand", ns.db.tooltipShift.trend, true)
+check("makes All Lines say Mixed", allLines.strings[1].text, "Mixed")
+
+-- How Tradeskills opens in each place (ts-improve-2, 2026-11-26): a row
+-- for the auction house, a profession window and the mailbox. Until one is
+-- picked, each shows what the older settings give, and those are never
+-- written. Vendors keeps its tick under Open By Itself At.
+local atAH = RowDropdown("At The Auction House:")
+local atProfession = RowDropdown("At A Profession:")
+local atMail = RowDropdown("At The Mailbox:")
+check("a row for each place", atAH ~= nil and atProfession ~= nil and atMail ~= nil, true)
+check("on Windows, with Window Size", Holder(atAH) == Holder(RowDropdown("Window Size:")), true)
+check("Open By Itself At is only Vendors now", RowDropdown("Open By Itself At:"), nil)
+check("no Small Craft Queue box: At A Profession does it", Tick("Small Craft Queue:"), nil)
+settings.openAtAuction, settings.openWithShops, settings.openAtProfessions = nil, nil, nil
+settings.windowAtAuction, settings.windowAtProfession, settings.windowAtMail = nil, nil, nil
+settings.craftPaneBeside = true
+UI.tabs.settings.refresh()
+check("a new player's mailbox: the slim list", atMail:GetValue(), "slim")
+check("Small Craft Queue ticked shows Slim Panel", atProfession:GetValue(), "slim")
+settings.openAtAuction = false
+UI.tabs.settings.refresh()
+check("Auction House unticked shows Stay Closed", atAH:GetValue(), "closed")
+Pick(atAH, 3)
+check("picking saves the place's choice", settings.windowAtAuction, "button")
+check("and leaves the older settings as they were", settings.openAtAuction == false
+    and settings.craftPaneBeside == true, true)
+settings.openAtAuction, settings.craftPaneBeside, settings.windowAtAuction = nil, nil, nil
+local vendors = Tick("Vendors")
+check("a Vendors tick", vendors ~= nil, true)
+vendors.scripts.OnClick(vendors)
+check("ticking Vendors saves Open With AH and Vendors", settings.openWithShops, true)
+settings.openWithShops = nil
+atAH.scripts.OnMouseDown(atAH)
+
+-- Stock From Sales and Raise When Sold Out in one box: each keeps its key.
+local fromSales = RowDropdown("Stock From Sales:")
+check("one Stock From Sales box", fromSales ~= nil, true)
+settings.learnStockFromSales, settings.raiseStockOnSellOut = false, true
+UI.tabs.settings.refresh()
+check("an old pair shows as its choice", fromSales:GetValue(), "sellout")
+settings.learnStockFromSales, settings.raiseStockOnSellOut = nil, nil
+UI.tabs.settings.refresh()
+check("a new player follows sales", fromSales:GetValue(), "sales")
+Pick(fromSales, 4)
+check("Both turns on raising", settings.raiseStockOnSellOut, true)
+check("and leaves following sales unwritten", settings.learnStockFromSales, nil)
+Pick(fromSales, 1)
+check("Off turns both off", settings.learnStockFromSales == false and settings.raiseStockOnSellOut == false, true)
+check("no Raise When Sold Out row of its own", RowDropdown("Raise When Sold Out:") == nil and Offered("Raise When Sold Out:") == nil, true)
+
+-- Six lists in one box.
+local listBox = RowDropdown("Show:")
+check("the Queue page's lists are one box", listBox ~= nil, true)
+check("with six lists in it", #listBox.options, 6)
+check("each named with its count", listBox.options[4].text, "Ignored Crafts (0)")
+Pick(listBox, 4)
+check("picking one keeps it", settings.settingsQueueList, "ignored")
+check("and the box shows it", listBox:GetValue(), "ignored")
+find.editBox:SetText("sell list right-click")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("a search shows the list it found", listBox:GetValue(), "keep")
+check("without changing the pick", settings.settingsQueueList, "ignored")
+find.editBox:SetText("")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("clearing it goes back to the pick", listBox:GetValue(), "ignored")
 
 -- The confirmation's Yes is the click that lists, so there is no switch
 -- to turn it off: one was offered and never did anything.
@@ -977,8 +1341,16 @@ ns.PostPanel = {
 }
 check("the sell list starts folded", sellBody.shown, false)
 
+settings.textSize, settings.windowEffects = "large", "off"
+settings.goldTrackerX, settings.disenchanterName = 55, "Someone Else"
+settings.tsmPriceSource, settings.undercutCopper = "dbmarket", 987654
 UI:ResetSettings()
 check("Reset to defaults opens the folded sell list", sellBody.shown, true)
+check("Reset puts a setting back", settings.undercutCopper, 1)
+check("and one with no default", settings.tsmPriceSource, nil)
+check("Reset keeps the choices every addon shares", settings.textSize == "large" and settings.windowEffects == "off", true)
+check("Reset keeps a small window's spot", settings.goldTrackerX, 55)
+check("Reset keeps the disenchanter picked", settings.disenchanterName, "Someone Else")
 check("whose button turns back to a minus", sellButton.glyph.stem.shown, false)
 check("measures it again", calls.height, 1)
 check("and redraws it", calls.panel, 1)
@@ -1038,6 +1410,148 @@ ScrollDown()
 sorter.buttons.name.scripts.OnClick(sorter.buttons.name)
 check("and a new sort", pricesList.offset, 0)
 check("by the heading clicked", sorter.key, "name")
+
+-- A "Never below" price adds Highest and When Cheaper under My price. In a
+-- short window the price graph was left one line tall (a player's report,
+-- 2026-11-23). The fake game lays nothing out, so the plot's height is worked
+-- out here the way the pane stacks: what is left after the shown rows.
+do
+    local widgets, state = UI._PricesWidgets()
+    local detail = widgets.detail
+    local floorItem = 1001
+    ns.Prices.GetMine = function(_, itemID) if itemID == floorItem then return 20000, "floor" end end
+    ns.Prices.GetMyLimits = function() return nil, nil end
+    detail.height = 440
+    detail.labels.market.height = 12
+    local function PlotHeight()
+        local used = 42 + 46 + 59 + 81
+        for _, label in pairs(detail.labels) do
+            if label:IsShown() then used = used + 18 end
+        end
+        if detail.myPrice.limits[1]:IsShown() then used = used + 78 end
+        return 440 - used
+    end
+    detail.graph.plot.GetHeight = PlotHeight
+
+    state.selected = { itemID = floorItem, record = records[floorItem] }
+    UI.tabs.prices.refresh()
+    check("Never below shows Highest and When Cheaper", detail.myPrice.limits[1]:IsShown(), true)
+    check("the price graph keeps room to read", PlotHeight() >= 60, true)
+    check("a row folded for it", detail.labels.bags:IsShown(), false)
+    check("the Market value row stays", detail.labels.market:IsShown(), true)
+    GameTooltip.AddDoubleLine = function(self, left) self.lines[#self.lines + 1] = left end
+    detail.marketHover.scripts.OnEnter(detail.marketHover)
+    local listed = table.concat(GameTooltip.lines, "|")
+    check("and its hover lists the folded row", listed:find("In your bags", 1, true) ~= nil, true)
+    GameTooltip:Hide()
+
+    ns.Prices.GetMine = function() return nil end
+    UI.tabs.prices.refresh()
+    check("cleared, every row is back", detail.labels.bags:IsShown(), true)
+    check("and the limits go", detail.myPrice.limits[1]:IsShown(), false)
+    ns.Prices.GetMine, ns.Prices.GetMyLimits = nil, nil
+    state.selected = nil
+end
+
+-- A suffix row's My price is that suffix's own (the owner chose it,
+-- 2026-11-24). One with none of its own says it takes the item's.
+do
+    local widgets, state = UI._PricesWidgets()
+    local my = widgets.detail.myPrice
+    local MAGIC, saved = 14327, nil
+    ns.Prices.GetMine = function(_, itemID, suffix)
+        if itemID ~= 1002 then return nil end
+        return 20000, "floor", nil
+    end
+    ns.Prices.SetMine = function(_, itemID, price, mode, name, suffix)
+        saved = { itemID = itemID, price = price, mode = mode, suffix = suffix }
+        return true
+    end
+    state.selected = { itemID = 1002, kid = true, suffix = MAGIC, name = "of Magic",
+        record = { market = 500 } }
+    UI.tabs.prices.refresh()
+    check("a suffix row shows no price taken from its item", my.gold:GetValue(), 0)
+    check("and says the item's is used", my.status.text, "Not set, the item's price is used")
+    check("no Highest or When Cheaper for it", my.limits[1]:IsShown(), false)
+    my.gold:SetValue(3)
+    check("a price typed there saves to that suffix", saved and saved.suffix, MAGIC)
+    check("for its item", saved and saved.itemID, 1002)
+
+    state.selected = { itemID = 1002, record = records[1002] }
+    UI.tabs.prices.refresh()
+    check("the item row shows the item's price", my.gold:GetValue(), 2)
+    my.gold:SetValue(4)
+    check("and saves to the whole item", saved and saved.suffix, nil)
+    ns.Prices.GetMine, ns.Prices.SetMine = nil, nil
+    state.selected = nil
+end
+
+-- Price History on the auction house Sell list (2026-11-26) opens the
+-- Prices tab with its item picked and its row scrolled into sight.
+do
+    local widgets, state = UI._PricesWidgets()
+    UI:SelectTab("settings")
+    ns.PricesUI:ShowItem(1018)
+    check("Price History opens the Prices tab", UI.activeTab, "prices")
+    check("on Details", ns.PricesUI.view, "details")
+    check("with the item picked", state.selected and state.selected.itemID, 1018)
+    check("its row in sight", pricesList.rows[1].data and pricesList.rows[1].data.itemID ~= nil, true)
+    local lit = false
+    for _, row in ipairs(pricesList.rows) do
+        if row.data and row.data.itemID == 1018 then lit = true end
+    end
+    check("its row on screen", lit, true)
+    ns.PricesUI:ShowItem(424242)
+    check("an item with no price still shows in the details", state.selected and state.selected.itemID, 424242)
+    state.selected = nil
+end
+
+-- Price History on a copy with a random suffix opens that suffix, not the
+-- plain item (a player's report, 2026-11-27: "it doesnt show the suffix").
+do
+    local widgets, state = UI._PricesWidgets()
+    local MONKEY, EAGLE = 1197, 1200
+    -- Forever's shape: the old suffix field empty, the suffix a bonus ID,
+    -- which the client's own reading (Util.LinkSuffix) turns into the suffix.
+    local BONUS = { ["12722"] = MONKEY, ["12725"] = 1203 }
+    local link = "|cff1eff00|Hitem:1018::::::::18:1485:::1:12722:::::|h[Item of the Monkey]|h|r"
+    local kept = { records[1018].suffixes, ns.Prices.SuffixCount, ns.Prices.SuffixRows,
+                   ns.Prices.SuffixName, ns.Util.LinkSuffix }
+    records[1018].suffixes = { [MONKEY] = {}, [EAGLE] = {} }
+    ns.Prices.SuffixCount = function(_, itemID) return itemID == 1018 and 2 or 0 end
+    ns.Prices.SuffixRows = function(_, itemID)
+        if itemID ~= 1018 then return {} end
+        return { { suffix = EAGLE, market = 900, name = "Item of the Eagle", seen = NOW },
+                 { suffix = MONKEY, market = 700, name = "Item of the Monkey", seen = NOW } }
+    end
+    ns.Prices.SuffixName = function(_, suffix) return "Item of suffix " .. tostring(suffix) end
+    ns.Util.LinkSuffix = function(l) return BONUS[tostring(l):match(":1:(%d+):")] end
+    UI:SelectTab("settings")
+    ns.PricesUI:ShowItem(1018, link)
+    check("a suffix copy opens its suffix row", state.selected and state.selected.kid, true)
+    check("the one the player picked", state.selected and tonumber(state.selected.suffix), MONKEY)
+    check("the details name the suffix", widgets.detail.title:GetText():find("of the Monkey", 1, true) ~= nil, true)
+    check("with that suffix's price", state.selected and state.selected.market, 700)
+    local lit = false
+    for _, row in ipairs(pricesList.rows) do
+        if row.data and row.data.kid and tonumber(row.data.suffix) == MONKEY then lit = true end
+    end
+    check("its row on screen", lit, true)
+
+    local LION = 1203
+    ns.PricesUI:ShowItem(1018, (link:gsub("12722", "12725")))
+    check("a suffix with no price of its own still shows as itself", state.selected and tonumber(state.selected.suffix), LION)
+    check("under its own name", widgets.detail.title:GetText():find("suffix " .. LION, 1, true) ~= nil, true)
+
+    ns.PricesUI:ShowItem(1018, "|cff1eff00|Hitem:1018::::::::18:1485::::::::|h[Item]|h|r")
+    check("a copy with no suffix opens the plain item", state.selected and state.selected.kid, nil)
+    check("still that item", state.selected and state.selected.itemID, 1018)
+
+    records[1018].suffixes, ns.Prices.SuffixCount, ns.Prices.SuffixRows,
+        ns.Prices.SuffixName, ns.Util.LinkSuffix = kept[1], kept[2], kept[3], kept[4], kept[5]
+    state.open[1018] = nil
+    state.selected = nil
+end
 
 --------------------------------------------------------------------------------
 print("")
@@ -1196,6 +1710,29 @@ craftList:SetData({ { recipeID = 703, quantity = 4 } })
 check("a row now showing another craft drops what was typed", ownRow.quantity.editBox.text, "4")
 check("without queuing it for either craft", quantities[701] == nil and quantities[703] == nil, true)
 
+-- A row that now shows a sub-craft hides its box. Hiding it let go of the
+-- keyboard first, and what was typed for the old craft was set on the
+-- sub-craft's recipe: changing one row changed the one below it (a
+-- player's report, 2026-11-20).
+craftList:SetData({ { recipeID = 703, quantity = 4 }, { recipeID = 704, quantity = 2 } })
+local typedRow = craftList.rows[1]
+typedRow.quantity.editBox:SetFocus()
+typedRow.quantity.editBox:SetText("55")
+craftList:SetData({ { recipeID = 705, quantity = 3, isDependency = true }, { recipeID = 704, quantity = 2 } })
+check("a row now showing a sub-craft drops what was typed", typedRow.quantity.editBox:HasFocus(), false)
+check("without setting it on the sub-craft or the old craft",
+    quantities[705] == nil and quantities[703] == nil and quantities[704] == nil, true)
+
+-- The box only ever sets the craft it was showing, whatever the row is
+-- bound to by the time it lets go of the keyboard.
+craftList:SetData({ { recipeID = 703, quantity = 4 } })
+typedRow.quantity.editBox:SetFocus()
+typedRow.quantity.editBox:SetText("9")
+typedRow.data = { recipeID = 706, quantity = 1 }
+typedRow.quantity.editBox.scripts.OnEnterPressed(typedRow.quantity.editBox)
+check("a number typed for one craft never lands on another", quantities[706], nil)
+check("it goes to the craft it was typed for", quantities[703], 9)
+
 -- Names in the colour of what they make (asked 2026-10-07). An item the
 -- client has not sent yet starts in the text colour and takes its colour
 -- when GET_ITEM_INFO_RECEIVED says it is here.
@@ -1229,6 +1766,46 @@ itemArrived()
 check("and colours it when it does", late.name.textColor[1], 0.64)
 
 ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After = savedQuality, savedRegister, savedAfter
+
+-- Sort By over the list and the gold an hour on each row (2026-11-26). The
+-- column shows only while Sort By is Gold per Hour, and the name gives it
+-- room.
+local sortBy, picked = "mine", nil
+local savedSorts, savedSortBy, savedSet, savedEarns =
+    ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns
+ns.Queue.SORTS = { "mine", "profit", "perHour", "bags" }
+ns.Queue.SortBy = function() return sortBy end
+ns.Queue.SetSortBy = function(_, value) picked = value end
+ns.Queue.EntryEarns = function(_, entry)
+    if entry.isDependency then return nil, nil end
+    return 10000, 1838400
+end
+local sortChips, realChip = {}, Widgets.CreateChip
+Widgets.CreateChip = function(...)
+    local chip = realChip(...)
+    sortChips[#sortChips + 1] = chip
+    return chip
+end
+listsBefore = #made.CreateScrollList
+UI.tabs.queue.build(Region(UI.window))
+craftList = made.CreateScrollList[listsBefore + 1]
+craftList.height = 200
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+local sortRow = craftList.rows[1]
+check("no gold an hour under My Order", sortRow.perHour:IsShown(), false)
+sortBy = "perHour"
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true } })
+check("Gold per Hour shows it on the row", sortRow.perHour:IsShown(), true)
+check("in gold and silver", sortRow.perHour.text ~= nil and sortRow.perHour.text:find("183") ~= nil, true)
+check("a part shows none", craftList.rows[2].perHour.text, "")
+Widgets.CreateChip = realChip
+check("four Sort By chips", #sortChips, 4)
+check("built under My Order, its chip is lit", sortChips[1]:IsSelected(), true)
+check("the others are not", sortChips[3]:IsSelected(), false)
+sortChips[4].scripts.OnClick(sortChips[4])
+check("a chip picks its Sort By", picked, "bags")
+ns.Queue.SORTS, ns.Queue.SortBy, ns.Queue.SetSortBy, ns.Queue.EntryEarns =
+    savedSorts, savedSortBy, savedSet, savedEarns
 
 --------------------------------------------------------------------------------
 

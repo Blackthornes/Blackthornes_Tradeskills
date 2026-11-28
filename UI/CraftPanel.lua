@@ -338,6 +338,7 @@ end
 -- @return "best", "vendor", "disenchant", or nil for the sale alone
 local function PaneMethod()
     local Profit = ns.Profit
+    if Profit and Profit.CountedMethod then return Profit:CountedMethod() end
     local method = Profit and Profit.GetMethod and Profit:GetMethod() or nil
     if method == "auction" then return nil end
     return method
@@ -363,6 +364,30 @@ local function RowSources(self, opts)
     return list, search
 end
 
+--- Can the "Upgrades Only:" box be shown? Only while Equipment can answer
+--- and the upgrade arrows are on; without them every answer would be "no".
+function CraftPanel:UpgradesAvailable()
+    local upgrades = ns.Upgrades
+    if type(upgrades) ~= "table" or type(upgrades.Equipment) ~= "function" then return false end
+    return upgrades:Equipment() ~= nil and upgrades:IsEnabled() == true
+end
+
+--- Is the "Upgrades Only:" box ticked, and can it be?
+function CraftPanel:UpgradesOnly()
+    return ns.Config:Get("craftPaneUpgradesOnly") == true and self:UpgradesAvailable()
+end
+
+--- Does this recipe make an upgrade for the character playing: gear that
+--- beats what is worn (the green arrow's answer), or an enchant that does.
+local function MakesUpgrade(recipeID, recipe)
+    local upgrades = ns.Upgrades
+    if type(upgrades) ~= "table" then return false end
+    if recipe.outputItemID and upgrades:IsUpgrade(recipe.outputItemID) then return true end
+    return type(upgrades.EnchantFor) == "function" and upgrades:EnchantFor(recipeID) ~= nil
+end
+
+CraftPanel.MakesUpgrade = MakesUpgrade
+
 --- One recipe's row, or nil when it is left out. `tally` counts what the
 --- Keep in stock limit and the ignored crafts hid.
 local function RowFor(recipeID, recipe, opts, search, tally)
@@ -375,6 +400,9 @@ local function RowFor(recipeID, recipe, opts, search, tally)
         tally.ignored = (tally.ignored or 0) + 1
         return nil
     end
+
+    -- Upgrades Only: what is not an upgrade is left out, searched for or not.
+    if opts.upgradesOnly and not MakesUpgrade(recipeID, recipe) then return nil end
 
     -- Plain substring, not a pattern: a recipe name with a hyphen in
     -- it would otherwise be a malformed pattern and match nothing.
@@ -400,6 +428,7 @@ local function RowFor(recipeID, recipe, opts, search, tally)
         local suppressed = atLimit
             and search == ""
             and not opts.ignoreLimit
+            and not opts.upgradesOnly
             and not (opts.keepOrder and opts.keepOrder[recipeID])
             and ns.Config:Get("hideAtPostLimit") ~= false
 
@@ -473,7 +502,9 @@ end
 
 --- The rows to draw: one per recipe, with what it is worth and what is queued.
 --
--- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
+-- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit,
+--   upgradesOnly } (upgradesOnly also shows upgrades at their limit: they
+--   are made to wear, not to sell)
 function CraftPanel:GetRows(opts)
     opts = opts or {}
 
@@ -508,7 +539,8 @@ function CraftPanel:OrderKey(opts)
     end
 
     return table.concat({ tostring(opts.sortBy), opts.search or "",
-        tostring(opts.ignoreLimit), tostring(opts.method), count, sum }, "|")
+        tostring(opts.ignoreLimit), tostring(opts.method),
+        tostring(opts.upgradesOnly), count, sum }, "|")
 end
 
 --------------------------------------------------------------------------------
@@ -687,7 +719,7 @@ local function CreateRow(row)
     -- The box is how many are queued: + and - change it by one, or type the
     -- number you want.
     row.add = Widgets.CreateButton(row, "+", function()
-        if row.data then QueueMore(row.data, 1) end
+        if row.data and not CraftPanel.ClickMeantElsewhere() then QueueMore(row.data, 1) end
     end, { width = STEP_WIDTH, height = 15, primary = true })
     row.add:SetPoint("TOPRIGHT", -8, -1)
 
@@ -706,7 +738,7 @@ local function CreateRow(row)
     row.remove = Widgets.CreateButton(row, "-", function()
         -- From the queue as it is now, not the row: a second quick click
         -- would otherwise ask for the same number again.
-        if not row.data then return end
+        if not row.data or CraftPanel.ClickMeantElsewhere() then return end
         local _, entry = ns.Queue:Find(row.data.recipeID, true)
         CraftPanel:SetQueued(row.data, (entry and entry.quantity or 0) - 1)
     end, { width = STEP_WIDTH, height = 15 })
@@ -715,7 +747,7 @@ local function CreateRow(row)
     -- Only on rows with something queued, so the names on the rest keep
     -- their room.
     row.craft = Widgets.CreateButton(row, L["Craft"], function()
-        if row.data then CraftPanel:CraftRow(row.data) end
+        if row.data and not CraftPanel.ClickMeantElsewhere() then CraftPanel:CraftRow(row.data) end
     end, { width = CRAFT_WIDTH, height = 15, primary = true })
     row.craft:SetPoint("RIGHT", row.remove, "LEFT", -CRAFT_GAP, 0)
     row.craft:Hide()
@@ -904,6 +936,8 @@ end
 CraftPanel._UpdateRow = UpdateRow
 
 local function ShowRowTooltip(row, line)
+    -- Out of sight, its tooltip would name a recipe the player can't see.
+    if CraftPanel.ClickMeantElsewhere and CraftPanel.ClickMeantElsewhere() then return end
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.outputItemID, line.name)
     GameTooltip:AddLine(" ")
 
@@ -963,15 +997,112 @@ local function ShowRowTooltip(row, line)
 
     GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5, true)
     GameTooltip:AddLine(L["Ctrl-right-click to stop suggesting it."], 0.5, 0.5, 0.5, true)
+    -- The Keep in Stock box (UI/StockBox.lua, 2026-11-17), for a craft that
+    -- makes something to hold.
+    if line.outputItemID and ns.StockBox then
+        GameTooltip:AddLine(L["Alt-click to set Keep in Stock."], Theme.Unpack("accent"))
+    end
     GameTooltip:Show()
 end
 
+-- The order the game draws its layers in, bottom first.
+local STRATA_ORDER = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+
+local function Read(frame, method)
+    local fn = type(frame) == "table" and frame[method]
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, frame)
+    if ok then return value end
+    return nil
+end
+
+--- Is a Tradeskills window (or the one window) over the pane where the
+--- mouse is? A player's recording (2026-11-20): every x clicked on the
+--- Queue tab, sitting over the pane, queued one more of a recipe on the
+--- pane under it instead, and a craft nobody asked for turned up. A click
+--- the pane hears while one of those is in front under the mouse was meant
+--- for that window, so the pane lets it go.
+-- @param pane the pane's frame
+-- @param windows the windows that can sit over it (CraftPanel.FrontWindows)
+function CraftPanel.CoveredAtMouse(pane, windows)
+    if type(pane) ~= "table" then return false end
+    local paneStrata = STRATA_ORDER[Read(pane, "GetFrameStrata") or ""] or 0
+    local paneLevel = tonumber(Read(pane, "GetFrameLevel")) or 0
+    for _, window in ipairs(windows or {}) do
+        -- In the one window the pane sits inside it: that is not over it.
+        local inside, parent = false, pane
+        for _ = 1, 20 do
+            parent = Read(parent, "GetParent")
+            if not parent then break end
+            if parent == window then inside = true break end
+        end
+        if not inside and window ~= pane and Read(window, "IsVisible")
+            and Read(window, "IsMouseOver") then
+            local strata = STRATA_ORDER[Read(window, "GetFrameStrata") or ""] or 0
+            local level = tonumber(Read(window, "GetFrameLevel")) or 0
+            if strata > paneStrata or (strata == paneStrata and level >= paneLevel) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--- Is the pane out of the player's sight, so nothing on it should answer
+--- the mouse? A player's second recording (2026-11-23): on the one window's
+--- Queue tab, docked beside the profession window, the mouse on a queue x
+--- showed the Crafting list's tooltip for a recipe the player could not
+--- see, and the click queued it. The window in front is the one the pane
+--- lives in, so CoveredAtMouse lets it through.
+-- @param pane the pane's frame
+-- @param inOne true while the pane is the one window's Crafting tab
+-- @param activeTab the tab the one window shows (UI.activeTab)
+-- @param docked true while the one window holds the profession window's
+--   Crafting tab, so the pane has no place beside it
+function CraftPanel.OutOfSight(pane, inOne, activeTab, docked)
+    if type(pane) ~= "table" then return false end
+    if Read(pane, "IsVisible") == false then return true end
+    local alpha = tonumber(Read(pane, "GetEffectiveAlpha"))
+    if alpha and alpha < 0.05 then return true end
+    -- Inside a window folded into its round button (2026-11-24).
+    if ns.Widgets and ns.Widgets.InFoldedWindow and ns.Widgets.InFoldedWindow(pane) then return true end
+    if inOne then return activeTab ~= nil and activeTab ~= "crafting" end
+    return docked == true
+end
+
+local function PaneOutOfSight()
+    local tabs = ns.TSTabs
+    return CraftPanel.OutOfSight(CraftPanel.frame, CraftPanel.inOne == true,
+        ns.UI and ns.UI.activeTab, tabs ~= nil and tabs.atDock == "profession")
+end
+CraftPanel.PaneOutOfSight = PaneOutOfSight
+
+--- True when a click on the pane belongs to a window in front of it, or
+--- the pane can't be seen at all.
+local function ClickMeantElsewhere()
+    if PaneOutOfSight() then return true end
+    return CraftPanel.CoveredAtMouse(CraftPanel.frame, CraftPanel.FrontWindows())
+end
+CraftPanel.ClickMeantElsewhere = ClickMeantElsewhere
+
 --- Left-click queues, right-click takes it back off, Ctrl-right-click
---- ignores the craft.
+--- ignores the craft, Alt-click opens the Keep in Stock box.
 --
 -- The + button is the discoverable way in; this is for working down a list
 -- quickly, where reaching for the same small button every time is the slow part.
 local function OnRowClick(line, _, mouseButton, row)
+    if ClickMeantElsewhere() then return end
+    -- Alt-click sets how many to keep (the owner said build it, 2026-11-17).
+    -- Never queues: a craft with nothing to hold just does nothing.
+    if IsAltKeyDown and IsAltKeyDown() then
+        if line.outputItemID and ns.StockBox then
+            GameTooltip:Hide()
+            ns.StockBox:Open(line.outputItemID, line.name, CraftPanel.frame)
+        end
+        return
+    end
+
     if mouseButton == "RightButton" then
         -- Ignoring is the Profit tab's own list (a player asked, 2026-10-14),
         -- so a craft ignored in either place is gone from both and Settings
@@ -991,6 +1122,9 @@ local function OnRowClick(line, _, mouseButton, row)
 
     QueueMore(line, 1)
 end
+
+-- For the tests.
+CraftPanel.OnRowClick = OnRowClick
 
 --------------------------------------------------------------------------------
 -- Panel
@@ -1043,6 +1177,9 @@ function CraftPanel:Build()
             CraftPanel:ApplyHeight()
             CraftPanel:Refresh()
         end,
+        -- As the one window's Crafting tab it never folds into its round
+        -- button, as the sell list (2026-11-22).
+        canFold = function() return not CraftPanel.inOne end,
     })
 
     -- Profit order is the useful default -- it answers "what should I make" --
@@ -1077,6 +1214,23 @@ function CraftPanel:Build()
     search:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     search:SetSize(PANEL_WIDTH - 28, 22)
     self.search = search
+
+    -- "Upgrades Only:" beside the search, shown only while Equipment can
+    -- answer (UpdateUpgradesBox). The words are the profession window's box's.
+    local upgradesBox = Widgets.CreateCheckbox(body, L["Upgrades Only:"], function(checked)
+        ns.Config:Set("craftPaneUpgradesOnly", checked)
+        CraftPanel:Refresh()
+    end, ns.Config:Get("craftPaneUpgradesOnly") == true)
+    upgradesBox:SetPoint("LEFT", search, "RIGHT", 10, 0)
+    upgradesBox:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Upgrades Only:"])
+        GameTooltip:AddLine(L["Shows only the gear you can make that beats what you wear now."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    upgradesBox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    upgradesBox:Hide()
+    self.upgradesBox = upgradesBox
 
     local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -8)
@@ -1296,12 +1450,45 @@ function CraftPanel.FrontWindows()
 end
 
 --- Dock to the right of the profession window, as tall as it is.
-function CraftPanel:Attach()
+function CraftPanel:Attach(besideOnly)
     local frame = self:Build()
+    -- With the one window on, the pane is its Crafting tab (UI/Main.lua's
+    -- TSTabs:AtDock), not a pane beside the profession window.
+    local tabs = ns.TSTabs
+    if not besideOnly and not self.inOne and tabs and tabs.AtDock then
+        local ok, there = pcall(tabs.AtDock, tabs, "profession")
+        if ok and there and self.inOne then return end
+    end
+    if self.inOne then
+        frame:Show()
+        self:Refresh()
+        return
+    end
     local opening = not frame:IsShown()
 
     self:WatchSheets()
     self:Place()
+
+    if self.stripMode then
+        -- No room beside the window: the strip inside it shows instead
+        -- (UI/CraftStrip.lua). Looked at again once the window settles.
+        if C_Timer and C_Timer.After then
+            for _, delay in ipairs({ 0.2, 1 }) do
+                C_Timer.After(delay, function() CraftPanel:Reflow() end)
+            end
+        end
+        return
+    end
+
+    -- Folded with nothing queued: out of sight until something is queued.
+    if self:WaitsForQueue() then
+        self.waitingForQueue = true
+        self:StopSlicedRefresh()
+        if self.queuedFrame then self.queuedFrame:Hide() end
+        frame:Hide()
+        return
+    end
+    self.waitingForQueue = false
 
     frame:Show()
     self:Refresh()
@@ -1427,7 +1614,31 @@ end
 
 --- Folded down to its title, by the player or for want of room.
 function CraftPanel:IsCollapsed()
+    if self.inOne then return false end
     return self.squeezed == true or ns.Collapse.IsCollapsed(COLLAPSE_KEY)
+end
+
+--- Folded to its title with nothing queued, the pane stays out of sight
+--- (a player's report, 2026-11-17: the folded title strip still sat over
+--- other addons' windows). Only the player's own fold counts, not the fold
+--- under a sheet. It comes back once something is queued, and /bts pane
+--- shows it anyway.
+function CraftPanel.StaysHidden(folded, queued, byHand)
+    return folded == true and not byHand and (tonumber(queued) or 0) <= 0
+end
+
+function CraftPanel:WaitsForQueue()
+    if self.inOne then return false end
+    local count = 0
+    local Queue = ns.Queue
+    if Queue and type(Queue.Count) == "function" then
+        local ok, n = pcall(Queue.Count, Queue)
+        if ok then count = n end
+    end
+    local Collapse = ns.Collapse
+    local folded = Collapse and type(Collapse.IsCollapsed) == "function"
+        and Collapse.IsCollapsed(COLLAPSE_KEY)
+    return CraftPanel.StaysHidden(folded, count, self.shownByHand)
 end
 
 --- The height the pane takes, given its full height.
@@ -1449,13 +1660,22 @@ end
 --- goes, never on a timer.
 function CraftPanel:Place()
     local frame = self.frame
-    if not frame then return end
+    if not frame or self.inOne then return end
 
     local tradeSkillFrame, frameName = self:FindTradeSkillFrame()
     local place, sheet = self:SheetSpot(tradeSkillFrame)
     local wasSqueezed = self.squeezed == true
 
     self.place = place
+
+    -- No room beside it: the slim strip inside the profession window
+    -- (UI/CraftStrip.lua) stands in for the pane.
+    if self:WantsStrip(tradeSkillFrame, place) then
+        self:EnterStrip()
+        if self.stripMode then return end
+    end
+    if self.stripMode then self:LeaveStrip() end
+
     self.squeezed = place == "fold"
 
     frame:ClearAllPoints()
@@ -1510,15 +1730,66 @@ end
 --- A sheet came or went: place the pane now, and again once the game has
 --- moved the sheet into its slot.
 function CraftPanel:SheetMoved()
-    if not self.frame or not self.frame:IsShown() then return end
-    self:Place()
+    if not self:IsShown() or self.inOne then return end
+    self:Reflow()
     if C_Timer and C_Timer.After then
         for _, delay in ipairs(self.SHEET_LOOKS) do
             C_Timer.After(delay, function()
-                if CraftPanel.frame and CraftPanel.frame:IsShown() then CraftPanel:Place() end
+                if CraftPanel:IsShown() then CraftPanel:Reflow() end
             end)
         end
     end
+end
+
+--------------------------------------------------------------------------------
+-- No room beside it: the strip inside the profession window
+--------------------------------------------------------------------------------
+
+--- True when the pane has no room beside the profession window: folded
+--- under the character sheet, or past the screen's edge.
+function CraftPanel:WantsStrip(tradeSkillFrame, place)
+    local Strip = ns.CraftStrip
+    if not (Strip and Strip.NoRoom) or self.inOne or not tradeSkillFrame then return false end
+    if place ~= "fold" and place ~= "dock" then return false end
+    local scale = 1
+    local frame = self.frame
+    if frame and type(frame.GetEffectiveScale) == "function" then
+        local ok, s = pcall(frame.GetEffectiveScale, frame)
+        if ok and type(s) == "number" and s > 0 then scale = s end
+    end
+    local overhang = 0
+    if place == "dock" then
+        local ok, over = pcall(self.RightOverhang, self, tradeSkillFrame)
+        if ok and type(over) == "number" then overhang = over end
+    end
+    local tradeScale = 1
+    if type(tradeSkillFrame.GetEffectiveScale) == "function" then
+        local ok, s = pcall(tradeSkillFrame.GetEffectiveScale, tradeSkillFrame)
+        if ok and type(s) == "number" and s > 0 then tradeScale = s end
+    end
+    return Strip.NoRoom(place, Edge(tradeSkillFrame, "GetRight"), overhang * tradeScale,
+        PANEL_GAP * scale, PANEL_WIDTH * scale, Edge(UIParent, "GetRight"))
+end
+
+--- The pane steps aside and the strip shows. Falls back to the pane when
+--- the strip finds nowhere to sit.
+function CraftPanel:EnterStrip()
+    local Strip = ns.CraftStrip
+    if not (Strip and Strip:Show()) then
+        self.stripMode = false
+        return
+    end
+    self.stripMode = true
+    self.squeezed = false
+    self:StopSlicedRefresh()
+    if self.queuedFrame then self.queuedFrame:Hide() end
+    if self.frame then self.frame:Hide() end
+end
+
+--- Room again: the strip goes and the pane comes back.
+function CraftPanel:LeaveStrip()
+    self.stripMode = false
+    if ns.CraftStrip then ns.CraftStrip:Hide() end
 end
 
 --- Hook each sheet once, as soon as it exists.
@@ -1539,6 +1810,7 @@ end
 --- Set the height outright, after folding or unfolding.
 function CraftPanel:ApplyHeight()
     if not self.frame then return end
+    if self.inOne then self:ApplyBody() return end
 
     local tradeSkillFrame = self:FindTradeSkillFrame()
     local full = tradeSkillFrame and self:DesiredHeight(tradeSkillFrame)
@@ -1549,14 +1821,29 @@ end
 
 --- Re-measure, for a profession window that changed size after it opened.
 function CraftPanel:Reflow()
-    if not self.frame or not self.frame:IsShown() then return end
+    if not self.frame or self.inOne then return end
+    if not self.frame:IsShown() and not self.stripMode then return end
 
     local tradeSkillFrame = self:FindTradeSkillFrame()
     if not tradeSkillFrame then return end
 
-    -- A sheet came, went or moved since the pane was placed: place it again.
-    if self:SheetSpot(tradeSkillFrame) ~= (self.place or "dock") then
+    -- A sheet came, went or moved since the pane was placed, or the room
+    -- beside the window came or went: place it again.
+    local spot = self:SheetSpot(tradeSkillFrame)
+    if spot ~= (self.place or "dock") or self:WantsStrip(tradeSkillFrame, spot) ~= (self.stripMode == true) then
         self:Place()
+        if self.stripMode then return end
+        if self.frame:IsShown() then return end
+        if self:WaitsForQueue() then
+            self.waitingForQueue = true
+            return
+        end
+        self.frame:Show()
+        self:Refresh()
+        return
+    end
+    if self.stripMode then
+        if ns.CraftStrip then ns.CraftStrip:Place() end
         return
     end
 
@@ -1708,11 +1995,13 @@ function CraftPanel:BeginRefresh()
     end
 
     self.title:SetText(L["Craft queue"])
+    self:UpdateUpgradesBox()
 
     local opts = {
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
         ignoreLimit = self:IgnoringLimit(),
+        upgradesOnly = self:UpgradesOnly(),
         method = PaneMethod(),
         methodRead = true,
     }
@@ -1723,6 +2012,27 @@ function CraftPanel:BeginRefresh()
     end
     opts.keepOrder = self.heldOrder
     return opts
+end
+
+--- Show the "Upgrades Only:" box only while Equipment can answer, and give
+--- the search box back the room when it goes. Moves nothing while unchanged.
+function CraftPanel:UpdateUpgradesBox()
+    local box, search = self.upgradesBox, self.search
+    if not (box and search) then return end
+
+    local show = self:UpgradesAvailable()
+    if box.shownFor == show then return end
+    box.shownFor = show
+
+    local full = PANEL_WIDTH - 28
+    if show then
+        local room = math.ceil(box:GetWidth() or 0) + 10
+        search:SetSize(math.max(80, full - room), 22)
+        box:Show()
+    else
+        box:Hide()
+        search:SetSize(full, 22)
+    end
 end
 
 --- Is the cursor on the pane? The order is held only then, so a row never
@@ -1781,6 +2091,8 @@ function CraftPanel:ApplyRows(rows, opts)
 
         self.empty:SetText(searching
             and L["Nothing here matches that."]
+            or opts and opts.upgradesOnly
+                and L["Nothing you can make here is an upgrade right now."]
             or (self.hiddenAtLimit or 0) > 0
                 and L["Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."]
             or (self.hiddenIgnored or 0) > 0
@@ -1798,6 +2110,12 @@ end
 
 function CraftPanel:Refresh()
     self:StopSlicedRefresh()
+    if self.stripMode then
+        -- Room may have come back: Reflow puts the pane back and fills it.
+        self:Reflow()
+        if self.stripMode and ns.CraftStrip then ns.CraftStrip:Update() end
+        return
+    end
 
     local opts = self:BeginRefresh()
     if not opts then return end
@@ -1817,6 +2135,10 @@ local SLICE_MS = 3
 -- as a jerky craft bar (2026-10-09). Clicks and typing still refresh at once
 -- (Refresh); only the refreshes events ask for are spread out.
 function CraftPanel:RefreshInSlices()
+    if self.stripMode then
+        if ns.CraftStrip then ns.CraftStrip:Update() end
+        return
+    end
     if not (Util and type(Util.NewWorker) == "function") then return self:Refresh() end
 
     -- One already under way finishes, then goes again with what changed since.
@@ -1882,17 +2204,18 @@ end
 function CraftPanel:UpdateSummary()
     if not self.summary then return end
 
-    local queued = ns.Queue:Count()
+    -- With "Only My Crafts:" ticked, only this character's crafts count.
+    local shownList = ns.Queue:Count() > 0 and ns.Queue.Shown and ns.Queue:Shown() or nil
     self.summaryNote = nil
     self.craftTime = nil
 
-    if queued == 0 then
+    if ns.Queue:Count() == 0 or (shownList and #shownList == 0) then
         self.summary:SetText(L["Nothing queued"])
         self.summary:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
-    local totals = ns.Queue:GetTotals()
+    local totals = ns.Queue:GetTotals(shownList)
     local colour = (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit
 
     -- A craft with no price is left out of the profit. A * says so, and the
@@ -1909,7 +2232,7 @@ function CraftPanel:UpdateSummary()
     -- How long the queue takes to cast comes first, and is the first thing
     -- dropped when the line runs short.
     local texts = {}
-    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime() or nil
+    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime(shownList) or nil
     self.craftTime = craftTime
     if craftTime and craftTime.seconds then
         local about = ns.CraftTime.Format(craftTime.seconds)
@@ -1941,6 +2264,10 @@ end
 local QUEUED_WIDTH = 250
 local QUEUED_ROW_HEIGHT = 30
 local QUEUED_GAP = 4
+-- On the one window's Crafting tab: a little wider than the drawer, with
+-- the tab's room to spare.
+local ONE_QUEUED_WIDTH = 280
+local ONE_QUEUED_GAP = 8
 
 CraftPanel.QUEUED_WIDTH = QUEUED_WIDTH
 
@@ -2098,6 +2425,8 @@ local QUEUED_MAX_SHARE = 0.45
 --
 -- From the counts Inventory already saved for each character; nothing new is
 -- read. Only a hint: stock on another character is not in reach of the craft.
+-- Only characters this one can mail (the same realm and side): a Horde
+-- crafter was told its Alliance alt held the cloth (2026-11-27).
 -- @return name, count  (nil when no other character has any)
 function CraftPanel:AltHolder(itemID)
     local characters = ns.db and ns.db.characters
@@ -2105,9 +2434,11 @@ function CraftPanel:AltHolder(itemID)
 
     local selfKey = ns.Config:GetCharacterKey()
     local bestKey, bestCount = nil, 0
+    local who = ns.Characters
 
     for key, record in pairs(characters) do
-        if key ~= selfKey and type(record) == "table" then
+        if key ~= selfKey and type(record) == "table"
+            and not (who and who.InReach and not who:InReach(key)) then
             local count = 0
             if type(record.inventory) == "table" then count = count + (record.inventory[itemID] or 0) end
             if type(record.bank) == "table" then count = count + (record.bank[itemID] or 0) end
@@ -2397,21 +2728,97 @@ function CraftPanel.QueuedFits(paneRight, screenRight)
     return paneRight + QUEUED_GAP + QUEUED_WIDTH <= screenRight
 end
 
---- Show the queued crafts beside the pane while anything is queued.
+--- Is the one window's Crafting tab wide enough for the queued crafts on
+--- its right? Too narrow, they step away so the crafts stay readable (the
+--- Queue tab still has them all).
+-- @param width the tab's width, nil when not laid out yet
+function CraftPanel.QueuedFitsInOne(width)
+    if type(width) ~= "number" or width <= 0 then return true end
+    return width >= PANEL_WIDTH + ONE_QUEUED_GAP + ONE_QUEUED_WIDTH
+end
+
+--- Lay the pane into the one window's Crafting tab: the whole tab, or its
+--- left part with the queued crafts on the right (the owner asked for the
+--- drawer's lists there, 2026-11-18). Re-placed only when that changes.
+function CraftPanel:LayOutInOne(column)
+    local container, frame = self.oneContainer, self.frame
+    if not (container and frame) then return end
+    column = column and true or false
+    if self.columnInOne == column then return end
+    self.columnInOne = column
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+    frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT",
+        column and -(ONE_QUEUED_WIDTH + ONE_QUEUED_GAP) or 0, 0)
+end
+
+--- The queued crafts into the Crafting tab's right side, without the
+--- drawer's own rim, the way the pane sits there.
+function CraftPanel:QueuedIntoOne(frame)
+    local container = self.oneContainer
+    if self.queuedInOne == container then return end
+    self.queuedInOne = container
+    frame:SetParent(container)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
+    frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
+    frame:SetWidth(ONE_QUEUED_WIDTH)
+    frame:SetClampedToScreen(false)
+    local trim = rawget(frame, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(frame, 0)
+end
+
+--- Back to the drawer beside the pane, rim and all.
+function CraftPanel:QueuedBeside(frame)
+    if not self.queuedInOne then return end
+    self.queuedInOne = nil
+    frame:Hide()
+    frame:SetParent(self.frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    frame:SetWidth(QUEUED_WIDTH)
+    frame:SetClampedToScreen(true)
+    local trim = rawget(frame, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(frame, 0.08)
+end
+
+--- Show the queued crafts beside the pane while anything is queued: past
+--- its right edge, or on the right of the one window's Crafting tab.
 function CraftPanel:RefreshQueued()
+    local container = self.inOne and self.oneContainer or nil
     local wanted = self.frame and self.frame:IsShown()
         and not self:IsCollapsed() and ns.Queue:Count() > 0
-        and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
+    if wanted and container then
+        local ok, width = pcall(container.GetWidth, container)
+        wanted = CraftPanel.QueuedFitsInOne(ok and width or nil)
+    elseif wanted then
+        wanted = CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
+    end
 
-    if not wanted then
+    -- With "Only My Crafts:" ticked, only this character's crafts.
+    local entries = wanted and (ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll())
+    -- In the Queue tab's Sort By order (2026-11-26).
+    if entries and ns.Queue.Ordered then entries = ns.Queue:Ordered(entries) end
+    if not entries or #entries == 0 then
         if self.queuedFrame then self.queuedFrame:Hide() end
+        if container then self:LayOutInOne(false) end
         return
     end
 
-    local entries = ns.Queue:GetAll()
-
     local frame = self:BuildQueued()
-    frame:SetHeight(self.frame:GetHeight())
+    local height
+    if container then
+        self:QueuedIntoOne(frame)
+        self:LayOutInOne(true)
+        local ok, tall = pcall(container.GetHeight, container)
+        height = ok and tonumber(tall) or 0
+    else
+        self:QueuedBeside(frame)
+        height = self.frame:GetHeight()
+        frame:SetHeight(height)
+    end
     local opening = not frame:IsShown()
     frame:Show()
     if opening and ns.Motion then ns.Motion:Open(frame, 0) end
@@ -2421,7 +2828,7 @@ function CraftPanel:RefreshQueued()
 
     -- Between the title and the footer, shared with the shopping list when
     -- it is showing.
-    local available = frame:GetHeight() + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
+    local available = height + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
     local shown = self:IsShoppingShown()
 
     -- Built once for the rows and the total: it walks the queue, the bags
@@ -2456,6 +2863,20 @@ end
 -- rows already on screen, the queued crafts list, the buttons and the total,
 -- are redrawn on the spot, and the full refresh follows as before.
 function CraftPanel:OnQueueChanged()
+    -- Folded with nothing queued, the pane steps out of sight; the first
+    -- craft queued while the profession window is open brings it back.
+    if self.frame and not self.inOne and not self.stripMode then
+        if self.frame:IsShown() and self:WaitsForQueue() then
+            self:Hide()
+            self.waitingForQueue = true
+            return
+        end
+        if self.waitingForQueue and not self.frame:IsShown() and not self:WaitsForQueue()
+            and ns.Crafting and ns.Crafting.isTradeSkillOpen then
+            self:Attach(true)
+        end
+    end
+
     if self.frame and self.frame:IsShown() and not self:IsCollapsed() and self.list then
         for _, line in ipairs(self.list:GetData() or {}) do
             local _, entry = ns.Queue:Find(line.recipeID, true)
@@ -2493,10 +2914,95 @@ function CraftPanel:Hide()
     -- A refresh still spread over frames would price on for a pane nobody
     -- sees, and throw the result away at the end.
     self:StopSlicedRefresh()
+    if self.stripMode then self:LeaveStrip() end
     if self.frame then self.frame:Hide() end
+    -- In the one window the queued crafts sit in the tab, not on the pane.
+    if self.queuedFrame then self.queuedFrame:Hide() end
+end
+
+--- A resized Crafting tab may now have room for the queued crafts on its
+--- right, or no longer have it: asked again once the size settles, not on
+--- every step of the drag. Hooked once per tab.
+function CraftPanel:WatchTabSize(container)
+    if not container or rawget(container, "craftPaneSized") or not container.HookScript then return end
+    container.craftPaneSized = true
+    container:HookScript("OnSizeChanged", function()
+        if CraftPanel.queuedSizePending then return end
+        CraftPanel.queuedSizePending = true
+        C_Timer.After(0.1, function()
+            CraftPanel.queuedSizePending = false
+            if CraftPanel.inOne and CraftPanel.oneContainer == container then
+                CraftPanel:RefreshQueued()
+            end
+        end)
+    end)
+end
+
+--- Lay the pane into the one window's Crafting tab (UI/Main.lua's
+--- TSTabs:SettleDock, while the one window sits beside the profession
+--- window). Its own rim, halo and fold go; the tab's area holds it.
+function CraftPanel:IntoOne(container)
+    if not container then return end
+    local frame = self:Build()
+    if self.stripMode then self:LeaveStrip() end
+    self.inOne = true
+    self.squeezed = false
+    self.oneContainer = container
+    if ns.FoldWindow and ns.FoldWindow:IsFolded(frame) then ns.FoldWindow:Unfold(frame, true) end
+    self:WatchTabSize(container)
+    frame:SetParent(container)
+    self.columnInOne = nil
+    self:LayOutInOne(false)
+    if frame.SetToplevel then frame:SetToplevel(false) end
+    pcall(frame.SetFrameStrata, frame, container:GetFrameStrata() or "MEDIUM")
+    local trim = rawget(frame, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(frame, 0)
+    self:ApplyBody()
+    if self.queuedFrame then self.queuedFrame:Hide() end
+    -- Refresh brings the queued crafts back on the tab's right side.
+    if ns.Crafting and ns.Crafting.isTradeSkillOpen then
+        frame:Show()
+        self:Refresh()
+    end
+end
+
+--- Back to the pane's own frame, as the one window leaves the profession
+--- window or Tradeskills' tab. Hidden until BackBeside or the next open.
+function CraftPanel:OutOfOne()
+    if not self.inOne then return end
+    self.inOne = false
+    self.oneContainer = nil
+    self.columnInOne = nil
+    if self.queuedFrame then self:QueuedBeside(self.queuedFrame) end
+    local frame = self.frame
+    if not frame then return end
+    self:StopSlicedRefresh()
+    frame:Hide()
+    frame:SetParent(UIParent)
+    frame:ClearAllPoints()
+    frame:SetWidth(PANEL_WIDTH)
+    pcall(frame.SetFrameStrata, frame, CraftPanel.STRATA)
+    if frame.SetToplevel then frame:SetToplevel(true) end
+    local trim = rawget(frame, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(frame, 0.08)
+    self:ApplyBody()
+end
+
+--- The one window moved on while the profession window is still open:
+--- the pane goes back beside it, as before.
+function CraftPanel:BackBeside()
+    if self.inOne then return end
+    local trade = self:FindTradeSkillFrame()
+    local open = trade and type(trade.IsShown) == "function" and trade:IsShown()
+    if open and ns.Crafting and ns.Crafting.isTradeSkillOpen and CraftPanel.OpensWithProfession() then
+        self:Attach(true)
+    end
 end
 
 function CraftPanel:IsShown()
+    if self.stripMode then return true end
     return self.frame ~= nil and self.frame:IsShown()
 end
 
@@ -2507,17 +3013,21 @@ end
 -- anything" has to be answerable from the chat frame.
 function CraftPanel:Toggle()
     if self:IsShown() then
+        self.shownByHand = false
         self:Hide()
         ns.Print(L["craft pane hidden. It comes back when you open a profession."])
         return
     end
 
+    -- Asked for by hand: shown even when folded with nothing queued.
+    self.shownByHand = true
     self:Attach()
 
     if self:IsShown() then
         local _, frameName = self:FindTradeSkillFrame()
 
-        local count = #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })
+        local count = #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit(),
+            upgradesOnly = self:UpgradesOnly() })
         ns.Print(frameName
             and L.Format("craft pane shown, docked to the profession window, %d recipe(s) listed.", count)
             or L.Format("craft pane shown (no profession window open), %d recipe(s) listed.", count))
@@ -2548,6 +3058,13 @@ end
 
 --- True unless "Open at Professions:" on the Queue page is unticked.
 function CraftPanel.OpensWithProfession()
+    -- "At A Profession:" Stay Closed (UI.WindowAt in UI/Main.lua), which
+    -- an unticked openAtProfessions still reads as.
+    local UI = ns.UI
+    if UI and UI.WindowAt then
+        local ok, choice = pcall(UI.WindowAt, "profession")
+        if ok and choice then return choice ~= "closed" end
+    end
     return ns.Config:Get("openAtProfessions") ~= false
 end
 
@@ -2560,6 +3077,9 @@ function CraftPanel:OnEnable()
         -- request, 2026-11-05): the pane waits for /bts pane.
         if not CraftPanel.OpensWithProfession() then return end
         CraftPanel:Attach()
+        -- With the one window off, Full Window or Round Button opens
+        -- Tradeskills' own window too (UI:ArrivedAt).
+        if ns.UI and ns.UI.ArrivedAt then pcall(ns.UI.ArrivedAt, ns.UI, "profession") end
 
         C_Timer.After(0.5, function()
             if ns.Crafting and ns.Crafting.isTradeSkillOpen then
@@ -2569,7 +3089,12 @@ function CraftPanel:OnEnable()
     end)
 
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", function()
+        CraftPanel.shownByHand = false
+        CraftPanel.waitingForQueue = false
         CraftPanel:Hide()
+        local tabs = ns.TSTabs
+        if tabs and tabs.DockClosed then tabs:DockClosed("profession") end
+        if ns.UI and ns.UI.CloseWithShop then pcall(ns.UI.CloseWithShop, ns.UI, "profession") end
     end)
 
     -- A name drawn before the client had its item gets its rarity colour

@@ -126,6 +126,15 @@ C_Reputation = {
 ns.db = {}
 
 assert(loadfile(lfs_cwd .. "/Data/CraftsmansWrits.lua"))("Blackthornes_TS", ns)
+-- The typed writ IDs and hand-in spots are checked on their own below. The
+-- rest of this file finds writs by name, as the game hands them out, so all
+-- but the Golden Rod's ID are put aside, and the spots with them.
+local typedIDs, typedQuests, handIns = {}, {}, ns.WRIT_HAND_INS
+for _, writ in ipairs(ns.CRAFTSMANS_WRITS) do
+    typedIDs[writ.item], typedQuests[writ.item] = writ.writ, writ.quest
+    if writ.item ~= 11128 then writ.writ = nil end
+end
+ns.WRIT_HAND_INS = nil
 assert(loadfile(lfs_cwd .. "/Logic/Writs.lua"))("Blackthornes_TS", ns)
 
 local Writs = ns.Writs
@@ -158,6 +167,26 @@ check("no item is asked for by two writs", once)
 check("9 Journeyman, 12 Expert and 9 Artisan in each", counts.Alchemy1 == 9 and counts.Alchemy2 == 12
     and counts.Alchemy3 == 9 and counts.Tailoring2 == 12)
 
+local idsOk, questsOk, usedIDs, usedQuests = true, true, {}, {}
+for item, id in pairs(seenItems) do
+    local writID, quest = typedIDs[item], typedQuests[item]
+    idsOk = idsOk and type(writID) == "number" and writID >= ns.WRIT_ID_RANGE[1]
+        and writID <= ns.WRIT_ID_RANGE[2] and not usedIDs[writID]
+    questsOk = questsOk and type(quest) == "number" and not usedQuests[quest]
+    if writID then usedIDs[writID] = true end
+    if quest then usedQuests[quest] = true end
+end
+check("every writ has its own item ID, inside Forever's range", idsOk)
+check("and its own quest", questsOk)
+local spots, spotsOk = 0, type(handIns) == "table"
+for item, spot in pairs(handIns or {}) do
+    spots = spots + 1
+    spotsOk = spotsOk and seenItems[item] == 1 and type(spot.name) == "string" and type(spot.zone) == "string"
+        and type(spot.mapID) == "number" and ((spot.x == nil and spot.y == nil)
+        or (spot.x > 0 and spot.x < 100 and spot.y > 0 and spot.y < 100))
+end
+check("101 typed hand-in spots, each for a writ, with a zone and map", spots == 101 and spotsOk)
+
 --------------------------------------------------------------------------------
 print("\nreading writ names")
 
@@ -183,6 +212,13 @@ check("the item is made when that is cheaper", rod.how == "make" and rod.itemCos
 check("with the reported 75 reputation", rod.rep == 75 and rod.source == "reported")
 check("total is writ + item", rod.total == 550)
 check("and a point is a 75th of that", math.abs(rod.perRep - 550 / 75) < 1e-9)
+
+-- A craft with a cooldown is never Make (Discord, 2026-11-27: 10 Gold Bars
+-- by transmute, one an hour at most). Cost:FindRecipeToMake leaves it out.
+ns.Cost.FindRecipeToMake = function() return nil end
+local bought = Row(Writs:GetRows(), ROD)
+check("a cooldown craft is not made for a writ", bought.how ~= "make" and bought.itemCost == 900)
+ns.Cost.FindRecipeToMake = nil
 
 -- None on the auction house: no writ to buy, so no price (a player asked,
 -- 2026-10-11, for the column to go blank rather than show the average).
@@ -450,7 +486,7 @@ local function Label()
     return label
 end
 
-CreateFrame = function() return Stub() end
+CreateFrame = function() return Stub({ CreateTexture = function() return Stub() end }) end
 GameTooltip = Stub({ lines = {}, AddLine = function(self, text) self.lines[#self.lines + 1] = text end })
 
 ns.Theme = {
@@ -676,7 +712,18 @@ check("a shipped spot stands in until one is learned",
     ns.Writs:GetCustomer(other).name == "Shipped Customer")
 check("a spot learned in play beats the shipped one",
     ns.Writs:GetCustomer(writOf[ROD]).name == "Tilda Hand")
+ns.WRIT_HAND_INS = {
+    [ROD] = { name = "Typed Name", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+    [other.item] = { name = "Typed Customer", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+    [WISDOM] = { name = "Typed Wisdom", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+}
+check("a shipped spot beats a typed one", ns.Writs:GetCustomer(other).name == "Shipped Customer")
 ns.WRIT_CUSTOMERS = nil
+check("a typed spot stands in when nothing else is known",
+    ns.Writs:GetCustomer(other).name == "Typed Customer")
+check("a spot learned in play beats a typed one", ns.Writs:GetCustomer(writOf[ROD]).name == "Tilda Hand"
+    and ns.Writs:GetCustomer(writOf[WISDOM]).zone == "Duskwood" and ns.Writs:GetCustomer(writOf[WISDOM]).x == 70)
+ns.WRIT_HAND_INS = nil
 groupBy.onSelect("zone")
 check("Group By is kept in Settings", config.writGroupBy == "zone")
 local function Header(title)
@@ -713,11 +760,148 @@ check("and offers Show Again", headRow.showAgain.shown == true and headRow.showW
     and headRow.zoneInfo.text:find("Skipped") ~= nil)
 ns.DealsWrits:SkipZone("Ashenvale", false)
 check("Show Again brings it back", not Header("Ashenvale").skipped)
+-- A spot learned while the list shows (a writ taken, a hand-in window)
+-- redraws it after the burst settles, with no other event.
+local fresh
+for _, entry in ipairs(ns.CRAFTSMANS_WRITS) do
+    if entry.item ~= ROD and entry.item ~= WISDOM then fresh = entry break end
+end
+Flush()
+ns.Writs:NoteCustomer(fresh, { name = "New Customer", zone = "Stranglethorn Vale", mapID = 1434, x = 28, y = 76 })
+check("a new spot waits for the burst", not Header("Stranglethorn Vale"))
+Flush()
+local stv = Header("Stranglethorn Vale")
+check("a spot learned while the list shows moves its writ out of Not Seen Yet",
+    stv and stv.count == 1 and Header("Not Seen Yet").count == #ns.CRAFTSMANS_WRITS - 3)
 groupBy.onSelect("none")
 check("back to no grouping", not list.data[1].header)
 local plainRow = Stub()
 list.opts.createRow(plainRow)
 list.opts.updateRow(plainRow, list.data[1])
+
+--------------------------------------------------------------------------------
+print("\nwrits done today")
+
+-- A player asked to see which orders were turned in today, and when new
+-- ones come in (from a mockup the owner said build, 2026-11-17).
+local savedDone = { time = time, UnitGUID = UnitGUID, C_DateAndTime = C_DateAndTime,
+    C_QuestLog = C_QuestLog, GetQuestResetTime = GetQuestResetTime }
+local now = 1800000000
+time = function() return now end
+local untilReset = 6 * 3600 + 12 * 60 + 30
+C_DateAndTime = { GetSecondsUntilDailyReset = function() return untilReset end }
+UnitGUID = nil
+local rodQuest = writOf[ROD].quest
+local rewardsBefore = ns.db.merchantsFavor.writRewards
+local function Bare(text) return (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+local function Find(pattern)
+    for _, label in ipairs(labels) do
+        if Bare(label.text):find(pattern) then return label end
+    end
+end
+local function Mine() return (ns.db.merchantsFavor.writsDone or {})["Player-1-0001"] end
+
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("no GUID to read, nothing is written", Mine() == nil)
+UnitGUID = function() error("secret value") end
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("a GUID that raises (a dungeon) writes nothing", Mine() == nil)
+
+UnitGUID = function() return "Player-1-0001" end
+Fire("QUEST_TURNED_IN", 12345, 0, 0)
+check("a quest that is no writ is not marked", Mine() == nil)
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("a writ turned in is marked until the daily reset", Mine() and Mine()[rodQuest] == now + untilReset)
+check("the rewards learned are left alone", ns.db.merchantsFavor.writRewards == rewardsBefore)
+Flush()
+local rod = Row(list.data, ROD)
+check("its row says done", rod.done == true and rod.doneUntil == now + untilReset)
+check("the list keeps its order", list.data[1].key == ROD)
+
+local doneRow = Stub()
+list.opts.createRow(doneRow)
+doneRow.name.SetAlpha = function(self, value) self.alpha = value end
+list.opts.updateRow(doneRow, rod)
+check("the row gets the Done Today tag", doneRow.tag and doneRow.tag.shown == true
+    and doneRow.tag.label.text == "Done Today")
+check("and fades in place", doneRow.name.alpha == 0.5 and doneRow.name.text == "Golden Rod")
+list.opts.updateRow(doneRow, Row(list.data, WISDOM))
+check("an open writ has no tag and no fade", doneRow.tag.shown == false and doneRow.name.alpha == 1)
+
+check("the line over the list counts the priced writs done today",
+    Find("^Done Today: 1 of %d+$") ~= nil)
+check("and says when new orders come in", Find("^New Orders In: 6h 12m$") ~= nil)
+
+GameTooltip.lines = {}
+list.opts.onEnter(doneRow, rod)
+local said = false
+for _, line in ipairs(GameTooltip.lines) do
+    said = said or line == "Done today. You can do it again in 6h 12m."
+end
+check("the tooltip says when it can be done again", said)
+
+list.opts.onClick(rod, 1, "LeftButton")
+check("the picked writ's note says it was turned in today",
+    Find("You turned this one in today%. You can do it again in 6h 12m%.$") ~= nil)
+list.opts.onClick(Row(list.data, WISDOM), 1, "LeftButton")
+check("an open writ's note keeps the old line and adds the clock",
+    Find("Each order can be done once a day%. New orders in 6h 12m%.$") ~= nil)
+
+groupBy.onSelect("zone")
+local ashDone = Header("Ashenvale")
+check("a zone heading counts its writs done today", ashDone.done == 1)
+list.opts.updateRow(headRow, ashDone)
+check("and says so after its counts", Bare(headRow.zoneInfo.text):find("· 1 done today$") ~= nil)
+groupBy.onSelect("none")
+
+ns.Config.GetCharacterKey = function() return "Player-1-0002" end
+ns.DealsWrits:Refresh()
+check("another character's day is its own", not Row(list.data, ROD).done)
+ns.Config.GetCharacterKey = function() return "Player-1-0001" end
+ns.DealsWrits:Refresh()
+
+untilReset = 5 * 60 + 10
+ns.DealsWrits:Tick()
+check("once a minute only the clock moves", Find("^New Orders In: 5m$") ~= nil and Row(list.data, ROD).done)
+now = now + 6 * 3600 + 13 * 60
+untilReset = 24 * 3600 - 60
+local before = list.data
+ns.DealsWrits:Tick()
+check("past the reset the list redraws once and the mark stops counting",
+    list.data ~= before and not Row(list.data, ROD).done and Find("^Done Today: 0 of %d+$") ~= nil)
+check("the old mark is kept, not wiped", Mine()[rodQuest] ~= nil)
+untilReset = 30
+ns.DealsWrits:Refresh()
+check("under a minute to go", Find("^New Orders In: under 1m$") ~= nil)
+
+-- Turned in with the addon off: the game's own done flag.
+untilReset = 3600
+local flagged = { [writOf[WISDOM].quest] = true }
+C_QuestLog = { IsQuestFlaggedCompleted = function(id) return flagged[id] == true end }
+ns.Writs:ReadFlagged()
+check("a writ the game says is done today is marked", Mine()[writOf[WISDOM].quest] == now + 3600)
+Flush()
+check("and its row says done", Row(list.data, WISDOM).done == true)
+
+-- The game will not say when the reset is: the clock hides, the tag stays.
+C_DateAndTime = nil
+GetQuestResetTime = nil
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+Flush()
+check("with no reset time a turn-in still counts for a day", Mine()[rodQuest] == now + 86400
+    and Row(list.data, ROD).done == true)
+check("and the clock hides", Find("^New Orders In:") == nil or not Find("^New Orders In:").shown)
+list.opts.onClick(Row(list.data, ROD), 1, "LeftButton")
+check("and the note keeps the old line", Find("Each order can be done once a day%.$") ~= nil)
+flagged = {}
+ns.Writs:ReadFlagged()
+check("a stand-in mark from this session is not cleared by the flag", Row(ns.Writs:GetRows(), ROD).done == true)
+GetQuestResetTime = function() return 7200 end
+check("the older reset call answers too", ns.Writs.SecondsToReset() == 7200)
+GetQuestResetTime = function() error("secret value") end
+check("a reset call that raises is no clock", ns.Writs.SecondsToReset() == nil)
+
+for key, value in pairs(savedDone) do _G[key] = value end
 
 show.onSelect("flips")
 check("back to the flips, the goal menu hides", goal.shown == false and #lists == 2)

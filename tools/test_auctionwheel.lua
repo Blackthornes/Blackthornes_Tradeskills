@@ -240,5 +240,26 @@ drawer.hooks.OnShow()
 assert(bindings.MOUSEWHEELUP, "seen again, bound again")
 Hide()
 
+-- 9. The auction house opens before the drawer shows, and the drawer's own
+-- OnUpdate never runs: our own frame's look still takes the wheel.
+assert(next(bindings) == nil, "nothing bound while the drawer is closed")
+handlers.AUCTION_HOUSE_SHOW()
+assert(next(bindings) == nil, "drawer not up yet, nothing bound")
+assert(Wheel.owner.scripts.OnUpdate, "our own look runs while the auction house is open")
+shown = true -- shown without its OnShow hook reaching us
+Wheel.owner.scripts.OnUpdate(nil, Wheel.CHECK_EVERY)
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "our own look took the wheel")
+-- 10. Opened again while it thinks it still holds the wheel: bound fresh.
+local sets = 0
+local plainSet = SetOverrideBindingClick
+SetOverrideBindingClick = function(...) sets = sets + 1; return plainSet(...) end
+handlers.AUCTION_HOUSE_SHOW()
+assert(sets == 2 and bindings.MOUSEWHEELUP, "a new visit binds the wheel fresh")
+SetOverrideBindingClick = plainSet
+shown = false
+handlers.AUCTION_HOUSE_CLOSED()
+assert(Wheel.owner.scripts.OnUpdate == nil, "the look stops when the auction house closes")
+assert(next(bindings) == nil, "and the wheel goes back")
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 print("test_auctionwheel: all passed")

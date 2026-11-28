@@ -471,7 +471,9 @@ function SkillUp:IsWorthIt(analysis)
     local profit = analysis.profit or 0
     if profit <= 0 then return false end
 
-    return profit >= (ns.Config:Get("minProfit") or 0)
+    -- The craft's profession's own Minimum Profit, when it has one.
+    local minProfit = ns.Profit and ns.Profit.MinimumsFor and ns.Profit:MinimumsFor(analysis)
+    return profit >= (minProfit or ns.Config:Get("minProfit") or 0)
 end
 
 --- Everything starred right now, best profit first.
@@ -481,7 +483,10 @@ function SkillUp:GetRecommended()
     if not ns.Profit then return starred end
 
     for recipeID in pairs(ns.Recipes:GetAll()) do
-        local analysis = ns.Profit:Analyse(recipeID)
+        -- Ranked the way the Profit tab ranks, so the stars listed here are
+        -- the stars it draws (a soulbound craft can pay by vendor or DE).
+        local method = ns.Profit.GetMethod and ns.Profit:GetMethod() or nil
+        local analysis = ns.Profit:Analyse(recipeID, nil, method)
 
         if analysis and analysis.recommended then
             starred[#starred + 1] = analysis

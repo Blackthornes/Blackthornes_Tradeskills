@@ -49,7 +49,6 @@ local VIEWS = {
             { key = "margin", label = L["MARGIN"],     width = 50, justify = "CENTER" },
             { key = "value",  label = L["DISENCHANT"], width = 70, money = true },
             { key = "buy",    label = L["BUY"],        width = 66, money = true },
-            { key = "skill",  label = L["SKILL"],      width = 40, justify = "CENTER" },
             { key = "age",    label = L["AGE"],        width = 44, justify = "CENTER" },
         },
         hint = L["Right-click for more."],
@@ -79,6 +78,17 @@ local MAX_COLUMNS = 6
 -- Any column but the item's name can be hidden, each view on its own
 -- (UI/Columns.lua).
 local LIST_IDS = { auction = "disenchant", bag = "disenchantbags", material = "disenchantmaterial" }
+--- The Minimum Profit (copper) and Minimum Margin (percent) the deals
+--- here must clear: the Disenchanting row in Minimums by Profession, else
+--- the usual ones.
+local function DisenchantMinimums()
+    if ns.Profit and ns.Profit.DisenchantMinimums then
+        local ok, profit, margin = pcall(ns.Profit.DisenchantMinimums, ns.Profit)
+        if ok and profit then return profit, margin or 0 end
+    end
+    return ns.Config:Get("minProfit") or 0, ns.Config:Get("minMarginPercent") or 0
+end
+
 ns.Columns:Register("disenchant", L["Disenchanting: auction house"], VIEWS.auction.columns)
 ns.Columns:Register("disenchantbags", L["Disenchanting: my bags"], VIEWS.bag.columns)
 ns.Columns:Register("disenchantmaterial", L["Disenchanting: find a material"], VIEWS.material.columns)
@@ -93,6 +103,9 @@ local state = {
     hidden = 0,
     -- The material Find a material shows, picked the first time it opens.
     material = nil,
+    -- With Keep Salvager Results Apart ticked: "plain", "salvager" or
+    -- "side", the switch above Breaks Into.
+    salvagerView = "side",
 }
 
 local widgets = {}
@@ -196,8 +209,88 @@ local function SearchAuctionHouse(entry)
     -- What is bought of it now is marked to disenchant.
     if ns.DisenchantBuys then ns.DisenchantBuys:Intend(entry.itemID) end
 
+    -- Buy One (2026-11-24): its listings, so the same button can buy them.
+    if ns.DisenchantQuickBuy then ns.DisenchantQuickBuy:Start(entry) end
+
     ns.Print(L.Format("Searching the auction house for %s. Buy it in the auction house window at %s or less and it's marked to disenchant. If the list there doesn't change, type the name into its search box.",
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
+end
+
+--- Buy One: what the side pane's auction button says, and its line under.
+-- Before a search it reads "Search the auction house". Once the search is
+-- back it buys the cheapest listing on each click (Logic/DisenchantQuickBuy).
+local function Picked()
+    local entry = state.selected
+    if entry and entry.source and entry.kind == "auction" then entry = entry.source end
+    return entry
+end
+
+local function QuickBuyState(entry)
+    local quick = ns.DisenchantQuickBuy
+    if not (quick and entry and entry.kind == "auction") then return nil end
+    return quick:StateFor(entry.itemID), quick
+end
+
+local function UpdateQuickBuy()
+    local detail = widgets.detail
+    if not detail then return end
+    local button, under = detail.searchButton, detail.quickLine
+    local entry = Picked()
+    local phase, quick = QuickBuyState(entry)
+
+    -- A different deal picked lets the last one go, so the key never buys
+    -- something the pane doesn't show.
+    if quick and not phase and quick.current and entry and entry.kind == "auction" then
+        quick:Closed()
+    end
+
+    local text, enabled, confirming, line = L["Search the auction house"], true, false, nil
+    if phase == "ready" or phase == "confirm" then
+        local nextOne = quick:Next()
+        text = phase == "confirm" and L["Confirm"]
+            or L.Format("Buy One for %s", Util.FormatMoney(nextOne.total, { noColor = true }))
+        confirming = phase == "confirm"
+        local more = quick:MoreAfterNext()
+        if more > 0 and quick.current.most then
+            line = L.Format("%d more at %s or less", more, Util.FormatMoney(quick.current.most, { noColor = true }))
+        end
+    elseif phase == "done" then
+        text, enabled = L["No more deals for this item"], false
+        local cur = quick.current
+        if cur.bought > 0 then
+            line = L.Format("Bought %d for %s", cur.bought, Util.FormatMoney(cur.spent, { noColor = true }))
+        end
+    end
+
+    button:SetText(text)
+    -- Its tooltip tells how Search works; a buy needs none.
+    button.tooltipText = phase == nil and L["Finds this item on the auction house. You click Buy yourself."] or nil
+    if button.SetEnabledState then button:SetEnabledState(enabled) end
+    if button.SetConfirming then button:SetConfirming(confirming) end
+    -- Wide enough for the longest of its words, never past the pane.
+    local width = 180
+    if Theme.MeasureText then
+        for _, word in ipairs({ L["Search the auction house"], L["No more deals for this item"], text }) do
+            local ok, measured = pcall(Theme.MeasureText, "small", word)
+            if ok and type(measured) == "number" then width = math.max(width, measured + 24) end
+        end
+    end
+    button:SetWidth(math.min(width, DETAIL_WIDTH - 24))
+    under:SetText(line or "")
+    under:SetShown(line ~= nil and button:IsShown())
+end
+
+--- The button's click: buy the next listing once the search is back, else
+--- search.
+local function AuctionButtonClicked()
+    local entry = Picked()
+    local phase, quick = QuickBuyState(entry)
+    if phase == "ready" or phase == "confirm" then
+        quick:Click()
+    elseif phase ~= "done" then
+        SearchAuctionHouse(entry)
+    end
+    UpdateQuickBuy()
 end
 
 --------------------------------------------------------------------------------
@@ -337,10 +430,6 @@ local function FillCell(cell, key, entry)
         text = tostring(entry.count or 0)
     elseif key == "buy" then
         text = Money(entry.buy)
-    elseif key == "skill" then
-        text = entry.needs and tostring(entry.needs) or ""
-        -- Red when none of your characters can break it yet.
-        color = entry.canDisenchant == false and "loss" or "dim"
     elseif key == "age" then
         -- Read now, as the list itself can be kept for a while.
         local age = ns.Prices:GetAge(entry.itemID) or entry.age
@@ -488,10 +577,7 @@ local function ShowRowTooltip(row, entry)
             Util.FormatMoney(-entry.gain, { noColor = true })), 0.85, 0.35, 0.35, true)
     end
 
-    if entry.canDisenchant == false then
-        GameTooltip:AddLine(L.Format("Needs Enchanting %d. Your best is %d (%s).",
-            entry.needs or 0, entry.enchanterSkill or 0, entry.enchanter or "?"), 0.85, 0.35, 0.35, true)
-    elseif entry.canDisenchant == nil then
+    if entry.canDisenchant == nil then
         GameTooltip:AddLine(L["None of your characters has Enchanting."], 0.85, 0.35, 0.35, true)
     end
 
@@ -531,9 +617,64 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
+    -- Arcane Salvager (the owner said build it, 2026-11-24): a purple line
+    -- across the top while Salvager mode is on, with Stop when only the
+    -- cast turned it on, and a Plain / Salvager / Side by Side switch above
+    -- Breaks Into. Both show only with Keep Salvager Results Apart ticked.
+    local bar = CreateFrame("Frame", nil, detail)
+    bar:SetPoint("TOPLEFT", 8, -8)
+    bar:SetPoint("TOPRIGHT", -8, -8)
+    bar:SetHeight(34)
+    if Theme.Fill then Theme.Fill(bar, "xp", 0.28) end
+    if Theme.Border then Theme.Border(bar, "way_disenchant", 0.8) end
+    bar:Hide()
+    detail.salvagerBar = bar
+
+    local dot = bar.CreateTexture and bar:CreateTexture(nil, "ARTWORK")
+    if dot then
+        dot:SetSize(6, 6)
+        dot:SetPoint("LEFT", 8, 0)
+        dot:SetColorTexture(Theme.Unpack("way_disenchant"))
+    end
+
+    local stop = Widgets.CreateButton(bar, L["Stop"], function()
+        if ns.DisenchantLog then ns.DisenchantLog:StopSalvager() end
+    end, { height = 20 })
+    stop:SetPoint("RIGHT", -6, 0)
+    do  -- As wide as its word, in any language.
+        local label = rawget(stop, "label")
+        local ok, width = false, nil
+        if label then ok, width = pcall(label.GetStringWidth, label) end
+        stop:SetWidth(math.max(44, (ok and type(width) == "number" and math.ceil(width) or 30) + 20))
+    end
+    detail.salvagerStop = stop
+
+    local barText = Theme.CreateLabel(bar, "tiny", "text")
+    barText:SetPoint("LEFT", 20, 0)
+    barText:SetPoint("RIGHT", stop, "LEFT", -6, 0)
+    barText:SetWordWrap(true)
+    barText:SetText(L["Arcane Salvager is up. Your disenchants count as Salvager ones."])
+    detail.salvagerText = barText
+
+    local switch = Widgets.CreateTabStrip(detail, {
+        { key = "plain",    text = L["Plain"] },
+        { key = "salvager", text = L["Salvager"] },
+        { key = "side",     text = L["Side by Side"] },
+    }, function(key)
+        state.salvagerView = key
+        detail.salvagerSwitch:Select(key)
+        if detail.redraw then detail.redraw() end
+    end)
+    switch:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -8)
+    switch:Select(state.salvagerView)
+    switch:Hide()
+    detail.salvagerSwitch = switch
+
     local heading = Theme.CreateHeading(detail, L["BREAKS INTO"])
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.heading = heading
+
+    detail.sideLines = {}
 
     detail.outcomeLines = {}
 
@@ -562,19 +703,27 @@ local function BuildDetail(parent)
     detail.verdict = verdict
 
     local note = Theme.CreateLabel(detail, "tiny", "dim")
-    note:SetPoint("BOTTOMLEFT", 12, 44)
-    note:SetPoint("BOTTOMRIGHT", -12, 44)
+    note:SetPoint("BOTTOMLEFT", 12, 50)
+    note:SetPoint("BOTTOMRIGHT", -12, 50)
     note:SetWordWrap(true)
     note:SetJustifyV("BOTTOM")
     note:SetHeight(60)
     detail.note = note
 
-    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
-        SearchAuctionHouse(state.selected)
-    end, { width = 180, primary = true, height = 24 })
-    searchButton:SetPoint("BOTTOMLEFT", 12, 14)
+    -- Search, then Buy One on each click once the search is back.
+    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], AuctionButtonClicked,
+        { width = 180, primary = true, height = 24 })
+    searchButton:SetPoint("BOTTOMLEFT", 12, 20)
     searchButton.tooltipText = L["Finds this item on the auction house. You click Buy yourself."]
     detail.searchButton = searchButton
+
+    -- Under it: how many more are deals, or how many were bought.
+    local quickLine = Theme.CreateLabel(detail, "tiny", "muted")
+    quickLine:SetPoint("BOTTOMLEFT", 12, 5)
+    quickLine:SetPoint("BOTTOMRIGHT", -12, 5)
+    quickLine:SetWordWrap(false)
+    quickLine:Hide()
+    detail.quickLine = quickLine
 
     -- Disenchant, for an item in the bags. The click itself is taken by the
     -- secure button UI/Disenchanter.lua lays over this one; this handler
@@ -711,10 +860,13 @@ local function DrawOutcomes(detail, breakdown)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
 
-        -- Only the most likely outcome is the value; the rest are a bonus.
-        line.name:SetText(("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-            Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
-            outcome.counted == false and L["  (bonus)"] or ""))
+        -- Each disenchant gives one of these; the value is their average.
+        local named = Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)
+        if outcome.soFar then
+            line.name:SetText(("%s  %s"):format(L.Format("%d so far", outcome.soFar), named))
+        else
+            line.name:SetText(("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count, named))
+        end
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then
@@ -731,18 +883,287 @@ local function DrawOutcomes(detail, breakdown)
     end
 end
 
+--------------------------------------------------------------------------------
+-- At an Arcane Salvager
+--------------------------------------------------------------------------------
+
+local function SalvagerOn()
+    local log = ns.DisenchantLog
+    return log ~= nil and log.SalvagerApart ~= nil and log:SalvagerApart() or false
+end
+
+--- The purple line, and the icon and title moved down under it.
+local function UpdateSalvagerBar(detail)
+    local up, byBuff = false, false
+    if SalvagerOn() then up, byBuff = ns.DisenchantLog:SalvagerUp() end
+
+    detail.salvagerBar:SetShown(up)
+    detail.salvagerStop:SetShown(up and not byBuff)
+    if up and not byBuff then
+        detail.salvagerText:SetPoint("RIGHT", detail.salvagerStop, "LEFT", -6, 0)
+    else
+        detail.salvagerText:SetPoint("RIGHT", detail.salvagerBar, "RIGHT", -8, 0)
+    end
+
+    local top = up and -50 or -12
+    detail.icon:ClearAllPoints()
+    detail.icon:SetPoint("TOPLEFT", 12, top)
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", 50, top)
+    detail.title:SetPoint("TOPRIGHT", -12, top)
+end
+
+--- Show the switch (or not), and hang Breaks Into under whichever is last.
+local function PlaceSwitch(detail, shown)
+    detail.salvagerSwitch:SetShown(shown)
+    if shown then detail.salvagerSwitch:Select(state.salvagerView) end
+
+    detail.heading:ClearAllPoints()
+    if shown then
+        detail.heading:SetPoint("TOPLEFT", detail.salvagerSwitch, "BOTTOMLEFT", 0, -8)
+    else
+        detail.heading:SetPoint("TOPLEFT", detail.subtitle, "BOTTOMLEFT", -38, -12)
+    end
+end
+
+local function HideSideLines(detail)
+    for _, line in ipairs(detail.sideLines) do line.frame:Hide() end
+end
+
+--- "58% (1.4)": how often, and how many on average when it is not one.
+local function ChanceText(outcome)
+    if not outcome then return "" end
+    local text = ("%s%%"):format(Util.Round((outcome.chance or 0) * 100, 0))
+    local average = outcome.average or ((outcome.min or 1) + (outcome.max or 1)) / 2
+    if math.abs(average - 1) > 0.05 then
+        text = ("%s (%s)"):format(text, Util.Round(average, 1))
+    end
+    return text
+end
+
+local SIDE_PLAIN_X, SIDE_SALVAGER_X = -70, 0
+local SIDE_COLUMN = 64
+
+--- One Side by Side line: a name on the left, Plain and Salvager on the right.
+local function SideLine(detail, index)
+    local line = detail.sideLines[index]
+    if line then return line end
+
+    local frame = CreateFrame("Frame", nil, detail)
+    frame:SetHeight(16)
+
+    local name = Theme.CreateLabel(frame, "small", "text")
+    name:SetPoint("LEFT", 0, 0)
+    name:SetPoint("RIGHT", frame, "RIGHT", SIDE_PLAIN_X - SIDE_COLUMN - 4, 0)
+    name:SetWordWrap(true)
+
+    local plain = Theme.CreateLabel(frame, "small", "text", "RIGHT")
+    plain:SetPoint("RIGHT", SIDE_PLAIN_X, 0)
+    plain:SetWidth(SIDE_COLUMN)
+    plain:SetWordWrap(true)
+
+    local salvager = Theme.CreateLabel(frame, "small", "text", "RIGHT")
+    salvager:SetPoint("RIGHT", SIDE_SALVAGER_X, 0)
+    salvager:SetWidth(SIDE_COLUMN)
+    salvager:SetWordWrap(true)
+
+    line = { frame = frame, name = name, plain = plain, salvager = salvager }
+    detail.sideLines[index] = line
+    return line
+end
+
+local function Height(label)
+    local ok, height = pcall(label.GetStringHeight, label)
+    return ok and type(height) == "number" and height or 12
+end
+
+--- Draw the Side by Side lines under Breaks Into.
+-- @param rows { { name, plain, salvager, nameColor, plainColor, salvagerColor } }
+local function DrawSide(detail, rows)
+    local anchor = detail.heading
+    for index, row in ipairs(rows) do
+        local line = SideLine(detail, index)
+
+        line.frame:ClearAllPoints()
+        line.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, index == 1 and -6 or -2)
+        line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+
+        line.name:SetText(row.name or "")
+        line.name:SetTextColor(Theme.Unpack(row.nameColor or "text"))
+        line.plain:SetText(row.plain or "")
+        line.plain:SetTextColor(Theme.Unpack(row.plainColor or "text"))
+        line.salvager:SetText(row.salvager or "")
+        line.salvager:SetTextColor(Theme.Unpack(row.salvagerColor or "text"))
+
+        line.frame:SetHeight(math.max(16, math.ceil(math.max(Height(line.name), Height(line.plain),
+            Height(line.salvager))) + 2))
+        line.frame:Show()
+        anchor = line.frame
+    end
+end
+
+--- "From your own 40 plain and 14 Salvager disenchants of this item."
+local function SideNote(itemID, salvagerFacts)
+    local log = ns.DisenchantLog
+    local _, plainFacts = ns.Disenchant:GetOutcomes(itemID)
+    local plainCasts = 0
+    if salvagerFacts.byItem then
+        local own = log and log:GetItem(itemID)
+        plainCasts = own and own.casts or 0
+        return L.Format("From your own %d plain and %d Salvager disenchants of this item.",
+            plainCasts, salvagerFacts.casts or 0)
+    end
+    local band = log and plainFacts and log:GetBand(plainFacts.key)
+    plainCasts = band and band.casts or 0
+    return L.Format("From your own %d plain and %d Salvager disenchants of items like this.",
+        plainCasts, salvagerFacts.casts or 0)
+end
+
+--- Draw Breaks Into for the view picked on the switch.
+--
+-- @return nil for the plain view (the caller fills it as always), else
+--   { view, value, partial, note } for the Salvager or Side by Side view.
+local function DrawView(detail, entry, breakdown)
+    HideSideLines(detail)
+
+    local on = SalvagerOn() and entry.itemID ~= nil
+    PlaceSwitch(detail, on)
+
+    local view = on and state.salvagerView or "plain"
+
+    -- Side by Side has its own value lines, and its list runs down into the
+    -- summary's place (seen in game 2026-11-24: the compare line sat on top
+    -- of Disenchant value and Sells for), so the summary steps aside.
+    detail.summary:SetShown(view ~= "side")
+    if view == "plain" then
+        DrawOutcomes(detail, breakdown)
+        return nil
+    end
+
+    local Disenchant = ns.Disenchant
+    local value, partial, salvaged = Disenchant:GetSalvagerValue(entry.itemID)
+    local facts = salvaged and salvaged.facts or {}
+    local enough = salvaged and #(salvaged.outcomes or {}) > 0
+    local seen = facts.seen and facts.seen.got or {}
+
+    local result = { view = view, value = value, partial = partial }
+    if not enough then
+        result.note = L.Format("Disenchant %d more at a Salvager to see its chances.",
+            math.max(1, facts.need or Disenchant.SALVAGER_LEARN_AFTER))
+    elseif view == "salvager" then
+        result.note = facts.byItem
+            and L.Format("Chances come from your own %d Salvager disenchants of this item.", facts.casts or 0)
+            or L.Format("Chances come from your own %d Salvager disenchants of items like this.", facts.casts or 0)
+    else
+        result.note = SideNote(entry.itemID, facts)
+    end
+
+    if view == "salvager" then
+        if enough then
+            DrawOutcomes(detail, salvaged)
+        else
+            -- Too few yet: what came out so far, by how often.
+            local soFar = {}
+            for materialID, got in pairs(seen) do
+                soFar[#soFar + 1] = { itemID = materialID, soFar = got.times or 0,
+                    min = got.min or 1, max = got.max or 1,
+                    name = Disenchant:MaterialName(materialID),
+                    price = Disenchant:GetMaterialPrice(materialID) }
+            end
+            table.sort(soFar, function(a, b)
+                if a.soFar ~= b.soFar then return a.soFar > b.soFar end
+                return a.itemID < b.itemID
+            end)
+            DrawOutcomes(detail, { outcomes = soFar })
+        end
+        return result
+    end
+
+    -- Side by Side: every material either record has, plain order first.
+    local plainBy, salvagerBy, order, listed = {}, {}, {}, {}
+    for _, outcome in ipairs(breakdown.outcomes or {}) do
+        plainBy[outcome.itemID] = outcome
+        if not listed[outcome.itemID] then order[#order + 1] = outcome.itemID; listed[outcome.itemID] = true end
+    end
+    for _, outcome in ipairs(enough and salvaged.outcomes or {}) do
+        salvagerBy[outcome.itemID] = outcome
+        if not listed[outcome.itemID] then order[#order + 1] = outcome.itemID; listed[outcome.itemID] = true end
+    end
+    if not enough then
+        for materialID in pairs(seen) do
+            if not listed[materialID] then order[#order + 1] = materialID; listed[materialID] = true end
+        end
+    end
+
+    local rows = { { name = L["Gives"], plain = L["Plain"], salvager = L["Salvager"],
+        nameColor = "muted", plainColor = "muted", salvagerColor = "muted" } }
+
+    for _, materialID in ipairs(order) do
+        local cell
+        if enough then
+            cell = ChanceText(salvagerBy[materialID])
+        else
+            local got = seen[materialID]
+            cell = got and L.Format("%d so far", got.times or 0) or ""
+        end
+        rows[#rows + 1] = {
+            name = Util.ColorItemName(materialID, Disenchant:MaterialName(materialID))
+                or Util.GetItemLabel(materialID),
+            plain = ChanceText(plainBy[materialID]),
+            salvager = cell,
+            salvagerColor = enough and "text" or "dim",
+        }
+    end
+
+    local plainValue = entry.value or Disenchant:GetValue(entry.itemID)
+    if enough then
+        rows[#rows + 1] = {
+            name = L["Disenchant value"],
+            plain = plainValue and Util.FormatMoney(plainValue) or "",
+            salvager = value and Util.FormatMoney(value) or "",
+        }
+        if value and plainValue and plainValue > 0 then
+            local gap = value - plainValue
+            local percent = math.floor(math.abs(gap) / plainValue * 100 + 0.5)
+            local text = gap >= 0
+                and L.Format("%s more (%d%%)", Util.FormatMoney(gap, { noColor = true }), percent)
+                or L.Format("%s less (%d%%)", Util.FormatMoney(-gap, { noColor = true }), percent)
+            rows[#rows + 1] = { name = L["The Salvager gives"], salvager = text,
+                salvagerColor = gap >= 0 and "profit" or "loss" }
+            -- The compare text is wide: it takes both columns.
+            result.compareWide = true
+        end
+    end
+
+    DrawSide(detail, rows)
+
+    -- The compare line's words run across both columns.
+    local last = detail.sideLines[#rows]
+    if result.compareWide and last then
+        last.salvager:SetWidth(SIDE_COLUMN * 2 + 6)
+    end
+    for index = 1, #rows - (result.compareWide and 1 or 0) do
+        detail.sideLines[index].salvager:SetWidth(SIDE_COLUMN)
+    end
+    if result.compareWide and last then
+        last.frame:SetHeight(math.max(16, math.ceil(math.max(Height(last.name), Height(last.salvager))) + 2))
+    end
+
+    return result
+end
+
 --- The detail panel for an item in the bags.
 local function UpdateBagDetail(entry)
     local detail = widgets.detail
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
 
-    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d."]
-            or L["Item level %d %s armor. Needs Enchanting about %d."],
-        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0))
+    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon."]
+            or L["Item level %d %s armor."],
+        facts.itemLevel or 0, QualityWord(facts.qualityName)))
     detail.subtitle:SetTextColor(Theme.Unpack("muted"))
 
-    DrawOutcomes(detail, breakdown)
+    local salvagerView = DrawView(detail, entry, breakdown)
 
     local lines = detail.lines
     if entry.value then
@@ -804,6 +1225,21 @@ local function UpdateBagDetail(entry)
     end
     if not entry.soulbound then
         note = note .. L[" If it is already bound to you, only a vendor will buy it."]
+    end
+
+    -- The Salvager's own value and note; prices elsewhere stay plain.
+    if salvagerView then
+        if salvagerView.view == "salvager" then
+            if salvagerView.value then
+                SetLine(lines[1], L["Disenchant value"], salvagerView.partial
+                    and L.Format("%s  or more", Util.FormatMoney(salvagerView.value))
+                    or Util.FormatMoney(salvagerView.value), "text")
+            else
+                SetLine(lines[1], nil)
+            end
+        end
+        detail.verdict:SetText("")
+        note = salvagerView.note
     end
     detail.note:SetText(note)
 
@@ -904,6 +1340,9 @@ local function UpdateDetail(entry)
     for _, line in ipairs(detail.outcomeLines) do
         line.frame:Hide()
     end
+    HideSideLines(detail)
+    UpdateSalvagerBar(detail)
+    PlaceSwitch(detail, false)
 
     for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
                             detail.summary, detail.verdict, detail.note }) do
@@ -911,6 +1350,7 @@ local function UpdateDetail(entry)
     end
 
     detail.searchButton:SetShown(shown and not isBag and not own)
+    UpdateQuickBuy()
     detail.actionButton:Hide()
 
     -- Hiding the button takes the secure button away with it.
@@ -929,19 +1369,18 @@ local function UpdateDetail(entry)
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
 
-    local who
     if entry.canDisenchant == nil then
-        who = L["None of your characters has Enchanting."]
+        detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. %s"]
+                or L["Item level %d %s armor. %s"],
+            facts.itemLevel or 0, QualityWord(facts.qualityName), L["None of your characters has Enchanting."]))
     else
-        who = L.Format("Your best is %d (%s).", entry.enchanterSkill or 0, entry.enchanter or "?")
+        detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon."]
+                or L["Item level %d %s armor."],
+            facts.itemLevel or 0, QualityWord(facts.qualityName)))
     end
-
-    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d. %s"]
-            or L["Item level %d %s armor. Needs Enchanting about %d. %s"],
-        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0, who))
     detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
 
-    DrawOutcomes(detail, breakdown)
+    local salvagerView = DrawView(detail, entry, breakdown)
 
     local lines = detail.lines
     SetLine(lines[1], entry.loneLow and L["Buy for (a lone low listing)"] or L["Buy for"],
@@ -971,6 +1410,33 @@ local function UpdateDetail(entry)
     note = note .. L.Format(" The buy price is the cheapest listing when last scanned (%s).",
         entry.age and Util.FormatAgeAgo(entry.age) or L["never"])
     if entry.stale then note = note .. L[" That was a while ago, so it may have sold."] end
+
+    -- The Salvager's chances are shown, and the cut and profit follow its
+    -- value. They once stayed plain, which showed a big cut and a loss
+    -- once the plain record was moved over (a player's report, 2026-11-25).
+    if salvagerView then
+        if salvagerView.view == "salvager" then
+            if salvagerView.value then
+                local value = salvagerView.value
+                local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
+                local net = math.floor(value * (1 - cut) + 0.5)
+                local gain = net - (entry.buy or 0)
+                SetLine(lines[2], L["Disenchant value"], salvagerView.partial
+                    and L.Format("%s  or more", Util.FormatMoney(value))
+                    or Util.FormatMoney(value), "text")
+                SetLine(lines[3], L["After the auction house cut"], Util.FormatMoney(net), "muted")
+                SetLine(lines[4], L["Profit"], ("%s  (%s)"):format(Util.FormatMoney(gain),
+                    MarginText(entry.buy and entry.buy > 0 and gain / entry.buy or 0)),
+                    gain > 0 and "profit" or "loss")
+            else
+                SetLine(lines[2], nil)
+                SetLine(lines[3], nil)
+                SetLine(lines[4], nil)
+            end
+        end
+        detail.verdict:SetText("")
+        note = salvagerView.note
+    end
     detail.note:SetText(note)
 end
 
@@ -999,8 +1465,8 @@ local function BuildKey()
         -- Your own disenchants taking over from the built-in table.
         tostring(ns.DisenchantLog and ns.DisenchantLog.version or 0),
         tostring(state.dealsOnly),
-        tostring(ns.Config:Get("minProfit")),
-        tostring(ns.Config:Get("minMarginPercent")),
+        tostring((DisenchantMinimums())),
+        tostring(select(2, DisenchantMinimums())),
         tostring(ns.Config:Get("auctionCut")),
         tostring(skill),
         tostring(ns.Scanner and ns.Scanner.isAuctionHouseOpen and true or false),
@@ -1062,7 +1528,77 @@ local function BuildMaterialRows()
     return rows
 end
 
-local function BuildRows()
+-- Picked, the tab walked every scanned item in that one frame whenever the
+-- list had to be built again (after a scan, the auction house opening or
+-- shutting, or new item facts). Once it has drawn, a pick keeps the rows it
+-- had and walks a few items a frame (Disenchant:BeginAuctionRows,
+-- AuctionRowStep, FinishAuctionRows, the steps GetAuctionRows takes), then
+-- draws. Any other refresh (a click, a filter, the bags) still answers at
+-- once and drops a build under way. The first draw is at once too, so the
+-- list never opens empty. The same way Level Up and Profit build when picked.
+local SLICE_MS = 4
+local spreadNext = false
+local building = nil
+local Refresh
+
+local function StopBuilding()
+    local worker = building
+    building = nil
+    if worker then worker:Cancel() end
+end
+
+--- Still on this tab's auction list, with the window up.
+local function StillShowing()
+    if UI.activeTab ~= "disenchanting" or state.view ~= "auction" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- Build the auction rows across frames, then draw. False when it must be
+--- at once.
+local function BuildInSlices(key, changes, opts)
+    local Disenchant = ns.Disenchant
+    if not (built.rows and Util and type(Util.NewWorker) == "function"
+        and Disenchant.BeginAuctionRows and Disenchant.AuctionRowStep and Disenchant.FinishAuctionRows) then
+        return false
+    end
+
+    local steps = Disenchant:BeginAuctionRows(opts)
+    local worker
+    worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(itemID)
+            if building ~= worker then return end
+            -- Another tab or view was picked, or the window shut: the next
+            -- time this one shows it builds afresh.
+            if not StillShowing() then
+                StopBuilding()
+                return
+            end
+            Disenchant:AuctionRowStep(steps, itemID)
+        end,
+        onDone = function()
+            if building ~= worker then return end
+            building = nil
+            if not StillShowing() then return end
+
+            -- Kept as of when the walk began. The draw then mends whatever
+            -- moved since, as it does for any kept list: a few items' rows
+            -- (PatchAuctionRows), or a fresh build at once.
+            local rows, hidden, pending, places = Disenchant:FinishAuctionRows(steps)
+            built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+            built.places, built.changes = places, changes
+            Disenchant.shownRows, Disenchant.shownBuiltAt = rows, Now()
+            Refresh()
+        end,
+    })
+    building = worker
+    worker:Start(steps.items)
+    return true
+end
+
+--- The rows to draw, or nil when the auction list is building over frames
+--- and will draw itself.
+local function BuildRows(spread)
     if state.view == "bag" then return BuildBagRows() end
     if state.view == "material" then return BuildMaterialRows() end
 
@@ -1079,6 +1615,8 @@ local function BuildRows()
     end
 
     if not patched and (key ~= built.key or changes ~= built.changes) then
+        if spread and BuildInSlices(key, changes, opts) then return nil end
+
         local rows, hidden, pending, places = ns.Disenchant:GetAuctionRows(opts)
         built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
         built.places, built.changes = places, changes
@@ -1152,8 +1690,8 @@ local function EmptyText()
         if state.hidden > 0 then
             text = text .. L.Format(" %d more would make a profit, but less than your minimums in Settings (%s profit, %d%% margin).",
                 state.hidden,
-                Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
-                ns.Config:Get("minMarginPercent") or 0)
+                Util.FormatMoney((DisenchantMinimums()), { noColor = true, short = true }),
+                select(2, DisenchantMinimums()))
         end
 
         return text .. L[" Untick \"Only deals over my minimums\" to see them all."]
@@ -1271,10 +1809,15 @@ local function RefreshMaterial(rows)
     UpdateDetail(fresh)
 end
 
-local function Refresh()
+Refresh = function()
     if not widgets.list then return end
 
-    local rows = BuildRows()
+    StopBuilding()
+    local spread = spreadNext
+    spreadNext = false
+    local rows = BuildRows(spread)
+    if not rows then return end
+
     -- A clicked heading's order over the list's own. Find a material keeps
     -- its ways under their headings.
     if widgets.sorter and state.view ~= "material" then rows = widgets.sorter:Sort(rows) end
@@ -1473,7 +2016,6 @@ local function Build(container)
     -- each one reads whatever column the view puts there.
     local FIELDS = {
         difference = function(row) return row.value and row.sells and (row.value - row.sells) or nil end,
-        skill = function(row) return row.needs end,
     }
     local sortLabels, values = { name = nameHeading }, {
         name = function(row) return row.name end,
@@ -1585,6 +2127,14 @@ local function Build(container)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+    detail.redraw = function() UpdateDetail(state.selected) end
+
+    -- Buy One redraws only the button and its line, and only when shown.
+    if ns.DisenchantQuickBuy then
+        ns.DisenchantQuickBuy.onChange = function()
+            if detail:IsVisible() then UpdateQuickBuy() end
+        end
+    end
 
     ApplyView()
     UpdateDetail(nil)
@@ -1619,10 +2169,19 @@ local function Build(container)
     end)
 end
 
+--- The tab was picked (UI:SelectTab): the auction list builds over frames.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(Refresh)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
 UI:RegisterTab({
     key = "disenchanting",
     text = L["Disenchanting"],
     order = 5,
     build = Build,
     refresh = Refresh,
+    refreshPicked = RefreshPicked,
 })

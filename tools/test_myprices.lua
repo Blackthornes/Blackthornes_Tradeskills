@@ -21,8 +21,14 @@ ns.Util = {
     FormatAge = function() return "" end,
     HasFunction = function() return false end,
     GetItemLabel = function(i) return "item" .. tostring(i) end,
-    RoundToSilver = function(p) return math.floor(p / 100) * 100 end,
-    CeilToSilver = function(p) return math.ceil(p / 100) * 100 end,
+    ItemAuctionPrice = function(p) return math.floor(p / 100) * 100 end,
+    ItemAuctionPriceUp = function(p) return math.ceil(p / 100) * 100 end,
+    -- Forever's link shape: the suffix comes from its bonus ID, learned
+    -- from the auction house (Util.ResolveSuffix in the game).
+    LinkSuffix = function(link)
+        local bonus = type(link) == "string" and tonumber(link:match(":1:(%d+)$"))
+        return ({ [12722] = 14327, [12731] = 14340 })[bonus]
+    end,
 }
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end
@@ -245,5 +251,44 @@ check("item auction: Highest rounds down to the silver", price, 500)
 check("item auction: basis", basis, "highest")
 Prices:SetMine(BOLT, nil)
 commodity = true
+
+
+-- Each suffix its own price (a player's report, the owner chose it,
+-- 2026-11-24): a floor set on one suffix was every suffix's.
+print("a price for one suffix")
+local GEAR, MAGIC, TIGER = 15012, 14327, 14340
+local magicLink = "item:15012::::::::18:1485:::1:12722"
+local tigerLink = "item:15012::::::::18:1485:::1:12731"
+Prices:Record(GEAR, 20000, 20000, 5, time(), 20000, nil)
+check("one suffix saved", Prices:SetMine(GEAR, 30000, "floor", "Captain's Breastplate", MAGIC), true)
+check("that suffix has it", (Prices:GetMine(GEAR, MAGIC)), 30000)
+check("and says it is its own", select(3, Prices:GetMine(GEAR, MAGIC)), true)
+check("another suffix does not", Prices:GetMine(GEAR, TIGER), nil)
+check("nor the whole item", Prices:GetMine(GEAR), nil)
+check("the item still counts as priced", Prices:HasMine(GEAR), true)
+check("posting of Magic lifts to its floor", (Profit:ChoosePostPrice(GEAR, nil, magicLink)), 30000)
+check("posting of the Tiger keeps the market", (Profit:ChoosePostPrice(GEAR, nil, tigerLink)) < 30000, true)
+
+Prices:SetMine(GEAR, 25000, "floor")
+check("the whole item's price", (Prices:GetMine(GEAR)), 25000)
+check("a suffix without its own takes the item's", (Prices:GetMine(GEAR, TIGER)), 25000)
+check("and says it is not its own", select(3, Prices:GetMine(GEAR, TIGER)), nil)
+check("the suffix with its own keeps it", (Prices:GetMine(GEAR, MAGIC)), 30000)
+
+check("Highest on one suffix", Prices:SetMyHigh(GEAR, 40000, MAGIC), true)
+check("read back on it", (Prices:GetMyLimits(GEAR, MAGIC)), 40000)
+check("not on the item", (Prices:GetMyLimits(GEAR)), nil)
+check("no Highest on a suffix without its own price", Prices:SetMyHigh(GEAR, 40000, TIGER), false)
+check("Wait on one suffix", Prices:SetMyWait(GEAR, true, MAGIC), true)
+check("read back on it", select(2, Prices:GetMyLimits(GEAR, MAGIC)), true)
+check("the item lists anyway", select(2, Prices:GetMyLimits(GEAR)), nil)
+
+Prices:SetMine(GEAR, nil)
+check("clearing the item keeps the suffix's", (Prices:GetMine(GEAR, MAGIC)), 30000)
+check("and its limits", (Prices:GetMyLimits(GEAR, MAGIC)), 40000)
+check("the other suffix has none again", Prices:GetMine(GEAR, TIGER), nil)
+Prices:SetMine(GEAR, nil, nil, nil, MAGIC)
+check("clearing the last suffix leaves nothing saved", ns.db.myPrices[realm][GEAR], nil)
+check("and nothing priced", Prices:HasMine(GEAR), false)
 
 if failures > 0 then error(("%d my-price check(s) failed"):format(failures)) end

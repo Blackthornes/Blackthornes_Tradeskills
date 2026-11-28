@@ -141,7 +141,7 @@ ns.Scanner = { GetCommodityStatus = function() return status end }
 local market = 0
 ns.Profit = nil
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
-ns.Util.RoundToSilver = function(v) return v end
+ns.Util.ItemAuctionPrice = function(v) return v end
 ns.Util.LinkSuffix = function() return nil end
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 ns.Profit.ChooseMarketPostPrice = function() return market, "undercut" end

@@ -306,24 +306,48 @@ ns.Cost.InvalidateIndex = noop
 Close()
 
 print("")
-print("Butler has the button, so this one stands down")
+print("with Butler loaded, it stays when the queue needs something here")
 
+-- It used to stand down whenever Butler was loaded with "Open at a vendor"
+-- on (2026-10-18), trusting the Buy row in Butler's window. That row is out
+-- of sight when the window is shut, folded or on All Characters, and the
+-- Butler Bar had no Buy, so players lost the button (2026-11-21). Now it
+-- stays at the vendor; with Butler loaded it only hides when nothing here
+-- is needed, instead of reading "Nothing needed here".
+inBags, needed = 0, 12
 BlackthornesButler = {}
 BlackthornesButlerDB = nil
 Open()
-check("with Butler loaded it hides", Shown(), false)
+check("with Butler loaded and a need, it shows", Shown(), true)
+check("offering to buy", UI.merchantButton.label:GetText():match("^Buy materials") ~= nil, true)
 Close()
 BlackthornesButlerDB = { openAtVendor = true }
 Open()
-check("with Butler opening at vendors it hides", Shown(), false)
+check("with Butler opening at vendors, it still shows", Shown(), true)
+inBags = 12
+Fire("BAG_UPDATE_DELAYED")
+check("nothing needed with Butler: it hides", Shown(), false)
+inBags = 0
+Fire("BAG_UPDATE_DELAYED")
+check("needed again: it comes back", Shown(), true)
+Close()
+check("closing the vendor hides it", Shown(), false)
+UI:UpdateMerchantButton()
+check("a redraw after it closed keeps it hidden", Shown(), false)
+inBags = 12
+Open()
+check("nothing needed when it opens: hidden", Shown(), false)
 Close()
 BlackthornesButlerDB = { openAtVendor = false }
+inBags = 0
 Open()
 check("with Butler not opening at vendors it shows", Shown(), true)
 Close()
 BlackthornesButler, BlackthornesButlerDB = nil, nil
+inBags = 12
 Open()
-check("without Butler it shows", Shown(), true)
+check("without Butler, nothing needed still shows", Shown(), true)
+check("reading Nothing needed here", UI.merchantButton.label:GetText(), "Nothing needed here")
 Close()
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

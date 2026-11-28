@@ -253,6 +253,14 @@ local function Shown(frame)
     return ok and shown and true or false
 end
 
+--- True when "At The Mailbox:" is Stay Closed.
+function QueueMailPanel.StaysClosed()
+    local UI = ns.UI
+    if not (UI and UI.WindowAt) then return false end
+    local ok, choice = pcall(UI.WindowAt, "mail")
+    return ok and choice == "closed"
+end
+
 --- The one window while it sits docked at the mailbox, else nil.
 local function DockedHere()
     local shared = ns.SharedWindow
@@ -272,7 +280,7 @@ function QueueMailPanel:WatchWindow()
     self.watching = true
     shared.Watch(function()
         QueueMailPanel.anchoredTo = nil
-        if QueueMailPanel.frame then QueueMailPanel:Place() end
+        if QueueMailPanel.frame and not QueueMailPanel.inOne then QueueMailPanel:Place() end
     end)
 end
 
@@ -280,7 +288,7 @@ end
 --- neither is covered. With the one window docked there, to its right.
 function QueueMailPanel:Place()
     local panel = self.frame
-    if not panel then return end
+    if not panel or self.inOne then return end
     self:WatchWindow()
 
     local anchor = DockedHere()
@@ -332,8 +340,15 @@ function QueueMailPanel:GetDeliveries()
     return deliveries, okGear and gear ~= nil
 end
 
-function QueueMailPanel:Refresh()
+function QueueMailPanel:Draw()
     if self.dismissed or not self.MailboxOpen() then return end
+    -- "At The Mailbox:" Stay Closed (UI.WindowAt in UI/Main.lua): nothing
+    -- beside the mailbox. With the one window docked there by hand, the
+    -- list still fills its Mail tab.
+    if not self.inOne and not DockedHere() and QueueMailPanel.StaysClosed() then
+        if self.frame then self.frame:Hide() end
+        return
+    end
     if self.coveredByButler then
         if self.frame then self.frame:Hide() end
         return
@@ -435,6 +450,58 @@ function QueueMailPanel:Refresh()
     panel:SetHeight(height)
     self:Place()
     panel:Show()
+end
+
+--- Draw the list, then tell the one window whether the Mail tab has
+--- anything to hold (UI/Main.lua's TSTabs:SettleDock).
+function QueueMailPanel:Refresh()
+    self:Draw()
+    local tabs = ns.TSTabs
+    if tabs and tabs.SettleDock and (self.inOne or DockedHere()) then
+        pcall(tabs.SettleDock, tabs)
+    end
+end
+
+--- True while the list has something to send or take.
+function QueueMailPanel:HasWork()
+    return self.frame ~= nil and self.frame:IsShown() and self.MailboxOpen() and true or false
+end
+
+--- Lay the list into the one window's Mail tab, while the one window sits
+--- docked at the mailbox with Tradeskills in it. Its rim and close gem go.
+function QueueMailPanel:IntoOne(container)
+    if not container or not self.frame then return end
+    local panel = self.frame
+    self.inOne = true
+    self.anchoredTo = nil
+    panel:SetParent(container)
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", container, "TOPLEFT", 8, -8)
+    pcall(panel.SetFrameStrata, panel, container:GetFrameStrata() or "MEDIUM")
+    local trim = rawget(panel, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(panel, 0)
+end
+
+--- Back to its own frame beside the mailbox.
+function QueueMailPanel:OutOfOne()
+    if not self.inOne then return end
+    self.inOne = false
+    local panel = self.frame
+    if not panel then return end
+    panel:SetParent(UIParent)
+    pcall(panel.SetFrameStrata, panel, "HIGH")
+    local trim = rawget(panel, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(panel, 0.14)
+    self.anchoredTo = nil
+end
+
+--- The one window moved on with the mailbox still open: beside it again.
+function QueueMailPanel:BackBeside()
+    if self.inOne or not self.frame then return end
+    self.anchoredTo = nil
+    if self.frame:IsShown() then self:Place() end
 end
 
 --- The postage the game asks for the mail as it stands, or nil.

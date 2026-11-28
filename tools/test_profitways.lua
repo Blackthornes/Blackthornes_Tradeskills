@@ -82,7 +82,7 @@ ns.Posting = { MIN_DEPOSIT = 100, GetCachedUnitDeposit = function() return 3 end
 
 local Profit = ns.Profit
 
--- The belt disenchants to 2s of materials at the most likely result, and
+-- The belt disenchants to 2s of materials on average, and
 -- needs Enchanting 50. Who can disenchant is set per check below.
 local enchanterSkill
 local disenchantable = true
@@ -90,7 +90,12 @@ ns.Disenchant = {
     IsDisenchantable = function() return disenchantable end,
     GetValue = function()
         if disenchantable then
-            return 200, nil, { outcomes = { { itemID = DUST, counted = true }, { itemID = ESSENCE } } }
+            -- As Disenchant:GetValue hands them back since the value became
+            -- an average: every outcome counted, the usual one marked likely.
+            return 200, nil, { outcomes = {
+                { itemID = DUST, counted = true, likely = true },
+                { itemID = ESSENCE, counted = true, likely = false },
+            } }
         end
     end,
     GetBestEnchanter = function() return enchanterSkill, enchanterSkill and "Ana" or nil end,
@@ -162,8 +167,9 @@ check("the disenchant line says why", Profit:DescribeWays(a)[3].note, "no enchan
 
 enchanterSkill = 20
 a = Profit:Analyse(RECIPE, nil, "best")
-check("an enchanter below the skill it needs does not count either", a.via, "vendor")
-check("and the line says so", Profit:DescribeWays(a)[3].note, "skill too low")
+-- On Forever any Enchanting skill breaks any item (2026-11-24).
+check("an enchanter at 20 counts for an item Classic gates at 50", a.via, "disenchant")
+check("and the line has no note", Profit:DescribeWays(a)[3].note, nil)
 
 print("")
 print("one way alone")
@@ -214,6 +220,21 @@ check("the tag names the AH", Profit.WayTag("auction"):find("(AH)", 1, true) ~= 
 check("the vendor", Profit.WayTag("vendor"):find("(Vendor)", 1, true) ~= nil, true)
 check("and disenchanting", Profit.WayTag("disenchant"):find("(DE)", 1, true) ~= nil, true)
 check("no way, no tag", Profit.WayTag(nil), "")
+
+-- My Crafts and Recipes to Learn show the same Profit: drop-down (2026-11-21).
+local options = Profit.MethodOptions()
+check("the drop-down starts on Best", options[1].value, "best")
+check("and offers every way", #options, #Profit.METHODS)
+local vendorDE
+for _, option in ipairs(options) do if option.value == "vendordisenchant" then vendorDE = option end end
+check("Vendor and DE keeps its hover", vendorDE and vendorDE.tooltip ~= nil, true)
+local paneAsked = 0
+ns.Config.Set = function(_, key, value) settings[key] = value end
+ns.CraftPanel = { IsShown = function() return true end, RequestRefresh = function() paneAsked = paneAsked + 1 end }
+Profit:SetMethod("vendor")
+check("picking one keeps it", Profit:GetMethod(), "vendor")
+check("and the pane beside the profession window redraws", paneAsked, 1)
+settings.profitBy, ns.CraftPanel, ns.Config.Set = nil, nil, nil
 
 print("")
 print("the choice kept in Settings")

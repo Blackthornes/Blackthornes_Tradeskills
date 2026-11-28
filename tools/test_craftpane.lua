@@ -1120,6 +1120,264 @@ do
   ns.UI, _G.BlackthornesWindow = oldUI, oldHub
 end
 
+do
+  -- A player's recording (2026-11-20): the Queue tab sat over the pane, and
+  -- every x clicked there queued one more of a recipe on the pane under it.
+  -- A click the pane hears while a Tradeskills window is in front of it
+  -- under the mouse belongs to that window.
+  local function Frame(strata, level, over, parent)
+    return { GetFrameStrata = function() return strata end, GetFrameLevel = function() return level end,
+      IsVisible = function() return true end, IsMouseOver = function() return over end,
+      GetParent = function() return parent end }
+  end
+  local C = CraftPanel.CoveredAtMouse
+  local pane = Frame("HIGH", 10, true)
+  check("a window raised over the pane under the mouse covers it", C(pane, { Frame("HIGH", 20, true) }), true)
+  check("a window in a higher layer covers it", C(pane, { Frame("DIALOG", 1, true) }), true)
+  check("the pane raised over the window is not covered", C(pane, { Frame("HIGH", 5, true) }), false)
+  check("a window in a lower layer is not over it", C(pane, { Frame("MEDIUM", 50, true) }), false)
+  check("a window away from the mouse is not over it", C(pane, { Frame("HIGH", 20, false) }), false)
+  local window = Frame("HIGH", 20, true)
+  local holder = Frame("HIGH", 21, true, window)
+  check("in the one window, the window holding the pane is not over it",
+    C(Frame("HIGH", 22, true, holder), { window }), false)
+  local secret = Frame("HIGH", 20, true)
+  secret.IsMouseOver = function() error("secret") end
+  check("a window that won't answer is not over it", C(pane, { secret }), false)
+
+  local oldQueue, oldFront, oldFrame = ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame
+  local added = 0
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.frame = pane
+  CraftPanel.FrontWindows = function() return { Frame("HIGH", 20, true) } end
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "LeftButton")
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "RightButton")
+  check("a click meant for the window in front queues and removes nothing", added, 0)
+  ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame = oldQueue, oldFront, oldFrame
+end
+
+do
+  -- A player's second recording (2026-11-23): on the one window's Queue tab,
+  -- docked beside the profession window, the mouse on a queue x showed the
+  -- Crafting list's tooltip and the click queued a recipe nobody could see.
+  -- The window in front holds the pane, so the strata test let it through.
+  local function Pane(visible, alpha)
+    return { GetFrameStrata = function() return "MEDIUM" end, GetFrameLevel = function() return 5 end,
+      IsVisible = function() return visible end, GetEffectiveAlpha = function() return alpha end,
+      IsMouseOver = function() return true end, GetParent = function() return nil end }
+  end
+  local O = CraftPanel.OutOfSight
+  check("the Crafting tab on show takes clicks", O and O(Pane(true, 1), true, "crafting", true), false)
+  check("in the one window on the Queue tab, the pane takes no clicks", O and O(Pane(true, 1), true, "queue", true), true)
+  check("a hidden pane takes no clicks", O and O(Pane(false, 1), false, nil, false), true)
+  check("a see-through pane takes no clicks", O and O(Pane(true, 0), false, nil, false), true)
+  check("beside the window while the one window holds Crafting, it takes no clicks",
+    O and O(Pane(true, 1), false, nil, true), true)
+  check("beside the window on its own, it takes clicks", O and O(Pane(true, 1), false, nil, false), false)
+  -- A player's recording (2026-11-24): the one window folded into its round
+  -- button while crafting, and the Crafting list's tooltips still came up
+  -- under the mouse where it had been. Forever let the rows answer.
+  -- The real test from UI/Widgets.lua, which the pane asks.
+  do
+    local wns = { Theme = {} }
+    assert(loadfile(lfs_cwd .. "/UI/Widgets.lua"))("Blackthornes_TS", wns)
+    ns.Widgets.InFoldedWindow = wns.Widgets.InFoldedWindow
+  end
+  local one = { blackthornesFold = { folded = true }, GetParent = function() return nil end }
+  local tab = { GetParent = function() return one end }
+  local folded = Pane(true, 1)
+  folded.GetParent = function() return tab end
+  check("in a folded one window, the pane takes no clicks or tooltips", O and O(folded, true, "crafting", true), true)
+  one.blackthornesFold.folded = false
+  check("opened again, it does", O and O(folded, true, "crafting", true), false)
+
+  local oldQueue, oldFront, oldFrame, oldInOne = ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame, CraftPanel.inOne
+  local oldUI, oldTabs = ns.UI, ns.TSTabs
+  local added = 0
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.frame = Pane(true, 1)
+  CraftPanel.inOne = true
+  ns.UI = setmetatable({ activeTab = "queue" }, { __index = oldUI })
+  ns.TSTabs = setmetatable({ atDock = "profession" }, { __index = oldTabs })
+  -- The one window holding the pane is the only window in front.
+  CraftPanel.FrontWindows = function() return {} end
+  local line = { recipeID = 102, outputItemID = 5002, name = "Coarse Dynamite" }
+  CraftPanel.OnRowClick(line, nil, "LeftButton")
+  CraftPanel.OnRowClick(line, nil, "RightButton")
+  check("a click on the Queue tab queues nothing from the Crafting list behind it", added, 0)
+  ns.Queue, CraftPanel.FrontWindows, CraftPanel.frame, CraftPanel.inOne = oldQueue, oldFront, oldFrame, oldInOne
+  ns.UI, ns.TSTabs = oldUI, oldTabs
+end
+
+do
+  -- Alt-click on a row opens the Keep in Stock box and queues nothing;
+  -- a craft with nothing to hold opens nothing (2026-11-17).
+  local oldAlt, oldBox, oldQueue, oldTip = rawget(_G, "IsAltKeyDown"), ns.StockBox, ns.Queue, rawget(_G, "GameTooltip")
+  local opened, added = {}, 0
+  _G.IsAltKeyDown = function() return true end
+  _G.GameTooltip = { Hide = function() end }
+  ns.StockBox = { Open = function(_, itemID, name) opened[#opened + 1] = { itemID = itemID, name = name } end }
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "LeftButton")
+  check("Alt-click opens the Keep in Stock box", opened[1] and opened[1].itemID, 5001)
+  check("for that craft", opened[1] and opened[1].name, "Runecloth Bag")
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "RightButton")
+  check("Alt-right-click opens it too", #opened, 2)
+  check("Alt-click queues and removes nothing", added, 0)
+  CraftPanel.OnRowClick({ recipeID = 104, name = "Enchant Bracer" }, nil, "LeftButton")
+  check("a craft with nothing to hold opens nothing", #opened, 2)
+  check("and queues nothing", added, 0)
+  _G.IsAltKeyDown, ns.StockBox, ns.Queue, _G.GameTooltip = oldAlt, oldBox, oldQueue, oldTip
+end
+
+do
+  -- A player's report (2026-11-17): folded to its title with nothing
+  -- queued, the pane's strip still sat over other addons' windows. Folded
+  -- and empty, it stays out of sight; the first craft queued brings it back.
+  local S = CraftPanel.StaysHidden
+  check("folded and empty: stays hidden", S(true, 0, false), true)
+  check("folded with a craft queued: shows", S(true, 2, false), false)
+  check("open and empty: shows as always", S(false, 0, false), false)
+  check("asked for by hand: shows", S(true, 0, true), false)
+
+  local saved = { frame = CraftPanel.frame, Place = CraftPanel.Place, Refresh = CraftPanel.Refresh,
+    WatchSheets = CraftPanel.WatchSheets, inOne = CraftPanel.inOne, stripMode = CraftPanel.stripMode,
+    RequestRefresh = CraftPanel.RequestRefresh, RefreshQueued = CraftPanel.RefreshQueued,
+    queuedFrame = CraftPanel.queuedFrame, list = CraftPanel.list }
+  local oldCollapse, oldQueue, oldTabs, oldCrafting, oldTimer, oldMotion =
+    ns.Collapse, ns.Queue, ns.TSTabs, ns.Crafting, _G.C_Timer, ns.Motion
+  local folded, queued = true, 0
+  ns.Collapse = { IsCollapsed = function() return folded end }
+  ns.Queue = { Count = function() return queued end, Find = function() end, GetAll = function() return {} end }
+  ns.TSTabs, ns.Motion, _G.C_Timer = nil, nil, nil
+  ns.Crafting = { isTradeSkillOpen = true }
+  CraftPanel.inOne, CraftPanel.stripMode, CraftPanel.queuedFrame, CraftPanel.list = false, false, nil, nil
+  CraftPanel.Place = function() end
+  CraftPanel.WatchSheets = function() end
+  CraftPanel.Refresh = function() end
+  CraftPanel.RequestRefresh = function() end
+  CraftPanel.RefreshQueued = function() end
+  local pane = { shown = false }
+  function pane:Show() self.shown = true end
+  function pane:Hide() self.shown = false end
+  function pane:IsShown() return self.shown end
+  CraftPanel.frame = pane
+  CraftPanel.shownByHand, CraftPanel.waitingForQueue = false, false
+
+  CraftPanel:Attach(true)
+  check("profession opened, folded, nothing queued: hidden", pane.shown, false)
+
+  queued = 1
+  CraftPanel:OnQueueChanged()
+  check("something queued: the pane comes back", pane.shown, true)
+
+  queued = 0
+  CraftPanel:OnQueueChanged()
+  check("the queue empties while folded: hidden again", pane.shown, false)
+
+  folded = false
+  CraftPanel:Attach(true)
+  check("open (not folded) and empty: shown as always", pane.shown, true)
+
+  folded = true
+  pane.shown = false
+  CraftPanel.shownByHand = true
+  CraftPanel:Attach(true)
+  check("/bts pane shows it anyway", pane.shown, true)
+  CraftPanel:OnQueueChanged()
+  check("and it stays while shown by hand", pane.shown, true)
+
+  ns.Collapse, ns.Queue, ns.TSTabs, ns.Crafting, _G.C_Timer, ns.Motion =
+    oldCollapse, oldQueue, oldTabs, oldCrafting, oldTimer, oldMotion
+  for key, value in pairs(saved) do CraftPanel[key] = value end
+  CraftPanel.shownByHand, CraftPanel.waitingForQueue = nil, nil
+end
+
+--------------------------------------------------------------------------------
+-- Upgrades Only (the owner, 2026-11-24)
+--------------------------------------------------------------------------------
+
+-- Ticked, the pane lists only crafts that make an upgrade for the character
+-- playing, as Equipment answers it. Upgrades at their Keep in stock limit
+-- still show (made to wear, not to sell), ignored crafts stay hidden, and a
+-- search narrows the upgrades further.
+do
+  local oldUpgrades, oldSettings = ns.Upgrades, SETTINGS
+  local UPGRADE_ITEMS = { [2853] = true }   -- Copper Chain Belt
+  local ENCHANTS = { [103] = { slot = "Chest" } }
+  local equipment = {}
+  ns.Upgrades = {
+    Equipment = function() return equipment end,
+    IsEnabled = function() return SETTINGS.showUpgradeArrows ~= false end,
+    IsUpgrade = function(_, itemID) return UPGRADE_ITEMS[itemID] == true end,
+    EnchantFor = function(_, recipeID) return ENCHANTS[recipeID] end,
+  }
+  SETTINGS = setmetatable({}, { __index = oldSettings })
+
+  check("off, every craft shows", #CraftPanel:GetRows({}), 3)
+  check("on, only upgrades and upgrade enchants show",
+    names(CraftPanel:GetRows({ sortBy = "name", upgradesOnly = true })),
+    "Brown Linen Shirt, Copper Chain Belt")
+  check("a search narrows the upgrades",
+    names(CraftPanel:GetRows({ search = "copper", upgradesOnly = true })), "Copper Chain Belt")
+  check("a search never finds what is not an upgrade",
+    #CraftPanel:GetRows({ search = "sharpening", upgradesOnly = true }), 0)
+
+  ANALYSIS[101].atPostLimit = true
+  check("off, an upgrade at its limit is hidden",
+    names(CraftPanel:GetRows({ sortBy = "name" })), "Brown Linen Shirt, Rough Sharpening Stone")
+  check("on, it still shows",
+    names(CraftPanel:GetRows({ sortBy = "name", upgradesOnly = true })),
+    "Brown Linen Shirt, Copper Chain Belt")
+  ANALYSIS[101].atPostLimit = nil
+
+  IGNORED[101] = "Copper Chain Belt"
+  check("an ignored upgrade stays hidden",
+    names(CraftPanel:GetRows({ upgradesOnly = true })), "Brown Linen Shirt")
+  check("and is counted", CraftPanel.hiddenIgnored, 1)
+  IGNORED[101] = nil
+
+  check("the order key changes with the box",
+    CraftPanel:OrderKey({ upgradesOnly = true }) ~= CraftPanel:OrderKey({}), true)
+
+  -- The setting counts only while the box can show.
+  SETTINGS.craftPaneUpgradesOnly = true
+  check("ticked with Equipment there, it is on", CraftPanel:UpgradesOnly(), true)
+  SETTINGS.showUpgradeArrows = false
+  check("with the arrows off, it is off", CraftPanel:UpgradesOnly(), false)
+  SETTINGS.showUpgradeArrows = nil
+  equipment = nil
+  check("without Equipment, it is off", CraftPanel:UpgradesOnly(), false)
+  equipment = {}
+
+  -- The box shows only while Equipment can answer, and the search box gives
+  -- it room, then takes the room back.
+  local function Fake(width)
+    local f = { width = width, shown = false }
+    function f:GetWidth() return self.width end
+    function f:SetSize(w) self.width = w end
+    function f:Show() self.shown = true end
+    function f:Hide() self.shown = false end
+    return f
+  end
+  local savedBox, savedSearch = CraftPanel.upgradesBox, CraftPanel.search
+  CraftPanel.upgradesBox, CraftPanel.search = Fake(110), Fake(500)
+  CraftPanel:UpdateUpgradesBox()
+  check("with Equipment, the box shows", CraftPanel.upgradesBox.shown, true)
+  local narrow = CraftPanel.search.width
+  equipment = nil
+  CraftPanel:UpdateUpgradesBox()
+  check("without it, the box hides", CraftPanel.upgradesBox.shown, false)
+  check("and the search box takes the room back", CraftPanel.search.width > narrow, true)
+  equipment = {}
+  CraftPanel.upgradesBox, CraftPanel.search = savedBox, savedSearch
+
+  ns.Upgrades, SETTINGS = oldUpgrades, oldSettings
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))

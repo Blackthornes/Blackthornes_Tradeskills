@@ -3,8 +3,9 @@
 -- character playing has not learned that would raise their skill now, with
 -- where to learn each, so the Level Up tab keeps going past what they know.
 --
--- Only recipes a trainer or a vendor teaches: a drop or a quest cannot be
--- shown the way to. The skill each needs and when it turns yellow and grey
+-- Only recipes a trainer or a vendor teaches by default: a drop or a quest
+-- cannot be shown the way to. "Learn From:" on the LEARN NEXT line
+-- (2026-11-17) can list those too, with no Show the Way. The skill each needs and when it turns yellow and grey
 -- are Forever's (Data/LearnSpots.lua, laid over the book in
 -- Logic/RecipeBook.lua); a recipe still a few points out of reach is listed
 -- after the rest, "At 120". The trainer or vendor picked is on the player's
@@ -38,9 +39,12 @@ local CITIES = {
 -- Thunder Bluff and Darnassus trainers are kept under the zone around them
 -- (Mulgore, Teldrassil) with that zone's map spot, so a spot inside the
 -- city's box counts as the city when picking one. The zone itself stays as
--- it is, since the map pin reads the spot on that zone's map.
+-- it is, since the map pin reads the spot on that zone's map. Thunder
+-- Bluff's box is where the city's own map sits on Forever's Mulgore map
+-- (the client's UiMapAssignment table), which reaches further than
+-- Classic's (tools/classic_maps.py).
 local CITY_BOXES = {
-    { zone = "Mulgore", city = "Thunder Bluff", x1 = 28, x2 = 46, y1 = 14, y2 = 36 },
+    { zone = "Mulgore", city = "Thunder Bluff", x1 = 31, x2 = 49, y1 = 27, y2 = 45 },
     { zone = "Teldrassil", city = "Darnassus", x1 = 22, x2 = 43, y1 = 38, y2 = 64 },
     -- The Apothecarium's trainers are placed on Silverpine's map.
     { zone = "Silverpine Forest", city = "Undercity", x1 = 70, x2 = 76, y1 = 6, y2 = 12 },
@@ -172,10 +176,335 @@ local function SeenAt(name, zone, kind)
     return ok and type(seen) == "table" and seen or nil
 end
 
+--- Trainers who stand inside a dungeon, by Classic skill line: the data's
+--- spots leave them out, since a dungeon has no outdoor spot (2026-11-16:
+--- Road to 300's Artisan Enchanting step named no trainer, as Annora in
+--- Uldaman is the only one). Same shape as a TRAINERS row, plus the
+--- dungeon's name; the spot is its entrance in the zone outside, so the pin
+--- and the arrow lead to the door. Used only when no outdoor trainer of the
+--- player's side teaches that high.
+-- { name, zone outside, x, y, faction, highest Classic skill, dungeon }
+LearnNext.INSIDE_TRAINERS = {
+    [333] = { { "Annora", "Badlands", 44.4, 12.2, "", 300, "Uldaman" } },
+}
+
+--- Trainers who teach a rank, by Classic skill line and the rank's cap
+--- (150 Journeyman, 225 Expert, 300 Artisan). A trainer's number in the
+--- data is the highest recipe it teaches, which also counts specialty
+--- trainers who teach no rank at all (2026-11-18: Expert Leatherworking
+--- sent players to Brumn Winterhoof in Arathi, an Elemental trainer, and
+--- Artisan Tailoring to Josephine Lister in Undercity, a Shadoweave one).
+--- Checked against Forever's trainer lists. A line with no list here
+--- (Mining) still goes by the highest recipe.
+local function Set(...)
+    local set = {}
+    for _, name in ipairs({ ... }) do set[name] = true end
+    return set
+end
+LearnNext.RANK_TRAINERS = {
+    [164] = {                                            -- Blacksmithing
+        [150] = Set("Snarl", "Karn Stonehoof", "James Van Brunt", "Traugh",
+                    "Rotgath Stonebeard", "Therum Deepforge", "Clarise Gnarltree"),
+        [225] = Set("Saru Steelfury", "Bengus Deepforge"),
+        [300] = Set("Brikk Keencraft"),
+    },
+    [165] = {                                            -- Leatherworking
+        [150] = Set("Karolek", "Tarn", "Arthur Moore", "Brawn", "Krulmoo Fullmoon",
+                    "Faldron", "Fimble Finespindle", "Simon Tanner", "Aayndia Floralwind"),
+        [225] = Set("Una", "Telonis"),
+        [300] = Set("Hahrana Ironhide", "Drakk Stonehand"),
+    },
+    [171] = {                                            -- Alchemy
+        [150] = Set("Yelmak", "Bena Winterhoof", "Doctor Marsh", "Serge Hinott", "Jaxin Chong",
+                    "Sylvanna Forestmoon", "Tally Berryfizz", "Lilyssia Nightbreeze", "Kylanna",
+                    "Alchemist Narett"),
+        [225] = Set("Doctor Herbert Halsey", "Ainethil"),
+        [300] = Set("Rogvar", "Kylanna Windwhisper"),
+    },
+    [197] = {                                            -- Tailoring
+        [150] = Set("Magar", "Tepa", "Rhiannon Davis", "Mahani", "Grarnik Goodstitch",
+                    "Me'lynn", "Jormund Stonebrow", "Sellandus"),
+        [225] = Set("Josef Gregorian", "Georgio Bolero"),
+        [300] = Set("Daryl Stack", "Timothy Worthington"),
+    },
+    [202] = {                                            -- Engineering
+        [150] = Set("Nogg", "Franklin Lloyd", "Trixie Quikswitch", "Lilliam Sparkspindle",
+                    "Finbus Geargrind"),
+        [225] = Set("Roxxik", "Springspindle Fizzlegear"),
+        [300] = Set("Buzzek Bracketswing"),
+    },
+    [333] = {                                            -- Enchanting
+        [150] = Set("Godan", "Teg Dawnstrider", "Lavinia Crowe", "Taladan", "Gimble Thistlefuzz",
+                    "Lucan Cordell", "Xylinnia Starshine"),
+        [225] = Set("Hgarth", "Kitta Firewind"),
+        [300] = Set("Annora"),
+    },
+}
+
+--- Specialty trainers, by Classic skill line: they teach only their
+--- specialty's recipes. A recipe goes to them only when no other trainer
+--- of the player's side teaches that high, or when its name is one of
+--- theirs (the pattern, where there is one).
+--- A specialist's own recipes are a name pattern or a set of names; false
+--- means it has none of its own. Forever's weapon and armor crafters teach
+--- only a few Truesilver recipes (2026-11-22: Mithril Coif sent players to
+--- Kelgruk Bloodaxe, who teaches four swords and maces; only Brikk Keencraft
+--- teaches it). Checked against Forever's trainer lists.
+local WEAPON_CRAFTS = Set("The Shatterer", "Phantom Blade", "Blight", "Truesilver Champion")
+local ARMOR_CRAFTS = Set("Truesilver Gauntlets", "Truesilver Breastplate")
+LearnNext.SPECIALISTS = {
+    [164] = { ["Grumnus Steelshaper"] = ARMOR_CRAFTS, ["Okothos Ironrager"] = ARMOR_CRAFTS,
+              ["Shayis Steelfury"] = ARMOR_CRAFTS,
+              ["Ironus Coldsteel"] = WEAPON_CRAFTS, ["Borgosh Corebender"] = WEAPON_CRAFTS,
+              ["Kelgruk Bloodaxe"] = WEAPON_CRAFTS, ["Borgus Steelhand"] = WEAPON_CRAFTS },
+    [165] = { ["Brumn Winterhoof"] = false, ["Sarah Tanner"] = false,
+              ["Peter Galen"] = false, ["Thorkaf Dragoneye"] = false,
+              ["Caryssia Moonhunter"] = false, ["Se'Jib"] = false },
+    [197] = { ["Josephine Lister"] = "^Shadoweave", ["Jalane Ayrole"] = "^Shadoweave" },
+    [202] = { ["Tinkmaster Overspark"] = false, ["Oglethorpe Obnoticus"] = false,
+              ["Nixx Sprocketspring"] = false, ["Vazario Linkgrease"] = false },
+}
+
+--------------------------------------------------------------------------------
+-- Specialties (a player's report, the owner said build it, 2026-11-25): the
+-- road and Learn Next listed Armorsmith recipes for a Weaponsmith, and
+-- Dragonscale patterns for a Tribal leatherworker. A recipe that needs a
+-- specialty the character playing doesn't have is left off both, like a
+-- recipe that needs a standing (Logic/RoadPlan.lua). Which recipes need one:
+-- the specialists' own trainer recipes above, what a recipe item's tooltip
+-- says ("Requires Armorsmith"), and what a trainer's window said
+-- (`needs` on its line in `trainerRecipes`). The character's own specialty
+-- is read from the game, never saved. When the game won't say, the
+-- character has none, so the recipe stays off. A known recipe always stays.
+--------------------------------------------------------------------------------
+
+-- [key] = { Classic skill line, spell, the game's English name, the
+-- specialty it builds on }
+LearnNext.SPECIALTIES = {
+    armor = { 164, 9788, "Armorsmith" },
+    weapon = { 164, 9787, "Weaponsmith" },
+    sword = { 164, 17039, "Master Swordsmith", "weapon" },
+    hammer = { 164, 17040, "Master Hammersmith", "weapon" },
+    axe = { 164, 17041, "Master Axesmith", "weapon" },
+    dragonscale = { 165, 10656, "Dragonscale Leatherworking" },
+    elemental = { 165, 10658, "Elemental Leatherworking" },
+    tribal = { 165, 10660, "Tribal Leatherworking" },
+    gnomish = { 202, 20219, "Gnomish Engineer" },
+    goblin = { 202, 20222, "Goblin Engineer" },
+}
+
+-- Bumped when the character's spells change, so a kept road is worked out
+-- again (RoadPlan's key).
+LearnNext.specialtyVersion = 0
+
+-- The specialists' own trainer recipes, by name.
+local OWN_SPECIALTY = {}
+for name in pairs(WEAPON_CRAFTS) do OWN_SPECIALTY[name] = "weapon" end
+for name in pairs(ARMOR_CRAFTS) do OWN_SPECIALTY[name] = "armor" end
+
+local hasMemo   -- [key] = true/false, until the spells change
+local nameMemo  -- [key] = the specialty's name in the client's language
+
+--- A specialty's name in the client's language, else the English.
+function LearnNext.SpecialtyName(key)
+    local row = LearnNext.SPECIALTIES[key]
+    if not row then return nil end
+    nameMemo = nameMemo or {}
+    if nameMemo[key] then return nameMemo[key] end
+    local found
+    pcall(function()
+        local spell = rawget(_G, "C_Spell")
+        local name
+        if type(spell) == "table" and type(spell.GetSpellName) == "function" then
+            name = spell.GetSpellName(row[2])
+        end
+        local info = rawget(_G, "GetSpellInfo")
+        if (type(name) ~= "string" or name == "") and type(info) == "function" then
+            name = info(row[2])
+        end
+        if type(name) == "string" and name ~= "" then found = name .. "" end
+    end)
+    nameMemo[key] = found or row[3]
+    return nameMemo[key]
+end
+
+local function KnowsSpell(spellID, name)
+    local known = false
+    for _, fn in ipairs({ "IsPlayerSpell", "IsSpellKnown" }) do
+        local call = rawget(_G, fn)
+        if not known and type(call) == "function" then
+            local ok, yes = pcall(call, spellID)
+            if ok and yes then known = true end
+        end
+    end
+    if known then return true end
+    pcall(function()
+        local book = rawget(_G, "C_SpellBook")
+        if type(book) == "table" and type(book.IsSpellKnown) == "function" and book.IsSpellKnown(spellID) then
+            known = true
+        end
+    end)
+    if known then return true end
+    -- By name, for a client whose spell numbers differ: the game finds a
+    -- spell by name only in the character's own spellbook.
+    pcall(function()
+        local spell = rawget(_G, "C_Spell")
+        if type(spell) == "table" and type(spell.GetSpellInfo) == "function" then
+            local info = spell.GetSpellInfo(name)
+            if type(info) == "table" and info.name == name then known = true end
+        end
+    end)
+    return known
+end
+
+--- Does the character playing have this specialty? A master smith has
+--- Weaponsmith too.
+function LearnNext.HasSpecialty(key)
+    local row = LearnNext.SPECIALTIES[key]
+    if not row then return true end
+    hasMemo = hasMemo or {}
+    if hasMemo[key] == nil then
+        local has = KnowsSpell(row[2], row[3])
+        if not has then
+            for other, more in pairs(LearnNext.SPECIALTIES) do
+                if more[4] == key and KnowsSpell(more[2], more[3]) then has = true end
+            end
+        end
+        hasMemo[key] = has
+    end
+    return hasMemo[key]
+end
+
+--- Has the character playing any specialty of this Classic skill line?
+--- true for a line with none to pick.
+function LearnNext.HasAnySpecialty(line)
+    local any = false
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        if row[1] == line then
+            if LearnNext.HasSpecialty(key) then return true end
+            any = true
+        end
+    end
+    return not any
+end
+
+--- The specialty by its name, in the client's language or English, or nil.
+function LearnNext.SpecialtyNamed(name)
+    if type(name) ~= "string" then return nil end
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        if name == row[3] or name == LearnNext.SpecialtyName(key) then return key end
+    end
+    return nil
+end
+
+--- The specialty a tooltip line names ("Requires Armorsmith"), or nil.
+function LearnNext.SpecialtyIn(text)
+    if type(text) ~= "string" then return nil end
+    local format = rawget(_G, "ITEM_REQ_SKILL")
+    if type(format) ~= "string" or not format:find("%s", 1, true) then format = "Requires %s" end
+    for key, row in pairs(LearnNext.SPECIALTIES) do
+        local name = LearnNext.SpecialtyName(key)
+        local ok, want = pcall(string.format, format, name)
+        if (ok and text == want) or text == "Requires " .. row[3] then return key end
+    end
+    return nil
+end
+
+--- The specialty a recipe needs, or nil.
+function LearnNext.NeedsSpecialty(record)
+    if type(record) ~= "table" then return nil end
+    if type(record.name) == "string" and OWN_SPECIALTY[record.name] then return OWN_SPECIALTY[record.name] end
+    local trained = ns.TrainerRecipes and ns.TrainerRecipes.Get and record.recipeID
+        and ns.TrainerRecipes:Get(record.recipeID)
+    if type(trained) == "table" and LearnNext.SPECIALTIES[trained.needs or ""] then return trained.needs end
+    local road = ns.RoadPlan
+    if road and road.ItemSpecialty then
+        for _, itemID in ipairs(record.recipeItems or {}) do
+            local key = road.ItemSpecialty(itemID)
+            if key then return key end
+        end
+    end
+    return nil
+end
+
+--- Is a recipe left off because it needs a specialty the character
+--- playing doesn't have?
+function LearnNext.WrongSpecialty(record)
+    local key = LearnNext.NeedsSpecialty(record)
+    return key ~= nil and not LearnNext.HasSpecialty(key)
+end
+
+local function Signature()
+    local parts = {}
+    for _, key in ipairs({ "armor", "weapon", "sword", "hammer", "axe", "dragonscale",
+        "elemental", "tribal", "gnomish", "goblin" }) do
+        parts[#parts + 1] = LearnNext.HasSpecialty(key) and key or ""
+    end
+    return table.concat(parts, ",")
+end
+
+--- The character's spells changed: read the specialties again. The game
+--- sends this often, so a kept road moves only when a specialty did.
+function LearnNext.OnSpellsChanged()
+    local before = hasMemo and Signature()
+    hasMemo = nil
+    if before ~= Signature() then LearnNext.specialtyVersion = LearnNext.specialtyVersion + 1 end
+end
+
+--- For the probe: each specialty, its name in the client and whether the
+--- character has it.
+function LearnNext.SpecialtyProbe()
+    local parts = {}
+    for _, key in ipairs({ "armor", "weapon", "sword", "hammer", "axe", "dragonscale",
+        "elemental", "tribal", "gnomish", "goblin" }) do
+        parts[#parts + 1] = ("%s=%s"):format(LearnNext.SpecialtyName(key), LearnNext.HasSpecialty(key) and "yes" or "no")
+    end
+    return table.concat(parts, ", ")
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(LearnNext, "SPELLS_CHANGED", function() LearnNext.OnSpellsChanged() end)
+end
+
+--- A trainer row as a place to go: its spot where the game saw it stand,
+--- else the data's; a dungeon's trainer carries `inside`.
+local function TrainerPlace(row)
+    local seen = not row[7] and SeenAt(row[1], row[2], "trainer")
+    return {
+        kind = "trainer", name = row[1], zone = row[2], inside = row[7],
+        x = seen and seen.x or row[3], y = seen and seen.y or row[4],
+        mapID = seen and seen.mapID,
+    }
+end
+
+--- Trainers the data keeps under a zone players don't know them by: Tarren
+--- Mill's spots are on the Alterac Mountains map, but players look for
+--- them in Tarren Mill (2026-11-18). Words only; the pin keeps the zone.
+LearnNext.TOWNS = {
+    ["Daryl Stack"] = "Tarren Mill",
+    ["Serge Hinott"] = "Tarren Mill",
+}
+
+--- Where a trainer place is, in words: the dungeon for one inside, the
+--- town players know it by, the city whose box the spot is in (Undercity's
+--- trainers sit on Silverpine's map, Thunder Bluff's on Mulgore's,
+--- Darnassus' on Teldrassil's; 2026-11-23), else the zone.
+function LearnNext.ZoneName(place)
+    if not place then return nil end
+    return place.inside or LearnNext.TOWNS[place.name or ""] or (place.zone and CityOf(place)) or nil
+end
+
 --- Where a recipe is learned: the trainer or vendor to go to.
 --
 -- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID,
 --   mapID (only where the game saw a vendor stand) } or nil when neither teaches it on the player's side
+--- Whether a recipe is one of a specialist's own (see SPECIALISTS).
+local function OwnRecipe(pattern, name)
+    if type(name) ~= "string" then return false end
+    if type(pattern) == "table" then return pattern[name] == true end
+    return type(pattern) == "string" and name:find(pattern) ~= nil
+end
+
 function LearnNext:Place(record)
     if not record then return nil end
     local side = Side()
@@ -186,17 +515,31 @@ function LearnNext:Place(record)
         local line = ns.RecipeBook.ClassicLine and ns.RecipeBook.ClassicLine(record.skillLineID)
             or record.skillLineID
         local needs = record.classicSkill or record.skill or 0
+        local specialists = LearnNext.SPECIALISTS[line] or {}
+        local plain, special, own = {}, {}, {}
         for _, row in ipairs((spots.TRAINERS or {})[line] or {}) do
             if OnSide(row[5], side) then sideTop = math.max(sideTop or 0, row[6] or 0) end
             if OnSide(row[5], side) and (row[6] or 0) >= needs then
                 local seen = SeenAt(row[1], row[2], "trainer")
-                trainers[#trainers + 1] = {
+                local place = {
                     kind = "trainer", name = row[1], zone = row[2],
                     x = seen and seen.x or row[3], y = seen and seen.y or row[4],
                     mapID = seen and seen.mapID, price = record.trainerCost,
                 }
+                local pattern = specialists[row[1]]
+                if pattern == nil then
+                    plain[#plain + 1] = place
+                elseif OwnRecipe(pattern, record.name) then
+                    own[#own + 1] = place
+                else
+                    special[#special + 1] = place
+                end
             end
         end
+        -- A specialty's own recipe goes to its trainer; any other recipe to
+        -- a plain trainer, and to a specialist only when no plain one
+        -- teaches that high.
+        trainers = (#own > 0 and own) or (#plain > 0 and plain) or special
     end
 
     local vendors = {}
@@ -232,16 +575,36 @@ function LearnNext:Place(record)
         end
     end
 
+    -- Every way the player's side has, for "Learn From:": a recipe both
+    -- a trainer and a vendor teach matches either.
+    local ways = { trainer = #trainers > 0 or nil, vendor = #vendors > 0 or nil }
+
     -- A trainer first: it is how most recipes are learned, and the cheaper.
     local place = Nearest(trainers, side) or Nearest(vendors, side)
-    if place then return place end
+    if place then
+        place.ways = ways
+        return place
+    end
 
     -- A trainer teaches it (it has a trainer's price) but none the data
     -- places teaches that high: Classic's Artisan trainers stand in places
     -- the data has no spot for. Still listed, with no spot to pin, rather
     -- than left out of the list.
     if record.trainerCost and sideTop and (record.classicSkill or record.skill or 0) > sideTop then
-        return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost }
+        -- One inside a dungeon, pinned at its door (Annora in Uldaman).
+        local line = ns.RecipeBook.ClassicLine and ns.RecipeBook.ClassicLine(record.skillLineID)
+            or record.skillLineID
+        local needs = record.classicSkill or record.skill or 0
+        for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
+            if OnSide(row[5], side) and (row[6] or 0) >= needs then
+                local inside = TrainerPlace(row)
+                inside.price = record.trainerCost
+                inside.ways = { trainer = true }
+                return inside
+            end
+        end
+        return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost,
+                 ways = { trainer = true } }
     end
     return nil
 end
@@ -259,17 +622,34 @@ end
 function LearnNext:TrainerFor(line, needs)
     local side = Side()
     local from = (needs or 0) - 75
-    local trainers = {}
-    for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
-        if OnSide(row[5], side) and (row[6] or 0) > from then
-            local seen = SeenAt(row[1], row[2], "trainer")
-            trainers[#trainers + 1] = {
-                kind = "trainer", name = row[1], zone = row[2],
-                x = seen and seen.x or row[3], y = seen and seen.y or row[4],
-                mapID = seen and seen.mapID,
-            }
-        end
+    local ranks = LearnNext.RANK_TRAINERS[line]
+    local named = ranks and ranks[needs]
+    local specialists = LearnNext.SPECIALISTS[line] or {}
+    -- Who teaches the rank: by name where the list has the rank, else by
+    -- the highest recipe, never a specialty trainer. A list that names no
+    -- trainer the data has for this side falls back to the highest recipe.
+    local function Teaches(row, byName)
+        if byName then return named[row[1]] == true end
+        return specialists[row[1]] == nil and (row[6] or 0) > from
     end
+    local function Gather(byName)
+        local trainers = {}
+        for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
+            if OnSide(row[5], side) and Teaches(row, byName) then
+                trainers[#trainers + 1] = TrainerPlace(row)
+            end
+        end
+        if #trainers == 0 then
+            for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
+                if OnSide(row[5], side) and Teaches(row, byName) then
+                    trainers[#trainers + 1] = TrainerPlace(row)
+                end
+            end
+        end
+        return trainers
+    end
+    local trainers = named and Gather(true) or {}
+    if #trainers == 0 then trainers = Gather(false) end
     return Nearest(trainers, side)
 end
 
@@ -299,9 +679,38 @@ local function Makes(record)
     return possible == math.huge and 0 or possible
 end
 
+--- A recipe got from a drop or a quest (Learn From:, 2026-11-17): no
+--- one to go to, so no spot; what its recipe item costs at the auction
+--- house when a price is known.
+local function ItemPlace(record, ways)
+    local kind = ways.drop and "drop" or ways.quest and "quest" or nil
+    if not kind then return nil end
+    local itemID = record.recipeItems and record.recipeItems[1]
+    local best
+    for _, id in ipairs(record.recipeItems or {}) do
+        local ok, price = false, nil
+        if ns.Prices and ns.Prices.GetValue then ok, price = pcall(ns.Prices.GetValue, ns.Prices, id, "lowest") end
+        price = ok and tonumber(price) or nil
+        if price and price > 0 and (not best or price < best) then best, itemID = price, id end
+    end
+    return { kind = kind, itemID = itemID, price = best, auction = best ~= nil, ways = ways }
+end
+
 --- One row, in the Level Up list's shape, plus where to learn it.
-function LearnNext:BuildRow(record, skill)
+--
+-- @param anyWay  also drop and quest recipes, with every way each is got
+--   in `place.ways` (Learn From:, 2026-11-17)
+function LearnNext:BuildRow(record, skill, anyWay)
     local place = self:Place(record)
+    if anyWay then
+        local more = ns.RecipeBook and ns.RecipeBook.LearnWays and ns.RecipeBook:LearnWays(record) or {}
+        if place then
+            place.ways = place.ways or {}
+            place.ways.drop, place.ways.quest = more.drop, more.quest
+        else
+            place = ItemPlace(record, more)
+        end
+    end
     if not place then return nil end
 
     local value = ns.RecipeBook:Value(record) or {}
@@ -336,6 +745,7 @@ end
 --
 -- @param opts.skills  { [Classic skill line] = the character's skill }
 -- @param opts.search  part of a name, any case
+-- @param opts.anyWay  drop and quest recipes too (LearnNext.Filter picks)
 -- @return rows (BuildRow's)
 function LearnNext:GetRows(opts)
     opts = opts or {}
@@ -352,13 +762,14 @@ function LearnNext:GetRows(opts)
             and (record.trainerCost or record.recipeItems)
             and needs <= skill + LearnNext.REACH
             and (not needle or (record.name or ""):lower():find(needle, 1, true))
-            and not ns.RecipeBook:KnowsIt(record) then
+            and not ns.RecipeBook:KnowsIt(record)
+            and not LearnNext.WrongSpecialty(record) then
             local tier = LearnNext.Tier(record, math.max(skill, needs))
             -- With no yellow and grey known, a recipe this far below the
             -- skill is grey all the same: Classic's go grey within this.
             if tier == "unknown" and skill >= needs + LearnNext.UNKNOWN_GREY then tier = "trivial" end
             if tier ~= "trivial" then
-                local row = self:BuildRow(record, skill)
+                local row = self:BuildRow(record, skill, opts.anyWay)
                 if row then
                     if row.locked then locked[#locked + 1] = row else open[#open + 1] = row end
                 end
@@ -377,11 +788,71 @@ function LearnNext:GetRows(opts)
     return open
 end
 
---- The words for where: "Trainer" or "Vendor", and the zone beside a vendor.
+--- The words for where: "Trainer" or "Vendor", and the zone beside a vendor;
+--- "Drop" or "Quest or other" for a recipe no one teaches.
 function LearnNext.WhereText(place)
     if not place then return "", nil end
     if place.kind == "trainer" then return L["Trainer"], nil end
+    if place.kind == "drop" then return L["Drop"], nil end
+    if place.kind == "quest" then return L["Quest or other"], nil end
     return L["Vendor"], place.zone
+end
+
+--- Can Show the Way lead to it: a trainer or vendor, never a drop or quest.
+function LearnNext.CanShowWay(row)
+    local kind = row and row.place and row.place.kind
+    return kind == "trainer" or kind == "vendor"
+end
+
+--------------------------------------------------------------------------------
+-- Have Skill and Learn From (the owner said build it, 2026-11-17)
+--------------------------------------------------------------------------------
+
+--- The Learn From choices, in the menu's order. "trainerVendor" is the
+--- first and the default: the list as it was before the filters.
+LearnNext.LEARN_FROM = { "trainerVendor", "trainer", "vendor", "drop", "quest", "any" }
+LearnNext.LEARN_FROM_DEFAULT = "trainerVendor"
+
+local FROM_WAYS = {
+    trainerVendor = { "trainer", "vendor" },
+    trainer = { "trainer" }, vendor = { "vendor" },
+    drop = { "drop" }, quest = { "quest" },
+}
+
+--- Is a row learned the way picked? A recipe got more than one way
+--- matches each.
+function LearnNext.Matches(row, from)
+    if from == "any" then return true end
+    local place = row and row.place
+    if not place then return false end
+    local ways = place.ways or { [place.kind or ""] = true }
+    for _, way in ipairs(FROM_WAYS[from] or FROM_WAYS.trainerVendor) do
+        if ways[way] then return true end
+    end
+    return false
+end
+
+--- The rows already built, filtered: Have Skill leaves out those still out
+--- of reach, then Learn From keeps the way picked. Nothing is read again.
+--
+-- @param opts.haveSkill  leave out locked rows
+-- @param opts.learnFrom  one of LEARN_FROM
+-- @return kept, counts ({ [choice] = rows it would keep, after Have Skill })
+function LearnNext.Filter(rows, opts)
+    opts = opts or {}
+    local from = opts.learnFrom
+    if not FROM_WAYS[from] and from ~= "any" then from = LearnNext.LEARN_FROM_DEFAULT end
+    local kept, counts = {}, {}
+    for _, choice in ipairs(LearnNext.LEARN_FROM) do counts[choice] = 0 end
+    for _, row in ipairs(rows or {}) do
+        if not (opts.haveSkill and row.locked) then
+            for _, choice in ipairs(LearnNext.LEARN_FROM) do
+                if LearnNext.Matches(row, choice) then counts[choice] = counts[choice] + 1 end
+            end
+            if LearnNext.Matches(row, from) then kept[#kept + 1] = row end
+        end
+    end
+    return kept, counts
 end
 
 --- What to pin the map for: the recipe item's name or the recipe's.
@@ -476,7 +947,7 @@ function LearnNext:ShowTheWay(row)
             place.zone, place.x, place.y))
     elseif place.zone then
         ns.Print(L.Format("Can't pin %s (%s): %s. They are in %s.", who, what,
-            WHY[why] or L["no exact spot is known for them"], place.zone))
+            WHY[why] or L["no exact spot is known for them"], LearnNext.ZoneName(place)))
     else
         ns.Print(L.Format("Can't pin %s (%s): %s.", who, what,
             WHY[why] or L["no exact spot is known for them"]))

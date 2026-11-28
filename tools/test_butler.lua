@@ -191,7 +191,8 @@ check("value", a.disenchant, 3000)
 check("cannot without the spell", a.canDisenchant, false)
 check("the alt with enough skill on this account", a.enchanter, "Ana")
 local b = Butler:Advise(4)
-check("too much for every alt here: nobody", b.enchanter, nil)
+-- On Forever any Enchanting skill breaks any item (2026-11-24).
+check("an alt here at any skill can", b.enchanter, "Ana")
 check("its value still shows", b.disenchant, 7000)
 check("not gear cannot be broken", Butler:Advise(3).canDisenchant, false)
 check("and has no value", Butler:Advise(3).disenchant, nil)
@@ -200,7 +201,7 @@ check("not loaded yet is unknown", Butler:Advise(99).canDisenchant, nil)
 typed = "Zed"
 Butler:Forget()
 check("the disenchanter typed in Settings comes first", Butler:Advise(1).enchanter, "Zed")
-check("but not above the quality picked", Butler:Advise(4).enchanter, nil)
+check("but not above the quality picked: an alt instead", Butler:Advise(4).enchanter, "Ana")
 check("gear the Mail page sends there names it", Butler:Advise(1).disenchanter, "Zed")
 check("gear it does not send names nobody", Butler:Advise(4).disenchanter, nil)
 typed = nil
@@ -213,7 +214,7 @@ Butler:Forget()
 local c = Butler:Advise(1)
 check("knows it and has the skill", c.canDisenchant, true)
 check("then no alt is named", c.enchanter, nil)
-check("short of the skill", Butler:Advise(4).canDisenchant, false)
+check("any skill breaks it", Butler:Advise(4).canDisenchant, true)
 
 -- Forever's spell checks can say no for a character that disenchants: the
 -- Enchanting on its own record still counts (a German client's enchanter
@@ -221,7 +222,7 @@ check("short of the skill", Butler:Advise(4).canDisenchant, false)
 knows = false
 Butler:Forget()
 check("Enchanting on record, spell check says no", Butler:Advise(1).canDisenchant, true)
-check("and still short of the skill", Butler:Advise(4).canDisenchant, false)
+check("and any skill breaks it", Butler:Advise(4).canDisenchant, true)
 ns.db.characters[SELF].professions = nil
 Butler:Forget()
 check("no Enchanting and the spell check says no", Butler:Advise(1).canDisenchant, false)
@@ -276,6 +277,15 @@ ns.Recipes.GetCharacters = function()
 end
 ns.db.characters[ALT].gold = 1234
 ns.db.characters[SELF].gold = 5
+local savedAuctions = ns.Auctions
+ns.Auctions = { GetListings = function()
+  return {
+    { itemID = 8, quantity = 20, who = ALT, readAt = 70 },
+    { itemID = 8, quantity = 5, who = ALT, readAt = 75 },
+    { itemID = 9, quantity = 3, who = ALT, readAt = 75, ended = true },
+    { itemID = 9, quantity = 2, who = SELF, readAt = 80 },
+  }
+end }
 local oldGetMoney = GetMoney
 GetMoney = function() return 99999 end
 local held = Butler:Holdings()
@@ -288,6 +298,8 @@ check("empty counts are left out", held[1].bank[7], nil)
 check("an alt's bags are its snapshot", held[2].bags[1], 2)
 check("a key that is not an item is left out", held[2].bags["x"], nil)
 check("when the bags were read", held[2].bagsAt, 50)
+check("an alt's professions with their skill", held[2].professions[1] and held[2].professions[1].name
+  .. " " .. held[2].professions[1].skill, "Enchanting 150")
 check("its mail", held[2].mail[4], 1)
 check("when the mail was read", held[2].mailAt, 60)
 check("never read is nil", held[2].bankAt, nil)
@@ -306,6 +318,15 @@ check("the character playing's purse is live", held[1].gold, 99999)
 check("gold waiting in an alt's mailbox", held[2].mailMoney, 700)
 check("when its items were cleared", held[2].clearedAt, 40)
 check("never read this way: no mail gold", held[3].mailMoney, nil)
+check("an alt's items on auction", held[2].auctions[8], 25)
+check("a listing that ended is left out", held[2].auctions[9], nil)
+check("when its auctions were read", held[2].auctionsAt, 75)
+check("the character playing's auctions", held[1].auctions[9], 2)
+check("never listed: nothing on auction", next(held[3].auctions), nil)
+check("never listed: no time", held[3].auctionsAt, nil)
+ns.Auctions = { GetListings = function() error("boom") end }
+check("auctions that raise leave the rest", #Butler:Holdings(), 3)
+ns.Auctions = savedAuctions
 held[2].bags[1] = 1000
 check("a copy: the save is untouched", ns.db.characters[ALT].inventory[1], 2)
 ns.Recipes.GetCharacters = function() error("boom") end
@@ -340,6 +361,9 @@ local started = Butler:FillMail("Ana", { { itemID = 3, count = 5 }, { itemID = "
 check("filling starts", started, true)
 check("to the character's full mail name", filled and filled.recipient, "Ana Smith")
 check("only real counts go in", filled and #filled.items, 1)
+Butler:FillMail("Ana", { { itemID = 3, count = 1, link = "|cff1eff00|Hitem:15012::::::::18:1485:::1:12731|h[Boots of the Bear]|h|r" } })
+check("the version Butler said to mail rides along by its link",
+    filled.items[1].link, "|cff1eff00|Hitem:15012::::::::18:1485:::1:12731|h[Boots of the Bear]|h|r")
 Butler:FillMail("Zed", { { itemID = 3, count = 1 } })
 check("a name not on record is used as typed", filled.recipient, "Zed")
 -- Two characters sharing a first name are "Ana S." and "Ana T." to Butler,

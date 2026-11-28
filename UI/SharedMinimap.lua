@@ -23,6 +23,19 @@
 -- addon is the answer in all) and `minimapSharedAngle` (where the shared
 -- button sits on the ring, nil until it is dragged: then it starts where
 -- the first addon's own button sits).
+--
+-- A launcher for addon bars (FILE_VERSION 4, 2026-11-17): when another
+-- addon has already loaded LibDataBroker-1.1, the copy that draws also
+-- signs up one "Blackthornes" launcher with it, once. We never ship
+-- LibStub or the library ourselves; without them nothing changes. Its
+-- clicks match the shared button: left opens the menu, right the All
+-- Addons settings (else the first addon's), middle Farmer's panels.
+--
+-- Left where another addon puts it (FILE_VERSION 5, 2026-11-27, after a
+-- player's button went missing in a minimap button drawer): a drawer takes
+-- a button by giving it a new parent. Once our button's parent is no
+-- longer the minimap, we stop placing it on the ring (`TakenAway`), so it
+-- stays where the drawer laid it. Each addon's own button asks the same.
 
 local ADDON, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -30,7 +43,7 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local SharedMinimap = {}
 ns.SharedMinimap = SharedMinimap
 
-local FILE_VERSION = 3
+local FILE_VERSION = 5
 SharedMinimap.FILE_VERSION = FILE_VERSION
 
 local TITLE = "Blackthornes AddOns"
@@ -168,6 +181,99 @@ function SharedMinimap.ApplyNow()
         if hub.button then hub.button:Hide() end
         if hub.menu then hub.menu:Hide() end
     end
+    SharedMinimap.Launcher()
+end
+
+--------------------------------------------------------------------------------
+-- The launcher for addon bars
+--------------------------------------------------------------------------------
+
+local LAUNCHER = "Blackthornes"
+
+--- The data broker library, only when another addon loaded it. Never asks
+--- for it loudly and never loads it.
+local function Broker()
+    local stub = rawget(_G, "LibStub")
+    if not stub then return nil end
+    local ok, lib = pcall(stub, "LibDataBroker-1.1", true)
+    if ok and type(lib) == "table" and type(lib.NewDataObject) == "function" then return lib end
+    return nil
+end
+
+--- The first addon in menu order that has this job.
+local function FirstWith(field)
+    for _, entry in ipairs(SharedMinimap.Entries()) do
+        if type(entry[field]) == "function" then return entry end
+    end
+    return nil
+end
+
+--- What a click on the launcher does, by mouse button.
+function SharedMinimap.LauncherClick(frame, mouseButton)
+    if mouseButton == "RightButton" then
+        local window = ns.SharedWindow
+        if window and type(window.OpenAllAddons) == "function" then
+            local ok, opened = pcall(window.OpenAllAddons)
+            if ok and opened then return end
+        end
+        local entry = FirstWith("settings")
+        if entry then pcall(entry.settings) end
+    elseif mouseButton == "MiddleButton" then
+        local farmer = hub.entries.farmer
+        if farmer and type(farmer.middle) == "function" then pcall(farmer.middle) end
+    else
+        SharedMinimap.ToggleMenu(frame)
+    end
+end
+
+--- Its tooltip: the same lines as the shared button's.
+function SharedMinimap.LauncherTooltip(tip)
+    if not tip or type(tip.AddLine) ~= "function" then return end
+    tip:AddLine(TITLE)
+    for _, entry in ipairs(SharedMinimap.Entries()) do
+        tip:AddLine(entry.name, 0.5, 0.5, 0.5)
+    end
+    tip:AddLine(L["Click to pick an addon"], 0.7, 0.7, 0.7)
+end
+
+--- Sign up the launcher once, from the copy that draws, when the library
+--- is there. Asked again at each Apply and once all addons have loaded,
+--- since an addon bar may load after us.
+function SharedMinimap.Launcher()
+    if hub.launcher ~= nil or not IsDrawer() then return hub.launcher or nil end
+    local lib = Broker()
+    if not lib then return nil end
+    local ok, object = pcall(lib.NewDataObject, lib, LAUNCHER, {
+        type = "launcher",
+        label = TITLE,
+        icon = ICON,
+        OnClick = function(frame, mouseButton)
+            local drawer = SharedMinimap.Drawer()
+            local api = (drawer and drawer.api) or SharedMinimap
+            api.LauncherClick(frame, mouseButton)
+        end,
+        OnTooltipShow = function(tip)
+            local drawer = SharedMinimap.Drawer()
+            local api = (drawer and drawer.api) or SharedMinimap
+            api.LauncherTooltip(tip)
+        end,
+    })
+    -- A name already taken gives nil; mark it tried so we never ask again.
+    hub.launcher = (ok and object) or false
+    return hub.launcher
+end
+
+if not hub.launcherWatch and CreateFrame then
+    local ok, watch = pcall(CreateFrame, "Frame")
+    if ok and watch then
+        hub.launcherWatch = watch
+        pcall(watch.RegisterEvent, watch, "PLAYER_LOGIN")
+        watch:SetScript("OnEvent", function(self)
+            pcall(self.UnregisterEvent, self, "PLAYER_LOGIN")
+            local drawer = SharedMinimap.Drawer()
+            if drawer and drawer.api.Launcher then pcall(drawer.api.Launcher) end
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -202,9 +308,18 @@ local function SaveAngle(angle)
     end
 end
 
+--- True once another addon (a button drawer) has moved the button off the
+--- minimap. We leave it where that addon put it.
+function SharedMinimap.TakenAway(button)
+    if not button or not Minimap or type(button.GetParent) ~= "function" then return false end
+    local ok, parent = pcall(button.GetParent, button)
+    return ok and parent ~= nil and parent ~= Minimap
+end
+
 function SharedMinimap.Reposition()
     local button = hub.button
     if not button or not Minimap then return end
+    if SharedMinimap.TakenAway(button) then return end
     local angle = SharedMinimap.Angle()
     local radius = Radius()
     button:ClearAllPoints()
@@ -400,6 +515,8 @@ function SharedMinimap.BuildMenu()
     menu:SetScript("OnHide", function(self) pcall(self.UnregisterEvent, self, "GLOBAL_MOUSE_DOWN") end)
     menu:SetScript("OnEvent", function(self)
         local over = self:IsMouseOver() or (hub.button and hub.button:IsMouseOver())
+            or (hub.menuAnchor and type(hub.menuAnchor.IsMouseOver) == "function"
+                and hub.menuAnchor:IsMouseOver())
         if not over then self:Hide() end
     end)
 
@@ -467,8 +584,9 @@ function SharedMinimap.Fill(menu)
     menu:SetHeight(top + 10 + footHeight + PAD)
 end
 
---- Open the menu beside the button, toward the middle of the screen.
-function SharedMinimap.ToggleMenu()
+--- Open the menu beside the button (or the addon bar's frame that was
+--- clicked), toward the middle of the screen.
+function SharedMinimap.ToggleMenu(anchor)
     local menu = SharedMinimap.BuildMenu()
     if menu:IsShown() then
         menu:Hide()
@@ -477,9 +595,10 @@ function SharedMinimap.ToggleMenu()
     if GameTooltip then GameTooltip:Hide() end
     SharedMinimap.Fill(menu)
 
-    local button = hub.button
+    local button = anchor or hub.button
+    hub.menuAnchor = anchor
     menu:ClearAllPoints()
-    if button and UIParent then
+    if button and UIParent and type(button.GetCenter) == "function" then
         local x, y = button:GetCenter()
         local width, height = UIParent:GetWidth(), UIParent:GetHeight()
         local scale = (button:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)

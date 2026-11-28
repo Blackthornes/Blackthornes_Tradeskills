@@ -568,7 +568,30 @@ function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback, link)
         return false
     end
 
+    -- Drawn by ID, a random suffix copy shows the plain item's name. The
+    -- row's own name ("Captain's Breastplate of Magic") goes on top then
+    -- (a player's report, 2026-11-23).
+    Widgets.TakeFullName(fallback)
     return true
+end
+
+--- Put a row's full name on the tooltip's top line, when it is the name
+--- shown there with words added after it (a random suffix). A link counts
+--- by the name inside it. Anything else leaves the line alone.
+function Widgets.TakeFullName(full)
+    if type(full) ~= "string" then return false end
+    local ok, done = pcall(function()
+        full = full:match("|h%[(.-)%]|h") or full
+        local line = _G.GameTooltipTextLeft1
+        local shown = line and line.GetText and line:GetText()
+        if type(shown) ~= "string" or shown == "" or #full <= #shown + 1 then return false end
+        if full:sub(1, #shown + 1) ~= shown .. " " then return false end
+        -- A count ("Linen Cloth (20)") or a colour code is not a suffix.
+        if full:find("[%d%(%[|]", #shown + 1) then return false end
+        line:SetText(full)
+        return true
+    end)
+    return ok and done == true
 end
 
 --- A row whose whole tooltip is the item's own.
@@ -1070,6 +1093,11 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 entry.label = Theme.CreateLabel(entry, "small", "text")
                 entry.label:SetPoint("LEFT", 8, 0)
                 entry.label:SetPoint("RIGHT", -8, 0)
+                -- A dim number or word on the right (`option.note`), such as
+                -- how many rows the choice keeps.
+                entry.note = Theme.CreateLabel(entry, "small", "muted", "RIGHT")
+                entry.note:SetPoint("RIGHT", -8, 0)
+                entry.note:Hide()
 
                 -- The option picked now wears the gold edge.
                 entry.mark = Theme.AccentStripe(entry, 2)
@@ -1100,7 +1128,12 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 local y = -4 - slot * MENU_ROW_HEIGHT
                 entry:SetPoint("TOPLEFT", 1, y)
                 entry:SetPoint("TOPRIGHT", scrolls and -7 or -1, y)
-                Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) }, room)
+                local note = option.note ~= nil and tostring(option.note) or nil
+                entry.note:SetText(note or "")
+                entry.note:SetShown(note ~= nil)
+                local noteRoom = note and (entry.note:GetStringWidth() or 0) + 8 or 0
+                Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) },
+                    room and (room - noteRoom) or nil)
                 -- A ticked option in a multiple choice menu is lit and an
                 -- unticked one dimmed, so it reads as on and off.
                 local color = IsOn(option) and "accent" or (option.header or multi) and "dim" or "text"
@@ -1760,6 +1793,135 @@ function Widgets.LightThumb(bar, thumb)
     end)
 end
 
+--- A scroll bar down a list's right edge: a dark track and a thumb that
+--- lights gold under the mouse.
+---
+--- Drawn and dragged by hand, not with the game's Slider: on Forever a
+--- vertical Slider runs the wrong way, so dragging the thumb down scrolled
+--- the list up (Butler met it 2026-10-13, the Sell list 2026-11-24). Here the
+--- thumb sits `value` steps down from the top and follows the cursor while it
+--- is held, so down is always down. It answers the Slider's calls
+--- (SetMinMaxValues, GetMinMaxValues, SetValue, GetValue), and
+--- `bar.onValueChanged(value)` hears each change, from the player or code.
+-- @param parent the frame it sits on
+-- @param width  pixels wide
+function Widgets.CreateScrollbar(parent, width)
+    local bar = CreateFrame("Frame", nil, parent)
+    bar:SetWidth(width)
+    bar.min, bar.max, bar.value = 0, 0, 0
+
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints(bar)
+    track:SetColorTexture(Theme.Unpack("panel"))
+
+    local thumb = bar:CreateTexture(nil, "ARTWORK")
+    thumb:SetColorTexture(Theme.Unpack("metal"))
+    thumb:SetSize(width, 40)
+    thumb:SetPoint("TOP", bar, "TOP", 0, 0)
+    bar.thumb = thumb
+    bar.thumbHeight = 40
+    Widgets.LightThumb(bar, thumb)
+
+    --- Pixels the thumb can travel: the bar less the thumb.
+    function bar:Room()
+        local height = tonumber(self:GetHeight()) or 0
+        return math.max(0, height - (self.thumbHeight or 0))
+    end
+
+    --- How far down the bar the thumb's top is, in pixels.
+    function bar:ThumbTop()
+        local span = (self.max or 0) - (self.min or 0)
+        if span <= 0 then return 0 end
+        return self:Room() * ((self.value or 0) - self.min) / span
+    end
+
+    local function Place()
+        thumb:ClearAllPoints()
+        thumb:SetPoint("TOP", bar, "TOP", 0, -bar:ThumbTop())
+    end
+
+    function bar:SetThumbHeight(height)
+        self.thumbHeight = tonumber(height) or 40
+        thumb:SetHeight(self.thumbHeight)
+        Place()
+    end
+
+    function bar:SetValue(value)
+        value = math.floor((tonumber(value) or 0) + 0.5)
+        value = math.max(self.min or 0, math.min(self.max or 0, value))
+        local before = self.value
+        self.value = value
+        Place()
+        if value ~= before and self.onValueChanged then self.onValueChanged(value) end
+    end
+
+    function bar:GetValue() return self.value end
+
+    function bar:SetMinMaxValues(low, high)
+        low = tonumber(low) or 0
+        self.min, self.max = low, math.max(low, tonumber(high) or 0)
+        self:SetValue(self.value)
+        Place()
+    end
+
+    function bar:GetMinMaxValues() return self.min, self.max end
+
+    --- The value that puts the thumb's top `pos` pixels down the bar.
+    function bar:ValueAt(pos)
+        local room = self:Room()
+        if room <= 0 then return self.min or 0 end
+        pos = math.max(0, math.min(room, pos))
+        return (self.min or 0) + pos / room * ((self.max or 0) - (self.min or 0))
+    end
+
+    --- How far down the bar the cursor is, in the bar's own pixels, or nil.
+    function bar:CursorDown()
+        local top = self:GetTop()
+        if type(top) ~= "number" or type(GetCursorPosition) ~= "function" then return nil end
+        local _, y = GetCursorPosition()
+        if type(y) ~= "number" then return nil end
+        local scale = self:GetEffectiveScale()
+        if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+        return top - y / scale
+    end
+
+    --- Press on the thumb: it is held where it was caught. Off it, the
+    --- thumb's middle jumps under the cursor. Until the button comes up the
+    --- thumb follows the cursor (OnUpdate runs only then).
+    local function StartDrag(self)
+        if (self.max or 0) <= (self.min or 0) then return end
+        local pos = self:CursorDown()
+        if not pos then return end
+        local top, size = self:ThumbTop(), self.thumbHeight or 0
+        if pos >= top and pos <= top + size then
+            self.grabAt = pos - top
+        else
+            self.grabAt = size / 2
+            self:SetValue(self:ValueAt(pos - self.grabAt))
+        end
+        self:SetScript("OnUpdate", function(held)
+            local now = held:CursorDown()
+            if now then held:SetValue(held:ValueAt(now - (held.grabAt or 0))) end
+        end)
+    end
+
+    local function StopDrag(self)
+        self.grabAt = nil
+        self:SetScript("OnUpdate", nil)
+    end
+
+    bar:SetScript("OnMouseDown", function(self, button)
+        if button ~= nil and button ~= "LeftButton" then return end
+        StartDrag(self)
+    end)
+    bar:SetScript("OnMouseUp", StopDrag)
+    -- Hidden mid-drag (the list shrank), the mouse-up never comes: let go.
+    bar:SetScript("OnHide", StopDrag)
+    bar:SetScript("OnSizeChanged", function() Place() end)
+
+    return bar
+end
+
 --------------------------------------------------------------------------------
 -- Scroll frame
 --------------------------------------------------------------------------------
@@ -1882,7 +2044,7 @@ function Widgets.SortableHeadings(labels, values, onChange)
         for key, button in pairs(sorter.buttons) do
             local active = sorter.key == key
             if active or not button.restColor then
-                button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+                button.label:SetTextColor(Theme.Unpack(active and "text" or "heading"))
             else
                 button.label:SetTextColor(unpack(button.restColor))
             end
@@ -2039,31 +2201,16 @@ function Widgets.CreateScrollFrame(parent, opts)
     -- Parented to `parent`, not to the scroll child: anything inside the child
     -- scrolls with it, and a scrollbar that slides itself off the screen is a
     -- memorable bug to chase.
-    local bar = CreateFrame("Slider", nil, parent)
-    bar:SetOrientation("VERTICAL")
-    bar:SetWidth(8)
+    local bar = Widgets.CreateScrollbar(parent, 8)
     bar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 8, 0)
     bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 8, 0)
-    bar:SetValueStep(1)
-    bar:SetObeyStepOnDrag(true)
-    bar:SetValue(0)
     bar:Hide()
-
-    local track = bar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints(bar)
-    track:SetColorTexture(Theme.Unpack("panel"))
-
-    local thumb = bar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(8, 40)
-    bar:SetThumbTexture(thumb)
-    Widgets.LightThumb(bar, thumb)
 
     scroll.scrollbar = bar
 
-    bar:SetScript("OnValueChanged", function(_, value)
+    bar.onValueChanged = function(value)
         scroll:SetVerticalScroll(value)
-    end)
+    end
 
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta)
@@ -2086,7 +2233,7 @@ function Widgets.CreateScrollFrame(parent, opts)
         if range > 0 and view > 0 then
             -- Thumb length tracks the visible fraction, so the bar says how
             -- much more there is rather than just that there is more.
-            thumb:SetHeight(math.max(20, view * (view / height)))
+            bar:SetThumbHeight(math.max(20, view * (view / height)))
         end
     end
 
@@ -2130,6 +2277,25 @@ end
 local function TipIdentity(entry)
     if type(entry) ~= "table" then return entry end
     return entry.itemID or entry.recipeID or entry.key or entry
+end
+
+--- True while a window up the line from `frame` is folded into its round
+--- button (UI/FoldWindow.lua). Forever lets the mouse reach rows inside a
+--- folded window, so they must not show tooltips or take clicks (a
+--- player's recording, 2026-11-24).
+function Widgets.InFoldedWindow(frame)
+    local current = frame
+    for _ = 1, 30 do
+        if type(current) ~= "table" then return false end
+        local fold = rawget(current, "blackthornesFold")
+        if type(fold) == "table" and fold.folded == true then return true end
+        local getParent = current.GetParent
+        if type(getParent) ~= "function" then return false end
+        local ok, parent = pcall(getParent, current)
+        if not ok then return false end
+        current = parent
+    end
+    return false
 end
 
 --- Whether the game's tooltip is showing for `frame` now.
@@ -2176,12 +2342,73 @@ function Widgets.LinkToChat(itemID, link)
     return ok and inserted and true or false
 end
 
+--- The game's answer to IsModifiedClick(kind) (CHATLINK, DRESSUP), which
+--- follows the player's own key choice; else the plain key.
+local function ModifiedClick(kind, key)
+    local modified = _G.IsModifiedClick
+    if type(modified) == "function" then
+        local ok, on = pcall(modified, kind)
+        if ok then return on and true or false end
+    end
+    local down = _G[key]
+    if type(down) ~= "function" then return false end
+    local ok, on = pcall(down)
+    return ok and on and true or false
+end
+
+--- True while the player has a chat box open to type in.
+function Widgets.ChatBoxOpen()
+    local util = _G.ChatFrameUtil
+    local active = (type(util) == "table" and type(util.GetActiveWindow) == "function" and util.GetActiveWindow)
+        or _G.ChatEdit_GetActiveWindow
+    if type(active) ~= "function" then return false end
+    local ok, box = pcall(active)
+    return ok and box ~= nil and true or false
+end
+
+--- Ctrl-click tries gear on, as the game's bags do (the owner, 2026-11-21,
+--- the same in all five addons). The game's own click handler does it where
+--- it is there; the item's number is enough while it loads.
+-- @return true when the click was taken
+function Widgets.ItemTryOn(itemID, link)
+    if not ModifiedClick("DRESSUP", "IsControlKeyDown") then return false end
+    itemID = tonumber(itemID)
+    if type(link) ~= "string" or not link:find("item:", 1, true) then
+        link = nil
+        if itemID and ns.Util and ns.Util.HasFunction("C_Item.GetItemInfo") then
+            local ok, _, found = pcall(C_Item.GetItemInfo, itemID)
+            if ok and type(found) == "string" then link = found end
+        end
+        link = link or (itemID and ("item:" .. itemID))
+    end
+    if not link then return false end
+
+    local handle = _G.HandleModifiedItemClick
+    if type(handle) == "function" then
+        local ok, taken = pcall(handle, link)
+        if ok and taken then return true end
+    end
+    local dress = _G.DressUpItemLink or _G.DressUpLink
+    if type(dress) ~= "function" then return false end
+    local ok, taken = pcall(dress, link)
+    return ok and taken and true or false
+end
+
+--- Every click on an item the addon shows: Ctrl tries gear on, Shift does
+--- what Widgets.ItemShiftClick says. Anything else is left to the row.
+-- @return true when the click was taken
+function Widgets.ItemClick(itemID, link)
+    if Widgets.ItemTryOn(itemID, link) then return true end
+    return Widgets.ItemShiftClick(itemID, link)
+end
+
 --- One shift-click for every item the addon shows (the owner, 2026-10-12):
---- with the auction house open it searches the house for the item, else it
---- puts the item's link in the chat box being typed in, as the bags do.
+--- with a chat box open it puts the item's link in it, as the bags do
+--- (2026-11-21); else with the auction house open it searches the house
+--- for the item.
 -- @return true when the click was taken
 function Widgets.ItemShiftClick(itemID, link)
-    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+    if not ModifiedClick("CHATLINK", "IsShiftKeyDown") then return false end
     itemID = tonumber(itemID)
     if not itemID and type(link) == "string" then itemID = tonumber(link:match("item:(%d+)")) end
     if not itemID then return false end
@@ -2189,6 +2416,9 @@ function Widgets.ItemShiftClick(itemID, link)
     -- The drawer's Lists view is adding to a list: the item goes on it.
     local lists = ns.ShoppingListsView
     if lists and lists.TakeItem and lists:TakeItem(itemID, true) then return true end
+
+    -- A chat box open: the link goes in it, as a Shift-click on the bags.
+    if Widgets.ChatBoxOpen() and Widgets.LinkToChat(itemID, link) then return true end
 
     if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
@@ -2277,16 +2507,20 @@ function Widgets.OpenRowMenu(data, menu)
     return true
 end
 
---- Shift-click on a list row: search the auction house for its item, or
---- link it in chat with the house closed.
+--- Shift-click on a list row: link its item in an open chat box, else
+--- search the auction house for it. Ctrl-click with the left button tries
+--- it on (a right-click stays the list's).
 -- @return true when the click was taken
-function Widgets.ShiftClickSearch(data, searchItem)
-    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+function Widgets.ShiftClickSearch(data, searchItem, mouseButton)
+    local shift = ModifiedClick("CHATLINK", "IsShiftKeyDown")
+    local dress = mouseButton ~= "RightButton" and not shift and ModifiedClick("DRESSUP", "IsControlKeyDown")
+    if not (shift or dress) then return false end
 
     local itemID = Widgets.RowItemID(data, searchItem)
     if not itemID then return false end
 
     local link = type(data.link) == "string" and data.link or nil
+    if dress then return Widgets.ItemTryOn(itemID, link) end
     return Widgets.ItemShiftClick(itemID, link)
 end
 
@@ -2312,39 +2546,53 @@ function Widgets.ItemHotspot(icon, cover)
     end)
     spot:SetScript("OnLeave", function() GameTooltip:Hide() end)
     spot:SetScript("OnClick", function()
-        Widgets.ItemShiftClick(Theme.IconItem(icon))
+        Widgets.ItemClick(Theme.IconItem(icon))
     end)
 
     Theme.SetIconSpot(icon, spot)
     return spot
 end
 
+-- Row Size (the owner said build it, 2026-11-21): "roomy" as the lists
+-- have always been, or "compact", the game's tighter rows. Read once, at the
+-- first list made, so a change waits for /reload as Text Size does. Only
+-- one-line rows (up to COMPACT_MOST tall) shrink, by COMPACT_LESS, never
+-- under COMPACT_LEAST; taller rows hold two lines and keep their height.
+Widgets.COMPACT_LESS = 4
+Widgets.COMPACT_MOST = 30
+Widgets.COMPACT_LEAST = 16
+
+--- True when the lists are drawn compact this session.
+function Widgets.Compact()
+    if Widgets.compactRows == nil then
+        local Config = ns.Config
+        local ok, size = pcall(function() return Config and Config:Get("rowSize") end)
+        Widgets.compactRows = ok and size == "compact" or false
+    end
+    return Widgets.compactRows
+end
+
+--- A list row's height at the Row Size picked.
+function Widgets.RowHeight(height)
+    height = height or 22
+    if not Widgets.Compact() or height > Widgets.COMPACT_MOST then return height end
+    return math.max(Widgets.COMPACT_LEAST, height - Widgets.COMPACT_LESS)
+end
+
 function Widgets.CreateScrollList(parent, opts)
     local list = CreateFrame("Frame", nil, parent)
 
-    local rowHeight = opts.rowHeight or 22
+    local rowHeight = Widgets.RowHeight(opts.rowHeight or 22)
 
     list.data = {}
     list.rows = {}
     list.offset = 0
 
-    local scrollbar = CreateFrame("Slider", nil, list)
-    scrollbar:SetOrientation("VERTICAL")
-    scrollbar:SetWidth(8)
+    local barWidth = opts.scrollbarWidth or 8
+    local scrollbar = Widgets.CreateScrollbar(list, barWidth)
     scrollbar:SetPoint("TOPRIGHT", 0, 0)
     scrollbar:SetPoint("BOTTOMRIGHT", 0, 0)
-    scrollbar:SetValueStep(1)
-    scrollbar:SetObeyStepOnDrag(true)
-
-    local track = scrollbar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints(scrollbar)
-    track:SetColorTexture(Theme.Unpack("panel"))
-
-    local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("metal"))
-    thumb:SetSize(8, 40)
-    scrollbar:SetThumbTexture(thumb)
-    Widgets.LightThumb(scrollbar, thumb)
+    if opts.scrollbarEdge and Theme.Border then Theme.Border(scrollbar, "metal", 0.6) end
 
     list.scrollbar = scrollbar
 
@@ -2488,7 +2736,7 @@ function Widgets.CreateScrollList(parent, opts)
         row:SetScript("OnEnter", function(self)
             Motion:Blend(self, "hover", 1, 0.1, Light)
             self.hoverEdge:Show()
-            if opts.onEnter and self.data then
+            if opts.onEnter and self.data and not Widgets.InFoldedWindow(self) then
                 self.tipFor = TipIdentity(self.data)
                 opts.onEnter(self, self.data)
                 Widgets.AddClickHint(self, opts.clickHint, self.data)
@@ -2503,10 +2751,11 @@ function Widgets.CreateScrollList(parent, opts)
         end)
 
         row:SetScript("OnClick", function(self, mouseButton)
+            if Widgets.InFoldedWindow(self) then return end
             -- Shift-click any item row with the auction house open and the
             -- house searches for it (2026-10-04). Right-click stays
             -- what each list already made it.
-            if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem) then return end
+            if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem, mouseButton) then return end
 
             if self.data and mouseButton == "RightButton" and opts.menu
                 and Widgets.OpenRowMenu(self.data, opts.menu) then
@@ -2529,7 +2778,7 @@ function Widgets.CreateScrollList(parent, opts)
     --- needs. Returns how many were drawn and whether every entry from the
     --- offset to the end was.
     local function Layout(self, height, maxOffset)
-        local right = maxOffset > 0 and -10 or 0
+        local right = maxOffset > 0 and -(barWidth + 2) or 0
         local y, index, drawn = 0, 0, 0
         local full = false
 
@@ -2545,9 +2794,15 @@ function Widgets.CreateScrollList(parent, opts)
             end
 
             local row = AcquireRow(index)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", 0, -y)
-            row:SetPoint("TOPRIGHT", right, -y)
+            -- Placed again only when it moved. Every redraw used to take
+            -- each row off the list and pin it back where it already was,
+            -- which makes the game lay the row and all on it out again.
+            if rawget(row, "placedY") ~= y or rawget(row, "placedRight") ~= right then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -y)
+                row:SetPoint("TOPRIGHT", right, -y)
+                row.placedY, row.placedRight = y, right
+            end
             row.data = entry
             row.dataIndex = dataIndex
 
@@ -2555,16 +2810,19 @@ function Widgets.CreateScrollList(parent, opts)
             -- across, and must follow the data row, not the frame.
             row.selected = opts.isSelected and opts.isSelected(entry) or false
 
-            if row.selected then
-                row.background:SetColorTexture(Theme.Unpack("glassActive"))
-            else
-                row.background:SetColorTexture(Theme.Unpack(
-                    dataIndex % 2 == 0 and "glassAlt" or "glass"))
+            -- Painted again only when its band changed, or the look did
+            -- (the Blizzard window style puts new colours in the table).
+            local band = row.selected and "glassActive"
+                or (dataIndex % 2 == 0 and "glassAlt" or "glass")
+            local paint = type(Theme.colors) == "table" and Theme.colors[band] or band
+            if rawget(row, "bandPaint") ~= paint then
+                row.background:SetColorTexture(Theme.Unpack(band))
+                row.bandPaint = paint
             end
 
             row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
-            local band = rawget(row, "glowBand")
-            if band then band:SetShown(row.selected) end
+            local glow = rawget(row, "glowBand")
+            if glow then glow:SetShown(row.selected) end
 
             if opts.updateRow then
                 opts.updateRow(row, entry, dataIndex)
@@ -2598,6 +2856,13 @@ function Widgets.CreateScrollList(parent, opts)
         local total = #self.data
         local height = self:GetHeight()
         if type(height) ~= "number" or height < 0 then height = 0 end
+        -- To the nearest whole point. In a scaled window (the one window
+        -- resized by its corner) the game reads a list sized for one row
+        -- back as a hair under it, and the row was left out: the Crafting
+        -- tab's only queued craft vanished while its title still said "(1)"
+        -- (a player's recording, 2026-11-19). A row may overhang by half a
+        -- point at most.
+        height = math.floor(height + 0.5)
 
         local maxOffset = MaxOffset(self, height)
         if self.offset > maxOffset then self.offset = maxOffset end
@@ -2645,7 +2910,7 @@ function Widgets.CreateScrollList(parent, opts)
         -- scroll frame's is, so it says how much more there is rather than
         -- only that there is more.
         if maxOffset > 0 and drawn > 0 and total > 0 then
-            thumb:SetHeight(math.max(20, math.floor(height * drawn / total)))
+            scrollbar:SetThumbHeight(math.max(20, math.floor(height * drawn / total)))
         end
 
         if scrollbar:GetValue() ~= self.offset then
@@ -2720,13 +2985,13 @@ function Widgets.CreateScrollList(parent, opts)
         return self.data
     end
 
-    scrollbar:SetScript("OnValueChanged", function(_, value)
+    scrollbar.onValueChanged = function(value)
         local newOffset = math.floor(value + 0.5)
         if newOffset ~= list.offset then
             list.offset = newOffset
             list:Refresh()
         end
-    end)
+    end
 
     list:EnableMouseWheel(true)
 

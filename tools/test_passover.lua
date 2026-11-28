@@ -20,7 +20,6 @@
 
 
 local GLOBALS = { "CreateFrame", "C_Container", "ItemLocation", "GetTime", "time", "C_Timer",
-    "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
     "C_AuctionHouse" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
@@ -69,17 +68,20 @@ C_Container = {
 ItemLocation = { CreateFromBagAndSlot = function() return { IsValid = function() return true end } end }
 
 local popup
-StaticPopupDialogs = {}
-StaticPopup_Show = function(which, text, _, data)
-    popup = Blank()
-    popup.which, popup.text, popup.data = which, text, data
-    return popup
-end
-StaticPopup_Visible = function(which) return popup and popup.which == which and popup or nil end
-StaticPopup_Hide = function(which) if popup and popup.which == which then popup = nil end end
 
 local said = {}
 local ns = {}
+
+-- Tradeskills' own question window (UI/PostConfirm.lua), as far as these
+-- checks need it. The game's pop-ups are never used for it.
+ns.PostConfirm = {
+    Show = function(_, ask)
+        popup = { text = ask.text, data = ask.data, itemID = ask.itemID, ask = ask }
+        return true
+    end,
+    IsShown = function() return popup ~= nil end,
+    Close = function() popup = nil end,
+}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = noop
@@ -250,10 +252,11 @@ recorded[POTION] = 150
 Posting:NoteChecked(POTION)
 Posting:Request(POTION, 5, 300)
 check("the box asks", popup ~= nil, true)
-local dialog = StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"]
-dialog.OnCancel(popup, nil, "override")
+local first = popup
+Posting:Confirm(POTION, 5, 300, { farUnder = true })
 check("the box replaced by the next is not a skip", Posting:IsPassedOver(POTION), false)
-dialog.OnCancel(popup, nil, "clicked")
+check("and the new one is up", popup ~= first and popup ~= nil, true)
+popup.ask.skip(popup.data)
 check("Skip passes it over", Posting:IsPassedOver(POTION), true)
 check("the oil is next now", NextID(), OIL)
 

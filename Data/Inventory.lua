@@ -130,7 +130,7 @@ end
 -- reads a count for every recipe it analyses -- asking per item would walk the
 -- bags hundreds of times per redraw.
 local function WalkBags()
-    local counts = {}
+    local counts, free = {}, {}
 
     for _, bag in ipairs(Inventory:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
@@ -140,20 +140,24 @@ local function WalkBags()
                 local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
 
                 if infoOk and info and info.itemID then
-                    counts[info.itemID] = (counts[info.itemID] or 0) + (info.stackCount or 1)
+                    local howMany = info.stackCount or 1
+                    counts[info.itemID] = (counts[info.itemID] or 0) + howMany
+                    if not info.isBound then
+                        free[info.itemID] = (free[info.itemID] or 0) + howMany
+                    end
                 end
             end
         end
     end
 
-    return counts
+    return counts, free
 end
 
-local bagCounts, bagCountsAt = nil, 0
+local bagCounts, freeCounts, bagCountsAt = nil, nil, 0
 
 --- Throw away the cached walk. Cheap, and safe to call on any bag event.
 function Inventory:InvalidateBagCounts()
-    bagCounts = nil
+    bagCounts, freeCounts = nil, nil
 end
 
 --- itemID -> how many are in the bags.
@@ -164,8 +168,21 @@ function Inventory:GetBagCounts()
         return bagCounts
     end
 
-    bagCounts, bagCountsAt = WalkBags(), now
+    bagCounts, freeCounts = WalkBags()
+    bagCountsAt = now
     return bagCounts
+end
+
+--- How many in the bags could be sold: soulbound copies left out.
+--
+-- Keep in Stock asks this, not GetBagCount. A crafted belt you wore once is
+-- bound to you, so it can never be listed, and counting it as stock meant a
+-- recipe already "had one" and was never suggested again. Crafting still
+-- reads GetBagCount: a bound reagent works in a recipe just the same.
+function Inventory:GetSellableBagCount(itemID)
+    if not itemID then return 0 end
+    self:GetBagCounts()
+    return freeCounts and freeCounts[itemID] or 0
 end
 
 --- How many of an item are in bags right now.
@@ -262,6 +279,39 @@ function Inventory:GetBankCount(itemID)
     return math.max(live, cached)
 end
 
+--- How many in the bank could be sold: soulbound and worn copies left out.
+--
+-- With the bank read this session its own walk answers, bound copies apart.
+-- Otherwise the client's count is all there is, and it cannot tell a bound
+-- copy from a free one, nor (on a client that counts worn gear in only one
+-- of its two answers) a worn copy from a banked one. So copies you are
+-- wearing come off it: a worn belt is never stock, and at worst a free one
+-- also in the bank is missed until the bank is next opened.
+function Inventory:GetSellableBankCount(itemID)
+    if not itemID then return 0 end
+
+    local record = ns.Recipes:GetCharacterRecord(false)
+    local bank = record and record.bank
+    local free = record and record.bankFree
+    local bound = 0
+    if type(bank) == "table" and type(free) == "table" then
+        bound = math.max(0, (bank[itemID] or 0) - (free[itemID] or 0))
+        if self.readThisSession then return free[itemID] or 0 end
+    end
+
+    local cached = (type(free) == "table" and free[itemID])
+        or (type(bank) == "table" and bank[itemID]) or 0
+
+    local live = 0
+    local withBank = ClientCount(itemID, true)
+    local withoutBank = ClientCount(itemID, false)
+    if withBank and withoutBank then
+        live = math.max(0, withBank - withoutBank - bound - self:GetEquippedCount(itemID))
+    end
+
+    return math.max(live, cached)
+end
+
 --- Everything this character owns: bags, bank and mailbox.
 --
 -- This is the right number for "do I need to buy this", because you already
@@ -318,7 +368,7 @@ function Inventory:SnapshotBank()
     local record = GetRecord(true)
     if not record then return end
 
-    local counts = {}
+    local counts, free = {}, {}
 
     local containers = { BANK_CONTAINER, REAGENT_BANK }
     for bag = FIRST_BANK_BAG, LAST_BANK_BAG do
@@ -336,7 +386,11 @@ function Inventory:SnapshotBank()
             for slot = 1, slots do
                 local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
                 if infoOk and info and info.itemID then
-                    counts[info.itemID] = (counts[info.itemID] or 0) + (info.stackCount or 1)
+                    local howMany = info.stackCount or 1
+                    counts[info.itemID] = (counts[info.itemID] or 0) + howMany
+                    if not info.isBound then
+                        free[info.itemID] = (free[info.itemID] or 0) + howMany
+                    end
                 end
             end
         end
@@ -347,6 +401,9 @@ function Inventory:SnapshotBank()
     -- already own.
     if sawAnything then
         record.bank = counts
+        -- The copies that could be sold, so Keep in Stock can leave the
+        -- soulbound ones out (GetSellableBankCount).
+        record.bankFree = free
         record.bankAt = time()
 
         -- Distinct from bankAt, which persists: this tracks whether the bank
@@ -388,6 +445,8 @@ end
 --- Cached counts held by other characters, as { characterKey = count }.
 -- Never merged into the local count: "you have 40, but 30 are on an alt" is a
 -- materially different situation from "you have 40".
+-- Only characters the one playing can mail: the same realm and side. A Horde
+-- character was told cloth on its Alliance alt was there to use (2026-11-27).
 function Inventory:GetAltCounts(itemID)
     local results = {}
     if not ns.db then return results end
@@ -397,7 +456,8 @@ function Inventory:GetAltCounts(itemID)
     -- Never this character under an old record of it: its bags are read live.
     local characters = ns.Characters
     for characterKey, record in pairs(ns.db.characters) do
-        if characterKey ~= selfKey and not (characters and characters:IsPlaying(characterKey)) then
+        if characterKey ~= selfKey and not (characters and characters:IsPlaying(characterKey))
+            and not (characters and characters.InReach and not characters:InReach(characterKey)) then
             local count = record.inventory and record.inventory[itemID]
             if count and count > 0 then
                 results[characterKey] = count
@@ -420,14 +480,27 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- The windows follow the bags half a second after they settle, and no more
+-- than once every two seconds. It used to be two seconds after any change,
+-- so materials just bought or a craft just made took that long to show.
+Inventory.SNAPSHOT_SOON = 0.5
+Inventory.SNAPSHOT_GAP = 2
+
 function Inventory:OnBagUpdate()
     self:InvalidateBagCounts()
 
     -- Bag events fire in bursts while looting or moving stacks; coalesce them.
     if self.snapshotTimer then return end
 
-    self.snapshotTimer = C_Timer.NewTimer(2, function()
+    local wait = self.SNAPSHOT_SOON
+    local last, now = self.snapshotAt, GetTime and GetTime() or nil
+    if last and now and now >= last then
+        wait = math.max(wait, self.SNAPSHOT_GAP - (now - last))
+    end
+
+    self.snapshotTimer = C_Timer.NewTimer(wait, function()
         Inventory.snapshotTimer = nil
+        Inventory.snapshotAt = GetTime and GetTime() or nil
         local record = GetRecord(false)
         local before = record and record.inventory or {}
         local after = Inventory:Snapshot() or {}

@@ -47,8 +47,8 @@ local DEFAULTS = {
         -- calculated at that price. This models what you will actually receive
         -- rather than a smoothed market average you would never get.
         --
-        -- Commodities only. An item auction cannot be priced in copper at all,
-        -- so it steps by a whole silver or matches; see minProfit below.
+        -- Item auctions take copper too (from one silver up), and only
+        -- undercut when the sale still clears minProfit below.
         -- 0 (match the cheapest) by default since 2026-11-09: Forever's
         -- auction house sells the cheapest first and keeps a line at each
         -- price, so a 1c undercut only jumps the line. Saves that already
@@ -149,9 +149,17 @@ local DEFAULTS = {
         -- value already saved is kept, so only new installs start with it.
         allowPostingAtALoss = true,
 
+        -- "Post at Minimum Profit:" (the owner, 2026-11-16): when others sell
+        -- a craft for less, list it at the least that still makes
+        -- minProfit (Profit:MinimumProfitPrice). Off unless ticked.
+        postAtMinProfit = false,
+
         -- The Snipe tab in the auction house drawer (2026-11-03). Off until
         -- ticked. Cap is copper per session, 0 until the player sets one.
         snipeTab = false,
+        -- The auction house's Buy tab lists what the Waylaid Crates in your
+        -- bags need (UI/PostPanel.lua, 2026-11-16). Off unless ticked.
+        crateShoppingList = false,
         snipeCap = 0,
         snipePct = 70,
         snipeSound = true,
@@ -176,11 +184,28 @@ local DEFAULTS = {
         -- by default). Never rename it.
         sellHoldsAltUpgrades = false,
 
+        -- "Craft First" (2026-11-17, off unless ticked): an item a craft
+        -- the character knows makes worth more stays off List all, dimmed
+        -- with why; its own List button still lists it
+        -- (SisterKeeps:CraftReason). Never rename it.
+        sellHoldsCraftFirst = false,
+
+        -- "Queue From Sell List" (2026-11-23, off unless ticked): a row
+        -- Craft First keeps back gets a Queue button on the Sell list, and
+        -- Queue All shows by List Next (UI/PostPanel.lua). Never rename it.
+        sellQueueFromList = false,
+
         -- "Show Equipment Upgrades" on Profit, Level Up and the Queue: a
         -- craft that is an upgrade for another character says so after its
         -- name (Upgrades:AltText). Off unless ticked (the owner,
         -- 2026-10-17). Never rename it.
         showAltUpgrades = false,
+
+        -- "Upgrades Only:" on Blizzard's profession window: the recipe list
+        -- shows only crafts Equipment calls an upgrade for the character
+        -- playing (UI/UpgradesOnly.lua). Off unless ticked (the owner,
+        -- 2026-11-22). Never rename it.
+        upgradesOnlyRecipes = false,
 
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
@@ -189,6 +214,11 @@ local DEFAULTS = {
         -- The craft pane's "Ignore max on hand" box: list every craft and let
         -- Add queue past the Keep in stock limit, without changing the limit.
         craftPaneIgnoreLimit = false,
+
+        -- The craft pane's "Upgrades Only:" box: list only the crafts that
+        -- make an upgrade for the character playing (the owner, 2026-11-24).
+        -- Its own box, apart from upgradesOnlyRecipes. Never rename it.
+        craftPaneUpgradesOnly = false,
 
         -- Side panels folded down to their title strip by the small button at
         -- their top left (UI/Collapse.lua). Remembered between sessions.
@@ -218,17 +248,14 @@ local DEFAULTS = {
         staleAfterSeconds = 48 * 3600,
 
         -- Hides crafts earning less than this, and does a second job on item
-        -- auctions: those only take whole silver, so the smallest undercut
-        -- available is a whole silver rather than a copper. That silver is
-        -- only given up when the sale would still clear this. At zero, any
-        -- craft still in profit undercuts.
+        -- auctions: they only undercut a rival when the sale would still
+        -- clear this, and match otherwise. At zero, any craft still in
+        -- profit undercuts.
         minProfit = 0,
         minMarginPercent = 0,
 
-        -- Deals, Merchant's Favor: leave bundles needing more than one stack
-        -- of a material out of the cheapest, as Forever could not fill a
-        -- crate from them when last reported (UI/DealsFavor.lua).
-        favorSkipOverStack = true,
+        -- favorSkipOverStack (Deals, Merchant's Favor) is gone: the game fills
+        -- a crate from two stacks now (2026-11-16). Old saves keep the value.
 
         -- Deals, Merchant's Favor: the favor goal (2026-10-20), typed on
         -- the tab as "favorGoal", nil until one is set. The auction house
@@ -305,6 +332,12 @@ local DEFAULTS = {
         priceTrendDays = 7,
         tooltipTrend = true,
 
+        -- Keep Price History For (2026-11-26, Logic/TidyUp.lua): days of
+        -- price readings kept for items you don't craft, star or sell. 0 is
+        -- Always, so nothing is removed until the player picks and confirms.
+        -- Never rename it.
+        keepPriceHistoryDays = 0,
+
         -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
         -- teaches, what one craft costs, sells and disenchants for, and how
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
@@ -326,6 +359,10 @@ local DEFAULTS = {
         -- rename it.
         tooltipBoughtFor = true,
 
+        -- Which professions use a material, on its tooltip (asked
+        -- 2026-11-17). See ItemTooltip:AddUsedInLines. Never rename it.
+        tooltipUsedIn = true,
+
         -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
         -- true keeps that line for while Shift is held. Whether a line is on
         -- stays in its own setting above, and the sales lines' Shift is
@@ -337,6 +374,7 @@ local DEFAULTS = {
         tooltipDisenchantShift = true,
         tooltipCrateShift = false,
         tooltipBoughtShift = false,
+        tooltipUsedInShift = false,
 
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
@@ -364,6 +402,12 @@ local DEFAULTS = {
         -- game's own frames, buttons and tabs, asked 2026-10-10). Read at
         -- login, so a change waits for /reload. See UI/BlizzardLook.lua.
         windowStyle = "titanforged",
+
+        -- Row Size: "roomy" (the lists as they have always been) or
+        -- "compact" (the game's tighter rows, the owner said build it,
+        -- 2026-11-21). Read once, so a change waits for /reload. See
+        -- Widgets.RowHeight in UI/Widgets.lua.
+        rowSize = "roomy",
 
         -- Whether each setting's description sits under it on the Settings
         -- tab rather than in its tooltip (2026-10-08). The page showing
@@ -428,10 +472,27 @@ local DEFAULTS = {
         -- Level Up's "Can afford" (2026-10-22): only crafts whose missing
         -- materials the gold carried can buy. Never rename it.
         levelUpCanAfford = false,
+        -- Learn next's "Have Skill" and "Learn From:" on the LEARN NEXT line
+        -- (2026-11-17): leave out recipes still out of reach, and which way
+        -- they are learned ("trainerVendor", "trainer", "vendor", "drop",
+        -- "quest" or "any"). Never rename either.
+        levelUpHaveSkill = false,
+        levelUpLearnFrom = "trainerVendor",
+        -- The recipe wishlist (2026-11-17): stars on recipes to learn, and
+        -- a note at a vendor or trainer that teaches one. Off unless ticked.
+        -- "Wishlist First" on Level Up's LEARN NEXT line and on Recipes to
+        -- Learn puts starred recipes at the top. Never rename these.
+        recipeWishlistOn = false,
+        levelUpWishlistFirst = true,
+        recipeBookWishlistFirst = true,
         -- Road to 300's "Pick By:" (2026-10-27): "lowest" ranks recipes by
         -- what their materials cost, "real" takes off what a craft sells
-        -- back for. Never rename it.
+        -- back for; "fewest" the fewest materials a point; "noah" no
+        -- auction house (2026-11-26). Never rename it.
         roadPickBy = "lowest",
+        -- Road to 300's "Stop At:" (2026-11-26): 150, 225 or 300, where the
+        -- road ends. Never rename it.
+        roadStopAt = 300,
 
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
@@ -457,6 +518,12 @@ local DEFAULTS = {
         disenchantSound = true,
         -- What each disenchant gave, said in chat (Logic/DisenchantLog.lua).
         disenchantChat = true,
+        -- Disenchants at an Arcane Salvager go in their own record
+        -- (Logic/DisenchantLog.lua, `salvagerLog`). On to start with (the
+        -- owner, 2026-11-24); Config:SalvagerApartOnOnce.
+        salvagerApart = true,
+        -- The "made 1 of X, 4 left" lines while crafting from the queue.
+        craftChat = true,
         -- The cheer when Set goal makes a Farmer goal.
         goalSound = true,
         -- Farmer goals made with Set goal move with the queue, and go
@@ -473,9 +540,25 @@ local DEFAULTS = {
         -- request, 2026-11-05). Account wide; never rename either.
         openAtAuction = true,
         openAtProfessions = true,
+        -- "Small Craft Queue:" (a player's request, 2026-11-17): ticked, the
+        -- profession window opens the small craft pane beside it, not the
+        -- one window. Off unless ticked. Account wide; never rename it.
+        craftPaneBeside = false,
+        -- How Tradeskills opens at the auction house, a profession window
+        -- and the mailbox: "full", "slim", "button" or "closed" (the owner
+        -- said build it, 2026-11-26). "auto" keeps what the three settings
+        -- above give (UI.WindowAt in UI/Main.lua). Account wide; never
+        -- rename them.
+        windowAtAuction = "auto",
+        windowAtProfession = "auto",
+        windowAtMail = "auto",
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
+        -- Our own chime when the last craft in the queue is made
+        -- (2026-11-26). Off unless ticked. See Crafting:QueueDone. Never
+        -- rename it.
+        queueDoneSound = false,
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
@@ -520,6 +603,16 @@ local DEFAULTS = {
         -- first, sub-crafts still before what they go into (2026-10-14).
         -- See Crafting:PickNext.
         craftFreesSpaceFirst = true,
+
+        -- The Queue tab and the craft pane show only the crafts this
+        -- character makes (a player asked, 2026-11-17). The queue itself
+        -- stays shared; nothing is taken off it. See Queue:Shown.
+        queueOnlyMine = false,
+
+        -- The Queue tab's Sort By (2026-11-26): "mine" (today's order),
+        -- "profit", "perHour" or "bags". See Queue:SortBy. Account wide;
+        -- never rename it.
+        queueSortBy = "mine",
 
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so
@@ -624,6 +717,10 @@ local DEFAULTS = {
         -- unticked since the owner asked 2026-10-28; never rename it. See
         -- Logic/RealmPrices.lua and Config:RealmPricesOnOnce.
         realmPrices = true,
+        -- Say in chat when prices come in from the guild or realm (the
+        -- owner, 2026-11-18). Off unless ticked; never rename it. See
+        -- GuildPrices:NoteHeard and RealmPrices:NoteHeard.
+        sharedChatNotice = false,
         enchantWindow = false,
         -- Send your own disenchant results and recipe skills to the
         -- addon's maker (2026-10-18). Off unless ticked; never rename it.
@@ -636,6 +733,10 @@ local DEFAULTS = {
         -- (the owner, 2026-11-12). Off unless ticked; never rename it.
         -- See Prices:PreferredTSM.
         preferTsmPrices = false,
+        -- The tooltip's "Sold a day" from TSM's DBRegionSoldPerDay (a
+        -- player asked, the owner said build it, 2026-11-16). Off unless
+        -- ticked; never rename it. See TSMPrices:SoldPerDay.
+        tsmSoldPerDay = false,
         -- The TSM price "market" reads, typed by the player (2026-11-13):
         -- `tsmPriceSource`, nil or empty for DBRecent; never rename it.
         -- `tsmGearPriceSource`, nil or empty for the TSM Price Source; never rename it.
@@ -679,6 +780,12 @@ local DEFAULTS = {
     -- never rename it. See Auctions:GetLimit.
     professionStockLimits = {},
 
+    -- [a profession's English name] = { profit = copper, margin = percent }:
+    -- that profession's own Minimum Profit and Minimum Margin, either one
+    -- missing for the usual (2026-11-17). Account wide; never rename it.
+    -- See Profit:MinimumsFor.
+    professionMinimums = {},
+
     -- recipeID -> the craft's name: crafts the player told the Profit tab to
     -- stop recommending. Account wide; the name is kept so Settings can list
     -- one the character playing does not know. See Profit:SetIgnored.
@@ -692,8 +799,13 @@ local DEFAULTS = {
     -- recipeID -> the craft's name: recipes the player skipped on Road to
     -- 300 (a player asked, 2026-11-12: a vendor's limited recipe was sold
     -- out), so the road picks the next one. Account wide; only the road
-    -- reads it; never rename it. See RoadPlan:Skip.
+    -- reads it; never rename it. See RoadPlan:Skip. Skips since
+    -- 2026-11-26 are per character in roadSkippedBy; these still count.
     roadSkipped = {},
+
+    -- GUID -> { recipeID -> the craft's name }: recipes each character
+    -- skipped on Road to 300 (2026-11-26). Never rename it.
+    roadSkippedBy = {},
 
     -- recipeID -> the craft's name: crafts always made to go into another
     -- craft, whatever buying costs (2026-10-13, Make on the Level Up tab).
@@ -724,6 +836,12 @@ local DEFAULTS = {
     -- hour a scan saw it, same items and fourteen days as priceHistory. Drawn
     -- as the volume bars under the price line.
     priceListed = {},
+
+    -- realmKey -> itemID -> suffix -> { hour, copper, ... } and { hour,
+    -- count, ... }: the same two lines for each random suffix of a kept
+    -- item, so a suffix picked on the Prices tab draws its own graph.
+    suffixHistory = {},
+    suffixListed = {},
 
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
@@ -774,6 +892,10 @@ local DEFAULTS = {
     -- See Logic/QueueActions.lua.
     queueMarks = {},
 
+    -- The recipe wishlist (2026-11-17): GUID -> recipeID -> true, the
+    -- recipes each character starred. Never rename it. See Logic/Wishlist.lua.
+    recipeWishlist = {},
+
     -- What the selling test at a vendor found: { at, result }. See
     -- UI/SellMarked.lua.
     sellTest = {},
@@ -823,11 +945,146 @@ local function SafeUnitName()
     return PlainString(UnitName, "player") or "Unknown"
 end
 
-local function SafeRealmName()
-    if type(GetRealmName) == "function" then
-        return PlainString(GetRealmName) or "UnknownRealm"
+-- A realm name as saved, or nil for none ("?" and "UnknownRealm" are what
+-- was written when the client would not say).
+local function SavedRealm(value)
+    if type(value) ~= "string" or value == "" or value == "?" or value == "UnknownRealm" then return nil end
+    return value
+end
+
+--- The server part of a character's key ("Player-<server>-<id>"), or nil.
+--- On Forever one account's characters on one realm share it, and the
+--- realm's name (the server behind it) goes with it one to one.
+local function ServerOf(guid)
+    return type(guid) == "string" and guid:match("^Player%-([^%-]+)%-") or nil
+end
+
+--- Each saved realm name's home server: the server most of this account's
+--- own characters naming that realm are on. A tie is no home (it cannot be
+--- told). Characters from a linked account never count.
+local function RealmHomes(characters)
+    local counts = {}
+    for key, entry in pairs(characters) do
+        local server = ServerOf(key)
+        local realm = server and type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+        if realm then
+            counts[realm] = counts[realm] or {}
+            counts[realm][server] = (counts[realm][server] or 0) + 1
+        end
     end
-    return "UnknownRealm"
+    local homes = {}
+    for realm, servers in pairs(counts) do
+        local best, bestCount, tied = nil, 0, false
+        for server, count in pairs(servers) do
+            if count > bestCount then
+                best, bestCount, tied = server, count, false
+            elseif count == bestCount then
+                tied = true
+            end
+        end
+        if not tied then homes[realm] = best end
+    end
+    return homes
+end
+
+--- A saved realm name that may be trusted for this character: not one
+--- whose home is another server. 1.35.4 to 1.45.0 gave a new character
+--- the realm most of the account was on, even one made on another realm
+--- (a player's PvP and RP characters all read "Realm 3 PvE", 2026-11-25).
+local function TrustedRealm(homes, guid, realm)
+    realm = SavedRealm(realm)
+    if not realm then return nil end
+    local home, server = homes[realm], ServerOf(guid)
+    if home and server and home ~= server then return nil end
+    return realm
+end
+
+--- The realm most of this account's own characters on this server name,
+--- leaving out the character itself and any name it cannot be trusted with.
+local function SameServerRealm(characters, homes, guid)
+    local server = ServerOf(guid)
+    if not server then return nil end
+    local counts, best, bestCount = {}, nil, 0
+    for key, entry in pairs(characters) do
+        if key ~= guid and ServerOf(key) == server and type(entry) == "table" and not entry.linkedFrom then
+            local realm = TrustedRealm(homes, key, entry.realm)
+            if realm then
+                counts[realm] = (counts[realm] or 0) + 1
+                local count = counts[realm]
+                if count > bestCount or (count == bestCount and realm < best) then
+                    best, bestCount = realm, count
+                end
+            end
+        end
+    end
+    return best
+end
+
+--- The realm this character played on last time the client said, when it
+--- will not say now. Forever 1.60.1 hands back an empty realm name for
+--- good, and every price, sale and gold line is filed under the realm: a
+--- new name would hide them all. In order: the character's own file, its
+--- record (unless that name is another server's), then the realm this
+--- account's characters on the same server are on (a new character). A
+--- character on a server none of the others are on gets none: a guess
+--- from another realm is worse than none. Nothing is moved or renamed.
+local function RememberedRealm()
+    local charDb = type(ns.charDb) == "table" and ns.charDb or nil
+    local own = charDb and SavedRealm(charDb.realmName)
+    if own then return own end
+
+    local db = type(ns.db) == "table" and ns.db or nil
+    local characters = db and type(db.characters) == "table" and db.characters or nil
+    if not characters then return nil end
+
+    local guid = Config.characterKey or (charDb and type(charDb.guid) == "string" and charDb.guid) or nil
+    if not guid then guid = PlainString(UnitGUID, "player") end
+    local homes = RealmHomes(characters)
+    local record = guid and characters[guid]
+    local mine = type(record) == "table" and TrustedRealm(homes, guid, record.realm)
+    if mine then return mine end
+
+    return SameServerRealm(characters, homes, guid)
+end
+
+--- Put right the realm names 1.35.4 to 1.45.0 guessed from another server
+--- (see TrustedRealm), on every own character: the name its server's other
+--- characters carry, else "?" (no realm known). The guess is kept beside
+--- it as `realmGuessed` (never rename it). Run while the client gives no
+--- realm name. Returns how many records were put right.
+function Config:MendGuessedRealms()
+    local db = type(ns.db) == "table" and ns.db or nil
+    local characters = db and type(db.characters) == "table" and db.characters or nil
+    if not characters then return 0 end
+    local homes = RealmHomes(characters)
+    local wrong = {}
+    for key, entry in pairs(characters) do
+        if type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm)
+            and not TrustedRealm(homes, key, entry.realm) then
+            wrong[#wrong + 1] = key
+        end
+    end
+    for _, key in ipairs(wrong) do
+        local entry = characters[key]
+        entry.realmGuessed = entry.realmGuessed or entry.realm
+        entry.realm = SameServerRealm(characters, homes, key) or "?"
+    end
+    return #wrong
+end
+
+local function SafeRealmName()
+    local realm = type(GetRealmName) == "function" and PlainString(GetRealmName) or nil
+    if realm then
+        if type(ns.charDb) == "table" then ns.charDb.realmName = realm end
+        return realm
+    end
+    return RememberedRealm() or "UnknownRealm"
+end
+
+--- The realm's name as the client gives it, else the one remembered for this
+--- character (see RememberedRealm), else nil.
+function Config:RealmName()
+    return SavedRealm(SafeRealmName())
 end
 
 local function SafeFaction()
@@ -855,6 +1112,273 @@ function Config:GetRealmKey()
 
     self.realmKey = key
     return key
+end
+
+--------------------------------------------------------------------------------
+-- Folding the blank realm's bucket back in
+--------------------------------------------------------------------------------
+
+-- Version 1.35.3 met Forever 1.60.1's empty realm name with "UnknownRealm",
+-- so a few hours of scans, sales and gold were filed under
+-- "UnknownRealm-<side>" (and a /reload in a dungeon could do the same, years
+-- of play apart). 1.35.4 reads the right realm again, which leaves that
+-- bucket stranded. This copies what it holds into the realm it came from,
+-- once. Only ever adds: nothing already under the realm is changed, and the
+-- stranded bucket itself stays as it was. Saved as `blankRealmFolded[key]`
+-- (never rename it).
+
+local function IsList(t) return t[1] ~= nil end
+
+local function CopyAll(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for k, v in pairs(value) do copy[k] = CopyAll(v) end
+    return copy
+end
+
+-- A table whose every value is a table (a list of records by key). Any
+-- other table is a record and is never mixed with another.
+local function IsHolder(t)
+    if IsList(t) then return false end
+    for _, v in pairs(t) do
+        if type(v) ~= "table" then return false end
+    end
+    return true
+end
+
+-- Adds what `into` lacks. Where both hold the same record, the realm's own
+-- one is kept.
+local function FillIn(into, from)
+    for k, v in pairs(from) do
+        local have = into[k]
+        if have == nil then
+            into[k] = CopyAll(v)
+        elseif type(have) == "table" and type(v) == "table" and IsHolder(have) and IsHolder(v) then
+            FillIn(have, v)
+        end
+    end
+end
+
+-- Price history: flat hour, value pairs. Hours the realm lacks are added;
+-- an hour both have keeps the realm's.
+local function FoldPairs(into, from)
+    local hours, merged = {}, {}
+    for i = 1, #into - 1, 2 do
+        hours[into[i]] = true
+        merged[#merged + 1] = { into[i], into[i + 1] }
+    end
+    local added = false
+    for i = 1, #from - 1, 2 do
+        if type(from[i]) == "number" and not hours[from[i]] then
+            hours[from[i]] = true
+            merged[#merged + 1] = { from[i], from[i + 1] }
+            added = true
+        end
+    end
+    if not added then return end
+    table.sort(merged, function(a, b) return a[1] < b[1] end)
+    for i = #into, 1, -1 do into[i] = nil end
+    for _, pair in ipairs(merged) do
+        into[#into + 1] = pair[1]
+        into[#into + 1] = pair[2]
+    end
+end
+
+local function FoldHistory(into, from)
+    for itemID, pairs_ in pairs(from) do
+        local have = into[itemID]
+        if type(pairs_) == "table" then
+            if type(have) ~= "table" then
+                into[itemID] = CopyAll(pairs_)
+            else
+                FoldPairs(have, pairs_)
+            end
+        end
+    end
+end
+
+-- The mail ledger: each mail is written down again on a first reading, so
+-- an entry the realm already has (the same character, kind, item and money,
+-- each matched once) is left out. The rest join in time order.
+local MAIL_DAYS = 31 * 86400
+local function SameMail(a, b)
+    return a.who == b.who and a.kind == b.kind and a.name == b.name and a.itemID == b.itemID
+        and a.net == b.net and a.quantity == b.quantity
+        and math.abs((tonumber(a.t) or 0) - (tonumber(b.t) or 0)) <= MAIL_DAYS
+end
+
+local function FoldLedger(into, from)
+    into.entries = type(into.entries) == "table" and into.entries or {}
+    into.seen = type(into.seen) == "table" and into.seen or {}
+    local entries, used, added = into.entries, {}, 0
+    local count = #entries
+    for _, entry in ipairs(type(from.entries) == "table" and from.entries or {}) do
+        if type(entry) == "table" then
+            local found = false
+            for index = 1, count do
+                local mine = entries[index]
+                if not used[index] and type(mine) == "table" and SameMail(mine, entry) then
+                    used[index], found = true, true
+                    break
+                end
+            end
+            if not found then
+                entries[#entries + 1] = CopyAll(entry)
+                added = added + 1
+            end
+        end
+    end
+    if added > 0 then
+        local order = {}
+        for index, entry in ipairs(entries) do order[entry] = index end
+        table.sort(entries, function(a, b)
+            local ta, tb = tonumber(a.t) or 0, tonumber(b.t) or 0
+            if ta ~= tb then return ta < tb end
+            return order[a] < order[b]
+        end)
+    end
+    for k, v in pairs(type(from.seen) == "table" and from.seen or {}) do
+        if into.seen[k] == nil then into.seen[k] = CopyAll(v) end
+    end
+    for k, v in pairs(from) do
+        if k ~= "entries" and k ~= "seen" and into[k] == nil then into[k] = CopyAll(v) end
+    end
+    return added
+end
+
+-- The gold log: an hour or day both have holds money from two stretches of
+-- play that never overlapped, so the two are added together.
+local function FoldGold(into, from)
+    for _, part in ipairs({ "hours", "days" }) do
+        local mine, theirs = into[part], from[part]
+        if type(theirs) == "table" then
+            if type(mine) ~= "table" then
+                into[part] = CopyAll(theirs)
+            else
+                for when, bucket in pairs(theirs) do
+                    local have = mine[when]
+                    if type(bucket) == "table" then
+                        if type(have) ~= "table" then
+                            mine[when] = CopyAll(bucket)
+                        else
+                            for source, sums in pairs(bucket) do
+                                local got = have[source]
+                                if type(sums) == "table" then
+                                    if type(got) ~= "table" then
+                                        have[source] = CopyAll(sums)
+                                    else
+                                        got.i = (tonumber(got.i) or 0) + (tonumber(sums.i) or 0)
+                                        got.o = (tonumber(got.o) or 0) + (tonumber(sums.o) or 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for k, v in pairs(from) do
+        if k ~= "hours" and k ~= "days" then
+            if into[k] == nil then
+                into[k] = CopyAll(v)
+            elseif type(into[k]) == "table" and type(v) == "table" then
+                FillIn(into[k], v)
+            end
+        end
+    end
+end
+
+local FOLDS = {
+    priceHistory = FoldHistory,
+    priceListed = FoldHistory,
+    mailLedger = FoldLedger,
+    goldLog = FoldGold,
+}
+
+--- The realm a stranded "UnknownRealm-<side>" bucket belongs to: the one
+--- realm all of this account's own characters on that side are on. Two
+--- realms, or none, and it cannot be told, so nil.
+function Config:BlankRealmHome(strandedKey)
+    local side = type(strandedKey) == "string" and strandedKey:match("^UnknownRealm%-(.+)$")
+    local characters = type(ns.db) == "table" and type(ns.db.characters) == "table" and ns.db.characters
+    if not side or not characters then return nil end
+
+    -- A character on a server none with a realm is on (made after the
+    -- realm went blank, on another realm) may own the bucket: then it
+    -- cannot be told.
+    local named = {}
+    for key, entry in pairs(characters) do
+        if ServerOf(key) and type(entry) == "table" and not entry.linkedFrom and SavedRealm(entry.realm) then
+            named[ServerOf(key)] = true
+        end
+    end
+
+    local function OnlyRealm(sameSide)
+        local found
+        for key, entry in pairs(characters) do
+            if type(entry) == "table" and not entry.linkedFrom and (not sameSide or entry.faction == side) then
+                local realm = SavedRealm(entry.realm)
+                if not realm and ServerOf(key) and next(named) and not named[ServerOf(key)] then
+                    return nil, true
+                end
+                if realm then
+                    if found and found ~= realm then return nil, true end
+                    found = realm
+                end
+            end
+        end
+        return found
+    end
+
+    local realm, mixed = OnlyRealm(true)
+    if not realm and not mixed then realm = OnlyRealm(false) end
+    return realm and (realm .. "-" .. side) or nil
+end
+
+--- Fold every stranded "UnknownRealm-<side>" bucket into its realm, once.
+--- Returns how many saved lists took something.
+function Config:FoldBlankRealm()
+    local db = ns.db
+    if type(db) ~= "table" then return 0 end
+    local done = type(db.blankRealmFolded) == "table" and db.blankRealmFolded or {}
+
+    local stranded = {}
+    for _, value in pairs(db) do
+        if type(value) == "table" then
+            for key, bucket in pairs(value) do
+                if type(key) == "string" and key:find("^UnknownRealm%-") and type(bucket) == "table"
+                    and done[key] == nil then
+                    stranded[key] = true
+                end
+            end
+        end
+    end
+
+    local folded = 0
+    for key in pairs(stranded) do
+        local home = self:BlankRealmHome(key)
+        if home then
+            local mails = 0
+            for root, value in pairs(db) do
+                local bucket = type(value) == "table" and value ~= done and value[key]
+                if type(bucket) == "table" and next(bucket) ~= nil then
+                    local into = value[home]
+                    if type(into) ~= "table" then
+                        value[home] = CopyAll(bucket)
+                    elseif FOLDS[root] then
+                        mails = mails + (FOLDS[root](into, bucket) or 0)
+                    else
+                        FillIn(into, bucket)
+                    end
+                    folded = folded + 1
+                end
+            end
+            done[key] = { into = home, at = time(), mails = mails }
+            db.blankRealmFolded = done
+        end
+    end
+    return folded
 end
 
 -- Checked and copied inside the pcall for the same dungeon reason as the name.
@@ -1277,6 +1801,17 @@ function Config:Bootstrap()
 
     self:SisterKeepsOffOnce(db)
     self:RealmPricesOnOnce(db)
+    self:SalvagerApartOnOnce(db)
+
+    -- Before any module reads prices or sales, so nothing caches the realm
+    -- without them. Inside a pcall: a save it does not expect must never
+    -- stop the addon loading.
+    if not (type(GetRealmName) == "function" and PlainString(GetRealmName)) then
+        local mended, mendErr = pcall(self.MendGuessedRealms, self)
+        if not mended then ns.Debug("guessed realms:", tostring(mendErr)) end
+    end
+    local ok, err = pcall(self.FoldBlankRealm, self)
+    if not ok then ns.Debug("blank realm fold:", tostring(err)) end
 end
 
 --- Realm Prices was off unless ticked until 2026-10-28, when the owner
@@ -1289,6 +1824,20 @@ function Config:RealmPricesOnOnce(db)
     if type(db.settings) == "table" and db.settings.realmPrices ~= true then
         ns.db = ns.db or db
         self:Set("realmPrices", true)
+    end
+end
+
+--- Keep Salvager Results Apart was off unless ticked for its first day
+--- (2026-11-24, before any release) until the owner asked for it on. The
+--- old default was copied into the save, so it is turned on once, and the
+--- save says so (`salvagerApartOnOnce`, never rename it). A player who
+--- unticks it after that keeps it off.
+function Config:SalvagerApartOnOnce(db)
+    if type(db) ~= "table" or db.salvagerApartOnOnce then return end
+    db.salvagerApartOnOnce = true
+    if type(db.settings) == "table" and db.settings.salvagerApart ~= true then
+        ns.db = ns.db or db
+        self:Set("salvagerApart", true)
     end
 end
 

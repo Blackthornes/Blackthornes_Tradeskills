@@ -7,6 +7,11 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+-- Costliest material first; a list as it came when Util is not loaded.
+local function CostliestFirst(list)
+    if Util.CostliestFirst then return Util.CostliestFirst(list) end
+    return list
+end
 
 local UI = ns.UI
 
@@ -26,6 +31,14 @@ local MARK_GUTTER = 16
 -- The made item's icon, between the star and the name.
 local ICON_SIZE = 16
 local ICON_GUTTER = ICON_SIZE + 4
+
+-- The 7 Days line: at most this many steps, this tall.
+local TREND_POINTS = 12
+local TREND_HEIGHT = 10
+
+-- The three cards over the list.
+local CARDS_HEIGHT = 44
+local CARD_GAP = 8
 
 -- The columns, measured from the right edge of the list and laid out right
 -- to left. Money sits to the right, so its coins line up down the column;
@@ -60,6 +73,9 @@ local COLUMNS = {
     { key = "disenchant", label = L["DISENCHANT"], width = 62, money = true, disenchantOnly = true },
     { key = "sells",  label = L["SELLS"],  width = 70, money = true },
     { key = "cost",   label = L["COST"],   width = 70, money = true },
+    -- A small line of the price over the last 7 days (ts-improve-6), beside
+    -- the name: green when it rose, red when it fell.
+    { key = "trend",  label = L["7 DAYS"], width = 56, justify = "CENTER" },
 }
 
 -- Any column but the craft's name can be hidden as well (UI/Columns.lua).
@@ -104,6 +120,12 @@ local function RowMenu(analysis)
             if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
         end },
     }
+    -- The Keep in Stock box (UI/StockBox.lua, 2026-11-17).
+    if analysis.outputItemID and ns.StockBox then
+        lines[#lines + 1] = { text = L["Set Keep in Stock"], run = function()
+            ns.StockBox:Open(analysis.outputItemID, analysis.name)
+        end }
+    end
     if analysis.outputItemID and ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         lines[#lines + 1] = { text = L["Search the Auction House"], run = function()
             ns.UI:SearchAuctionHouse(analysis.outputItemID)
@@ -127,7 +149,7 @@ end
 -- lasts, least needed first, so the name keeps NAME_MIN. Nothing saved: they
 -- come back once there is room. COST, SELLS, PROFIT, TIME and A DAY stay.
 local NAME_MIN = 160
-local SQUEEZE_ORDER = { "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
+local SQUEEZE_ORDER = { "trend", "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
 local squeezed = {}
 local squeezedKey = ""
 
@@ -171,9 +193,119 @@ local function ApplyRowLayout(row)
 
     -- The margin's bar sits centred under its number.
     row.marginBar:SetPoint("TOP", row.cells.margin, "BOTTOM", 0, -1)
+    -- So does how well it sells, under DEMAND.
+    if row.demandBar then row.demandBar:SetPoint("TOP", row.cells.demand, "BOTTOM", 0, -1) end
+    -- The 7 Days line fills its cell, a little in from each side.
+    if row.spark then
+        row.spark:ClearAllPoints()
+        row.spark:SetPoint("LEFT", row.cells.trend, "LEFT", 4, -TREND_HEIGHT / 2)
+        row.spark:SetPoint("RIGHT", row.cells.trend, "RIGHT", -4, 0)
+        row.spark:SetHeight(TREND_HEIGHT)
+        row.spark:SetShown(row.cells.trend:IsShown())
+        row.spark.key = false
+    end
 
     row.layoutVersion = layoutVersion
     row.columnsVersion = ns.Columns.version
+end
+
+--------------------------------------------------------------------------------
+-- 7 Days: a small line of the price (the owner said build it, 2026-11-26)
+--------------------------------------------------------------------------------
+
+
+-- An item's line, kept until a price changes or the hour turns, so a row
+-- redrawn with the same numbers draws nothing new.
+local trendKept = {}
+
+--- An item's price over the last 7 days, in at most TREND_POINTS steps,
+--- each 0 to 1 from its lowest to its highest, and which way it went
+--- ("up", "down" or "flat"). nil with under two readings.
+local function TrendFor(itemID)
+    if not itemID then return nil end
+    local stamp = tostring(ns.Prices and ns.Prices.changes or 0) .. ":" .. math.floor(time() / 3600)
+    local kept = trendKept[itemID]
+    if kept and kept.stamp == stamp then return kept.trend end
+
+    local trend
+    local graph = ns.PriceGraph
+    local ok, points = false, nil
+    if graph and graph.Series then ok, points = pcall(graph.Series, itemID, "week") end
+    if ok and type(points) == "table" and #points >= 2 then
+        -- Bucketed by time into even steps, each the average of its readings.
+        local first, last = points[1].t, points[#points].t
+        local span = math.max(1, last - first)
+        local sums, counts = {}, {}
+        for _, point in ipairs(points) do
+            local step = math.min(TREND_POINTS, math.floor((point.t - first) / span * (TREND_POINTS - 1)) + 1)
+            sums[step] = (sums[step] or 0) + point.p
+            counts[step] = (counts[step] or 0) + 1
+        end
+        local values = {}
+        for step = 1, TREND_POINTS do
+            if counts[step] then values[#values + 1] = sums[step] / counts[step] end
+        end
+        if #values >= 2 then
+            local low, high = math.huge, -math.huge
+            for _, value in ipairs(values) do
+                low, high = math.min(low, value), math.max(high, value)
+            end
+            local shape = {}
+            for index, value in ipairs(values) do
+                shape[index] = high > low and (value - low) / (high - low) or 0.5
+            end
+            local change = (values[#values] - values[1]) / math.max(1, values[1])
+            trend = {
+                shape = shape,
+                change = change,
+                way = change > 0.02 and "up" or change < -0.02 and "down" or "flat",
+            }
+        end
+    end
+    trendKept[itemID] = { stamp = stamp, trend = trend }
+    return trend
+end
+
+--- Draw an item's 7 Days line in a row's cell; the row keeps what it drew,
+--- so the same line is never drawn twice.
+local function DrawTrend(row, analysis, shown)
+    local spark = row.spark
+    if not spark then return end
+    local trend = shown and TrendFor(analysis.outputItemID) or nil
+    local key = trend and (tostring(analysis.outputItemID) .. ":" .. table.concat(trend.shape, ",")) or nil
+    if key == spark.key then return end
+    spark.key = key
+    for _, line in ipairs(spark.lines) do line:Hide() end
+    row.cells.trend:SetText(trend and "" or "--")
+    row.cells.trend:SetTextColor(Theme.Unpack("dim"))
+    if not trend or type(spark.CreateLine) ~= "function" then return end
+
+    local color = trend.way == "up" and "profit" or trend.way == "down" and "loss" or "muted"
+    local width = (spark.GetWidth and spark:GetWidth()) or 48
+    if type(width) ~= "number" or width <= 0 then width = 48 end
+    local count = #trend.shape
+    for index = 1, count - 1 do
+        local line = spark.lines[index]
+        if not line then
+            line = spark:CreateLine(nil, "ARTWORK")
+            line:SetThickness(1.2)
+            spark.lines[index] = line
+        end
+        local x1 = (index - 1) / (count - 1) * width
+        local x2 = index / (count - 1) * width
+        line:SetStartPoint("BOTTOMLEFT", spark, x1, trend.shape[index] * TREND_HEIGHT)
+        line:SetEndPoint("BOTTOMLEFT", spark, x2, trend.shape[index + 1] * TREND_HEIGHT)
+        line:SetColorTexture(Theme.Unpack(color))
+        line:Show()
+    end
+end
+
+--- What the How This Profit Adds Up card opens beside: the main window
+--- while it shows, else `fallback`.
+local function CardAnchor(fallback)
+    local window = _G.BlackthornesTSWindow
+    if window and window.IsShown and window:IsShown() then return window end
+    return fallback
 end
 
 local function CreateRow(row)
@@ -192,6 +324,29 @@ local function CreateRow(row)
     end
 
     row.marginBar = Theme.CreateBar(row, 40, 2)
+    row.demandBar = Theme.CreateBar(row, 40, 2)
+    row.spark = CreateFrame("Frame", nil, row)
+    row.spark.lines = {}
+
+    -- Hovering the profit says a click shows how it adds up (UI/ProfitCard.lua).
+    -- Clicks still reach the row, which opens the card when over the profit.
+    row.profitHover = CreateFrame("Frame", nil, row)
+    row.profitHover:SetAllPoints(row.cells.profit)
+    row.profitHover:EnableMouse(true)
+    if row.profitHover.SetMouseClickEnabled then row.profitHover:SetMouseClickEnabled(false) end
+    row.profitHover:SetScript("OnEnter", function()
+        local enter = row:GetScript("OnEnter")
+        if enter then enter(row) end
+        if row.data and row.data.priceable and ns.ProfitCard and GameTooltip:IsShown() then
+            ns.ProfitCard.AddHint(GameTooltip)
+            GameTooltip:Show()
+        end
+    end)
+    row.profitHover:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+        local script = row:GetScript(row:IsMouseOver() and "OnEnter" or "OnLeave")
+        if script then script(row) end
+    end)
 
     ApplyRowLayout(row)
 end
@@ -343,6 +498,15 @@ end
 
 --- What the STOCK column's "0/3" means (a player asked, the owner said yes,
 --- 2026-10-22): how many you have, and how many you keep and why.
+--- A price for one item, with " x2" after it when one craft makes more,
+--- so the profit (for the whole craft) adds up.
+local function WithYield(text, yield)
+    if type(yield) == "number" and yield > 1 then
+        return text .. " x" .. yield
+    end
+    return text
+end
+
 local function StockLine(analysis)
     local stock = analysis.stock or 0
     if analysis.postLimit and analysis.postLimit > 0 then
@@ -426,6 +590,7 @@ local function UpdateRow(row, analysis)
     Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
+    DrawTrend(row, analysis, row.cells.trend:IsShown())
 
     local cells = row.cells
 
@@ -455,9 +620,14 @@ local function UpdateRow(row, analysis)
     if reading then
         cells.demand:SetText(ns.Demand:Label(reading))
         cells.demand:SetTextColor(Theme.Unpack(ns.Demand:Color(reading)))
+        -- A small bar for how fast it sells: a third for Low, full for High.
+        local rank = ns.Demand.Rank and ns.Demand:Rank(reading) or 0
+        row.demandBar:Set(cells.demand:IsShown() and rank > 0 and math.min(1, math.floor(rank) / 3) or nil,
+            ns.Demand:Color(reading))
     else
         cells.demand:SetText("--")
         cells.demand:SetTextColor(Theme.Unpack("dim"))
+        row.demandBar:Set(nil)
     end
 
     -- Everything you already hold: listed, plus bags and bank.
@@ -507,6 +677,18 @@ local function UpdateRow(row, analysis)
 
     Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
+
+    -- Random rolls (of the Bear, of the Eagle...): each roll sells for its
+    -- own price, so Sells For says "by roll" and Profit gives the range,
+    -- cheapest roll to dearest (Profit:RollRange). Sorting stays on profit.
+    local low, high
+    if ns.Profit.RollRange then low, high = ns.Profit:RollRange(analysis) end
+    if low and ns.ProfitCard then
+        cells.sells:SetText(L["by roll"])
+        cells.sells:SetTextColor(Theme.Unpack("muted"))
+        Theme.FitText(cells.profit, { ns.ProfitCard.RangeText(low, high, 2), ns.ProfitCard.RangeText(low, high, 1) })
+        cells.profit:SetTextColor(Theme.Unpack("text"))
+    end
 
     cells.via:SetText(ns.Profit.WAY_LABELS and ns.Profit.WAY_LABELS[analysis.via] or "")
     cells.via:SetTextColor(Theme.Unpack(analysis.via == "disenchant" and "accent" or "muted"))
@@ -601,18 +783,14 @@ local function ShowBreaksInto(owner, analysis)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
         GameTooltip:AddDoubleLine(
-            ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
-                outcome.counted == false and L["  (bonus)"] or ""),
+            ("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
+                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID)),
             outcome.price and L.Format("%s each", Util.FormatMoney(outcome.price, { noColor = true, short = true }))
                 or L["no price"],
             1, 1, 1, 0.8, 0.8, 0.8)
     end
 
     local facts = breakdown.facts or {}
-    if facts.skill then
-        GameTooltip:AddLine(L.Format("Needs Enchanting about %d.", facts.skill), 0.7, 0.7, 0.7, true)
-    end
     if facts.source == "yours" then
         GameTooltip:AddLine(L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
     else
@@ -994,6 +1172,42 @@ local function BuildDetail(parent)
     hourHover:SetScript("OnEnter", function(self) ShowHourPlans(self, state.selected) end)
     hourHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     detail.hourHover = hourHover
+    -- Hovering the price says how many one craft makes, when it is more
+    -- than one.
+    local yieldHover = CreateFrame("Frame", nil, summary)
+    yieldHover:SetPoint("TOPLEFT", detail.rivalLabel, "TOPLEFT", 0, 2)
+    yieldHover:SetPoint("BOTTOMRIGHT", detail.postValue, "BOTTOMRIGHT", 0, -2)
+    yieldHover:EnableMouse(true)
+    yieldHover:SetScript("OnEnter", function(self)
+        local yield = detail.yield
+        if not (type(yield) == "number" and yield > 1) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.yieldHover = yieldHover
+
+    -- A click on the profit shows how it adds up (UI/ProfitCard.lua).
+    local profitClick = CreateFrame("Button", nil, summary)
+    profitClick:SetPoint("TOPLEFT", detail.summaryRows[7].label, "TOPLEFT", 0, 2)
+    profitClick:SetPoint("BOTTOMRIGHT", detail.profitValue, "BOTTOMRIGHT", 0, -2)
+    profitClick:SetScript("OnClick", function()
+        local selected = state.selected
+        if selected and ns.ProfitCard then
+            ns.ProfitCard:ShowRecipe(selected.recipeID,
+                CardAnchor(detail), Method())
+        end
+    end)
+    profitClick:SetScript("OnEnter", function(self)
+        if not (state.selected and state.selected.priceable and ns.ProfitCard) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["How This Profit Adds Up"], 1, 1, 1)
+        ns.ProfitCard.AddHint(GameTooltip)
+        GameTooltip:Show()
+    end)
+    profitClick:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.profitClick = profitClick
     for index = 13, 14 do
         detail.summaryRows[index].label:Hide()
         detail.summaryRows[index].value:Hide()
@@ -1474,7 +1688,9 @@ function UpdateDetail(analysis)
     local y = -12
     local anchor = detail.reagentHeading
 
-    local reagents = (analysis.cost and analysis.cost.reagents) or {}
+    -- Costliest first, so the line that says how many more only hides
+    -- the cheapest (a player asked, 2026-11-25).
+    local reagents = CostliestFirst((analysis.cost and analysis.cost.reagents) or {})
     local shownCount = #reagents
     local room = ReagentRoom(detail)
     if shownCount > room then shownCount = room - 1 end
@@ -1552,6 +1768,7 @@ function UpdateDetail(analysis)
     if analysis.priceable then
         detail.summary:Show()
         detail.costValue:SetText(Util.FormatMoney(analysis.totalCost))
+        detail.yield = analysis.yield
 
         if analysis.undercut then
             -- An item auction that cannot be undercut by less than a silver is
@@ -1559,15 +1776,19 @@ function UpdateDetail(analysis)
             -- price below the rival's.
             detail.rivalLabel:SetText(analysis.matchedRival
                 and L["Matching rival"] or L["Cheapest rival"])
-            detail.rivalValue:SetText(Util.FormatMoney(analysis.competitorPrice))
+            detail.rivalValue:SetText(WithYield(Util.FormatMoney(analysis.competitorPrice), analysis.yield))
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         elseif analysis.priceUncontested then
             -- Nobody is competing, so the price above is the markup over
             -- materials rather than anything the book says. Checked before
             -- "You hold lowest" below, which is the same situation described
             -- less usefully: what matters is where the price came from.
+            -- What the Sell tab lists at; the sale price above is now the
+            -- market value the profit is counted at.
             detail.rivalLabel:SetText(L["No competition"])
-            detail.rivalValue:SetText(L["materials + markup"])
+            detail.rivalValue:SetText(analysis.listsAt
+                and WithYield(Util.FormatMoney(analysis.listsAt), analysis.yield)
+                or L["materials + markup"])
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
         elseif analysis.youHoldLowest then
             -- Your own auction is the cheapest. Undercutting it would just walk
@@ -1603,7 +1824,7 @@ function UpdateDetail(analysis)
         if analysis.ownListing then
             detail.ownLabel:Show()
             detail.ownValue:Show()
-            detail.ownValue:SetText(Util.FormatMoney(analysis.ownListing))
+            detail.ownValue:SetText(WithYield(Util.FormatMoney(analysis.ownListing), analysis.yield))
 
             -- Undercut by a rival: your listing is not the one that sells.
             local beaten = analysis.competitorPrice
@@ -1622,7 +1843,7 @@ function UpdateDetail(analysis)
 
         detail.postLabel:SetText(toVendor and L["Vendor pays"]
             or toEnchanter and L["Disenchants to"] or L["You post at"])
-        detail.postValue:SetText(Util.FormatMoney(analysis.unitRevenue))
+        detail.postValue:SetText(WithYield(Util.FormatMoney(analysis.unitRevenue), analysis.yield))
         detail.postValue:SetTextColor(Theme.Unpack("accent"))
 
         if toVendor then
@@ -1902,13 +2123,43 @@ local function OrderKey()
         tostring(Method()), state.search or "" }, "|")
 end
 
-local function BuildList()
+--- The empty list's words when some professions have minimums of their
+--- own: the one picked by name, else that some have their own. False
+--- when the profession picked has none, so today's words stay.
+local function ShowProfessionHidden(hidden)
+    local best = hidden[1]
+    local bestText = Util.FormatMoney(best and best.profit or 0, { noColor = true, short = true })
+
+    if state.profession then
+        local profit, margin, profession = ns.Profit:MinimumsFor({ skillLineID = state.profession })
+        if not profession then return false end
+        local name = ns.Auctions and ns.Auctions.ProfessionLabel
+            and ns.Auctions:ProfessionLabel(profession) or profession
+        local floor = Util.FormatMoney(profit or 0, { noColor = true, short = true })
+        widgets.emptyLabel:SetText(#hidden == 1
+            and L.Format("%d craft hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s.",
+                #hidden, name, floor, margin or 0, bestText)
+            or L.Format("%d crafts hidden by your minimums in Settings.\n%s asks for %s profit and %d%% margin.\nThe best right now makes %s.",
+                #hidden, name, floor, margin or 0, bestText))
+        return true
+    end
+
+    widgets.emptyLabel:SetText(#hidden == 1
+        and L.Format("%d craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s.",
+            #hidden, bestText)
+        or L.Format("%d crafts hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes %s.",
+            #hidden, bestText))
+    return true
+end
+
+--- What the list asks the ranking for.
+local function RankOptions()
     local key = OrderKey()
     if key ~= state.orderKey then
         state.orderKey, state.heldOrder = key, nil
     end
 
-    local ranked = ns.Profit:GetRanked({
+    return {
         accountWide = state.accountWide,
         ignorePostLimit = state.ignorePostLimit,
         sortBy = state.sortBy,
@@ -1917,8 +2168,11 @@ local function BuildList()
         skillLineID = state.profession,
         method = Method(),
         keepOrder = state.heldOrder,
-    })
+    }
+end
 
+--- The ranking narrowed to the search, its order held for the next redraw.
+local function Narrow(ranked)
     if state.search ~= "" then
         local needle = state.search:lower()
         local filtered = {}
@@ -1939,10 +2193,219 @@ local function BuildList()
     return ranked
 end
 
+-- The last ranking worked out, before the search narrowed it, with what it
+-- was worked out from. Typing in the search box narrows this instead of
+-- analysing every recipe again on each key (SearchChanged).
+local kept = nil
+
+--- Everything but the search that the ranking is made from.
+local function RankedFrom()
+    return table.concat({ tostring(state.accountWide), tostring(state.ignorePostLimit),
+        tostring(state.sortBy), tostring(state.craftableOnly),
+        tostring(state.includeUnpriceable), tostring(state.profession), tostring(Method()),
+        tostring(ns.Prices and ns.Prices.changes), tostring(ns.Inventory and ns.Inventory.changes),
+        tostring(ns.Config and ns.Config.changes) }, "|")
+end
+
+local function Keep(ranked, from)
+    local copy = {}
+    for index, analysis in ipairs(ranked) do copy[index] = analysis end
+    kept = { results = copy, from = from }
+    return ranked
+end
+
+local function BuildList()
+    local from = RankedFrom()
+    return Narrow(Keep(ns.Profit:GetRanked(RankOptions()), from))
+end
+
+-- Picking the tab analysed every recipe in one frame, a stall with a few
+-- hundred recipes and a long one with every character's (the owner's
+-- report, 2026-11-21, swapping tabs at the auction house). When the tab is
+-- picked the list now keeps the rows it had and the ranking runs a few
+-- recipes a frame (Profit:BeginRanked, RankOne, FinishRanked: the same
+-- steps GetRanked takes), then the list is drawn from it. Any other
+-- refresh (a click, a price, the bags) still answers at once and drops a
+-- ranking under way. The first draw is at once too, so the list never
+-- opens empty.
+local SLICE_MS = 4
+local spreadNext = false
+local ranking = nil
+-- Still on this tab's My Crafts view; set once the views are made.
+local StillShowing = function() return true end
+
+local function StopRanking()
+    local worker = ranking
+    ranking = nil
+    if worker then worker:Cancel() end
+end
+
+local Draw
+
+--- Rank across frames, then draw. False when it must be done at once.
+local function RankInSlices()
+    if not (state.drawn and Util and type(Util.NewWorker) == "function"
+        and ns.Profit.BeginRanked and ns.Profit.RankOne and ns.Profit.FinishRanked) then
+        return false
+    end
+
+    local steps = ns.Profit:BeginRanked(RankOptions())
+    local from = RankedFrom()
+    local worker
+    worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(item)
+            if ranking ~= worker then return end
+            -- Another tab or view was picked, or the window shut: the next
+            -- time this one shows it ranks afresh.
+            if not StillShowing() then
+                StopRanking()
+                return
+            end
+            ns.Profit:RankOne(steps, item)
+        end,
+        onDone = function()
+            if ranking ~= worker then return end
+            ranking = nil
+            if not StillShowing() then return end
+            -- Kept only when nothing moved while it was worked out.
+            local ranked = ns.Profit:FinishRanked(steps)
+            if from == RankedFrom() then Keep(ranked, from) else kept = nil end
+            Draw(Narrow(ranked))
+        end,
+    })
+    ranking = worker
+    worker:Start(steps.items)
+    return true
+end
+
+--- The English name of a My Crafts profession choice (a skill line), or
+--- nil when it is none of the known ones.
+local function EnglishOfLine(skillLineID, text)
+    local Profit = ns.Profit
+    local english = Profit and Profit.ProfessionOfLine and Profit.ProfessionOfLine(skillLineID)
+    if not english and text and ns.Recipes and ns.Recipes.EnglishProfessionName then
+        local ok, name = pcall(ns.Recipes.EnglishProfessionName, text)
+        if ok then english = name end
+    end
+    return english
+end
+
+--- Take the profession picked on All Recipes or Recipes to Learn
+--- (Profit.PickProfession), once per pick. A profession with no crafts
+--- here leaves the list on All professions.
+local function AdoptPickedProfession()
+    local dropdown = widgets.professionDropdown
+    local Profit = ns.Profit
+    if not (dropdown and Profit and Profit.PickedProfession) then return end
+    local version, english = Profit.PickedProfession()
+    if version == (state.pickSeen or 0) then return end
+    state.pickSeen = version
+
+    local value
+    if english then
+        for _, option in ipairs(dropdown.options or {}) do
+            if option.value ~= nil and not option.header
+                and EnglishOfLine(option.value, option.text) == english then
+                value = option.value
+                break
+            end
+        end
+    end
+    dropdown:SetValue(value)
+    state.profession = value
+end
+
 local function Refresh()
     if not widgets.list then return end
 
-    local data = BuildList()
+    AdoptPickedProfession()
+
+    -- Recipes to Learn can change the Profit: choice too. VIA shows only
+    -- when more than one way can win, so the headings follow.
+    local method = Method() or "best"
+    if widgets.methodDropdown and state.shownMethod ~= method then
+        widgets.methodDropdown:SetValue(method)
+        if state.shownMethod ~= nil then
+            layoutVersion = layoutVersion + 1
+            ApplyHeadingLayout()
+        end
+        state.shownMethod = method
+    end
+
+    StopRanking()
+    local spread = spreadNext
+    spreadNext = false
+    if spread and RankInSlices() then return end
+
+    Draw(BuildList())
+end
+
+--- The search box changed: narrow the ranking already worked out. Rows
+--- held in place past the listing limit leave, as a fresh ranking would
+--- have them (Profit:RankAgain). Anything else changed too, or no ranking
+--- is kept, and it is all worked out afresh.
+local function SearchChanged()
+    local last = kept
+    if not (widgets.list and last and not ranking and ns.Profit.RankAgain
+        and last.from == RankedFrom()) then
+        return Refresh()
+    end
+    Draw(Narrow(ns.Profit:RankAgain(last.results, RankOptions())))
+end
+
+--- The three cards over the list: the craft that pays most each, how many
+--- of the crafts in view pay, and how long ago prices were read.
+local function UpdateCards(data)
+    local panels = widgets.cardPanels
+    if not panels then return end
+
+    local best, paying = nil, 0
+    for _, analysis in ipairs(data) do
+        if analysis.priceable and (analysis.profit or 0) > 0 then
+            paying = paying + 1
+            local each = analysis.profitPerUnit or analysis.profit
+            if not best or each > (best.profitPerUnit or best.profit) then best = analysis end
+        end
+    end
+
+    local first = panels[1]
+    if best then
+        first.value:SetText(best.name or "")
+        Theme.SetItemNameColor(first.value, best.outputItemID, "text")
+        first.note:SetText(L.Format("%s each", "+" .. Util.FormatMoney(best.profitPerUnit or best.profit)))
+    else
+        first.value:SetText("--")
+        first.value:SetTextColor(Theme.Unpack("dim"))
+        first.note:SetText("")
+    end
+
+    -- Every craft in view, the ones with no price or a loss too.
+    local all = state.accountWide and ns.Recipes.GetAccountWide and ns.Recipes:GetAccountWide(true)
+        or ns.Recipes:GetAll() or {}
+    local total = 0
+    for _, recipe in pairs(all) do
+        if type(recipe) == "table" and recipe.outputItemID
+            and (not state.profession or recipe.skillLineID == state.profession) then
+            total = total + 1
+        end
+    end
+    local second = panels[2]
+    second.value:SetText(tostring(paying))
+    second.value:SetTextColor(Theme.Unpack(paying > 0 and "profit" or "dim"))
+    second.note:SetText(L.Format("of %d", math.max(total, #data)))
+
+    local third = panels[3]
+    local last = ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    third.value:SetText(last and Util.FormatAgeAgo(math.max(0, time() - last)) or L["never"])
+    local stale = not last or time() - last > (ns.Config:Get("staleAfterSeconds") or 172800)
+    third.value:SetTextColor(Theme.Unpack(stale and "warn" or "text"))
+    third.note:SetText("")
+end
+
+function Draw(data)
+    state.drawn = true
+    UpdateCards(data)
 
     -- A clicked heading's order over the ranking's.
     if widgets.sorter then data = widgets.sorter:Sort(data) end
@@ -1983,13 +2446,14 @@ local function Refresh()
         if ns.Recipes:Count() == 0 then
             widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif ns.Prices:Count() == 0 then
-            widgets.emptyLabel:SetText(L["No auction data yet."])
+            widgets.emptyLabel:SetText(L["No prices yet. Visit an auctioneer and the list fills in by itself."])
             widgets.emptyScan:Show()
         else
             -- "Nothing matches these filters" is true and useless. A threshold
             -- set once and forgotten now survives logout, so the message says
             -- which one is doing the hiding and what it would take to see them.
-            local hidden = ns.Profit:GetRanked({
+            -- Not for a search that matched nothing: its words need no ranking.
+            local hidden = state.search ~= "" and {} or ns.Profit:GetRanked({
                 accountWide = state.accountWide,
                 ignorePostLimit = state.ignorePostLimit,
                 craftableOnly = state.craftableOnly,
@@ -2008,6 +2472,11 @@ local function Refresh()
             if state.search ~= "" then
                 widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
                 if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
+            elseif #hidden > 0 and ns.Profit.HasProfessionMinimums
+                and ns.Profit:HasProfessionMinimums()
+                and ShowProfessionHidden(hidden) then
+                -- A profession's own minimums (2026-11-17) name it, or say
+                -- some have their own, since one number would be wrong.
             elseif #hidden > 0 and (minProfit > 0 or minMargin > 0) then
                 local best = hidden[1]
 
@@ -2113,6 +2582,9 @@ local function RefreshProfessionOptions()
     -- follow it or the list would stay filtered to a choice no longer shown.
     state.profession = dropdown:GetValue()
 
+    -- A profession picked on another Profit view comes along.
+    AdoptPickedProfession()
+
     -- And named on its face. The dropdown writes that only when the choice
     -- changes, and "All professions" is already the choice when the tab
     -- first opens, so the face stayed blank until something was picked.
@@ -2134,6 +2606,20 @@ local function BuildCrafts(container)
     local profession = Widgets.CreateDropdown(toolbar, { { text = L["All professions"], value = nil } },
         function(value)
             state.profession = value
+            -- All Recipes and Recipes to Learn follow (2026-11-27).
+            local Profit = ns.Profit
+            if Profit and Profit.PickProfession then
+                local english
+                if value ~= nil then
+                    for _, option in ipairs(widgets.professionDropdown.options or {}) do
+                        if option.value == value then english = EnglishOfLine(value, option.text) end
+                    end
+                end
+                if value == nil or english then
+                    Profit.PickProfession(english)
+                    state.pickSeen = (Profit.PickedProfession())
+                end
+            end
             Refresh()
         end, { width = 150 })
     profession:SetPoint("LEFT", 0, 0)
@@ -2143,40 +2629,25 @@ local function BuildCrafts(container)
     -- most, or one way alone. Kept in Settings, so /bts top and /bts why
     -- rank the same way, and the Level Up tab counts what a craft gets
     -- back by it too.
-    local labels = ns.Profit.WAY_LABELS or {}
-    local methodOptions = { { text = L["Profit: Best"], value = "best" } }
-    for _, method in ipairs(ns.Profit.METHODS or {}) do
-        if labels[method] then
-            methodOptions[#methodOptions + 1] = { text = L.Format("Profit: %s", labels[method]), value = method }
-        elseif method == "vendordisenchant" then
-            -- The AH left out, for a player who finds it slow (asked 2026-11-12).
-            methodOptions[#methodOptions + 1] = { text = L["Profit: Vendor and DE"], value = method,
-                tooltip = L["Counts vendor and disenchant money. Leaves the AH out."] }
-        end
-    end
-
+    local methodOptions = ns.Profit.MethodOptions and ns.Profit.MethodOptions()
+        or { { text = L["Profit: Best"], value = "best" } }
     local method = Widgets.CreateDropdown(toolbar, methodOptions, function(value)
-        ns.Config:Set("profitBy", value)
+        if ns.Profit.SetMethod then ns.Profit:SetMethod(value) else ns.Config:Set("profitBy", value) end
 
         -- VIA shows only when more than one way can win.
         layoutVersion = layoutVersion + 1
         ApplyHeadingLayout()
 
         Refresh()
-
-        -- The pane beside the profession window counts the same way.
-        local pane = ns.CraftPanel
-        if pane and pane.RequestRefresh and pane.IsShown and pane:IsShown() then
-            pane:RequestRefresh()
-        end
     end, { width = 170 })
     method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
-    method:SetValue(Method() or "best")
+    state.shownMethod = Method() or "best"
+    method:SetValue(state.shownMethod)
     widgets.methodDropdown = method
 
     local search = Widgets.CreateSearchBox(toolbar, L["Search crafts"], function(text)
         state.search = text or ""
-        Refresh()
+        SearchChanged()
     end)
     search:SetPoint("LEFT", method, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
@@ -2223,10 +2694,49 @@ local function BuildCrafts(container)
     end, ns.Config:Get("profitShowsPerHour") == true)
     perHour:SetPoint("LEFT", showMaxed, "RIGHT", 12, 0)
 
+    -- Three cards over the list (ts-improve-6): the best craft now, how
+    -- many pay, and how old the prices are. Filled by Draw (UpdateCards).
+    local cards = CreateFrame("Frame", nil, container)
+    cards:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
+    cards:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
+    cards:SetHeight(CARDS_HEIGHT)
+    widgets.cards = cards
+    widgets.cardPanels = {}
+    for index, title in ipairs({ L["Best Right Now"], L["Crafts That Pay"], L["Prices Read"] }) do
+        local panel = Theme.CreatePanel(cards, "glass", "border")
+        panel:SetHeight(CARDS_HEIGHT)
+        panel.title = Theme.CreateLabel(panel, "tiny", "accent")
+        panel.title:SetPoint("TOPLEFT", 8, -6)
+        panel.title:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
+        panel.title:SetJustifyH("LEFT")
+        panel.title:SetText(title)
+        panel.value = Theme.CreateLabel(panel, "normal", "text")
+        panel.value:SetPoint("TOPLEFT", panel.title, "BOTTOMLEFT", 0, -3)
+        panel.value:SetJustifyH("LEFT")
+        panel.note = Theme.CreateLabel(panel, "small", "muted")
+        panel.note:SetPoint("LEFT", panel.value, "RIGHT", 6, 0)
+        panel.note:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
+        panel.note:SetJustifyH("LEFT")
+        widgets.cardPanels[index] = panel
+    end
+    local function PlaceCards()
+        local width = cards:GetWidth()
+        if type(width) ~= "number" or width <= 0 then return end
+        local each = (width - CARD_GAP * 2) / 3
+        for index, panel in ipairs(widgets.cardPanels) do
+            panel:ClearAllPoints()
+            panel:SetPoint("TOPLEFT", cards, "TOPLEFT", (index - 1) * (each + CARD_GAP), 0)
+            panel:SetWidth(each)
+            panel.value:SetWidth(math.max(40, each - 16 - 60))
+        end
+    end
+    cards:SetScript("OnSizeChanged", PlaceCards)
+    PlaceCards()
+
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
-    headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
-    headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
+    headings:SetPoint("TOPLEFT", cards, "BOTTOMLEFT", 0, -8)
+    headings:SetPoint("TOPRIGHT", cards, "BOTTOMRIGHT", 0, -8)
     headings:SetHeight(16)
     widgets.headingFrame = headings
 
@@ -2272,6 +2782,10 @@ local function BuildCrafts(container)
         demand = function(a)
             return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
         end,
+        trend = function(a)
+            local trend = TrendFor(a.outputItemID)
+            return trend and trend.change or nil
+        end,
     }, function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name", "who", "via" }) end
 
@@ -2293,7 +2807,7 @@ local function BuildCrafts(container)
     local list = Widgets.CreateScrollList(container, {
         -- The headings move in with the rows when the scrollbar takes its room.
         onScrollbarShown = function(shown)
-            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+            headings:SetPoint("TOPRIGHT", cards, "BOTTOMRIGHT", -(shown and 10 or 0), -8)
         end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
@@ -2323,11 +2837,18 @@ local function BuildCrafts(container)
             return state.selected ~= nil and entry.recipeID == state.selected.recipeID
         end,
 
-        onClick = function(analysis, _, mouseButton)
+        onClick = function(analysis, _, mouseButton, row)
             if mouseButton == "RightButton" then return end
 
             state.selected = analysis
-            UpdateDetail(ns.Profit:Analyse(analysis.recipeID, nil, Method()))
+            local fresh = ns.Profit:Analyse(analysis.recipeID, nil, Method())
+            UpdateDetail(fresh)
+
+            -- A click on the profit shows how it adds up.
+            local cell = row and row.cells and row.cells.profit
+            if cell and cell:IsShown() and cell:IsMouseOver() and ns.ProfitCard then
+                ns.ProfitCard:Show(fresh, CardAnchor(container))
+            end
         end,
     })
 
@@ -2441,6 +2962,13 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     -- every way to turn one item into gold, after RECIPES TO LEARN.
     extras = (function()
         local list = {}
+        -- All Recipes (UI/AllRecipesView.lua, the owner said build it
+        -- 2026-11-17): every recipe you know, right after My Crafts.
+        if ns.AllRecipesView then
+            list[#list + 1] = { key = "all", text = L["All Recipes"],
+                tip = L["Every recipe you know, grey ones too"],
+                build = ns.AllRecipesView.Build, refresh = ns.AllRecipesView.Refresh }
+        end
         if ns.YourTimeView then
             list[#list + 1] = { key = "time", text = L["Your Time"],
                 tip = L["Farm it, sell the mats, or buy them: which pays best for your time"],
@@ -2465,11 +2993,29 @@ local function OnShow()
     RefreshProfessionOptions()
 end
 
+StillShowing = function()
+    if UI.activeTab ~= "profit" then return false end
+    if switch and switch.view ~= "crafts" then return false end
+    return not (UI.window and UI.window.IsShown) or UI.window:IsShown() == true
+end
+
+--- The tab was picked (UI:SelectTab): My Crafts ranks a few recipes a frame.
+local function RefreshPicked()
+    spreadNext = true
+    local ok, err = pcall(RefreshView)
+    spreadNext = false
+    if not ok then error(err, 0) end
+end
+
 --- /bts recipes and the Settings button: the window, on this tab, on
 --- Recipes to learn, optionally on one profession.
 ns.ProfitTab = {
     ShowView = ShowView,
+    RowMenu = RowMenu,
     StockLine = StockLine,
+    WithYield = WithYield,
+    TrendFor = TrendFor,
+    UpdateCards = function(data) return UpdateCards(data) end,
     ShowRecipesToLearn = function(profession)
         if not (ns.UI and ns.UI.Show) then
             ns.Print(L["the window is not ready yet, try again in a moment"])
@@ -2488,5 +3034,6 @@ UI:RegisterTab({
     order = 1,
     build = Build,
     refresh = RefreshView,
+    refreshPicked = RefreshPicked,
     onShow = OnShow,
 })

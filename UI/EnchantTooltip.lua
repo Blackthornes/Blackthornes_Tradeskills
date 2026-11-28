@@ -22,7 +22,7 @@
 -- lines are kept per spell until the bags change or `KEEP_FOR` passes, so
 -- the game redrawing a tooltip costs a table lookup.
 --
--- "Enchant costs on tooltips" on the Look page (`tooltipEnchantCosts`, on
+-- "Enchant costs on tooltips" on the Tooltips page (`tooltipEnchantCosts`, on
 -- unless unticked, never rename it). Blizzard's tooltips are hooked and
 -- appended to; nothing of ours is written onto one.
 
