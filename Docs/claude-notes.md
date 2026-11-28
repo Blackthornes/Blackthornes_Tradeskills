@@ -2364,6 +2364,20 @@ takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 Tested in `tools/test_shoppinglists.lua` and
 `tools/test_shoppinglistsview.lua`.
 
+Away from the auction house (a player's report, 2026-11-28: lists could
+only be changed with it open): a quiet **Lists** button left of Scan
+Auctions in the main window's header, and `/bts lists`, open the Lists
+window (`View:OpenWindow`, `ToggleWindow`, titled "Shopping lists", spot
+kept as `ts.lists`). There is one set of list pieces: `View:Place` moves
+them into whichever frame shows them, and the one before is told
+(`opts.onLeave`), so the window closes when the drawer's Lists tab takes
+them back (`PostPanel:TakeLists`, `listsSpot`). The drawer only shows or
+hides them while it holds them (`View:HeldBy`). At the auction house the
+button opens the drawer's Lists tab instead. Search still needs the
+auction house and says so. New words: "Make and change your shopping lists
+anywhere." and "open your shopping lists". Tested in part 6 of
+`tools/test_shoppinglistsview.lua`.
+
 ## List rules
 
 The owner said build it (2026-10-19, from a mockup; he approved the words):

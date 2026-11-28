@@ -245,6 +245,17 @@ function UI:BuildHeader()
     self.header = header
     self:PlaceScanButton(false)
 
+    -- Lists, left of Scan: the shopping lists away from the auction house
+    -- (a player's report, 2026-11-28: they could only be changed there).
+    local listsButton = Widgets.CreateButton(header, L["Lists"], function()
+        if ns.ShoppingListsView and ns.ShoppingListsView.ToggleWindow then ns.ShoppingListsView:ToggleWindow() end
+    end, { width = 64, height = SCAN_BUTTON_HEIGHT, tooltip = L["Make and change your shopping lists anywhere."] })
+    -- Sized to its word, which runs longer in some languages.
+    local listsWidth = listsButton.label and Theme.TextWidth and Theme.TextWidth(listsButton.label)
+    if listsWidth then listsButton:SetWidth(math.max(64, math.ceil(listsWidth) + 24)) end
+    listsButton:SetPoint("RIGHT", scanButton, "LEFT", -6, 0)
+    self.listsButton = listsButton
+
     local progress = Widgets.CreateProgressBar(window)
     progress:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     progress:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
