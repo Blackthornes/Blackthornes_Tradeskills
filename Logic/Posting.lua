@@ -440,7 +440,7 @@ end
 -- client's answer for the item.
 local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
 
-local function IsGrey(itemID, held)
+local function QualityOf(itemID, held)
     local quality = held and held.quality
     if quality == nil and type(C_Item) == "table" and type(C_Item.GetItemQualityByID) == "function" then
         local ok, value = pcall(C_Item.GetItemQualityByID, itemID)
@@ -451,7 +451,33 @@ local function IsGrey(itemID, held)
         local ok, _, _, value = pcall(getInfo, itemID)
         quality = ok and tonumber(value) or nil
     end
-    return quality == POOR
+    return quality
+end
+
+local function IsGrey(itemID, held)
+    return QualityOf(itemID, held) == POOR
+end
+
+--- Does a vendor's price count for this item on the Sell list? A player
+--- asked (2026-11-28) to pick the colors: "Vendor Price For:" on the
+--- Auction House page, saved as `vendorPriceFor`, the quality numbers
+--- ticked ("1234" is White, Green, Blue and Purple, the default). For an
+--- unticked color the item is never marked "A vendor pays more" and the
+--- vendor price no longer stops a listing. Grey always counts; a quality
+--- the client won't say counts too, as before. Epic and better follow
+--- Purple. Item worth (max of auction and vendor) is not touched here.
+function Posting.VendorPriceFor(itemID, held)
+    local quality = QualityOf(itemID, held)
+    if quality == nil or quality <= POOR then return true end
+    if quality > 4 then quality = 4 end
+    local picked
+    local Config = ns.Config
+    if Config and Config.Get then
+        local ok, value = pcall(Config.Get, Config, "vendorPriceFor")
+        if ok then picked = value end
+    end
+    if type(picked) ~= "string" then return true end
+    return picked:find(tostring(quality), 1, true) ~= nil
 end
 
 --- A validated ItemLocation for a bag slot, or nil.
@@ -1139,12 +1165,13 @@ function Posting.UsuallyPaysMore(itemID, vendorPrice)
     return not Posting.VendorPaysMore(itemID, market, vendorPrice)
 end
 
-function Posting:GetLossFloor(itemID, unitCost)
+function Posting:GetLossFloor(itemID, unitCost, held)
     local vendorPrice = Util.GetVendorSellPrice(itemID)
 
     local floor, reason = unitCost, unitCost and "cost" or nil
 
-    if vendorPrice and (not floor or vendorPrice > floor) then
+    if vendorPrice and (not floor or vendorPrice > floor)
+            and Posting.VendorPriceFor(itemID, held) then
         floor, reason = vendorPrice, "vendor"
     end
 
@@ -1400,12 +1427,15 @@ function Posting:GetPostable(opts)
             local unitCost = MadeCostOf(itemID, outputs[itemID])
 
             local lossFloor, lossReason, vendorPrice =
-                self:GetLossFloor(itemID, unitCost)
+                self:GetLossFloor(itemID, unitCost, held)
 
             -- Worth more at a vendor than the auction house pays after its
             -- cut: it goes to the vendor pile, not this list. A price the
             -- player typed this session still lists.
-            local toVendor = not anyway and basis ~= "chosen" and Posting.VendorPaysMore(itemID, price, vendorPrice)
+            -- Not for a color the player unticked under "Vendor Price For:".
+            local toVendor = not anyway and basis ~= "chosen"
+                and Posting.VendorPriceFor(itemID, held)
+                and Posting.VendorPaysMore(itemID, price, vendorPrice)
 
             -- Only today's cheapest loses to the vendor, and the usual price
             -- beats it: wait, as Butler does, rather than sell to a vendor.
@@ -2005,8 +2035,9 @@ function Posting:GetPriceFloor(itemID, byHand)
     -- Below what a vendor pays, selling it to a vendor is strictly better.
     -- Remembered for the session: this runs for every line, every second,
     -- at the auction house.
+    -- Not for a color the player unticked under "Vendor Price For:".
     local sellPrice = Util.GetVendorSellPrice(itemID)
-    if sellPrice and sellPrice > 0 then
+    if sellPrice and sellPrice > 0 and Posting.VendorPriceFor(itemID) then
         floor, why, kind = sellPrice, L["a vendor pays more than that"], "vendor"
     end
 
