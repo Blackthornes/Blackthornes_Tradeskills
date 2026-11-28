@@ -4527,3 +4527,16 @@ Account-wide views stay account wide on purpose: the bank view
 (`Banks:Collect`) and the disenchant buy marks (`DisenchantBuys:Held`).
 Tested in `tools/test_oneside.lua` and `tools/test_butlerjobs.lua`.
 Equipment (`Alts`) and Butler already keep to this realm and side.
+
+## Shift-click + to queue all you can make (2026-11-28)
+
+A player asked, the owner said build it from the mockup. Shift-click on
+either + (the craft pane's row, `CraftPanel:QueueAll`, and the Queue tab's
+row, `ns.QueuePlus.Click` through `CraftPanel:QueueAllForEntry`) sets the
+queued total to `Profit:GetCraftableCount` (bags only), never lower, and
+stops at the max on hand the way + does (`QueueMore`). With none to make
+it queues nothing, shakes the + (`CraftPanel.Shake`, an animation) and
+prints "Your bags don't have the materials for any %s." Sub-crafts on the
+Queue tab are left alone. Both hovers add `CraftPanel.ShiftClickLine`;
+the Queue tab + got its first hover, "Add one more." No setting. Tested
+in `tools/test_shiftqueueall.lua`.
