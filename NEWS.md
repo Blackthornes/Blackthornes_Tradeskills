@@ -23,6 +23,23 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.51.0
+
+- The Snipe tab is faster. It shows your last scan's deals first and tells you how far along it is.
+- Vendor Price For lets you choose which item colors count a vendor price on the Sell list.
+- Shift-click List lists one row anyway, and Shift-click + queues all your bags can make.
+- A Lists button opens your shopping lists away from the auction house.
+- Crafts with a wait, like Mooncloth, count once per wait on the Profit tab.
+
+Fixes and changes:
+- The buy box on a shopping list item follows that item's own Most I'll Pay.
+- The craft queue, its materials list and mail show only crafts from your realm and side.
+- Fill Mail for Butler takes the version of an item it names, not the version you keep.
+- Keep on This Character holds what is in the bank too.
+- Tidy Up on Price History keeps a reading's place when it leaves out old ones.
+- A fold gem on a window set to a round button no longer reads "Expand this window" at the wrong time.
+- The vendor window sits under the stack split pop-up and other buy pop-ups.
+
 ## 1.50.1
 
 Fixes and changes:
